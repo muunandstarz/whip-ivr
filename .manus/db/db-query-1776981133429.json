@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `call_sessions` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`callSid` varchar(64) NOT NULL,\n\t`callerPhone` varchar(32),\n\t`state` varchar(64) NOT NULL DEFAULT 'greeting',\n\t`collectedData` json,\n\t`conversationHistory` json,\n\t`callerType` enum('carrier','law_office','medical_provider','member','claimant','police','wrong_department','unknown') DEFAULT 'unknown',\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `call_sessions_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `call_sessions_callSid_unique` UNIQUE(`callSid`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute CREATE TABLE `call_sessions` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`callSid` varchar(64) NOT NULL,\n\t`callerPhone` varchar(32),\n\t`state` varchar(64) NOT NULL DEFAULT 'greeting',\n\t`collectedData` json,\n\t`conversationHistory` json,\n\t`callerType` enum('carrier','law_office','medical_provider','member','claimant','police','wrong_department','unknown') DEFAULT 'unknown',\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `call_sessions_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `call_sessions_callSid_unique` UNIQUE(`callSid`)\n)",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 542
+}

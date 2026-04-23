@@ -43,10 +43,12 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
+  /* Whip brand: #171b31 blue, #ff6221 orange */
+  --primary: oklch(0.22 0.06 265);
+  --primary-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.22 0.06 265);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --whip-orange: oklch(0.72 0.18 42);
   --chart-1: var(--color-blue-300);
   --chart-2: var(--color-blue-500);
   --chart-3: var(--color-blue-600);

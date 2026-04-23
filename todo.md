@@ -1,0 +1,23 @@
+# Whip Claims AI Voice IVR — TODO
+
+- [x] Database schema: intake_records, call_sessions tables
+- [x] Drizzle migration and SQL applied
+- [x] Twilio webhook endpoint for inbound calls (/api/ivr/voice)
+- [x] Twilio webhook endpoint for call status updates (/api/ivr/status)
+- [x] LLM-powered conversation engine with caller type detection and branching
+- [x] Structured intake collection for carriers/law offices/medical providers
+- [x] Read-back confirmation step in AI conversation
+- [x] Wrong-department auto-routing with correct phone number provided
+- [x] Member/claimant/police routing to live agent queue
+- [x] Voicemail transcription and storage (/api/ivr/voicemail)
+- [x] Owner notification on new intake record
+- [x] Claims team dashboard with WhipLayout sidebar
+- [x] Intake records table with search, filter by status/caller type
+- [x] Status update (open/closed) and handler assignment from dashboard
+- [x] Record detail view with full conversation transcript
+- [x] Manual intake form for logging calls manually
+- [x] Analytics view: call volume by day, caller type breakdown, repeat callers
+- [x] IVR setup guide page with Twilio webhook configuration
+- [x] Branding: Whip colors (#171b31 blue, #ff6221 orange)
+- [x] Vitest tests for core procedures (8 tests passing)
+- [x] Checkpoint saved
