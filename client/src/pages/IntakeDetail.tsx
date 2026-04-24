@@ -265,17 +265,18 @@ export default function IntakeDetail() {
                   </p>
                 </div>
               )}
-              {record.snapsheetClaimUrl && (
+              {record.whipClaimNumber && (
                 <div>
                   <Label className="text-xs text-muted-foreground">Snapsheet Claim</Label>
                   <a
-                    href={record.snapsheetClaimUrl}
+                    href={`https://snapsheetvice.com/claims?search=${encodeURIComponent(record.whipClaimNumber)}`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    title="Search this claim in Snapsheet (login required)"
                     className="inline-flex items-center gap-1 text-sm mt-0.5 text-blue-600 hover:text-blue-800 hover:underline"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    View in Snapsheet
+                    Search in Snapsheet
                   </a>
                 </div>
               )}

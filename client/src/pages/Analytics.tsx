@@ -32,7 +32,14 @@ import {
   CheckCircle2,
   ExternalLink,
   Info,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Mic,
+  MessageSquare,
+  HelpCircle,
 } from "lucide-react";
+import { useState as useLocalState } from "react";
 import { format, parseISO } from "date-fns";
 
 function fmtDuration(seconds: number | null | undefined): string {
@@ -69,6 +76,124 @@ function ivrRoutingBadge(type: string | null | undefined) {
     );
   }
   return null;
+}
+
+function IntakeRecordExpanded({ r }: { r: any }) {
+  const [showTranscript, setShowTranscript] = useLocalState(false);
+  const hasTranscript = r.rawTranscript && r.rawTranscript.trim().length > 0;
+  const hasRecording = r.aircallRecordingUrl || r.recordingUrl;
+
+  // Derive resolution blocker from message/notes
+  const blockerKeywords = [
+    { pattern: /unable to reach|no answer|not available|voicemail/i, label: "Handler unavailable" },
+    { pattern: /waiting|pending|follow.?up|call back/i, label: "Awaiting callback" },
+    { pattern: /unclear|didn.t understand|couldn.t hear/i, label: "Communication issue" },
+    { pattern: /wrong number|wrong department|transfer/i, label: "Misrouted" },
+    { pattern: /missing info|no claim|no file|not found/i, label: "Missing claim info" },
+  ];
+  const text = `${r.message ?? ""} ${r.notes ?? ""}`;
+  const blocker = blockerKeywords.find(b => b.pattern.test(text))?.label ?? null;
+
+  return (
+    <div className="bg-muted/40 rounded-lg border text-sm overflow-hidden">
+      {/* Header row */}
+      <div className="flex items-start justify-between p-3 gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium">
+              {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
+            </span>
+            {r.whipClaimNumber && (
+              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+                Claim: {r.whipClaimNumber}
+              </span>
+            )}
+            {r.source && (
+              <span className="text-xs bg-slate-50 text-slate-600 border border-slate-200 rounded px-1.5 py-0.5 capitalize">
+                {r.source === "voicemail" ? "Voicemail" : r.source === "live_call" ? "Live Call" : r.source}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {new Date(r.createdAt).toLocaleString()}
+            {r.handlerName ? ` · Handler: ${r.handlerName}` : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Badge variant="outline" className={
+            r.status === "open"
+              ? "text-orange-600 border-orange-200 bg-orange-50"
+              : "text-green-600 border-green-200 bg-green-50"
+          }>{r.status}</Badge>
+          {r.whipClaimNumber && (
+            <a
+              href={`https://snapsheetvice.com/claims?search=${encodeURIComponent(r.whipClaimNumber)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5"
+              onClick={(e) => e.stopPropagation()}
+              title="Search this claim in Snapsheet (login required)">
+              Snapsheet <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* AI-extracted call purpose / message */}
+      {r.message && (
+        <div className="px-3 pb-2">
+          <div className="flex items-start gap-1.5 bg-background/70 rounded p-2 border border-border/50">
+            <MessageSquare className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-medium text-blue-700 mb-0.5">Call Purpose</p>
+              <p className="text-xs text-foreground leading-relaxed">{r.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolution blocker */}
+      {blocker && (
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-1.5 bg-amber-50 rounded p-2 border border-amber-200">
+            <HelpCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+            <p className="text-xs text-amber-800"><span className="font-medium">Resolution blocker:</span> {blocker}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Recording + transcript toggle */}
+      <div className="px-3 pb-3 flex items-center gap-3">
+        {hasRecording && (
+          <a href={r.aircallRecordingUrl ?? r.recordingUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+            onClick={(e) => e.stopPropagation()}>
+            <Mic className="h-3 w-3" /> Listen to recording
+          </a>
+        )}
+        {hasTranscript && (
+          <button
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setShowTranscript(v => !v)}>
+            <FileText className="h-3 w-3" />
+            {showTranscript ? "Hide transcript" : "View full transcript"}
+            {showTranscript ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        )}
+      </div>
+
+      {/* Full transcript */}
+      {showTranscript && hasTranscript && (
+        <div className="border-t px-3 py-3 bg-background/50">
+          <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+            <FileText className="h-3 w-3" /> Voicemail Transcript
+          </p>
+          <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-mono bg-muted/40 rounded p-2">
+            {r.rawTranscript}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () => void }) {
@@ -156,99 +281,80 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
               </div>
             )}
 
-            {/* Intake Records */}
-            {intakes.length > 0 && (
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Intake Records ({intakes.length})
-                </h3>
-                <div className="space-y-2">
-                  {intakes.map((r) => (
-                    <div key={r.id} className="bg-muted/40 rounded-lg p-3 text-sm border">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">
-                            {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
-                          </span>
-                          {r.whipClaimNumber && (
-                            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
-                              Claim: {r.whipClaimNumber}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className={
-                            r.status === "open"
-                              ? "text-orange-600 border-orange-200 bg-orange-50"
-                              : "text-green-600 border-green-200 bg-green-50"
-                          }>{r.status}</Badge>
-                          {r.snapsheetClaimUrl && (
-                            <a href={r.snapsheetClaimUrl} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5"
-                              onClick={(e) => e.stopPropagation()}>
-                              Snapsheet <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      {r.message && (
-                        <p className="text-xs text-muted-foreground line-clamp-3 bg-background/60 rounded p-2 mt-1">
-                          {r.message}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {format(new Date(r.createdAt), "MMM d, yyyy h:mm a")}
-                        {r.handlerName ? ` · Handler: ${r.handlerName}` : ""}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Chronological Timeline — merges call_history + intake records */}
+            {(() => {
+              // Build a merged timeline sorted newest-first
+              type TimelineItem =
+                | { kind: "call"; ts: Date; call: typeof calls[0] }
+                | { kind: "intake"; ts: Date; intake: typeof intakes[0] };
 
-            {/* No intake records note */}
-            {intakes.length === 0 && calls.length > 0 && (
-              <div className="bg-muted/30 rounded-lg p-3 flex items-start gap-2 text-sm">
-                <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <p className="text-muted-foreground text-xs">
-                  No voicemail intake records for this number. All {calls.length} calls were answered or missed without leaving a message.
-                  {calls.filter(c => c.status === "answered").length > 0 && " Questions asked during answered calls are not captured without a voicemail."}
-                </p>
-              </div>
-            )}
+              const items: TimelineItem[] = [
+                ...calls.map(c => ({ kind: "call" as const, ts: new Date(c.startedAt), call: c })),
+                ...intakes.map(r => ({ kind: "intake" as const, ts: new Date(r.createdAt), intake: r })),
+              ].sort((a, b) => b.ts.getTime() - a.ts.getTime());
 
-            {/* All Calls */}
-            <div>
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                Call History ({calls.length})
-              </h3>
-              <div className="space-y-1.5">
-                {calls.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between bg-muted/30 rounded px-3 py-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        c.status === "answered" ? "bg-green-500" : c.status === "missed" ? "bg-red-500" : "bg-orange-500"
-                      }`} />
-                      <span className="capitalize text-muted-foreground">{c.status}</span>
-                      {c.agentName && <span className="text-foreground font-medium">· {c.agentName}</span>}
-                    </div>
-                    <div className="flex items-center gap-3 text-muted-foreground">
-                      {c.durationSeconds ? <span>{fmtDuration(c.durationSeconds)}</span> : null}
-                      <span>{format(new Date(c.startedAt), "MMM d, h:mm a")}</span>
-                      {c.voicemailUrl && (
-                        <a href={c.voicemailUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-blue-500 hover:underline" onClick={(e) => e.stopPropagation()}>
-                          <Voicemail className="h-3 w-3" />
-                        </a>
-                      )}
+              if (items.length === 0) return (
+                <p className="text-xs text-muted-foreground py-2">No call records found.</p>
+              );
+
+              return (
+                <div>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Full Call Timeline ({items.length} events)
+                  </h3>
+                  <div className="relative pl-5">
+                    {/* vertical line */}
+                    <div className="absolute left-1.5 top-0 bottom-0 w-px bg-border" />
+                    <div className="space-y-3">
+                      {items.map((item, idx) => {
+                        if (item.kind === "call") {
+                          const c = item.call;
+                          const dotColor = c.status === "answered" ? "bg-green-500" : c.status === "missed" ? "bg-red-500" : "bg-orange-400";
+                          return (
+                            <div key={`call-${c.id}`} className="relative">
+                              <span className={`absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full border-2 border-background ${dotColor}`} />
+                              <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`font-medium capitalize ${
+                                      c.status === "answered" ? "text-green-700" : c.status === "missed" ? "text-red-600" : "text-orange-600"
+                                    }`}>{c.status}</span>
+                                    {c.agentName && <span className="text-muted-foreground">· {c.agentName}</span>}
+                                    {c.durationSeconds ? <span className="text-muted-foreground">· {fmtDuration(c.durationSeconds)}</span> : null}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-muted-foreground">
+                                    <span>{format(item.ts, "MMM d, h:mm a")}</span>
+                                    {c.voicemailUrl && (
+                                      <a href={c.voicemailUrl} target="_blank" rel="noopener noreferrer"
+                                        className="text-blue-500 hover:underline" onClick={(e) => e.stopPropagation()}>
+                                        <Voicemail className="h-3 w-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                                {c.status === "answered" && (
+                                  <p className="text-muted-foreground mt-1 italic">
+                                    Live call — conversation not captured in voicemail system.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          const r = item.intake;
+                          return (
+                            <div key={`intake-${r.id}`} className="relative">
+                              <span className="absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-blue-500" />
+                              <IntakeRecordExpanded r={r} />
+                            </div>
+                          );
+                        }
+                      })}
                     </div>
                   </div>
-                ))}
-                {calls.length === 0 && (
-                  <p className="text-xs text-muted-foreground py-2">No call records found.</p>
-                )}
-              </div>
-            </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

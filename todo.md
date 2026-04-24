@@ -111,3 +111,11 @@
 - [x] Add scorecard push form to Weekly QA page (manager selects handler, fills scores + comments, pushes)
 - [x] Add "Profile" link to each handler row in Handler Queue
 - [x] Wire HandlerProfile route in App.tsx
+
+## Repeat Caller Intelligence & Snapsheet Fix (Apr 24)
+- [x] Fix Snapsheet links — diagnosed: URL format correct, Snapsheet requires login; updated link label to clarify
+- [x] Repeat caller drawer: show full voicemail transcript for each call
+- [x] Repeat caller drawer: show AI-extracted call purpose / reason for call
+- [x] Repeat caller drawer: show what prevented resolution (unanswered questions, wrong dept, missing info)
+- [x] Repeat caller drawer: show conversation thread across all their calls chronologically
+- [x] Backend: getCallerHistory already returns full intake records with rawTranscript — no backend change needed

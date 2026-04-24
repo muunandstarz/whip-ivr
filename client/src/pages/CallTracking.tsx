@@ -27,6 +27,12 @@ import {
   CheckCircle2,
   ExternalLink,
   Info,
+  FileText,
+  Mic,
+  MessageSquare,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -62,6 +68,106 @@ function callerTypeBadge(type: string | null | undefined) {
     <Badge variant="outline" className={`text-xs capitalize ${map[type] ?? ""}`}>
       {type.replace(/_/g, " ")}
     </Badge>
+  );
+}
+
+function IntakeCardCT({ r, blocker, hasTranscript, hasRecording }: {
+  r: any;
+  blocker: string | null;
+  hasTranscript: boolean;
+  hasRecording: boolean;
+}) {
+  const [showTx, setShowTx] = useState(false);
+  return (
+    <div className="bg-muted/40 rounded-lg border text-sm overflow-hidden">
+      <div className="flex items-start justify-between p-3 gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium">
+              {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
+            </span>
+            {r.whipClaimNumber && (
+              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+                Claim: {r.whipClaimNumber}
+              </span>
+            )}
+            {r.source && (
+              <span className="text-xs bg-slate-50 text-slate-600 border border-slate-200 rounded px-1.5 py-0.5 capitalize">
+                {r.source === "voicemail" ? "Voicemail" : r.source === "live_call" ? "Live Call" : r.source}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {new Date(r.createdAt).toLocaleString()}
+            {r.handlerName ? ` · Handler: ${r.handlerName}` : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Badge variant="outline" className={
+            r.status === "open"
+              ? "text-orange-600 border-orange-200 bg-orange-50"
+              : "text-green-600 border-green-200 bg-green-50"
+          }>{r.status}</Badge>
+          {r.whipClaimNumber && (
+            <a
+              href={`https://snapsheetvice.com/claims?search=${encodeURIComponent(r.whipClaimNumber)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5"
+              onClick={(e) => e.stopPropagation()}
+              title="Search in Snapsheet (login required)">
+              Snapsheet <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      </div>
+      {r.message && (
+        <div className="px-3 pb-2">
+          <div className="flex items-start gap-1.5 bg-background/70 rounded p-2 border border-border/50">
+            <MessageSquare className="h-3.5 w-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-medium text-blue-700 mb-0.5">Call Purpose</p>
+              <p className="text-xs text-foreground leading-relaxed">{r.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      {blocker && (
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-1.5 bg-amber-50 rounded p-2 border border-amber-200">
+            <HelpCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+            <p className="text-xs text-amber-800"><span className="font-medium">Resolution blocker:</span> {blocker}</p>
+          </div>
+        </div>
+      )}
+      <div className="px-3 pb-3 flex items-center gap-3">
+        {hasRecording && (
+          <a href={r.aircallRecordingUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+            onClick={(e) => e.stopPropagation()}>
+            <Mic className="h-3 w-3" /> Listen to recording
+          </a>
+        )}
+        {hasTranscript && (
+          <button
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setShowTx(v => !v)}>
+            <FileText className="h-3 w-3" />
+            {showTx ? "Hide transcript" : "View full transcript"}
+            {showTx ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        )}
+      </div>
+      {showTx && hasTranscript && (
+        <div className="border-t px-3 py-3 bg-background/50">
+          <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+            <FileText className="h-3 w-3" /> Voicemail Transcript
+          </p>
+          <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-mono bg-muted/40 rounded p-2">
+            {r.rawTranscript}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -153,52 +259,27 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
               </div>
             )}
 
-            {/* Intake Records */}
+            {/* Intake Records with full transcript */}
             {intakes.length > 0 && (
               <div>
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Intake Records ({intakes.length})
+                  Voicemails & Intake Records ({intakes.length})
                 </h3>
                 <div className="space-y-2">
-                  {intakes.map((r) => (
-                    <div key={r.id} className="bg-muted/40 rounded-lg p-3 text-sm border">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">
-                            {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
-                          </span>
-                          {r.whipClaimNumber && (
-                            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
-                              Claim: {r.whipClaimNumber}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className={
-                            r.status === "open"
-                              ? "text-orange-600 border-orange-200 bg-orange-50"
-                              : "text-green-600 border-green-200 bg-green-50"
-                          }>{r.status}</Badge>
-                          {r.snapsheetClaimUrl && (
-                            <a href={r.snapsheetClaimUrl} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5"
-                              onClick={(e) => e.stopPropagation()}>
-                              Snapsheet <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      {r.message && (
-                        <p className="text-xs text-muted-foreground bg-background/60 rounded p-2 mt-1 whitespace-pre-wrap">
-                          {r.message}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {format(new Date(r.createdAt), "MMM d, yyyy h:mm a")}
-                        {r.handlerName ? ` · Handler: ${r.handlerName}` : ""}
-                      </p>
-                    </div>
-                  ))}
+                  {intakes.map((r) => {
+                    const hasTranscript = !!(r.rawTranscript && r.rawTranscript.trim().length > 0);
+                    const hasRecording = !!(r.aircallRecordingUrl);
+                    const blockerKeywords = [
+                      { pattern: /unable to reach|no answer|not available|voicemail/i, label: "Handler unavailable" },
+                      { pattern: /waiting|pending|follow.?up|call back/i, label: "Awaiting callback" },
+                      { pattern: /wrong number|wrong department|transfer/i, label: "Misrouted" },
+                      { pattern: /missing info|no claim|no file|not found/i, label: "Missing claim info" },
+                    ];
+                    const blocker = blockerKeywords.find(b => b.pattern.test(`${r.message ?? ""} ${r.notes ?? ""}`))?.label ?? null;
+                    return (
+                      <IntakeCardCT key={r.id} r={r} blocker={blocker} hasTranscript={hasTranscript} hasRecording={hasRecording} />
+                    );
+                  })}
                 </div>
               </div>
             )}
