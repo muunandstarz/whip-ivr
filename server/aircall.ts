@@ -9,19 +9,30 @@ import { matchClaimNumber, resolveClaimFromSnapsheet } from "./claimMatch";
 
 export const aircallRouter = express.Router();
 
-// Handler routing rules (matches known team members)
+// Handler routing rules — full names match the handlers table
+// Nicknames: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
 const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string }> = {
-  natasha: { id: 1, name: "Natasha", email: "natasha@drivewhip.com" },
-  natashia: { id: 1, name: "Natasha", email: "natasha@drivewhip.com" },
-  jayla: { id: 2, name: "Jayla", email: "jayla@drivewhip.com" },
-  jela: { id: 2, name: "Jayla", email: "jayla@drivewhip.com" },
-  carlito: { id: 3, name: "Carlito", email: "carlito@drivewhip.com" },
-  jasmine: { id: 4, name: "Jasmine", email: "jasminea@drivewhip.com" },
-  annie: { id: 5, name: "Annie", email: "annie@drivewhip.com" },
-  lorraine: { id: 6, name: "Lorraine", email: "lorraine@drivewhip.com" },
-  raine: { id: 6, name: "Lorraine", email: "lorraine@drivewhip.com" },
-  jovel: { id: 7, name: "Jovel", email: "jovel@drivewhip.com" },
+  natasha:    { id: 1,  name: "Natashia Edulan",   email: "natashiae@drivewhip.com" },
+  natashia:   { id: 1,  name: "Natashia Edulan",   email: "natashiae@drivewhip.com" },
+  jayla:      { id: 2,  name: "Jayla Bernard",      email: "jayla.bernard@drivewhip.com" },
+  jela:       { id: 2,  name: "Jayla Bernard",      email: "jayla.bernard@drivewhip.com" },
+  mj:         { id: 3,  name: "MJ Badua",           email: "mj.badua@drivewhip.com" },
+  "mary joy": { id: 3,  name: "MJ Badua",           email: "mj.badua@drivewhip.com" },
+  carlito:    { id: 4,  name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
+  annie:      { id: 5,  name: "Annie Ortiz",        email: "annie.ortiz@drivewhip.com" },
+  ana:        { id: 6,  name: "Ana Padilla",        email: "anap@drivewhip.com" },
+  catherine:  { id: 7,  name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
+  elizabeth:  { id: 8,  name: "Elizabeth Avilla",   email: "elizabeth.avila@drivewhip.com" },
+  lorraine:   { id: 9,  name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
+  raine:      { id: 9,  name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
+  daniel:     { id: 10, name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
+  jovel:      { id: 11, name: "Jovel Villa",         email: "jovel@drivewhip.com" },
+  jobs:       { id: 11, name: "Jovel Villa",         email: "jovel@drivewhip.com" },
+  daryl:      { id: 12, name: "Daryl Ochate",        email: "daryl@drivewhip.com" },
 };
+
+// Accident/new-loss detection — flag when a member is REPORTING an incident
+const ACCIDENT_REPORT_REGEX = /\b(reporting (a|an|the) (accident|loss|crash|collision)|just had an accident|was in an accident|got hit|rear.?ended|side.?swiped|totaled|total loss|vehicle was struck|car was hit|accident report|filing a claim for|backed into|made wrong turn|another driver|other driver|driver hit|driver ran)\b/i;
 
 // Determine handler from extracted data
 function resolveHandler(handlerMentioned: string | null, callerType: string): { id: number; name: string } {
@@ -225,6 +236,14 @@ export async function processVoicemail(params: {
   let priority: "normal" | "high" | "urgent" = "normal";
   if (isRepeat && callCount >= 3) priority = "urgent";
   else if (isRepeat) priority = "high";
+  // Law office calls are always high priority
+  if (extracted.callerType === "law_office" && priority === "normal") priority = "high";
+  // Members/claimants reporting an accident are high priority
+  if (
+    (extracted.callerType === "member" || extracted.callerType === "claimant") &&
+    priority === "normal" &&
+    ACCIDENT_REPORT_REGEX.test(extracted.message || "")
+  ) priority = "high";
 
   // 5b. Claim number matching
   let claimMatchType: string | null = null;

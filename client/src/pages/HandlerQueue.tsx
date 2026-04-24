@@ -1,50 +1,56 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import {
   Users,
-  PhoneIncoming,
   Clock,
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 
+// Full name → color mapping
+// Nicknames: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
 const HANDLER_COLORS: Record<string, string> = {
-  Natasha: "bg-blue-100 text-blue-800 border-blue-200",
-  Jayla: "bg-purple-100 text-purple-800 border-purple-200",
-  Carlito: "bg-green-100 text-green-800 border-green-200",
-  Annie: "bg-pink-100 text-pink-800 border-pink-200",
-  Lorraine: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  Jovel: "bg-orange-100 text-orange-800 border-orange-200",
-  MJ: "bg-teal-100 text-teal-800 border-teal-200",
-  Daryl: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  "Natashia Edulan":    "bg-blue-100 text-blue-800 border-blue-200",
+  "Jayla Bernard":      "bg-purple-100 text-purple-800 border-purple-200",
+  "Carlito Legarde Jr": "bg-green-100 text-green-800 border-green-200",
+  "Annie Ortiz":        "bg-pink-100 text-pink-800 border-pink-200",
+  "Lorraine Tria":      "bg-yellow-100 text-yellow-800 border-yellow-200",
+  "Jovel Villa":        "bg-orange-100 text-orange-800 border-orange-200",
+  "MJ Badua":           "bg-teal-100 text-teal-800 border-teal-200",
+  "Daryl Ochate":       "bg-indigo-100 text-indigo-800 border-indigo-200",
+  "Ana Padilla":        "bg-rose-100 text-rose-800 border-rose-200",
+  "Catherine Cestina":  "bg-cyan-100 text-cyan-800 border-cyan-200",
+  "Elizabeth Avilla":   "bg-lime-100 text-lime-800 border-lime-200",
+  "Unassigned":         "bg-gray-100 text-gray-600 border-gray-200",
 };
 
-const PRIORITY_CONFIG = {
+const PRIORITY_CONFIG: Record<string, { label: string; className: string }> = {
   urgent: { label: "Urgent", className: "bg-red-50 text-red-700 border-red-200" },
-  high: { label: "High", className: "bg-orange-50 text-orange-700 border-orange-200" },
+  high:   { label: "High",   className: "bg-orange-50 text-orange-700 border-orange-200" },
   normal: { label: "Normal", className: "bg-gray-50 text-gray-600 border-gray-200" },
 };
 
 const CALLER_TYPE_LABELS: Record<string, string> = {
-  carrier: "Carrier",
-  law_office: "Law Office",
+  carrier:          "Carrier",
+  law_office:       "Law Office",
   medical_provider: "Medical",
-  member: "Member",
-  claimant: "Claimant",
-  police: "Police",
-  unknown: "Unknown",
+  member:           "Member",
+  claimant:         "Claimant",
+  police:           "Police",
+  unknown:          "Unknown",
 };
 
 export default function HandlerQueue() {
-  const [expandedHandlers, setExpandedHandlers] = useState<Set<string>>(new Set(["Natasha", "Jayla"]));
+  const [expandedHandlers, setExpandedHandlers] = useState<Set<string>>(new Set<string>());
+  const [initialized, setInitialized] = useState(false);
 
   const { data, isLoading } = trpc.intake.list.useQuery({
     status: "open",
@@ -72,8 +78,27 @@ export default function HandlerQueue() {
     }
   }
 
-  // Sort handlers by queue size (descending)
-  const sortedHandlers = Object.entries(byHandler).sort(([, a], [, b]) => b.length - a.length);
+  // Auto-expand all handlers once data loads
+  useEffect(() => {
+    if (!initialized && data?.records && data.records.length > 0) {
+      const allHandlers = new Set<string>(
+        data.records.map((r) => r.handlerName || "Unassigned")
+      );
+      setExpandedHandlers(allHandlers);
+      setInitialized(true);
+    }
+  }, [data, initialized]);
+
+  // Sort: handlers with urgent/high records first, then by queue size
+  const sortedHandlers = Object.entries(byHandler).sort(([, a], [, b]) => {
+    const urgentA = a.filter((r) => r.priority === "urgent").length;
+    const urgentB = b.filter((r) => r.priority === "urgent").length;
+    if (urgentB !== urgentA) return urgentB - urgentA;
+    const highA = a.filter((r) => r.priority === "high").length;
+    const highB = b.filter((r) => r.priority === "high").length;
+    if (highB !== highA) return highB - highA;
+    return b.length - a.length;
+  });
 
   const totalOpen = data?.total ?? 0;
   const urgentCount = data?.records?.filter((r) => r.priority === "urgent").length ?? 0;
@@ -86,7 +111,7 @@ export default function HandlerQueue() {
         <div>
           <h1 className="text-2xl font-bold text-[#171b31]">Handler Queue</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Open intake records grouped by assigned handler
+            Open intake records grouped by assigned handler — urgent and high priority shown first
           </p>
         </div>
 
@@ -162,7 +187,12 @@ export default function HandlerQueue() {
               const isExpanded = expandedHandlers.has(handlerName);
               const urgentInQueue = records.filter((r) => r.priority === "urgent").length;
               const highInQueue = records.filter((r) => r.priority === "high").length;
-              const colorClass = HANDLER_COLORS[handlerName] || "bg-gray-100 text-gray-800 border-gray-200";
+              const colorClass = HANDLER_COLORS[handlerName] ?? "bg-gray-100 text-gray-800 border-gray-200";
+              const initials = handlerName
+                .split(" ")
+                .slice(0, 2)
+                .map((n) => n[0])
+                .join("");
 
               return (
                 <Card key={handlerName} className="overflow-hidden">
@@ -172,22 +202,32 @@ export default function HandlerQueue() {
                     onClick={() => toggleHandler(handlerName)}
                   >
                     <div className="flex items-center gap-4 px-5 py-4 hover:bg-muted/20 transition-colors">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border ${colorClass}`}>
-                        {handlerName.charAt(0)}
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border flex-shrink-0 ${colorClass}`}>
+                        {initials}
                       </div>
                       <div className="flex-1">
                         <div className="font-semibold text-[#171b31]">{handlerName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {records.length} open record{records.length !== 1 ? "s" : ""}
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                          <span>{records.length} open record{records.length !== 1 ? "s" : ""}</span>
                           {urgentInQueue > 0 && (
-                            <span className="ml-2 text-red-600 font-medium">• {urgentInQueue} urgent</span>
+                            <span className="text-red-600 font-medium">• {urgentInQueue} urgent</span>
                           )}
-                          {highInQueue > 0 && !urgentInQueue && (
-                            <span className="ml-2 text-orange-600 font-medium">• {highInQueue} high priority</span>
+                          {highInQueue > 0 && (
+                            <span className="text-orange-600 font-medium">• {highInQueue} high priority</span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {urgentInQueue > 0 && (
+                          <Badge className="text-xs bg-red-100 text-red-700 border-red-200 border">
+                            {urgentInQueue} urgent
+                          </Badge>
+                        )}
+                        {highInQueue > 0 && (
+                          <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-200 border">
+                            {highInQueue} high
+                          </Badge>
+                        )}
                         <Badge variant="outline" className={`text-xs ${colorClass}`}>
                           {records.length}
                         </Badge>
@@ -205,11 +245,11 @@ export default function HandlerQueue() {
                     <div className="border-t">
                       {records
                         .sort((a, b) => {
-                          const pOrder = { urgent: 0, high: 1, normal: 2 };
-                          return (pOrder[a.priority] ?? 2) - (pOrder[b.priority] ?? 2);
+                          const pOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+                          return (pOrder[a.priority ?? "normal"] ?? 2) - (pOrder[b.priority ?? "normal"] ?? 2);
                         })
                         .map((record, idx) => {
-                          const priorityCfg = PRIORITY_CONFIG[record.priority] ?? PRIORITY_CONFIG.normal;
+                          const priorityCfg = PRIORITY_CONFIG[record.priority ?? "normal"] ?? PRIORITY_CONFIG.normal;
                           return (
                             <div
                               key={record.id}
@@ -217,6 +257,12 @@ export default function HandlerQueue() {
                                 idx < records.length - 1 ? "border-b" : ""
                               }`}
                             >
+                              {/* Priority indicator stripe */}
+                              <div className={`w-1 h-10 rounded-full flex-shrink-0 ${
+                                record.priority === "urgent" ? "bg-red-400" :
+                                record.priority === "high" ? "bg-orange-400" :
+                                "bg-gray-200"
+                              }`} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium text-sm text-[#171b31]">
@@ -230,11 +276,11 @@ export default function HandlerQueue() {
                                   </Badge>
                                   {record.isRepeatCaller && (
                                     <Badge variant="outline" className="text-xs border-red-200 text-red-600 bg-red-50">
-                                      🔁 Repeat
+                                      Repeat
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
                                   <span>{CALLER_TYPE_LABELS[record.callerType ?? "unknown"]}</span>
                                   {record.whipClaimNumber && (
                                     <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded">
@@ -242,6 +288,11 @@ export default function HandlerQueue() {
                                     </span>
                                   )}
                                   <span>{formatDistanceToNow(new Date(record.createdAt), { addSuffix: true })}</span>
+                                  {record.message && (
+                                    <span className="truncate max-w-xs text-muted-foreground/70 hidden md:inline">
+                                      {record.message.substring(0, 60)}…
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <Link href={`/intake/${record.id}`}>

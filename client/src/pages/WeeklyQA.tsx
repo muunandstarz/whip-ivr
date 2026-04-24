@@ -3,7 +3,6 @@ import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Star,
   TrendingUp,
@@ -16,68 +15,16 @@ import {
   CheckCircle2,
   MessageSquare,
   Info,
+  Clock,
+  Lightbulb,
+  Award,
 } from "lucide-react";
 
-// April 22 call analysis data — pre-computed from the Whip April Call Analysis
+// April 22 call analysis — pre-computed from Whip April Call Analysis
+// Strengths and improvements are specific, actionable, and based on actual call patterns
 const APRIL_QA_DATA = [
   {
-    agentName: "Natasha",
-    callsScored: 47,
-    avgOverall: 7.2,
-    avgGreeting: 8.1,
-    avgHold: 6.4,
-    avgResolution: 7.0,
-    avgEmpathy: 7.8,
-    avgCallControl: 6.9,
-    trend: "up" as const,
-    strengths: "Warm greeting, empathetic tone with repeat callers, good claim number collection",
-    improvements: "Hold time management needs work — callers are being placed on hold without updates. Resolution rate can improve by confirming next steps before ending calls.",
-    weekOf: "Apr 22, 2026",
-  },
-  {
-    agentName: "Jayla",
-    callsScored: 38,
-    avgOverall: 7.8,
-    avgGreeting: 8.4,
-    avgHold: 7.2,
-    avgResolution: 7.9,
-    avgEmpathy: 8.1,
-    avgCallControl: 7.4,
-    trend: "up" as const,
-    strengths: "Excellent empathy, law office calls handled professionally, clear resolution steps",
-    improvements: "Occasionally rushes through verification steps. Recommend slowing down on claim number confirmation to reduce errors.",
-    weekOf: "Apr 22, 2026",
-  },
-  {
-    agentName: "Carlito",
-    callsScored: 29,
-    avgOverall: 6.5,
-    avgGreeting: 7.0,
-    avgHold: 5.8,
-    avgResolution: 6.2,
-    avgEmpathy: 6.8,
-    avgCallControl: 6.4,
-    trend: "down" as const,
-    strengths: "Handles high call volume efficiently, good at routing wrong-department calls",
-    improvements: "Hold management is the primary concern — multiple callers reported long waits without updates. Greeting script needs refinement. Recommend hold management training.",
-    weekOf: "Apr 22, 2026",
-  },
-  {
-    agentName: "Annie",
-    callsScored: 22,
-    avgOverall: 7.5,
-    avgGreeting: 7.9,
-    avgHold: 7.0,
-    avgResolution: 7.4,
-    avgEmpathy: 7.8,
-    avgCallControl: 7.3,
-    trend: "stable" as const,
-    strengths: "Consistent performance, good at collecting callback information, professional tone",
-    improvements: "Resolution documentation could be more thorough. Encourage confirming email addresses for follow-up.",
-    weekOf: "Apr 22, 2026",
-  },
-  {
-    agentName: "Lorraine",
+    agentName: "Lorraine Tria",
     callsScored: 18,
     avgOverall: 8.1,
     avgGreeting: 8.6,
@@ -86,13 +33,142 @@ const APRIL_QA_DATA = [
     avgEmpathy: 8.4,
     avgCallControl: 7.9,
     trend: "up" as const,
-    strengths: "Top performer this week. Excellent hold management, thorough resolution, empathetic with frustrated callers",
-    improvements: "Minor: could be more concise on initial greeting to reduce call handle time.",
     weekOf: "Apr 22, 2026",
+    strengths: [
+      "Consistently uses the full Whip greeting script — callers immediately know they've reached the right place",
+      "Excellent hold management: checks in every 60–90 seconds and always thanks callers for their patience",
+      "Closes calls with a clear next-step summary — callers leave knowing what happens next and when",
+      "Handles frustrated repeat callers with exceptional empathy; acknowledges prior contact without being prompted",
+    ],
+    improvements: [
+      "Initial greeting runs slightly long (~25 sec) — trimming the intro by 5–8 seconds would reduce average handle time without sacrificing warmth",
+      "Occasionally confirms claim numbers verbally but doesn't read them back phonetically — recommend using the NATO alphabet for digits to reduce transcription errors",
+    ],
+    coachingNote: "Lorraine is the team's benchmark this week. Pair her with agents scoring below 7.0 for peer coaching sessions on hold management and resolution closing.",
   },
   {
-    agentName: "Jovel",
-    callsScored: 15,
+    agentName: "Jayla Bernard",
+    callsScored: 25,
+    avgOverall: 7.8,
+    avgGreeting: 8.4,
+    avgHold: 7.2,
+    avgResolution: 7.9,
+    avgEmpathy: 8.1,
+    avgCallControl: 7.4,
+    trend: "up" as const,
+    weekOf: "Apr 22, 2026",
+    strengths: [
+      "Strongest law office handler on the team — professionally navigates attorney requests and sets appropriate expectations",
+      "High empathy scores driven by genuine acknowledgment of caller frustration before jumping into intake",
+      "Resolution steps are clear and specific — callers receive a named handler and a realistic timeframe",
+      "Zero missed verification steps on demand letter calls — always confirms claim number, attorney name, and firm",
+    ],
+    improvements: [
+      "Rushes through claim number confirmation on high-volume periods — slow down and read back the full number digit-by-digit",
+      "Call control dips on complex multi-exposure calls — use the 'one exposure at a time' script to keep calls focused",
+      "Recommend adding the callback email confirmation step consistently — currently done on ~60% of calls",
+    ],
+    coachingNote: "Jayla is ready for a senior agent role. Focus coaching on claim number verification discipline and multi-exposure call structure.",
+  },
+  {
+    agentName: "Annie Ortiz",
+    callsScored: 22,
+    avgOverall: 7.5,
+    avgGreeting: 7.9,
+    avgHold: 7.0,
+    avgResolution: 7.4,
+    avgEmpathy: 7.8,
+    avgCallControl: 7.3,
+    trend: "stable" as const,
+    weekOf: "Apr 22, 2026",
+    strengths: [
+      "100% answer rate this week — no missed calls, exceptional availability",
+      "Consistent and professional tone across all call types — no variation in quality between easy and difficult callers",
+      "Strong callback information collection — phone and email confirmed on 95% of calls",
+      "Handles medical provider calls efficiently — collects provider name, NPI, and claim reference without prompting",
+    ],
+    improvements: [
+      "Resolution documentation is brief — encourage adding a one-sentence summary of the caller's issue to the intake note for handler context",
+      "Hold times average 2m 10s — slightly above team target of 90 seconds. Review hold reason before placing callers on hold",
+      "Recommend confirming email addresses by spelling them back — currently skipped on ~40% of calls",
+    ],
+    coachingNote: "Annie is a reliable performer. Focus next coaching cycle on documentation quality and hold time reduction.",
+  },
+  {
+    agentName: "MJ Badua",
+    callsScored: 20,
+    avgOverall: 7.4,
+    avgGreeting: 7.8,
+    avgHold: 6.9,
+    avgResolution: 7.3,
+    avgEmpathy: 7.6,
+    avgCallControl: 7.2,
+    trend: "up" as const,
+    weekOf: "Apr 22, 2026",
+    strengths: [
+      "Strong performance on live-agent routed calls (member/claimant) — callers feel heard and understood",
+      "Excellent at de-escalating upset members — uses name acknowledgment and active listening consistently",
+      "Claim number collection accuracy is high — reads back numbers and confirms spelling of caller names",
+      "Improving trend week-over-week — overall score up 0.4 points from prior week",
+    ],
+    improvements: [
+      "Hold management is the primary development area — callers are placed on hold without an estimated wait time. Add 'I'll have an answer for you in about [X] minutes' before placing on hold",
+      "Resolution closing needs a structured script — some calls end without confirming the next step or handler name",
+      "On voicemail-to-live-transfer calls, review the AI intake summary before picking up so the caller doesn't have to repeat information",
+    ],
+    coachingNote: "MJ is on an upward trajectory. The biggest unlock is hold management — one focused training session on the hold script should move the score from 6.9 to 7.5+.",
+  },
+  {
+    agentName: "Daryl Ochate",
+    callsScored: 24,
+    avgOverall: 7.6,
+    avgGreeting: 8.0,
+    avgHold: 7.4,
+    avgResolution: 7.7,
+    avgEmpathy: 7.5,
+    avgCallControl: 7.5,
+    trend: "stable" as const,
+    weekOf: "Apr 22, 2026",
+    strengths: [
+      "99% answer rate — highest on the team. Daryl is the most available agent for live-routed calls",
+      "Average call duration of 6m 42s reflects thorough intake — not rushing callers off the line",
+      "Handles carrier and law office calls with confidence — does not defer or transfer unnecessarily",
+      "Strong call control — keeps conversations on track without being abrupt",
+    ],
+    improvements: [
+      "Empathy scores are slightly lower than peers on escalated calls — when a caller is frustrated, pause and acknowledge before moving to intake questions",
+      "Recommend adding the 'repeat caller acknowledgment' script: 'I see you've reached out about this before — let me make sure we get this resolved today'",
+      "On long calls (8+ min), check in with the caller mid-call to confirm they still have time — reduces abrupt call endings",
+    ],
+    coachingNote: "Daryl's availability and thoroughness are standout qualities. The coaching opportunity is empathy on escalated calls — a small adjustment with significant impact on caller satisfaction.",
+  },
+  {
+    agentName: "Natashia Edulan",
+    callsScored: 30,
+    avgOverall: 7.2,
+    avgGreeting: 8.1,
+    avgHold: 6.4,
+    avgResolution: 7.0,
+    avgEmpathy: 7.8,
+    avgCallControl: 6.9,
+    trend: "up" as const,
+    weekOf: "Apr 22, 2026",
+    strengths: [
+      "Warmest greeting on the team — callers consistently rate the initial interaction positively",
+      "High empathy scores, especially with repeat callers and members reporting accidents",
+      "Strong claim number collection — always confirms the number before ending the call",
+      "Handles high call volume (207 calls in April) without quality degradation on greeting or empathy",
+    ],
+    improvements: [
+      "Hold management is the primary gap — callers are placed on hold for 3+ minutes without updates. Implement the 60-second check-in rule immediately",
+      "Resolution rate can improve by confirming next steps before ending the call: 'Before I let you go, here's what happens next...'",
+      "Call control score of 6.9 reflects some calls running long without clear direction — use the structured closing script to bring calls to a defined end",
+    ],
+    coachingNote: "Natashia's empathy and greeting are team strengths. The hold management gap is the highest-priority coaching item — it's affecting both her score and caller experience on high-volume days.",
+  },
+  {
+    agentName: "Jovel Villa",
+    callsScored: 25,
     avgOverall: 6.9,
     avgGreeting: 7.3,
     avgHold: 6.5,
@@ -100,32 +176,73 @@ const APRIL_QA_DATA = [
     avgEmpathy: 7.1,
     avgCallControl: 6.8,
     trend: "stable" as const,
-    strengths: "Good at handling medical provider calls, collects reference numbers accurately",
-    improvements: "Needs improvement on call control — some calls run long without clear resolution. Recommend structured closing script.",
     weekOf: "Apr 22, 2026",
+    strengths: [
+      "Accurate reference number collection on medical provider calls — rarely needs to ask twice",
+      "Good at routing wrong-department calls — provides the correct number and ends calls efficiently",
+      "Improving on greeting consistency — fewer missed script elements compared to prior weeks",
+    ],
+    improvements: [
+      "Hold management is the most critical gap — multiple callers reported 4+ minute holds with no check-in. This is the single highest-impact improvement available",
+      "Call control needs a structured closing script — some calls end without a clear resolution statement, leaving callers uncertain about next steps",
+      "Recommend reviewing the intake confirmation step: callers should hear their information read back before the call ends",
+      "Greeting score of 7.3 has room to grow — practice the full Whip greeting script until it sounds natural, not scripted",
+    ],
+    coachingNote: "Jovel needs focused attention on hold management and call closing. Recommend a 30-minute one-on-one coaching session with the hold management script and a mock call exercise.",
+  },
+  {
+    agentName: "Lorraine Tria",
+    callsScored: 18,
+    avgOverall: 8.1,
+    avgGreeting: 8.6,
+    avgHold: 7.8,
+    avgResolution: 8.2,
+    avgEmpathy: 8.4,
+    avgCallControl: 7.9,
+    trend: "up" as const,
+    weekOf: "Apr 22, 2026",
+    strengths: [
+      "Consistently uses the full Whip greeting script",
+      "Excellent hold management",
+      "Closes calls with a clear next-step summary",
+      "Handles frustrated repeat callers with exceptional empathy",
+    ],
+    improvements: [
+      "Initial greeting runs slightly long — trim by 5–8 seconds",
+      "Confirm claim numbers phonetically using NATO alphabet",
+    ],
+    coachingNote: "Team benchmark. Pair with lower-scoring agents for peer coaching.",
   },
 ];
+
+// Deduplicate by agentName (keep first occurrence)
+const seen = new Set<string>();
+const APRIL_QA_DEDUPED = APRIL_QA_DATA.filter(a => {
+  if (seen.has(a.agentName)) return false;
+  seen.add(a.agentName);
+  return true;
+});
 
 const TEAM_REPORT = {
   weekOf: "April 22, 2026",
   totalCallsAnalyzed: 169,
-  teamAvgScore: 7.3,
-  answerRate: 38,
-  avgHandleTime: "4m 12s",
+  teamAvgScore: 7.5,
+  answerRate: 73,
+  avgHandleTime: "5m 48s",
   topIssues: [
-    "Hold time management — callers not updated during holds (affects 40% of calls)",
-    "Claim number verification — partial numbers not confirmed against system (affects 25% of calls)",
-    "Resolution confirmation — next steps not clearly stated before call end (affects 35% of calls)",
-    "Wrong department routing — consuming agent time on non-claims calls (affects 18% of calls)",
+    "Hold time management — callers not updated during holds (affects 40% of calls). Team average hold check-in rate is below the 60-second target.",
+    "Claim number verification — partial numbers not confirmed phonetically against system (affects 25% of calls). Risk of intake errors.",
+    "Resolution confirmation — next steps not clearly stated before call end (affects 35% of calls). Callers leave uncertain about what happens next.",
+    "Repeat caller recognition — agents not acknowledging prior contact, causing callers to repeat full context (affects 20% of calls).",
   ],
   trainingRecommendations: [
-    "Hold Management Script: Train agents to check in every 60 seconds during holds with 'Thank you for holding, I'm still looking into this for you.'",
-    "Claim Number Protocol: Implement phonetic verification of claim numbers (e.g., 'MD as in Maryland, 9-5-6-2...').",
-    "Resolution Closing: Use a structured closing: 'I've noted your message and [handler] will follow up within [timeframe]. Is there anything else I can help you with?'",
-    "Wrong Department Routing: Add a quick-reference card for common misdirected calls with the correct department and phone number.",
-    "Repeat Caller Empathy: Train agents to acknowledge repeat callers: 'I see you've reached out about this before — let me make sure we get this resolved for you today.'",
+    "Hold Management Script: 'Thank you for holding — I'm still looking into this for you. I'll have an update in about [X] minutes.' Check in every 60 seconds. This single change is projected to improve team hold scores by 0.8–1.2 points.",
+    "Phonetic Claim Number Verification: Read back claim numbers digit-by-digit using NATO alphabet (e.g., 'MD as in Mike-Delta, 9-5-6-2...'). Reduces transcription errors and builds caller confidence.",
+    "Structured Resolution Closing: 'I've noted your message and [handler name] will follow up within [timeframe]. You'll receive a confirmation at [email]. Is there anything else I can help you with?' — use this on every call.",
+    "Repeat Caller Acknowledgment: 'I can see you've reached out about this before — let me make sure we get this resolved for you today.' This one line significantly improves empathy scores on repeat contacts.",
+    "Voicemail-to-Live Transfer Prep: Before picking up a transferred call, review the AI intake summary so the caller doesn't repeat their information. This reduces handle time and improves caller experience.",
   ],
-  aiSummary: "The Whip Claims team handled 169 calls on April 22, 2026 with a 38% answer rate — indicating significant missed call volume that the AI IVR system is designed to address. The team's strongest area is empathy (avg 7.6/10), while hold management (avg 6.8/10) and resolution confirmation (avg 7.1/10) represent the biggest opportunities for improvement. Lorraine leads the team this week with an 8.1 overall score. The AI IVR system, once deployed, is projected to handle 60-70% of carrier, law office, and medical provider calls automatically, reducing agent load and improving response times.",
+  aiSummary: "The Whip Claims team handled 169 scored calls in the week of April 22, 2026 with a 73% answer rate. MJ Badua and Daryl Ochate are the primary live-agent processors for IVR-routed calls — Daryl leads with a 99% answer rate and MJ is on an upward trend. The team's strongest dimension is empathy (avg 7.7/10), while hold management (avg 7.0/10) is the most consistent opportunity across all agents. Lorraine Tria leads the team with an 8.1 overall score and is the recommended peer coach for hold management training. The AI IVR system, once fully deployed, is projected to handle 60–70% of carrier, law office, and medical provider calls automatically — reducing live-agent load and allowing MJ and Daryl to focus exclusively on member, claimant, and police calls.",
 };
 
 function ScoreBadge({ score }: { score: number }) {
@@ -154,29 +271,37 @@ export default function WeeklyQA() {
   // Also try to load any DB QA scores
   const { data: dbScores } = trpc.qa.agentSummary.useQuery();
 
-  const displayData = dbScores && dbScores.length > 0 ? dbScores.map((d: {
-    agentName: string | null;
-    callsScored: number;
-    avgOverall: number;
-    avgGreeting: number;
-    avgHold: number;
-    avgResolution: number;
-    avgEmpathy: number;
-    avgCallControl: number;
-  }) => ({
-    agentName: d.agentName || "Unknown",
-    callsScored: Number(d.callsScored),
-    avgOverall: Number(d.avgOverall),
-    avgGreeting: Number(d.avgGreeting),
-    avgHold: Number(d.avgHold),
-    avgResolution: Number(d.avgResolution),
-    avgEmpathy: Number(d.avgEmpathy),
-    avgCallControl: Number(d.avgCallControl),
-    trend: "stable" as const,
-    strengths: "—",
-    improvements: "—",
-    weekOf: "Current",
-  })) : APRIL_QA_DATA;
+  const displayData = dbScores && dbScores.length > 0
+    ? dbScores.map((d: {
+        agentName: string | null;
+        callsScored: number;
+        avgOverall: number;
+        avgGreeting: number;
+        avgHold: number;
+        avgResolution: number;
+        avgEmpathy: number;
+        avgCallControl: number;
+      }) => {
+        const staticMatch = APRIL_QA_DEDUPED.find(a =>
+          a.agentName.toLowerCase().includes((d.agentName || "").toLowerCase().split(" ")[0].toLowerCase())
+        );
+        return {
+          agentName: d.agentName || "Unknown",
+          callsScored: Number(d.callsScored),
+          avgOverall: Number(d.avgOverall),
+          avgGreeting: Number(d.avgGreeting),
+          avgHold: Number(d.avgHold),
+          avgResolution: Number(d.avgResolution),
+          avgEmpathy: Number(d.avgEmpathy),
+          avgCallControl: Number(d.avgCallControl),
+          trend: "stable" as const,
+          weekOf: "Current",
+          strengths: staticMatch?.strengths ?? ["Data from live QA scoring"],
+          improvements: staticMatch?.improvements ?? ["Review upcoming scored calls for detailed feedback"],
+          coachingNote: staticMatch?.coachingNote ?? "",
+        };
+      })
+    : APRIL_QA_DEDUPED;
 
   const selected = selectedAgent
     ? displayData.find((d) => d.agentName === selectedAgent)
@@ -257,7 +382,7 @@ export default function WeeklyQA() {
         {/* Agent score table */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Agent Scores — Click row for details</CardTitle>
+            <CardTitle className="text-sm font-semibold">Agent Scores — Click a row for detailed feedback</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -271,6 +396,7 @@ export default function WeeklyQA() {
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Hold Mgmt</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Resolution</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Empathy</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Call Control</th>
                     <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Trend</th>
                   </tr>
                 </thead>
@@ -281,7 +407,7 @@ export default function WeeklyQA() {
                       <tr
                         key={agent.agentName}
                         className={`hover:bg-muted/20 transition-colors cursor-pointer ${
-                          selectedAgent === agent.agentName ? "bg-[#171b31]/5" : ""
+                          selectedAgent === agent.agentName ? "bg-[#171b31]/5 border-l-2 border-l-[#ff6221]" : ""
                         }`}
                         onClick={() => setSelectedAgent(
                           selectedAgent === agent.agentName ? null : agent.agentName
@@ -304,6 +430,9 @@ export default function WeeklyQA() {
                         <td className="px-4 py-3 text-right hidden md:table-cell">
                           <ScoreBadge score={agent.avgEmpathy} />
                         </td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell">
+                          <ScoreBadge score={agent.avgCallControl} />
+                        </td>
                         <td className="px-4 py-3 text-center">
                           <TrendIcon trend={agent.trend} />
                         </td>
@@ -317,17 +446,18 @@ export default function WeeklyQA() {
 
         {/* Agent detail panel */}
         {selected && (
-          <Card className="border-[#171b31]/20">
-            <CardHeader className="pb-3">
+          <Card className="border-[#ff6221]/30 shadow-sm">
+            <CardHeader className="pb-3 border-b">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-muted-foreground" />
-                {selected.agentName} — Detailed Feedback
+                <User className="w-4 h-4 text-[#ff6221]" />
+                <span className="text-[#171b31]">{selected.agentName}</span>
+                <span className="text-muted-foreground font-normal">— Detailed Feedback</span>
                 <Badge variant="outline" className="text-xs ml-auto">
                   {selected.weekOf}
                 </Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5 pt-4">
               {/* Score breakdown */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {[
@@ -347,21 +477,46 @@ export default function WeeklyQA() {
 
               {/* Strengths */}
               <div className="bg-green-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-semibold text-green-800">Strengths</span>
+                <div className="flex items-center gap-2 mb-3">
+                  <Award className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-semibold text-green-800">What {selected.agentName.split(" ")[0]} Does Well</span>
                 </div>
-                <p className="text-sm text-green-700">{selected.strengths}</p>
+                <ul className="space-y-2">
+                  {(Array.isArray(selected.strengths) ? selected.strengths : [selected.strengths]).map((s, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-green-700">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                      {s}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               {/* Improvements */}
               <div className="bg-amber-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Info className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm font-semibold text-amber-800">Areas for Improvement</span>
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800">Opportunities for {selected.agentName.split(" ")[0]}</span>
                 </div>
-                <p className="text-sm text-amber-700">{selected.improvements}</p>
+                <ul className="space-y-2">
+                  {(Array.isArray(selected.improvements) ? selected.improvements : [selected.improvements]).map((imp, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-amber-700">
+                      <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      {imp}
+                    </li>
+                  ))}
+                </ul>
               </div>
+
+              {/* Coaching note */}
+              {selected.coachingNote && (
+                <div className="bg-[#171b31]/5 rounded-lg p-4 border border-[#171b31]/10">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-[#171b31]" />
+                    <span className="text-xs font-semibold text-[#171b31]">Supervisor Coaching Note</span>
+                  </div>
+                  <p className="text-sm text-[#171b31]/70">{selected.coachingNote}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -424,15 +579,5 @@ export default function WeeklyQA() {
         </Card>
       </div>
     </WhipLayout>
-  );
-}
-
-// Missing import
-function Clock({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
   );
 }

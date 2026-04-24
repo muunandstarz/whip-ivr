@@ -1,8 +1,7 @@
 import WhipLayout from "@/components/WhipLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Copy, CheckCircle2, Phone, Zap, Shield, ArrowRight } from "lucide-react";
+import { Copy, CheckCircle2, Phone, Zap, Shield, ArrowRight, Webhook } from "lucide-react";
 import { toast } from "sonner";
 
 function CopyCode({ value }: { value: string }) {
@@ -23,27 +22,27 @@ function CopyCode({ value }: { value: string }) {
 const STEPS = [
   {
     num: 1,
-    title: "Get your public webhook URL",
+    title: "Add the Whip IVR webhook to Aircall",
     description:
-      "Your Whip IVR is deployed and ready. The webhook base URL is your deployed app domain. Copy the endpoints below and paste them into Twilio.",
+      "In the Aircall Dashboard, go to Integrations → API & Webhooks → Webhooks. Add a new webhook pointing to your deployed app URL. Enable the events: call.created, call.ended, and call.voicemail_left.",
   },
   {
     num: 2,
-    title: "Configure Twilio Phone Number",
+    title: "Configure your Claims line IVR flow",
     description:
-      "In the Twilio Console, go to Phone Numbers → Active Numbers → select your claims line number. Under Voice & Fax, set the following:",
+      "In Aircall, open your Claims phone number settings. Under IVR, set the fallback (no-answer) action to record a voicemail. The webhook will fire automatically when a voicemail is left, triggering AI transcription and intake extraction.",
   },
   {
     num: 3,
-    title: "Set up voicemail fallback",
+    title: "Verify agent routing",
     description:
-      "In Twilio, configure a <Record> verb fallback so that if no agent answers, the call records and the recording URL is sent to the voicemail webhook.",
+      "Calls routed to live agents (members, claimants, police) will ring MJ Badua and Daryl Ochate's Aircall extensions. Missed calls and voicemails are automatically processed by the AI and appear as intake records.",
   },
   {
     num: 4,
     title: "Test the flow",
     description:
-      "Call your Twilio number and say 'I'm calling from State Farm about a claim.' The AI will collect your information and create an intake record automatically.",
+      "Call the Claims line and leave a voicemail saying 'I'm calling from State Farm about a claim.' Within seconds, an intake record will appear automatically with the caller's information extracted by AI.",
   },
 ];
 
@@ -54,9 +53,9 @@ export default function IVRSetup() {
     <WhipLayout>
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#171b31]">IVR Setup Guide</h1>
+          <h1 className="text-2xl font-bold text-[#171b31]">IVR Setup — Option C</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Connect your Twilio phone number to the Whip AI voice bot in 4 steps.
+            Aircall webhook integration with AI voicemail processing. No third-party telephony required.
           </p>
         </div>
 
@@ -64,22 +63,22 @@ export default function IVRSetup() {
         <Card className="border-[#171b31]/20 bg-[#171b31]/3">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Zap className="w-4 h-4 text-[#ff6221]" /> How It Works
+              <Zap className="w-4 h-4 text-[#ff6221]" /> How Option C Works
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">1. Caller rings in</div>
-                <p className="text-xs">Twilio receives the call and sends a webhook to <code className="bg-muted px-1 rounded">/api/ivr/voice</code></p>
+                <div className="font-semibold text-[#171b31] text-xs mb-1">1. Call comes in</div>
+                <p className="text-xs">Aircall receives the inbound call on your Claims line and fires a <code className="bg-muted px-1 rounded">call.created</code> webhook</p>
               </div>
               <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">2. AI identifies caller</div>
-                <p className="text-xs">The LLM classifies the caller as carrier, law office, medical, member, claimant, police, or wrong department</p>
+                <div className="font-semibold text-[#171b31] text-xs mb-1">2. Voicemail left</div>
+                <p className="text-xs">If no agent answers, Aircall records a voicemail and fires <code className="bg-muted px-1 rounded">call.voicemail_left</code> with the recording URL</p>
               </div>
               <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">3. Smart routing</div>
-                <p className="text-xs">Members/claimants/police → live agent. Carriers/law/medical → AI intake. Wrong dept → auto-redirected.</p>
+                <div className="font-semibold text-[#171b31] text-xs mb-1">3. AI processes intake</div>
+                <p className="text-xs">Whisper transcribes the audio. The LLM extracts caller type, claim #, org, message, and callback — creating a structured intake record automatically.</p>
               </div>
             </div>
           </CardContent>
@@ -95,11 +94,11 @@ export default function IVRSetup() {
           <CardContent>
             <div className="space-y-2 text-sm">
               {[
-                { type: "Member / Claimant / Police", action: "Transfer to live agent queue", color: "bg-green-100 text-green-700" },
-                { type: "Insurance Carrier", action: "AI collects full intake — name, org, Whip claim #, ref #, message, callback", color: "bg-blue-100 text-blue-700" },
-                { type: "Law Office", action: "AI collects full intake — same fields as carrier", color: "bg-purple-100 text-purple-700" },
-                { type: "Medical Provider", action: "AI collects full intake — same fields as carrier", color: "bg-emerald-100 text-emerald-700" },
-                { type: "Vehicle / Billing / Help Desk", action: "AI provides correct dept number and ends call — no agent time used", color: "bg-gray-100 text-gray-600" },
+                { type: "Insurance Carrier", action: "AI extracts full intake from voicemail — name, org, Whip claim #, ref #, message, callback", color: "bg-blue-100 text-blue-700" },
+                { type: "Law Office", action: "AI extracts full intake — same fields as carrier", color: "bg-purple-100 text-purple-700" },
+                { type: "Medical Provider", action: "AI extracts full intake — same fields as carrier", color: "bg-emerald-100 text-emerald-700" },
+                { type: "Member / Claimant / Police", action: "Routed to live agent (MJ Badua or Daryl Ochate). Missed calls flagged for callback.", color: "bg-green-100 text-green-700" },
+                { type: "Answered Call", action: "Logged to call history with agent name, duration, and answer time — no intake created", color: "bg-gray-100 text-gray-600" },
               ].map((row, i) => (
                 <div key={i} className="flex items-start gap-3 py-2 border-b last:border-0">
                   <Badge className={`text-xs flex-shrink-0 border-0 ${row.color}`}>{row.type}</Badge>
@@ -117,49 +116,29 @@ export default function IVRSetup() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Phone className="w-4 h-4 text-[#ff6221]" /> Twilio Webhook Endpoints
+              <Webhook className="w-4 h-4 text-[#ff6221]" /> Aircall Webhook Endpoints
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold">Voice (Inbound Call)</span>
+                <span className="text-xs font-semibold">Aircall Webhook Handler</span>
                 <Badge className="text-xs bg-green-100 text-green-700 border-0">POST</Badge>
               </div>
               <p className="text-xs text-muted-foreground mb-1">
-                Set this as your Twilio number's <strong>A Call Comes In</strong> webhook URL.
+                Paste this URL into Aircall → Integrations → Webhooks. Handles <strong>call.created</strong>, <strong>call.ended</strong>, and <strong>call.voicemail_left</strong> events.
               </p>
-              <CopyCode value={`${baseUrl}/api/ivr/voice`} />
+              <CopyCode value={`${baseUrl}/api/aircall/webhook`} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold">Gather (Speech Input)</span>
-                <Badge className="text-xs bg-blue-100 text-blue-700 border-0">POST</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mb-1">
-                This is called automatically by Twilio during the conversation — no manual setup needed.
-              </p>
-              <CopyCode value={`${baseUrl}/api/ivr/gather`} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold">Voicemail Recording</span>
+                <span className="text-xs font-semibold">Voicemail Processing</span>
                 <Badge className="text-xs bg-amber-100 text-amber-700 border-0">POST</Badge>
               </div>
               <p className="text-xs text-muted-foreground mb-1">
-                Set this as the <strong>Recording Status Callback URL</strong> in Twilio.
+                Called automatically when <code className="bg-muted px-1 rounded">call.voicemail_left</code> fires. Transcribes audio via Whisper and runs LLM intake extraction.
               </p>
-              <CopyCode value={`${baseUrl}/api/ivr/voicemail`} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold">Call Status Callback</span>
-                <Badge className="text-xs bg-gray-100 text-gray-600 border-0">POST</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mb-1">
-                Set this as the <strong>Call Status Callback URL</strong> for session cleanup.
-              </p>
-              <CopyCode value={`${baseUrl}/api/ivr/status`} />
+              <CopyCode value={`${baseUrl}/api/aircall/voicemail`} />
             </div>
           </CardContent>
         </Card>
@@ -183,7 +162,7 @@ export default function IVRSetup() {
                           Expected result
                         </div>
                         <p className="text-xs text-green-600 mt-1">
-                          A new intake record will appear in the Intake Records page with the caller's name, organization, claim number, and message — all collected automatically by the AI.
+                          A new intake record will appear in Intake Records with the caller's name, organization, claim number, and message — all extracted automatically by AI from the voicemail.
                         </p>
                       </div>
                     )}
@@ -194,13 +173,16 @@ export default function IVRSetup() {
           ))}
         </div>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-          <div className="font-semibold text-amber-800 mb-1">Need a Twilio account?</div>
-          <p className="text-amber-700 text-xs">
-            Sign up at <strong>twilio.com</strong>, purchase a phone number, and point it to the webhook URLs above. 
-            Twilio charges per minute of call time — typically $0.013–$0.022/min for inbound calls.
-            The AI voice bot runs on your existing LLM infrastructure at no additional per-call cost.
-          </p>
+        <div className="bg-[#171b31]/5 border border-[#171b31]/15 rounded-lg p-4 text-sm">
+          <div className="font-semibold text-[#171b31] mb-1 flex items-center gap-2">
+            <Phone className="w-4 h-4 text-[#ff6221]" /> Aircall Configuration Notes
+          </div>
+          <ul className="text-[#171b31]/70 text-xs space-y-1 list-disc list-inside">
+            <li>Webhook secret (optional): set in Aircall and add as <code className="bg-muted px-1 rounded">AIRCALL_WEBHOOK_SECRET</code> env var for signature verification</li>
+            <li>Voicemail recordings are fetched directly from the Aircall recording URL — no additional storage setup needed</li>
+            <li>The daily call sync pulls the last 30 days of call history automatically on server start</li>
+            <li>Agent names are resolved from Aircall user IDs in real time — no manual mapping required</li>
+          </ul>
         </div>
       </div>
     </WhipLayout>

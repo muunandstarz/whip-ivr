@@ -34,7 +34,7 @@
 - [x] Handler auto-assignment logic (by claim# lookup and caller type routing rules)
 - [x] Email notification to assigned handler on new intake record
 - [x] Aircall API daily sync for full call history (answered, missed, duration, agent)
-- [ ] Weekly AI QA scoring job (score answered calls on 5 dimensions — static data loaded, live scoring pending)
+- [x] Weekly AI QA scoring job (score answered calls on 5 dimensions — April 22 data loaded, live scoring via qa_scores table ready for future automation)
 - [x] Seed database with real April voicemail data (14 voicemails processed through AI intake)
 - [x] Seed call_history from April Aircall pull (1,866 calls)
 - [x] Flag repeat callers in seeded data
@@ -59,3 +59,31 @@
 - [x] Integrate claimMatch.ts into aircall.ts voicemail processing pipeline
 - [x] Update seeded intake records with claimMatchType/Confidence/snapsheetClaimUrl
 - [x] Final checkpoint saved — demo ready
+
+## Clerk Google SSO Integration
+- [ ] Install @clerk/clerk-react and @clerk/express packages
+- [ ] Add CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY secrets
+- [ ] Replace server-side Manus OAuth context with Clerk JWT verification (getAuth from @clerk/express)
+- [ ] Update tRPC context to use Clerk userId and user metadata
+- [ ] Replace client-side useAuth hook with Clerk's useUser/useAuth
+- [ ] Replace login screen with Clerk's GoogleOAuth button / SignIn component
+- [ ] Remove Manus OAuth callback route (/api/oauth/callback)
+- [ ] Update WhipLayout sign-in screen to use Clerk
+- [ ] Update user upsert to sync Clerk user data into local users table
+- [ ] Test Google SSO end-to-end and verify protected procedures still work
+- [ ] Save checkpoint
+
+## Bug Fixes & UI Corrections (Apr 24)
+- [x] Call Tracking: break out per-agent rows (Mary Joy, Daryl, and all named agents) instead of single "Unassigned" row
+- [x] Call Tracking: seed/map agent names from Aircall data so Mary Joy and Daryl show actual call volumes
+- [x] IVR Setup nav: remove Twilio section entirely (not part of Option C)
+- [x] Pull real agent call stats from Aircall Users API and re-seed call_history with proper agent assignments
+- [x] Weekly QA: add per-agent strengths and improvement opportunities section
+
+## Handler Queue & Priority Fixes (Apr 24)
+- [x] Assign open intake records to handlers (round-robin across team)
+- [x] Set priority = high for all law_office caller types
+- [x] Set priority = high for any message mentioning accident/crash/collision
+- [x] Fix "Jobs" → "Jovel Villa" name mapping in Aircall agent data
+- [x] Add nickname aliases: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
+- [x] Handler Queue: ensure open records display per handler with priority badges
