@@ -93,3 +93,21 @@
 - [x] Set up live Aircall call sync (node-cron job every 15 min, runs on server startup, credentials set)
 - [x] Fix name: Elizabeth Avilla (email corrected in aircall.ts and seed_voicemails.mjs)
 - [x] Add "mary" as alias for Ana Padilla in handler routing
+
+## Analytics & QA Overhaul (Apr 24)
+- [x] Fix repeat callers query — rebuilt caller_profiles from all 1,866 calls (706 unique callers, 20 repeat)
+- [x] Handler Queue: add "Called Back" button on each intake record
+- [x] Handler Queue: wire Called Back action to update record status in DB
+- [x] Analytics: rebuild to cover all 1,866 calls (not just voicemails)
+- [x] Analytics: caller-type breakdown — law offices, providers, carriers with handling outcome (answered/voicemail/missed)
+- [x] Analytics: IVR transfer potential section — how many law/provider/carrier calls could auto-route
+- [x] Analytics: caller identity linking — name, org, claim link for callers with known intake records
+- [x] Analytics: repeat caller drill-down with identity + claim link
+- [x] Analytics: callback pattern — did they call back repeatedly without leaving voicemail?
+- [x] Add qa_scorecards table to drizzle schema (handlerId, week, scores x5, managerComments, createdAt)
+- [x] Add getHandlerScorecards, getAllScorecards, saveHandlerScorecard DB functions
+- [x] Add qa.allScorecards, qa.handlerScorecards, qa.saveScorecard tRPC procedures
+- [x] Build HandlerProfile page: QA scorecard history, score trends, manager comments per week
+- [x] Add scorecard push form to Weekly QA page (manager selects handler, fills scores + comments, pushes)
+- [x] Add "Profile" link to each handler row in Handler Queue
+- [x] Wire HandlerProfile route in App.tsx

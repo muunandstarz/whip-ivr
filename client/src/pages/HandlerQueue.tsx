@@ -12,8 +12,38 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  PhoneCall,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
+
+function CalledBackButton({ intakeId }: { intakeId: number }) {
+  const utils = trpc.useUtils();
+  const mutation = trpc.handlerActions.calledBack.useMutation({
+    onSuccess: () => {
+      toast.success("Marked as called back", { description: `Record #${intakeId} updated.` });
+      utils.intake.list.invalidate();
+    },
+    onError: () => {
+      toast.error("Error", { description: "Could not mark as called back." });
+    },
+  });
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 text-xs gap-1 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+      disabled={mutation.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        mutation.mutate({ intakeId });
+      }}
+    >
+      <PhoneCall className="h-3 w-3" />
+      {mutation.isPending ? "Saving…" : "Called Back"}
+    </Button>
+  );
+}
 
 // Full name → color mapping
 // Nicknames: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
@@ -51,6 +81,11 @@ const CALLER_TYPE_LABELS: Record<string, string> = {
 export default function HandlerQueue() {
   const [expandedHandlers, setExpandedHandlers] = useState<Set<string>>(new Set<string>());
   const [initialized, setInitialized] = useState(false);
+
+  const { data: handlersData } = trpc.handlers.list.useQuery();
+  const handlerIdMap = Object.fromEntries(
+    (handlersData ?? []).map((h: { id: number; name: string }) => [h.name, h.id])
+  );
 
   const { data, isLoading } = trpc.intake.list.useQuery({
     status: "open",
@@ -240,6 +275,19 @@ export default function HandlerQueue() {
                     </div>
                   </button>
 
+                  {/* Profile link */}
+                  {handlerIdMap[handlerName] && (
+                    <div className="px-5 pb-2 -mt-1 border-t bg-muted/10">
+                      <Link
+                        href={`/handlers/${handlerIdMap[handlerName]}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-[#ff6221] hover:underline"
+                      >
+                        View Profile &amp; QA Scorecards →
+                      </Link>
+                    </div>
+                  )}
+
                   {/* Records list */}
                   {isExpanded && (
                     <div className="border-t">
@@ -295,11 +343,14 @@ export default function HandlerQueue() {
                                   )}
                                 </div>
                               </div>
-                              <Link href={`/intake/${record.id}`}>
-                                <Button variant="ghost" size="sm" className="h-7 text-xs flex-shrink-0">
-                                  View
-                                </Button>
-                              </Link>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <CalledBackButton intakeId={record.id} />
+                                <Link href={`/intake/${record.id}`}>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs">
+                                    View
+                                  </Button>
+                                </Link>
+                              </div>
                             </div>
                           );
                         })}

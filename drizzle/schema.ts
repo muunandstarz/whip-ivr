@@ -106,6 +106,7 @@ export const callHistory = mysqlTable("call_history", {
   voicemailUrl: text("voicemailUrl"),
   hasIntakeRecord: boolean("hasIntakeRecord").default(false),
   intakeRecordId: int("intakeRecordId"),
+  callerType: varchar("callerType", { length: 50 }),
   startedAt: timestamp("startedAt").notNull(),
   endedAt: timestamp("endedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -164,3 +165,27 @@ export const callerProfiles = mysqlTable("caller_profiles", {
 
 export type CallerProfile = typeof callerProfiles.$inferSelect;
 export type InsertCallerProfile = typeof callerProfiles.$inferInsert;
+
+// Manager-pushed QA scorecards per handler per week
+export const qaScorecards = mysqlTable("qa_scorecards", {
+  id: int("id").autoincrement().primaryKey(),
+  handlerId: int("handlerId").notNull(),
+  handlerName: varchar("handlerName", { length: 128 }).notNull(),
+  weekOf: varchar("weekOf", { length: 16 }).notNull(), // ISO date string e.g. "2026-04-21"
+  // Scores 1-10
+  greetingScore: float("greetingScore"),
+  holdManagementScore: float("holdManagementScore"),
+  resolutionScore: float("resolutionScore"),
+  empathyScore: float("empathyScore"),
+  callControlScore: float("callControlScore"),
+  overallScore: float("overallScore"),
+  strengths: text("strengths"),
+  improvements: text("improvements"),
+  managerComments: text("managerComments"),
+  submittedBy: varchar("submittedBy", { length: 128 }), // manager name
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type QaScorecard = typeof qaScorecards.$inferSelect;
+export type InsertQaScorecard = typeof qaScorecards.$inferInsert;

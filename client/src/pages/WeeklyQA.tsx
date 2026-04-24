@@ -3,6 +3,17 @@ import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Star,
   TrendingUp,
@@ -18,10 +29,14 @@ import {
   Clock,
   Lightbulb,
   Award,
+  Send,
+  Edit3,
+  X,
 } from "lucide-react";
+import { format, startOfWeek } from "date-fns";
+import { toast } from "sonner";
 
 // April 22 call analysis — pre-computed from Whip April Call Analysis
-// Strengths and improvements are specific, actionable, and based on actual call patterns
 const APRIL_QA_DATA = [
   {
     agentName: "Lorraine Tria",
@@ -190,32 +205,8 @@ const APRIL_QA_DATA = [
     ],
     coachingNote: "Jovel needs focused attention on hold management and call closing. Recommend a 30-minute one-on-one coaching session with the hold management script and a mock call exercise.",
   },
-  {
-    agentName: "Lorraine Tria",
-    callsScored: 18,
-    avgOverall: 8.1,
-    avgGreeting: 8.6,
-    avgHold: 7.8,
-    avgResolution: 8.2,
-    avgEmpathy: 8.4,
-    avgCallControl: 7.9,
-    trend: "up" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "Consistently uses the full Whip greeting script",
-      "Excellent hold management",
-      "Closes calls with a clear next-step summary",
-      "Handles frustrated repeat callers with exceptional empathy",
-    ],
-    improvements: [
-      "Initial greeting runs slightly long — trim by 5–8 seconds",
-      "Confirm claim numbers phonetically using NATO alphabet",
-    ],
-    coachingNote: "Team benchmark. Pair with lower-scoring agents for peer coaching.",
-  },
 ];
 
-// Deduplicate by agentName (keep first occurrence)
 const seen = new Set<string>();
 const APRIL_QA_DEDUPED = APRIL_QA_DATA.filter(a => {
   if (seen.has(a.agentName)) return false;
@@ -259,17 +250,215 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
+function ScoreInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Input
+        type="number"
+        min="1"
+        max="10"
+        step="0.1"
+        placeholder="1–10"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 text-sm"
+      />
+    </div>
+  );
+}
+
 function TrendIcon({ trend }: { trend: "up" | "down" | "stable" }) {
   if (trend === "up") return <TrendingUp className="w-4 h-4 text-green-500" />;
   if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-500" />;
   return <Minus className="w-4 h-4 text-gray-400" />;
 }
 
+interface PushFormState {
+  handlerId: string;
+  handlerName: string;
+  weekOf: string;
+  greetingScore: string;
+  holdManagementScore: string;
+  resolutionScore: string;
+  empathyScore: string;
+  callControlScore: string;
+  overallScore: string;
+  strengths: string;
+  improvements: string;
+  managerComments: string;
+}
+
+function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose: () => void }) {
+  const { data: handlers } = trpc.handlers.list.useQuery();
+  const saveScorecard = trpc.qa.saveScorecard.useMutation();
+  const utils = trpc.useUtils();
+
+  // Pre-fill from static QA data
+  const staticData = APRIL_QA_DEDUPED.find(a => a.agentName === agentName);
+
+  const [form, setForm] = useState<PushFormState>({
+    handlerId: "",
+    handlerName: agentName,
+    weekOf: format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd"),
+    greetingScore: staticData?.avgGreeting?.toFixed(1) ?? "",
+    holdManagementScore: staticData?.avgHold?.toFixed(1) ?? "",
+    resolutionScore: staticData?.avgResolution?.toFixed(1) ?? "",
+    empathyScore: staticData?.avgEmpathy?.toFixed(1) ?? "",
+    callControlScore: staticData?.avgCallControl?.toFixed(1) ?? "",
+    overallScore: staticData?.avgOverall?.toFixed(1) ?? "",
+    strengths: staticData?.strengths?.join("\n") ?? "",
+    improvements: staticData?.improvements?.join("\n") ?? "",
+    managerComments: staticData?.coachingNote ?? "",
+  });
+
+  const set = (key: keyof PushFormState) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
+
+  const handleSubmit = async () => {
+    if (!form.handlerId) {
+      toast.error("Please link this scorecard to a handler profile.");
+      return;
+    }
+    try {
+      await saveScorecard.mutateAsync({
+        handlerId: Number(form.handlerId),
+        handlerName: form.handlerName,
+        weekOf: form.weekOf,
+        greetingScore: form.greetingScore ? Number(form.greetingScore) : undefined,
+        holdManagementScore: form.holdManagementScore ? Number(form.holdManagementScore) : undefined,
+        resolutionScore: form.resolutionScore ? Number(form.resolutionScore) : undefined,
+        empathyScore: form.empathyScore ? Number(form.empathyScore) : undefined,
+        callControlScore: form.callControlScore ? Number(form.callControlScore) : undefined,
+        overallScore: form.overallScore ? Number(form.overallScore) : undefined,
+        strengths: form.strengths || undefined,
+        improvements: form.improvements || undefined,
+        managerComments: form.managerComments || undefined,
+      });
+      await utils.qa.allScorecards.invalidate();
+      toast.success(`${agentName}'s scorecard has been saved to their handler profile.`);
+      onClose();
+    } catch (err) {
+      toast.error("Failed to save scorecard. Please try again.");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-xl bg-background border-l shadow-2xl overflow-y-auto flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background z-10">
+          <div>
+            <h2 className="font-semibold text-base flex items-center gap-2">
+              <Send className="h-4 w-4 text-[#ff6221]" />
+              Push Scorecard to Handler Profile
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{agentName} — review and edit before pushing</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+        </div>
+
+        <div className="p-4 space-y-5 flex-1">
+          {/* Handler link */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Link to Handler Profile <span className="text-red-500">*</span></Label>
+            <Select value={form.handlerId} onValueChange={(v) => {
+              const h = (handlers ?? []).find((h: { id: number; name: string }) => String(h.id) === v);
+              setForm((f) => ({ ...f, handlerId: v, handlerName: h?.name ?? agentName }));
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select handler…" />
+              </SelectTrigger>
+              <SelectContent>
+                {(handlers ?? []).map((h: { id: number; name: string }) => (
+                  <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Week of */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Week Of</Label>
+            <Input type="date" value={form.weekOf} onChange={(e) => set("weekOf")(e.target.value)} className="h-8 text-sm" />
+          </div>
+
+          {/* Score grid */}
+          <div>
+            <Label className="text-xs font-medium mb-2 block">Scores (1–10)</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <ScoreInput label="Greeting" value={form.greetingScore} onChange={set("greetingScore")} />
+              <ScoreInput label="Hold Management" value={form.holdManagementScore} onChange={set("holdManagementScore")} />
+              <ScoreInput label="Resolution" value={form.resolutionScore} onChange={set("resolutionScore")} />
+              <ScoreInput label="Empathy" value={form.empathyScore} onChange={set("empathyScore")} />
+              <ScoreInput label="Call Control" value={form.callControlScore} onChange={set("callControlScore")} />
+              <ScoreInput label="Overall Score" value={form.overallScore} onChange={set("overallScore")} />
+            </div>
+          </div>
+
+          {/* Strengths */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1">
+              <Award className="h-3 w-3 text-green-600" /> Strengths
+            </Label>
+            <Textarea
+              value={form.strengths}
+              onChange={(e) => set("strengths")(e.target.value)}
+              rows={4}
+              placeholder="What this agent does well…"
+              className="text-sm resize-none"
+            />
+          </div>
+
+          {/* Improvements */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1">
+              <Lightbulb className="h-3 w-3 text-amber-600" /> Opportunities for Improvement
+            </Label>
+            <Textarea
+              value={form.improvements}
+              onChange={(e) => set("improvements")(e.target.value)}
+              rows={4}
+              placeholder="Areas to work on…"
+              className="text-sm resize-none"
+            />
+          </div>
+
+          {/* Manager comments */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1">
+              <MessageSquare className="h-3 w-3 text-blue-600" /> Supervisor Coaching Note
+            </Label>
+            <Textarea
+              value={form.managerComments}
+              onChange={(e) => set("managerComments")(e.target.value)}
+              rows={3}
+              placeholder="Private coaching note for this handler…"
+              className="text-sm resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="p-4 border-t sticky bottom-0 bg-background">
+          <Button
+            className="w-full bg-[#171b31] hover:bg-[#171b31]/90 text-white gap-2"
+            onClick={handleSubmit}
+            disabled={saveScorecard.isPending}
+          >
+            <Send className="h-4 w-4" />
+            {saveScorecard.isPending ? "Pushing…" : `Push Scorecard to ${form.handlerName || agentName}'s Profile`}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WeeklyQA() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [pushAgent, setPushAgent] = useState<string | null>(null);
 
-  // Also try to load any DB QA scores
   const { data: dbScores } = trpc.qa.agentSummary.useQuery();
+  const { data: pushedScorecards } = trpc.qa.allScorecards.useQuery();
 
   const displayData = dbScores && dbScores.length > 0
     ? dbScores.map((d: {
@@ -307,8 +496,16 @@ export default function WeeklyQA() {
     ? displayData.find((d) => d.agentName === selectedAgent)
     : null;
 
+  // Check which agents have already had scorecards pushed this week
+  const pushedThisWeek = new Set(
+    (pushedScorecards ?? []).map((s: { handlerName: string }) => s.handlerName)
+  );
+
   return (
     <WhipLayout>
+      {pushAgent && (
+        <PushScorecardPanel agentName={pushAgent} onClose={() => setPushAgent(null)} />
+      )}
       <div className="p-6 space-y-5">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -382,7 +579,9 @@ export default function WeeklyQA() {
         {/* Agent score table */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Agent Scores — Click a row for detailed feedback</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              Agent Scores — Click a row for detailed feedback · Use "Push to Profile" to send scorecard to handler
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -398,6 +597,7 @@ export default function WeeklyQA() {
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Empathy</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Call Control</th>
                     <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Trend</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Push</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -413,28 +613,34 @@ export default function WeeklyQA() {
                           selectedAgent === agent.agentName ? null : agent.agentName
                         )}
                       >
-                        <td className="px-4 py-3 font-medium text-[#171b31]">{agent.agentName}</td>
+                        <td className="px-4 py-3 font-medium text-[#171b31]">
+                          <div className="flex items-center gap-2">
+                            {agent.agentName}
+                            {pushedThisWeek.has(agent.agentName) && (
+                              <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                                ✓ Pushed
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-right text-muted-foreground">{agent.callsScored}</td>
+                        <td className="px-4 py-3 text-right"><ScoreBadge score={agent.avgOverall} /></td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgGreeting} /></td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgHold} /></td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgResolution} /></td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgEmpathy} /></td>
+                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgCallControl} /></td>
+                        <td className="px-4 py-3 text-center"><TrendIcon trend={agent.trend} /></td>
                         <td className="px-4 py-3 text-right">
-                          <ScoreBadge score={agent.avgOverall} />
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <ScoreBadge score={agent.avgGreeting} />
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <ScoreBadge score={agent.avgHold} />
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <ScoreBadge score={agent.avgResolution} />
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <ScoreBadge score={agent.avgEmpathy} />
-                        </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <ScoreBadge score={agent.avgCallControl} />
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <TrendIcon trend={agent.trend} />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-7 gap-1 border-[#171b31]/30 hover:bg-[#171b31] hover:text-white"
+                            onClick={(e) => { e.stopPropagation(); setPushAgent(agent.agentName); }}
+                          >
+                            <Send className="h-3 w-3" />
+                            {pushedThisWeek.has(agent.agentName) ? "Re-push" : "Push"}
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -452,9 +658,14 @@ export default function WeeklyQA() {
                 <User className="w-4 h-4 text-[#ff6221]" />
                 <span className="text-[#171b31]">{selected.agentName}</span>
                 <span className="text-muted-foreground font-normal">— Detailed Feedback</span>
-                <Badge variant="outline" className="text-xs ml-auto">
-                  {selected.weekOf}
-                </Badge>
+                <Badge variant="outline" className="text-xs ml-auto">{selected.weekOf}</Badge>
+                <Button
+                  size="sm"
+                  className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs h-7 gap-1"
+                  onClick={() => setPushAgent(selected.agentName)}
+                >
+                  <Edit3 className="h-3 w-3" /> Review &amp; Push to Profile
+                </Button>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5 pt-4">
@@ -517,6 +728,57 @@ export default function WeeklyQA() {
                   <p className="text-sm text-[#171b31]/70">{selected.coachingNote}</p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Pushed scorecards this week */}
+        {pushedScorecards && pushedScorecards.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Send className="w-4 h-4 text-emerald-600" />
+                Scorecards Pushed to Handler Profiles ({pushedScorecards.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      {["Handler", "Week Of", "Overall", "Greeting", "Hold Mgmt", "Resolution", "Empathy", "Call Control", "Pushed By"].map((h) => (
+                        <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {pushedScorecards.map((sc: {
+                      id: number;
+                      handlerName: string;
+                      weekOf: string;
+                      overallScore: number | null;
+                      greetingScore: number | null;
+                      holdManagementScore: number | null;
+                      resolutionScore: number | null;
+                      empathyScore: number | null;
+                      callControlScore: number | null;
+                      submittedBy: string | null;
+                    }) => (
+                      <tr key={sc.id} className="hover:bg-muted/20">
+                        <td className="px-4 py-2.5 font-medium">{sc.handlerName}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{sc.weekOf}</td>
+                        <td className="px-4 py-2.5">{sc.overallScore ? <ScoreBadge score={Number(sc.overallScore)} /> : "—"}</td>
+                        <td className="px-4 py-2.5">{sc.greetingScore ? <ScoreBadge score={Number(sc.greetingScore)} /> : "—"}</td>
+                        <td className="px-4 py-2.5">{sc.holdManagementScore ? <ScoreBadge score={Number(sc.holdManagementScore)} /> : "—"}</td>
+                        <td className="px-4 py-2.5">{sc.resolutionScore ? <ScoreBadge score={Number(sc.resolutionScore)} /> : "—"}</td>
+                        <td className="px-4 py-2.5">{sc.empathyScore ? <ScoreBadge score={Number(sc.empathyScore)} /> : "—"}</td>
+                        <td className="px-4 py-2.5">{sc.callControlScore ? <ScoreBadge score={Number(sc.callControlScore)} /> : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{sc.submittedBy ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         )}

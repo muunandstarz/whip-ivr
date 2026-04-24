@@ -11,10 +11,16 @@ import {
   getIntakeAnalytics,
   getCallHistory,
   getCallHistoryAnalytics,
+  getFullCallAnalytics,
+  getCallerHistory,
+  markCalledBack,
   getQaScores,
   getQaAgentSummary,
   getHandlers,
   getRepeatCallers,
+  getHandlerScorecards,
+  getAllScorecards,
+  saveHandlerScorecard,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -136,6 +142,16 @@ export const appRouter = router({
     analytics: protectedProcedure.query(async () => {
       return getCallHistoryAnalytics();
     }),
+
+    fullAnalytics: protectedProcedure.query(async () => {
+      return getFullCallAnalytics();
+    }),
+
+    callerHistory: protectedProcedure
+      .input(z.object({ phone: z.string() }))
+      .query(async ({ input }) => {
+        return getCallerHistory(input.phone);
+      }),
   }),
 
   // ─── QA Scores ─────────────────────────────────────────────────────────
@@ -154,6 +170,42 @@ export const appRouter = router({
     agentSummary: protectedProcedure.query(async () => {
       return getQaAgentSummary();
     }),
+
+    // ── Scorecard push to handler profiles ──
+    allScorecards: protectedProcedure.query(async () => {
+      return getAllScorecards();
+    }),
+
+    handlerScorecards: protectedProcedure
+      .input(z.object({ handlerId: z.number() }))
+      .query(async ({ input }) => {
+        return getHandlerScorecards(input.handlerId);
+      }),
+
+    saveScorecard: protectedProcedure
+      .input(
+        z.object({
+          handlerId: z.number(),
+          handlerName: z.string(),
+          weekOf: z.string(), // "YYYY-MM-DD" (Monday of the week)
+          greetingScore: z.number().min(1).max(10).optional(),
+          holdManagementScore: z.number().min(1).max(10).optional(),
+          resolutionScore: z.number().min(1).max(10).optional(),
+          empathyScore: z.number().min(1).max(10).optional(),
+          callControlScore: z.number().min(1).max(10).optional(),
+          overallScore: z.number().min(1).max(10).optional(),
+          strengths: z.string().optional(),
+          improvements: z.string().optional(),
+          managerComments: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const id = await saveHandlerScorecard({
+          ...input,
+          submittedBy: ctx.user?.name ?? "Manager",
+        });
+        return { id, success: true };
+      }),
   }),
 
   // ─── Handlers ──────────────────────────────────────────────────────────
@@ -168,6 +220,21 @@ export const appRouter = router({
     repeats: protectedProcedure.query(async () => {
       return getRepeatCallers();
     }),
+    history: protectedProcedure
+      .input(z.object({ phone: z.string() }))
+      .query(async ({ input }) => {
+        return getCallerHistory(input.phone);
+      }),
+  }),
+
+  // ─── Handler Actions ───────────────────────────────────────────────────
+  handlerActions: router({
+    calledBack: protectedProcedure
+      .input(z.object({ intakeId: z.number(), handlerName: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        await markCalledBack(input.intakeId, input.handlerName);
+        return { success: true };
+      }),
   }),
 });
 

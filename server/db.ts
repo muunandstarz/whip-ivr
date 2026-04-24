@@ -8,6 +8,7 @@ import {
   callerProfiles,
   handlers,
   qaScores,
+  qaScorecards,
   InsertIntakeRecord,
   InsertCallHistory,
   InsertCallerProfile,
@@ -363,10 +364,270 @@ export async function getCallerProfile(phone: string) {
 export async function getRepeatCallers() {
   const db = await getDb();
   if (!db) return [];
-  return db
+  // Join with intake_records to get org/claim info for known callers
+  const profiles = await db
     .select()
     .from(callerProfiles)
     .where(sql`totalCalls > 1`)
     .orderBy(desc(callerProfiles.totalCalls))
     .limit(50);
+
+  // For each profile, get the most recent intake record
+  const enriched = await Promise.all(
+    profiles.map(async (p) => {
+      const intake = await db
+        .select({
+          callerName: intakeRecords.callerName,
+          callerOrg: intakeRecords.callerOrg,
+          callerType: intakeRecords.callerType,
+          whipClaimNumber: intakeRecords.whipClaimNumber,
+          snapsheetClaimUrl: intakeRecords.snapsheetClaimUrl,
+          message: intakeRecords.message,
+          status: intakeRecords.status,
+        })
+        .from(intakeRecords)
+        .where(eq(intakeRecords.callerPhone, p.phone))
+        .orderBy(desc(intakeRecords.createdAt))
+        .limit(1);
+      return { ...p, intake: intake[0] ?? null };
+    })
+  );
+  return enriched;
+}
+
+// ─── Full Call Analytics (all 1,866 calls) ─────────────────────────────────
+export async function getFullCallAnalytics() {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [totals, byAgent, byDay, byDirection, topRepeatCallers, callbackPatterns, avgDurations, byCallerType, byMonth] =
+    await Promise.all([
+      db
+        .select({ status: callHistory.status, count: sql<number>`count(*)` })
+        .from(callHistory)
+        .groupBy(callHistory.status),
+
+      db
+        .select({
+          agentName: callHistory.agentName,
+          answered: sql<number>`SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END)`,
+          missed: sql<number>`SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END)`,
+          voicemail: sql<number>`SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END)`,
+          avgDurationSeconds: sql<number>`ROUND(AVG(CASE WHEN status='answered' THEN durationSeconds END), 0)`,
+          total: sql<number>`count(*)`,
+        })
+        .from(callHistory)
+        .where(sql`agentName IS NOT NULL`)
+        .groupBy(callHistory.agentName)
+        .orderBy(desc(sql`count(*)`)),
+
+      db
+        .select({
+          day: sql<string>`DATE(startedAt)`,
+          total: sql<number>`count(*)`,
+          answered: sql<number>`SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END)`,
+          missed: sql<number>`SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END)`,
+          voicemail: sql<number>`SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END)`,
+        })
+        .from(callHistory)
+        .groupBy(sql`DATE(startedAt)`)
+        .orderBy(sql`DATE(startedAt)`),
+
+      db
+        .select({ direction: callHistory.direction, count: sql<number>`count(*)` })
+        .from(callHistory)
+        .groupBy(callHistory.direction),
+
+      db
+        .select({
+          phone: callerProfiles.phone,
+          name: callerProfiles.name,
+          callerType: callerProfiles.callerType,
+          totalCalls: callerProfiles.totalCalls,
+          lastCallAt: callerProfiles.lastCallAt,
+        })
+        .from(callerProfiles)
+        .where(sql`totalCalls >= 3`)
+        .orderBy(desc(callerProfiles.totalCalls))
+        .limit(25),
+
+      db
+        .select({
+          callerPhone: callHistory.callerPhone,
+          totalCalls: sql<number>`count(*)`,
+          missedCalls: sql<number>`SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END)`,
+          answeredCalls: sql<number>`SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END)`,
+          voicemailCalls: sql<number>`SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END)`,
+          lastCallAt: sql<string>`MAX(startedAt)`,
+        })
+        .from(callHistory)
+        .where(sql`callerPhone IS NOT NULL`)
+        .groupBy(callHistory.callerPhone)
+        .having(sql`count(*) >= 3`)
+        .orderBy(desc(sql`count(*)`))
+        .limit(20),
+
+      db
+        .select({
+          status: callHistory.status,
+          avgDuration: sql<number>`ROUND(AVG(durationSeconds), 0)`,
+          maxDuration: sql<number>`MAX(durationSeconds)`,
+        })
+        .from(callHistory)
+        .groupBy(callHistory.status),
+
+      // Caller type breakdown
+      db
+        .select({
+          callerType: callHistory.callerType,
+          total: sql<number>`count(*)`,
+          answered: sql<number>`SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END)`,
+          missed: sql<number>`SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END)`,
+          voicemail: sql<number>`SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END)`,
+        })
+        .from(callHistory)
+        .groupBy(callHistory.callerType)
+        .orderBy(desc(sql`count(*)`)),
+
+      // Month-over-month (by week for April data)
+      db
+        .select({
+          week: sql<string>`DATE_FORMAT(startedAt, '%Y-%m-%d')`,
+          total: sql<number>`count(*)`,
+          answered: sql<number>`SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END)`,
+          missed: sql<number>`SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END)`,
+          voicemail: sql<number>`SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END)`,
+          repeatCallers: sql<number>`SUM(CASE WHEN callerPhone IN (SELECT callerPhone FROM call_history GROUP BY callerPhone HAVING count(*) > 1) THEN 1 ELSE 0 END)`,
+        })
+        .from(callHistory)
+        .groupBy(sql`DATE_FORMAT(startedAt, '%Y-%m-%d')`)
+        .orderBy(sql`DATE_FORMAT(startedAt, '%Y-%m-%d')`),
+    ]);
+
+  return { totals, byAgent, byDay, byDirection, topRepeatCallers, callbackPatterns, avgDurations, byCallerType, byMonth };
+}
+
+// Get full call history for a specific phone number
+export async function getCallerHistory(phone: string) {
+  const db = await getDb();
+  if (!db) return { calls: [], profile: null, intakeRecords: [] };
+
+  const [calls, profileResult, intakes] = await Promise.all([
+    db
+      .select()
+      .from(callHistory)
+      .where(eq(callHistory.callerPhone, phone))
+      .orderBy(desc(callHistory.startedAt))
+      .limit(100),
+    db.select().from(callerProfiles).where(eq(callerProfiles.phone, phone)).limit(1),
+    db
+      .select()
+      .from(intakeRecords)
+      .where(eq(intakeRecords.callerPhone, phone))
+      .orderBy(desc(intakeRecords.createdAt))
+      .limit(20),
+  ]);
+
+  return { calls, profile: profileResult[0] ?? null, intakeRecords: intakes };
+}
+
+// Mark an intake record as called back (close it with a note)
+export async function markCalledBack(id: number, handlerName?: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const note = `[Called back by ${handlerName ?? "handler"} on ${new Date().toLocaleString()}]`;
+  await db
+    .update(intakeRecords)
+    .set({
+      status: "closed",
+      notes: sql`CONCAT(COALESCE(notes, ''), '\n', ${note})`,
+      updatedAt: new Date(),
+    })
+    .where(eq(intakeRecords.id, id));
+}
+
+// ── QA Scorecards ──────────────────────────────────────────────────────────────
+
+/** Fetch all scorecards for a specific handler, newest first */
+export async function getHandlerScorecards(handlerId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(qaScorecards)
+    .where(eq(qaScorecards.handlerId, handlerId))
+    .orderBy(desc(qaScorecards.weekOf));
+}
+
+/** Fetch all scorecards for all handlers (for the Weekly QA review page) */
+export async function getAllScorecards() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(qaScorecards)
+    .orderBy(desc(qaScorecards.weekOf), qaScorecards.handlerName);
+}
+
+/** Save (upsert) a QA scorecard for a handler for a given week */
+export async function saveHandlerScorecard(data: {
+  handlerId: number;
+  handlerName: string;
+  weekOf: string;
+  greetingScore?: number | null;
+  holdManagementScore?: number | null;
+  resolutionScore?: number | null;
+  empathyScore?: number | null;
+  callControlScore?: number | null;
+  overallScore?: number | null;
+  strengths?: string | null;
+  improvements?: string | null;
+  managerComments?: string | null;
+  submittedBy?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select({ id: qaScorecards.id })
+    .from(qaScorecards)
+    .where(sql`handlerId = ${data.handlerId} AND weekOf = ${data.weekOf}`)
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(qaScorecards)
+      .set({
+        greetingScore: data.greetingScore,
+        holdManagementScore: data.holdManagementScore,
+        resolutionScore: data.resolutionScore,
+        empathyScore: data.empathyScore,
+        callControlScore: data.callControlScore,
+        overallScore: data.overallScore,
+        strengths: data.strengths,
+        improvements: data.improvements,
+        managerComments: data.managerComments,
+        submittedBy: data.submittedBy,
+        updatedAt: new Date(),
+      })
+      .where(eq(qaScorecards.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    const result = await db.insert(qaScorecards).values({
+      handlerId: data.handlerId,
+      handlerName: data.handlerName,
+      weekOf: data.weekOf,
+      greetingScore: data.greetingScore,
+      holdManagementScore: data.holdManagementScore,
+      resolutionScore: data.resolutionScore,
+      empathyScore: data.empathyScore,
+      callControlScore: data.callControlScore,
+      overallScore: data.overallScore,
+      strengths: data.strengths,
+      improvements: data.improvements,
+      managerComments: data.managerComments,
+      submittedBy: data.submittedBy,
+    });
+    return (result as any).insertId as number;
+  }
 }

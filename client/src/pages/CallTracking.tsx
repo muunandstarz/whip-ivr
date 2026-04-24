@@ -21,8 +21,14 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  X,
+  Building2,
+  AlertTriangle,
+  CheckCircle2,
+  ExternalLink,
+  Info,
 } from "lucide-react";
-import { format, formatDuration, intervalToDuration } from "date-fns";
+import { format } from "date-fns";
 
 const PAGE_SIZE = 50;
 
@@ -42,10 +48,216 @@ function formatSeconds(seconds: number): string {
   return `${mins}m ${secs}s`;
 }
 
+function callerTypeBadge(type: string | null | undefined) {
+  if (!type) return <Badge variant="outline" className="text-xs text-muted-foreground">Unknown</Badge>;
+  const map: Record<string, string> = {
+    carrier: "bg-blue-50 text-blue-700 border-blue-200",
+    law_office: "bg-red-50 text-red-700 border-red-200",
+    medical_provider: "bg-purple-50 text-purple-700 border-purple-200",
+    member: "bg-green-50 text-green-700 border-green-200",
+    claimant: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    police: "bg-gray-50 text-gray-700 border-gray-200",
+  };
+  return (
+    <Badge variant="outline" className={`text-xs capitalize ${map[type] ?? ""}`}>
+      {type.replace(/_/g, " ")}
+    </Badge>
+  );
+}
+
+function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () => void }) {
+  const { data, isLoading } = trpc.calls.callerHistory.useQuery({ phone });
+  const profile = data?.profile;
+  const intakes = data?.intakeRecords ?? [];
+  const calls = data?.calls ?? [];
+
+  const answered = calls.filter((c) => c.status === "answered").length;
+  const missed = calls.filter((c) => c.status === "missed").length;
+  const voicemail = calls.filter((c) => c.status === "voicemail").length;
+
+  const callerType = profile?.callerType ?? intakes[0]?.callerType ?? null;
+  const ivrEligible = callerType && ["carrier", "law_office", "medical_provider"].includes(callerType);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-background border-l shadow-2xl overflow-y-auto flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background z-10">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="font-semibold text-base">
+                {intakes[0]?.callerName ?? profile?.name ?? "Unknown Caller"}
+              </h2>
+              {callerTypeBadge(callerType)}
+              {ivrEligible && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                  <CheckCircle2 className="h-3 w-3" /> IVR Eligible
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5 font-mono">{phone}</p>
+            {(intakes[0]?.callerOrg || profile?.org) && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Building2 className="h-3 w-3" />
+                {intakes[0]?.callerOrg ?? profile?.org}
+              </p>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+        </div>
+
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">Loading…</div>
+        ) : (
+          <div className="p-4 space-y-5">
+            {/* Call Stats Summary */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: "Total Calls", value: calls.length, color: "text-foreground" },
+                { label: "Answered", value: answered, color: "text-green-600" },
+                { label: "Missed", value: missed, color: "text-red-500" },
+                { label: "Voicemail", value: voicemail, color: "text-orange-500" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-muted/40 rounded-lg p-3 text-center">
+                  <p className={`text-xl font-bold ${color}`}>{value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* IVR Routing Recommendation */}
+            {ivrEligible && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-emerald-800">IVR Self-Service Candidate</p>
+                  <p className="text-emerald-700 text-xs mt-0.5">
+                    This {(callerType ?? "").replace(/_/g, " ")} has called {calls.length} times.
+                    With IVR Option C, they could submit intake without tying up a live agent.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Repeat caller warning */}
+            {calls.length >= 3 && !ivrEligible && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-amber-800">Persistent Caller — {calls.length} calls</p>
+                  <p className="text-amber-700 text-xs mt-0.5">
+                    This caller has not reached resolution. Consider proactive outreach or claim escalation.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Intake Records */}
+            {intakes.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Intake Records ({intakes.length})
+                </h3>
+                <div className="space-y-2">
+                  {intakes.map((r) => (
+                    <div key={r.id} className="bg-muted/40 rounded-lg p-3 text-sm border">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">
+                            {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
+                          </span>
+                          {r.whipClaimNumber && (
+                            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+                              Claim: {r.whipClaimNumber}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={
+                            r.status === "open"
+                              ? "text-orange-600 border-orange-200 bg-orange-50"
+                              : "text-green-600 border-green-200 bg-green-50"
+                          }>{r.status}</Badge>
+                          {r.snapsheetClaimUrl && (
+                            <a href={r.snapsheetClaimUrl} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5"
+                              onClick={(e) => e.stopPropagation()}>
+                              Snapsheet <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      {r.message && (
+                        <p className="text-xs text-muted-foreground bg-background/60 rounded p-2 mt-1 whitespace-pre-wrap">
+                          {r.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {format(new Date(r.createdAt), "MMM d, yyyy h:mm a")}
+                        {r.handlerName ? ` · Handler: ${r.handlerName}` : ""}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No intake records note */}
+            {intakes.length === 0 && calls.length > 0 && (
+              <div className="bg-muted/30 rounded-lg p-3 flex items-start gap-2 text-sm">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <p className="text-muted-foreground text-xs">
+                  No voicemail intake records for this number. All {calls.length} call(s) were answered or missed without leaving a message.
+                  {calls.filter(c => c.status === "answered").length > 0 && " Questions asked during answered calls are not captured without a voicemail."}
+                </p>
+              </div>
+            )}
+
+            {/* All Calls */}
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Call History ({calls.length})
+              </h3>
+              <div className="space-y-1.5">
+                {calls.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between bg-muted/30 rounded px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        c.status === "answered" ? "bg-green-500" : c.status === "missed" ? "bg-red-500" : "bg-orange-500"
+                      }`} />
+                      <span className="capitalize text-muted-foreground">{c.status}</span>
+                      {c.agentName && <span className="text-foreground font-medium">· {c.agentName}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      {c.durationSeconds ? <span>{formatSeconds(c.durationSeconds)}</span> : null}
+                      <span>{format(new Date(c.startedAt), "MMM d, h:mm a")}</span>
+                      {c.voicemailUrl && (
+                        <a href={c.voicemailUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-blue-500 hover:underline" onClick={(e) => e.stopPropagation()}>
+                          <Voicemail className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {calls.length === 0 && (
+                  <p className="text-xs text-muted-foreground py-2">No call records found.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CallTracking() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [page, setPage] = useState(0);
+  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
 
   const { data, isLoading } = trpc.calls.list.useQuery({
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -58,14 +270,11 @@ export default function CallTracking() {
 
   const totalPages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
 
-  // Compute summary from analytics
   const totalCalls = analytics?.byStatus?.reduce((sum: number, s: { count: number }) => sum + Number(s.count), 0) ?? 0;
   const answeredCount = analytics?.byStatus?.find((s: { status: string }) => s.status === "answered")?.count ?? 0;
   const missedCount = analytics?.byStatus?.find((s: { status: string }) => s.status === "missed")?.count ?? 0;
-  const voicemailCount = analytics?.byStatus?.find((s: { status: string }) => s.status === "voicemail")?.count ?? 0;
   const answerRate = totalCalls > 0 ? Math.round((Number(answeredCount) / totalCalls) * 100) : 0;
 
-  // Get unique agents for filter
   const agents = Array.from(
     new Set(
       (analytics?.byAgent ?? [])
@@ -76,12 +285,15 @@ export default function CallTracking() {
 
   return (
     <WhipLayout>
+      {selectedPhone && (
+        <CallerHistoryDrawer phone={selectedPhone} onClose={() => setSelectedPhone(null)} />
+      )}
       <div className="p-6 space-y-5">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-[#171b31]">Call Tracking</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            All inbound calls — answered, missed, and voicemail (last 30 days)
+            All inbound calls — answered, missed, and voicemail. Click any row to view full caller profile.
           </p>
         </div>
 
@@ -225,7 +437,7 @@ export default function CallTracking() {
             </SelectContent>
           </Select>
           <div className="text-sm text-muted-foreground self-center ml-auto">
-            {data?.total ?? 0} calls
+            {data?.total ?? 0} calls · <span className="text-xs">Click any row to view caller profile</span>
           </div>
         </div>
 
@@ -249,7 +461,8 @@ export default function CallTracking() {
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Status</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Agent</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Duration</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Date & Time</th>
+                        <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Date &amp; Time</th>
+                        <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Type</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Intake</th>
                       </tr>
                     </thead>
@@ -257,15 +470,20 @@ export default function CallTracking() {
                       {data?.calls.map((call) => {
                         const statusCfg = STATUS_CONFIG[call.status] ?? STATUS_CONFIG.missed;
                         const StatusIcon = statusCfg.icon;
+                        const hasPhone = !!(call.callerPhone);
                         return (
-                          <tr key={call.id} className="hover:bg-muted/20 transition-colors">
+                          <tr
+                            key={call.id}
+                            className={`hover:bg-muted/20 transition-colors ${hasPhone ? "cursor-pointer" : ""}`}
+                            onClick={() => hasPhone && setSelectedPhone(call.callerPhone!)}
+                          >
                             <td className="px-4 py-3">
                               <div>
                                 <div className="font-medium text-[#171b31]">
                                   {call.callerName || call.callerPhone || "Unknown"}
                                 </div>
                                 {call.callerPhone && call.callerName && (
-                                  <div className="text-xs text-muted-foreground">{call.callerPhone}</div>
+                                  <div className="text-xs text-muted-foreground font-mono">{call.callerPhone}</div>
                                 )}
                               </div>
                             </td>
@@ -283,6 +501,11 @@ export default function CallTracking() {
                             </td>
                             <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                               {format(new Date(call.startedAt), "MMM d, h:mm a")}
+                            </td>
+                            <td className="px-4 py-3">
+                              {(call as { callerType?: string | null }).callerType
+                                ? callerTypeBadge((call as { callerType?: string | null }).callerType)
+                                : <span className="text-xs text-muted-foreground">—</span>}
                             </td>
                             <td className="px-4 py-3">
                               {call.hasIntakeRecord ? (

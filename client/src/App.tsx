@@ -13,6 +13,7 @@ import IVRSetup from "./pages/IVRSetup";
 import HandlerQueue from "./pages/HandlerQueue";
 import CallTracking from "./pages/CallTracking";
 import WeeklyQA from "./pages/WeeklyQA";
+import HandlerProfile from "./pages/HandlerProfile";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/handler-queue" component={HandlerQueue} />
       <Route path="/call-tracking" component={CallTracking} />
       <Route path="/qa" component={WeeklyQA} />
+      <Route path="/handlers/:id" component={HandlerProfile} />
       <Route path="/ivr-setup" component={IVRSetup} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
