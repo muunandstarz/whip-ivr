@@ -14,6 +14,7 @@ import HandlerQueue from "./pages/HandlerQueue";
 import CallTracking from "./pages/CallTracking";
 import WeeklyQA from "./pages/WeeklyQA";
 import HandlerProfile from "./pages/HandlerProfile";
+import Softphone from "./pages/Softphone";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/call-tracking" component={CallTracking} />
       <Route path="/qa" component={WeeklyQA} />
       <Route path="/handlers/:id" component={HandlerProfile} />
+      <Route path="/softphone" component={Softphone} />
       <Route path="/ivr-setup" component={IVRSetup} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

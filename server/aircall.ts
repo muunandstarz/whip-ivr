@@ -304,6 +304,17 @@ export async function processVoicemail(params: {
     claimMatchType: claimMatchType ?? undefined,
     claimMatchConfidence: claimMatchConfidence ?? undefined,
     snapsheetClaimUrl: snapsheetClaimUrl ?? undefined,
+    // Callback QA: due by 5pm on the day the voicemail was received
+    callbackDueBy: (() => {
+      const eob = new Date();
+      eob.setHours(17, 0, 0, 0);
+      if (new Date() > eob) {
+        eob.setDate(eob.getDate() + 1);
+        if (eob.getDay() === 6) eob.setDate(eob.getDate() + 2);
+        if (eob.getDay() === 0) eob.setDate(eob.getDate() + 1);
+      }
+      return eob;
+    })(),
   });
 
   // 7. Update call_history record

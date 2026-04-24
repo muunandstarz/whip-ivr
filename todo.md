@@ -119,3 +119,38 @@
 - [x] Repeat caller drawer: show what prevented resolution (unanswered questions, wrong dept, missing info)
 - [x] Repeat caller drawer: show conversation thread across all their calls chronologically
 - [x] Backend: getCallerHistory already returns full intake records with rawTranscript — no backend change needed
+
+## IVR Build — Conversational AI Phone Flow (Apr 24)
+
+- [x] Rewrite 1-pager pitch in plain language with real IVR explanation
+- [ ] Aircall inbound webhook endpoint (POST /api/ivr/inbound) — fires when call arrives on Whip line
+- [ ] Handler availability check via Aircall API (is the named handler currently available?)
+- [ ] Conversational AI IVR flow: greet caller, identify by phone, confirm claim, detect intent, ask questions
+- [ ] Transfer logic: if caller requests handler by name and handler is available → transfer; else → monitored voicemail
+- [ ] Auto intake record creation from IVR conversation (caller name, org, claim number, reason, transcript)
+- [ ] IVR session state management (track conversation turns per call)
+- [ ] Aircall webhook signature verification (security)
+- [ ] IVR call log visible in dashboard (show IVR-handled calls separately)
+
+## IVR Audio + Softphone (Apr 24)
+
+- [x] Generate 3 voice options for main IVR greeting
+- [x] Generate press-1 voicemail prompt audio (carrier/law/medical)
+- [x] Generate no-answer voicemail prompt audio (drivers/claimants)
+- [x] Build Aircall softphone (Phone SDK) embedded in dashboard
+- [x] Write Aircall Smartflow configuration instructions
+- [x] Add callback timestamp tracking for QA metric (return call before EOB)
+
+## Softphone + IVR Webhook Build (Apr 24)
+
+- [x] Add Softphone page to dashboard using Aircall Phone SDK (iframe embed)
+- [x] Add Softphone nav item to WhipLayout sidebar
+- [ ] Build POST /api/webhooks/aircall endpoint (receives all Aircall events)
+- [ ] Handle call.voicemail_left: download voicemail, transcribe with Whisper, extract intake data with LLM, create intake record
+- [ ] Handle call.ended: update call_history record with final status/duration
+- [ ] Handle call.answered: mark call as answered in call_history
+- [x] Add callbackAt timestamp column to intake_records for EOB callback QA metric
+- [x] Add callbackDueBy column (EOB of day voicemail received) to intake_records
+- [x] Show callback QA status in intake records list (on time / overdue / pending)
+- [ ] Webhook signature verification (Aircall-Signature header)
+- [x] Write Aircall Smartflow + webhook setup instructions doc

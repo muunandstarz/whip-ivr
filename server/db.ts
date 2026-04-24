@@ -531,17 +531,20 @@ export async function getCallerHistory(phone: string) {
   return { calls, profile: profileResult[0] ?? null, intakeRecords: intakes };
 }
 
-// Mark an intake record as called back (close it with a note)
+// Mark an intake record as called back (close it with a note + timestamp)
 export async function markCalledBack(id: number, handlerName?: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const note = `[Called back by ${handlerName ?? "handler"} on ${new Date().toLocaleString()}]`;
+  const now = new Date();
+  const note = `[Called back by ${handlerName ?? "handler"} on ${now.toLocaleString()}]`;
   await db
     .update(intakeRecords)
     .set({
       status: "closed",
+      callbackAt: now,
+      callbackHandlerName: handlerName ?? null,
       notes: sql`CONCAT(COALESCE(notes, ''), '\n', ${note})`,
-      updatedAt: new Date(),
+      updatedAt: now,
     })
     .where(eq(intakeRecords.id, id));
 }

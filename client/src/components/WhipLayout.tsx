@@ -12,6 +12,7 @@ import {
   X,
   Users,
   PhoneCall,
+  Phone,
   Star,
 } from "lucide-react";
 import { useState } from "react";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/qa", label: "Weekly QA", icon: Star },
+  { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/ivr-setup", label: "IVR Setup", icon: Settings },
 ];
 

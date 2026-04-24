@@ -176,6 +176,7 @@ export default function IntakeRecords() {
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Handler</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Source</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Status</th>
+                        <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Callback</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Date</th>
                         <th className="px-4 py-3" />
                       </tr>
@@ -266,6 +267,31 @@ export default function IntakeRecords() {
                                   <SelectItem value="closed">Closed</SelectItem>
                                 </SelectContent>
                               </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              {record.source === "voicemail" && (
+                                record.callbackAt ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <Badge variant="outline" className="text-xs border-green-300 text-green-700 bg-green-50 w-fit">
+                                      ✓ Called Back
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      {record.callbackHandlerName || ""}
+                                    </span>
+                                  </div>
+                                ) : record.callbackDueBy ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs w-fit ${
+                                      new Date() > new Date(record.callbackDueBy)
+                                        ? "border-red-300 text-red-700 bg-red-50"
+                                        : "border-blue-300 text-blue-700 bg-blue-50"
+                                    }`}
+                                  >
+                                    {new Date() > new Date(record.callbackDueBy) ? "⚠ Overdue" : "Due EOB"}
+                                  </Badge>
+                                ) : null
+                              )}
                             </td>
                             <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                               {format(new Date(record.createdAt), "MMM d, h:mm a")}

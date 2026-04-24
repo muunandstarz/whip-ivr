@@ -74,6 +74,10 @@ export const intakeRecords = mysqlTable("intake_records", {
   claimMatchType: varchar("claimMatchType", { length: 32 }), // exact | vin_fragment | claim_fragment | partial | none
   claimMatchConfidence: int("claimMatchConfidence"), // 0-100
   snapsheetClaimUrl: text("snapsheetClaimUrl"), // direct link to Snapsheet claim
+  // Callback QA tracking
+  callbackDueBy: timestamp("callbackDueBy"), // EOB of day voicemail received (5pm local)
+  callbackAt: timestamp("callbackAt"),       // when handler actually called back
+  callbackHandlerName: varchar("callbackHandlerName", { length: 128 }), // who made the callback
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
