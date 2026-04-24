@@ -178,7 +178,7 @@ export async function getIntakeAnalytics() {
       })
       .from(intakeRecords)
       .groupBy(intakeRecords.callerPhone, intakeRecords.callerName, intakeRecords.callerOrg)
-      .having(sql`count(*) > 1`)
+      .having(sql`count(*) >= 2`)
       .orderBy(desc(sql`count(*)`))
       .limit(10),
     db

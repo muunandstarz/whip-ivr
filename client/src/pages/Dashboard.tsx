@@ -48,6 +48,7 @@ export default function Dashboard() {
   const closedCount = totalRecords - openCount;
 
   const callerTypeBreakdown = analyticsData?.byCallerType ?? [];
+  const repeatCallers = analyticsData?.repeatCallers ?? [];
   const carrierCount = callerTypeBreakdown.find((c) => c.callerType === "carrier")?.count ?? 0;
   const memberCount =
     (callerTypeBreakdown.find((c) => c.callerType === "member")?.count ?? 0) +
@@ -246,6 +247,33 @@ export default function Dashboard() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Repeat Callers */}
+            {repeatCallers.length > 0 && (
+              <Card className="mt-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-[#ff6221]" />
+                    Repeat Callers
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {repeatCallers.slice(0, 5).map((caller, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{caller.callerName || caller.callerPhone || "Unknown"}</div>
+                        {caller.callerOrg && (
+                          <div className="text-xs text-muted-foreground truncate">{caller.callerOrg}</div>
+                        )}
+                      </div>
+                      <span className="ml-2 flex-shrink-0 bg-[#ff6221]/10 text-[#ff6221] font-semibold px-2 py-0.5 rounded text-xs">
+                        {Number(caller.count)}x
+                      </span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* IVR Webhook Info */}
             <Card className="mt-4">

@@ -87,3 +87,9 @@
 - [x] Fix "Jobs" → "Jovel Villa" name mapping in Aircall agent data
 - [x] Add nickname aliases: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
 - [x] Handler Queue: ensure open records display per handler with priority badges
+
+## Live Sync & Data Fixes (Apr 24)
+- [x] Fix repeat caller info missing from dashboard (widget added to Dashboard.tsx, threshold >= 2)
+- [x] Set up live Aircall call sync (node-cron job every 15 min, runs on server startup, credentials set)
+- [x] Fix name: Elizabeth Avilla (email corrected in aircall.ts and seed_voicemails.mjs)
+- [x] Add "mary" as alias for Ana Padilla in handler routing

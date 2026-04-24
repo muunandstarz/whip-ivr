@@ -21,8 +21,9 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   carlito:    { id: 4,  name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
   annie:      { id: 5,  name: "Annie Ortiz",        email: "annie.ortiz@drivewhip.com" },
   ana:        { id: 6,  name: "Ana Padilla",        email: "anap@drivewhip.com" },
+  mary:       { id: 6,  name: "Ana Padilla",        email: "anap@drivewhip.com" },  // Ana also goes by Mary
   catherine:  { id: 7,  name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
-  elizabeth:  { id: 8,  name: "Elizabeth Avilla",   email: "elizabeth.avila@drivewhip.com" },
+  elizabeth:  { id: 8,  name: "Elizabeth Avilla",   email: "elizabeth.avilla@drivewhip.com" },
   lorraine:   { id: 9,  name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   raine:      { id: 9,  name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   daniel:     { id: 10, name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },

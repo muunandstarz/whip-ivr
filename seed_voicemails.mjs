@@ -13,7 +13,7 @@ const handlers = [
   { name: 'Annie Ortiz', email: 'annie.ortiz@drivewhip.com', phone: '8559065949', role: 'handler' },
   { name: 'Ana Padilla', email: 'anap@drivewhip.com', phone: '1111111111', role: 'handler' },
   { name: 'Catherine Cestina', email: 'catherine.cestina@drivewhip.com', phone: '8559065949', role: 'handler' },
-  { name: 'Elizabeth Avilla', email: 'elizabeth.avila@drivewhip.com', phone: '1112225555', role: 'handler' },
+  { name: 'Elizabeth Avilla', email: 'elizabeth.avilla@drivewhip.com', phone: '1112225555', role: 'handler' },
   { name: 'Lorraine Tria', email: 'lorraine.tria@drivewhip.com', phone: '8599065949', role: 'manager' },
   { name: 'Daniel Giono', email: 'daniel.giono@drivewhip.com', phone: '8559065949', role: 'manager' },
 ];
