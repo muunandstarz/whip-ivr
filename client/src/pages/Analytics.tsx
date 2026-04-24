@@ -66,19 +66,19 @@ export default function Analytics() {
   }));
 
   const byCallerType = (analytics?.byCallerType ?? []).map((d) => ({
-    name: CALLER_TYPE_LABELS[d.callerType] ?? d.callerType,
+    name: CALLER_TYPE_LABELS[d.callerType ?? 'unknown'] ?? (d.callerType ?? 'unknown'),
     value: Number(d.count),
-    type: d.callerType,
+    type: d.callerType ?? 'unknown',
   }));
 
   // Separate AI-routed (carrier/law/medical) vs live-needed (member/claimant/police)
   const aiRoutedTypes = ["carrier", "law_office", "medical_provider", "wrong_department"];
   const liveNeededTypes = ["member", "claimant", "police"];
   const aiRoutedCount = byCallerType
-    .filter((d) => aiRoutedTypes.includes(d.type))
+    .filter((d) => aiRoutedTypes.includes(d.type as string))
     .reduce((s, d) => s + d.value, 0);
   const liveNeededCount = byCallerType
-    .filter((d) => liveNeededTypes.includes(d.type))
+    .filter((d) => liveNeededTypes.includes(d.type as string))
     .reduce((s, d) => s + d.value, 0);
 
   return (
@@ -228,7 +228,7 @@ export default function Analytics() {
                       {byCallerType.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={CALLER_TYPE_COLORS[entry.type] ?? "#d1d5db"}
+                          fill={CALLER_TYPE_COLORS[entry.type as string] ?? "#d1d5db"}
                         />
                       ))}
                     </Pie>
@@ -280,7 +280,7 @@ export default function Analytics() {
                     {analytics?.repeatCallers.map((caller, i) => (
                       <tr key={i} className="hover:bg-muted/20">
                         <td className="px-3 py-2 font-medium">{caller.callerName || "—"}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{caller.organization || "—"}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{caller.callerOrg || "—"}</td>
                         <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{caller.callerPhone}</td>
                         <td className="px-3 py-2">
                           <span className="bg-[#ff6221]/10 text-[#ff6221] font-semibold px-2 py-0.5 rounded text-xs">

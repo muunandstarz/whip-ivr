@@ -17,7 +17,45 @@
 - [x] Record detail view with full conversation transcript
 - [x] Manual intake form for logging calls manually
 - [x] Analytics view: call volume by day, caller type breakdown, repeat callers
-- [x] IVR setup guide page with Twilio webhook configuration
+- [x] IVR setup guide page with Aircall Option C configuration
 - [x] Branding: Whip colors (#171b31 blue, #ff6221 orange)
-- [x] Vitest tests for core procedures (8 tests passing)
+- [x] Vitest tests for core procedures (18 tests passing)
 - [x] Checkpoint saved
+
+## Option C — Aircall Webhook + AI Voicemail Processing (Active Build)
+- [x] Add call_history table for full Aircall call sync
+- [x] Add qa_scores table for weekly AI QA per call/agent
+- [x] Add handlers table with real team members
+- [x] Run all new migrations
+- [x] Rewrite IVR backend to use Aircall webhooks (call.created, call.ended, call.voicemail_left)
+- [x] AI voicemail transcription pipeline (Whisper via built-in helper)
+- [x] LLM structured intake extraction from voicemail transcript
+- [x] Repeat caller detection logic (flag callers with prior contacts about same claim)
+- [x] Handler auto-assignment logic (by claim# lookup and caller type routing rules)
+- [x] Email notification to assigned handler on new intake record
+- [x] Aircall API daily sync for full call history (answered, missed, duration, agent)
+- [ ] Weekly AI QA scoring job (score answered calls on 5 dimensions — static data loaded, live scoring pending)
+- [x] Seed database with real April voicemail data (14 voicemails processed through AI intake)
+- [x] Seed call_history from April Aircall pull (1,866 calls)
+- [x] Flag repeat callers in seeded data
+- [x] Admin dashboard with summary stats, open records, repeat callers, missed calls
+- [x] Handler queue view — each handler sees only their assigned open records
+- [x] Admin call tracking — every answered call (by who, duration) and every missed call
+- [x] Analytics page — call volume chart, caller type breakdown, answer rate trend
+- [x] Weekly QA page — agent scores, trend lines, AI improvement notes per call
+- [x] Update IVR Setup page to reflect Aircall Option C configuration
+- [x] Vitest tests updated for new webhook and intake pipeline (18 tests passing)
+- [x] Fix intake_records query failures — column mismatch between schema and actual DB table
+- [x] Pull Whip logo from drivewhip.com and replace text logo in nav
+- [x] Seed database with real April voicemail data so dashboard shows actual records
+
+## Claim Number Matching & Snapsheet Integration
+- [x] Fuzzy claim number matching: extract last-6 of VIN and middle-6 of claim number as searchable fragments
+- [x] Match partial claim numbers (5+ digits) against both VIN fragment and claim middle-6 in DB
+- [x] Store matched claim number and confidence level on intake record
+- [x] Snapsheet claim lookup: when API is connected, query by claim number and return handler + claim URL
+- [x] Link Snapsheet claim URL in intake detail view (opens claim in new tab)
+- [x] Show claim match confidence badge on intake records (exact / partial / unmatched)
+- [x] Integrate claimMatch.ts into aircall.ts voicemail processing pipeline
+- [x] Update seeded intake records with claimMatchType/Confidence/snapsheetClaimUrl
+- [x] Final checkpoint saved — demo ready

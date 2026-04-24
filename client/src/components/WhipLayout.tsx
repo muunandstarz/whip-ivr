@@ -11,6 +11,9 @@ import {
   PlusCircle,
   Menu,
   X,
+  Users,
+  PhoneCall,
+  Star,
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -19,7 +22,10 @@ import { toast } from "sonner";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
+  { href: "/handler-queue", label: "Handler Queue", icon: Users },
+  { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/qa", label: "Weekly QA", icon: Star },
   { href: "/ivr-setup", label: "IVR Setup", icon: Settings },
 ];
 
@@ -46,10 +52,12 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#171b31] gap-6">
         <div className="flex flex-col items-center gap-2">
-          <div className="w-12 h-12 rounded-full bg-[#ff6221] flex items-center justify-center">
-            <PhoneIncoming className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">Whip Claims IVR</h1>
+          <img
+            src="/manus-storage/whip_logo_5e114d45.webp"
+            alt="Whip"
+            className="h-14 w-auto object-contain"
+          />
+          <h1 className="text-2xl font-bold text-white">Claims IVR</h1>
           <p className="text-white/60 text-sm">AI-powered call intake management</p>
         </div>
         <Button
@@ -72,12 +80,14 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
-          <div className="w-8 h-8 rounded-lg bg-[#ff6221] flex items-center justify-center flex-shrink-0">
-            <PhoneIncoming className="w-4 h-4 text-white" />
-          </div>
+          <img
+            src="/manus-storage/whip_logo_5e114d45.webp"
+            alt="Whip"
+            className="h-10 w-auto object-contain flex-shrink-0"
+          />
           <div>
-            <div className="font-bold text-sm leading-tight">Whip Claims</div>
-            <div className="text-white/50 text-xs">AI Voice IVR</div>
+            <div className="font-bold text-sm leading-tight text-white">Claims IVR</div>
+            <div className="text-white/50 text-xs">AI Voice Intake</div>
           </div>
           <button
             className="ml-auto lg:hidden text-white/60 hover:text-white"
@@ -165,10 +175,12 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-[#ff6221] flex items-center justify-center">
-              <PhoneIncoming className="w-3 h-3 text-white" />
-            </div>
-            <span className="font-semibold text-sm text-[#171b31]">Whip Claims IVR</span>
+            <img
+              src="/manus-storage/whip_logo_5e114d45.webp"
+              alt="Whip"
+              className="h-7 w-auto object-contain"
+            />
+            <span className="font-semibold text-sm text-[#171b31]">Claims IVR</span>
           </div>
         </header>
 

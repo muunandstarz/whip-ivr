@@ -8,7 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { ivrRouter } from "../ivr";
+import { aircallRouter } from "../aircall";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,7 +37,7 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
-  app.use("/api/ivr", ivrRouter);
+  app.use("/api/aircall", aircallRouter);
   // tRPC API
   app.use(
     "/api/trpc",

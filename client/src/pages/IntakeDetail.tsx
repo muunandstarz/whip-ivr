@@ -15,13 +15,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 const HANDLERS = [
   "Natasha", "Jayla", "Carlito", "Annie", "Lorraine", "Jovel", "MJ", "Daryl",
 ];
+
+const CALLER_TYPE_LABELS: Record<string, string> = {
+  carrier: "Insurance Carrier",
+  law_office: "Law Office",
+  medical_provider: "Medical Provider",
+  member: "Member",
+  claimant: "Claimant",
+  police: "Police",
+  unknown: "Unknown",
+};
 
 export default function IntakeDetail() {
   const params = useParams<{ id: string }>();
@@ -60,15 +70,15 @@ export default function IntakeDetail() {
   const startEdit = () => {
     setForm({
       callerName: record.callerName || "",
-      organization: record.organization || "",
+      callerOrg: record.callerOrg || "",
       whipClaimNumber: record.whipClaimNumber || "",
-      callerReferenceNumber: record.callerReferenceNumber || "",
-      callPurpose: record.callPurpose || "",
+      callerRefNumber: record.callerRefNumber || "",
       message: record.message || "",
       callbackPhone: record.callbackPhone || "",
       callbackEmail: record.callbackEmail || "",
-      assignedHandler: record.assignedHandler || "",
+      handlerName: record.handlerName || "",
       status: record.status,
+      notes: record.notes || "",
     });
     setEditing(true);
   };
@@ -77,19 +87,17 @@ export default function IntakeDetail() {
     updateMutation.mutate({
       id,
       callerName: form.callerName || undefined,
-      organization: form.organization || undefined,
+      callerOrg: form.callerOrg || undefined,
       whipClaimNumber: form.whipClaimNumber || undefined,
-      callerReferenceNumber: form.callerReferenceNumber || undefined,
-      callPurpose: form.callPurpose || undefined,
+      callerRefNumber: form.callerRefNumber || undefined,
       message: form.message || undefined,
       callbackPhone: form.callbackPhone || undefined,
       callbackEmail: form.callbackEmail || undefined,
-      assignedHandler: form.assignedHandler || undefined,
-      status: (form.status as "open" | "closed") || undefined,
+      handlerName: form.handlerName || undefined,
+      status: (form.status as "open" | "closed" | "escalated") || undefined,
+      notes: form.notes || undefined,
     });
   };
-
-  const f = (key: string) => (editing ? form[key] ?? "" : (record as Record<string, unknown>)[key] as string ?? "");
 
   return (
     <WhipLayout>
@@ -106,80 +114,96 @@ export default function IntakeDetail() {
             <h1 className="text-2xl font-bold text-[#171b31]">
               {record.callerName || record.callerPhone || "Unknown Caller"}
             </h1>
-            {record.organization && (
-              <p className="text-muted-foreground text-sm">{record.organization}</p>
+            {record.callerOrg && (
+              <p className="text-muted-foreground text-sm">{record.callerOrg}</p>
             )}
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge
                 variant="outline"
                 className={record.status === "open"
                   ? "border-amber-300 text-amber-700 bg-amber-50"
+                  : record.status === "escalated"
+                  ? "border-red-300 text-red-700 bg-red-50"
                   : "border-green-300 text-green-700 bg-green-50"}
               >
                 {record.status === "open" ? (
                   <><Clock className="w-3 h-3 mr-1" />Open</>
+                ) : record.status === "escalated" ? (
+                  <><AlertTriangle className="w-3 h-3 mr-1" />Escalated</>
                 ) : (
                   <><CheckCircle2 className="w-3 h-3 mr-1" />Closed</>
                 )}
               </Badge>
-              <span className="text-xs text-muted-foreground">
-                Record #{record.id} · {format(new Date(record.createdAt), "MMM d, yyyy h:mm a")}
-              </span>
-              <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
-                {record.source === "ai_ivr" ? "AI IVR" : record.source === "voicemail" ? "Voicemail" : "Manual"}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {!editing ? (
-              <>
-                <Button variant="outline" size="sm" onClick={startEdit}>Edit</Button>
-                <Select
-                  value={record.status}
-                  onValueChange={(v) =>
-                    updateMutation.mutate({ id, status: v as "open" | "closed" })
+              {record.callerType && (
+                <Badge variant="outline" className="text-xs">
+                  {CALLER_TYPE_LABELS[record.callerType] ?? record.callerType}
+                </Badge>
+              )}
+              {record.isRepeatCaller && (
+                <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50 text-xs">
+                  🔁 Repeat Caller ({record.repeatCallCount}x)
+                </Badge>
+              )}
+              {record.priority === "urgent" && (
+                <Badge variant="outline" className="border-red-400 text-red-700 bg-red-50 text-xs font-semibold">
+                  🔴 URGENT
+                </Badge>
+              )}
+              {record.priority === "high" && (
+                <Badge variant="outline" className="border-orange-400 text-orange-700 bg-orange-50 text-xs">
+                  🟠 HIGH
+                </Badge>
+              )}
+              {/* Claim match confidence badge */}
+              {record.claimMatchType && record.claimMatchType !== "none" && (
+                <Badge
+                  variant="outline"
+                  className={
+                    record.claimMatchConfidence != null && record.claimMatchConfidence >= 95
+                      ? "border-green-400 text-green-700 bg-green-50 text-xs"
+                      : record.claimMatchConfidence != null && record.claimMatchConfidence >= 70
+                      ? "border-yellow-400 text-yellow-700 bg-yellow-50 text-xs"
+                      : "border-gray-400 text-gray-600 bg-gray-50 text-xs"
                   }
                 >
-                  <SelectTrigger className={`h-9 w-28 text-sm ${
-                    record.status === "open"
-                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                      : "bg-green-50 text-green-700 border-green-200"
-                  }`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="open">Open</SelectItem>
-                    <SelectItem value="closed">Closed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </>
-            ) : (
+                  {record.claimMatchConfidence != null && record.claimMatchConfidence >= 95 ? (
+                    <ShieldCheck className="w-3 h-3 mr-1" />
+                  ) : record.claimMatchConfidence != null && record.claimMatchConfidence >= 70 ? (
+                    <ShieldAlert className="w-3 h-3 mr-1" />
+                  ) : (
+                    <ShieldX className="w-3 h-3 mr-1" />
+                  )}
+                  Claim Match: {record.claimMatchType?.replace("_", " ")} ({record.claimMatchConfidence ?? 0}%)
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            {editing ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
-                <Button
-                  size="sm"
-                  className="bg-[#171b31] hover:bg-[#1e2440] text-white"
-                  onClick={saveEdit}
-                  disabled={updateMutation.isPending}
-                >
-                  Save Changes
+                <Button size="sm" className="bg-[#ff6221] hover:bg-[#e5541a] text-white" onClick={saveEdit} disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? "Saving..." : "Save"}
                 </Button>
               </>
+            ) : (
+              <Button variant="outline" size="sm" onClick={startEdit}>Edit</Button>
             )}
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Caller Info */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-[#ff6221]" /> Caller Information
+                <User className="w-4 h-4 text-muted-foreground" />
+                Caller Information
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Label className="text-xs text-muted-foreground">Full Name</Label>
+                <Label className="text-xs text-muted-foreground">Name</Label>
                 {editing ? (
                   <Input value={form.callerName} onChange={(e) => setForm({ ...form, callerName: e.target.value })} className="mt-1 h-8 text-sm" />
                 ) : (
@@ -189,18 +213,84 @@ export default function IntakeDetail() {
               <div>
                 <Label className="text-xs text-muted-foreground">Organization</Label>
                 {editing ? (
-                  <Input value={form.organization} onChange={(e) => setForm({ ...form, organization: e.target.value })} className="mt-1 h-8 text-sm" />
+                  <Input value={form.callerOrg} onChange={(e) => setForm({ ...form, callerOrg: e.target.value })} className="mt-1 h-8 text-sm" />
                 ) : (
-                  <p className="text-sm mt-0.5">{record.organization || "—"}</p>
+                  <p className="text-sm mt-0.5">{record.callerOrg || "—"}</p>
                 )}
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Caller Phone</Label>
+                <Label className="text-xs text-muted-foreground">Phone</Label>
                 <p className="text-sm mt-0.5 flex items-center gap-1">
                   <Phone className="w-3 h-3 text-muted-foreground" />
                   {record.callerPhone || "—"}
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Claim Info */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                Claim Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Whip Claim #</Label>
+                {editing ? (
+                  <Input value={form.whipClaimNumber} onChange={(e) => setForm({ ...form, whipClaimNumber: e.target.value })} className="mt-1 h-8 text-sm font-mono" />
+                ) : (
+                  <p className="text-sm mt-0.5 font-mono">{record.whipClaimNumber || "—"}</p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Their Reference #</Label>
+                {editing ? (
+                  <Input value={form.callerRefNumber} onChange={(e) => setForm({ ...form, callerRefNumber: e.target.value })} className="mt-1 h-8 text-sm" />
+                ) : (
+                  <p className="text-sm mt-0.5">{record.callerRefNumber || "—"}</p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Source</Label>
+                <p className="text-sm mt-0.5 capitalize">{record.source}</p>
+              </div>
+              {record.claimMatchType && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Claim Match</Label>
+                  <p className="text-sm mt-0.5 capitalize">
+                    {record.claimMatchType === "none" ? "No match found" : `${record.claimMatchType?.replace(/_/g, " ")} (${record.claimMatchConfidence ?? 0}% confidence)`}
+                  </p>
+                </div>
+              )}
+              {record.snapsheetClaimUrl && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Snapsheet Claim</Label>
+                  <a
+                    href={record.snapsheetClaimUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm mt-0.5 text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View in Snapsheet
+                  </a>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Callback Info */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Phone className="w-4 h-4 text-muted-foreground" />
+                Callback Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
               <div>
                 <Label className="text-xs text-muted-foreground">Callback Phone</Label>
                 {editing ? (
@@ -213,7 +303,7 @@ export default function IntakeDetail() {
                 )}
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Email</Label>
+                <Label className="text-xs text-muted-foreground">Callback Email</Label>
                 {editing ? (
                   <Input value={form.callbackEmail} onChange={(e) => setForm({ ...form, callbackEmail: e.target.value })} className="mt-1 h-8 text-sm" />
                 ) : (
@@ -226,48 +316,19 @@ export default function IntakeDetail() {
             </CardContent>
           </Card>
 
-          {/* Claim Info */}
+          {/* Assignment */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#ff6221]" /> Claim Information
+                <Building2 className="w-4 h-4 text-muted-foreground" />
+                Assignment & Status
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Label className="text-xs text-muted-foreground">Whip Claim Number</Label>
-                {editing ? (
-                  <Input value={form.whipClaimNumber} onChange={(e) => setForm({ ...form, whipClaimNumber: e.target.value })} className="mt-1 h-8 text-sm font-mono" placeholder="MD-XXXX-XXXXXX" />
-                ) : (
-                  <p className="text-sm mt-0.5 font-mono">
-                    {record.whipClaimNumber ? (
-                      <span className="bg-[#171b31]/8 text-[#171b31] px-2 py-0.5 rounded">
-                        {record.whipClaimNumber}
-                      </span>
-                    ) : "—"}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Their Reference Number</Label>
-                {editing ? (
-                  <Input value={form.callerReferenceNumber} onChange={(e) => setForm({ ...form, callerReferenceNumber: e.target.value })} className="mt-1 h-8 text-sm" />
-                ) : (
-                  <p className="text-sm mt-0.5">{record.callerReferenceNumber || "—"}</p>
-                )}
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Purpose of Call</Label>
-                {editing ? (
-                  <Input value={form.callPurpose} onChange={(e) => setForm({ ...form, callPurpose: e.target.value })} className="mt-1 h-8 text-sm" />
-                ) : (
-                  <p className="text-sm mt-0.5">{record.callPurpose || "—"}</p>
-                )}
-              </div>
-              <div>
                 <Label className="text-xs text-muted-foreground">Assigned Handler</Label>
                 {editing ? (
-                  <Select value={form.assignedHandler} onValueChange={(v) => setForm({ ...form, assignedHandler: v })}>
+                  <Select value={form.handlerName} onValueChange={(v) => setForm({ ...form, handlerName: v })}>
                     <SelectTrigger className="mt-1 h-8 text-sm">
                       <SelectValue placeholder="Select handler" />
                     </SelectTrigger>
@@ -278,10 +339,7 @@ export default function IntakeDetail() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-sm mt-0.5 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 text-muted-foreground" />
-                    {record.assignedHandler || "—"}
-                  </p>
+                  <p className="text-sm mt-0.5">{record.handlerName || "—"}</p>
                 )}
               </div>
               <div>
@@ -293,12 +351,17 @@ export default function IntakeDetail() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="escalated">Escalated</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-sm mt-0.5">{record.status}</p>
+                  <p className="text-sm mt-0.5 capitalize">{record.status}</p>
                 )}
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Created</Label>
+                <p className="text-sm mt-0.5">{format(new Date(record.createdAt), "MMM d, yyyy h:mm a")}</p>
               </div>
             </CardContent>
           </Card>
@@ -307,7 +370,7 @@ export default function IntakeDetail() {
         {/* Message */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Message / Notes</CardTitle>
+            <CardTitle className="text-sm font-semibold">Message</CardTitle>
           </CardHeader>
           <CardContent>
             {editing ? (
@@ -325,16 +388,38 @@ export default function IntakeDetail() {
           </CardContent>
         </Card>
 
-        {/* Transcript */}
-        {record.transcript && (
+        {/* Notes */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Internal Notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editing ? (
+              <Textarea
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                rows={3}
+                className="text-sm"
+                placeholder="Add internal notes..."
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {record.notes || "No notes."}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Voicemail Transcript */}
+        {record.rawTranscript && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">AI Conversation Transcript</CardTitle>
+              <CardTitle className="text-sm font-semibold">Voicemail Transcript</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="bg-muted/40 rounded-lg p-4 max-h-80 overflow-y-auto">
                 <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed">
-                  {record.transcript}
+                  {record.rawTranscript}
                 </pre>
               </div>
             </CardContent>

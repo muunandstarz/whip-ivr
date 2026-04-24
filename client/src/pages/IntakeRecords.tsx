@@ -24,6 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   PlusCircle,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
@@ -180,7 +182,7 @@ export default function IntakeRecords() {
                     </thead>
                     <tbody className="divide-y">
                       {data?.records.map((record) => {
-                        const cfg = CALLER_TYPE_CONFIG[record.callerType] ?? CALLER_TYPE_CONFIG.unknown;
+                        const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                         const Icon = cfg.icon;
                         return (
                           <tr key={record.id} className="hover:bg-muted/20 transition-colors">
@@ -193,8 +195,8 @@ export default function IntakeRecords() {
                                   <div className="font-medium text-[#171b31]">
                                     {record.callerName || "—"}
                                   </div>
-                                  {record.organization && (
-                                    <div className="text-xs text-muted-foreground">{record.organization}</div>
+                                  {record.callerOrg && (
+                                    <div className="text-xs text-muted-foreground">{record.callerOrg}</div>
                                   )}
                                   {record.callerPhone && (
                                     <div className="text-xs text-muted-foreground">{record.callerPhone}</div>
@@ -203,13 +205,31 @@ export default function IntakeRecords() {
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              {record.whipClaimNumber ? (
-                                <span className="font-mono text-xs bg-[#171b31]/8 text-[#171b31] px-2 py-0.5 rounded">
-                                  {record.whipClaimNumber}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
+                              <div className="flex flex-col gap-1">
+                                {record.whipClaimNumber ? (
+                                  <span className="font-mono text-xs bg-[#171b31]/8 text-[#171b31] px-2 py-0.5 rounded">
+                                    {record.whipClaimNumber}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                                {record.claimMatchType && record.claimMatchType !== "none" && (
+                                  <span className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded w-fit ${
+                                    (record.claimMatchConfidence ?? 0) >= 95
+                                      ? "bg-green-50 text-green-700"
+                                      : (record.claimMatchConfidence ?? 0) >= 70
+                                      ? "bg-yellow-50 text-yellow-700"
+                                      : "bg-gray-50 text-gray-600"
+                                  }`}>
+                                    {(record.claimMatchConfidence ?? 0) >= 95 ? (
+                                      <ShieldCheck className="w-2.5 h-2.5" />
+                                    ) : (
+                                      <ShieldAlert className="w-2.5 h-2.5" />
+                                    )}
+                                    {record.claimMatchConfidence ?? 0}%
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <Badge variant="outline" className={`text-xs ${cfg.color} border-0`}>
@@ -217,7 +237,7 @@ export default function IntakeRecords() {
                               </Badge>
                             </td>
                             <td className="px-4 py-3 text-sm text-muted-foreground">
-                              {record.assignedHandler || "—"}
+                              {record.handlerName || "—"}
                             </td>
                             <td className="px-4 py-3">
                               <span className="text-xs text-muted-foreground">
@@ -267,7 +287,7 @@ export default function IntakeRecords() {
                 {/* Mobile list */}
                 <div className="md:hidden divide-y">
                   {data?.records.map((record) => {
-                    const cfg = CALLER_TYPE_CONFIG[record.callerType] ?? CALLER_TYPE_CONFIG.unknown;
+                    const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                     const Icon = cfg.icon;
                     return (
                       <Link key={record.id} href={`/intake/${record.id}`}>
@@ -280,7 +300,7 @@ export default function IntakeRecords() {
                               {record.callerName || record.callerPhone || "Unknown"}
                             </div>
                             <div className="text-xs text-muted-foreground truncate">
-                              {record.organization || cfg.label} ·{" "}
+                              {record.callerOrg || cfg.label} ·{" "}
                               {formatDistanceToNow(new Date(record.createdAt), { addSuffix: true })}
                             </div>
                           </div>

@@ -157,7 +157,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="divide-y">
                     {recentData?.records.map((record) => {
-                      const cfg = CALLER_TYPE_CONFIG[record.callerType] ?? CALLER_TYPE_CONFIG.unknown;
+                      const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                       const Icon = cfg.icon;
                       return (
                         <Link key={record.id} href={`/intake/${record.id}`}>
@@ -170,9 +170,9 @@ export default function Dashboard() {
                                 <span className="text-sm font-medium truncate">
                                   {record.callerName || record.callerPhone || "Unknown Caller"}
                                 </span>
-                                {record.organization && (
+                                {record.callerOrg && (
                                   <span className="text-xs text-muted-foreground truncate">
-                                    — {record.organization}
+                                    — {record.callerOrg}
                                   </span>
                                 )}
                               </div>
@@ -220,7 +220,7 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
                 ) : (
                   callerTypeBreakdown.map((item) => {
-                    const cfg = CALLER_TYPE_CONFIG[item.callerType] ?? CALLER_TYPE_CONFIG.unknown;
+                    const cfg = CALLER_TYPE_CONFIG[item.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                     const Icon = cfg.icon;
                     const pct = totalRecords > 0 ? Math.round((Number(item.count) / totalRecords) * 100) : 0;
                     return (
@@ -250,25 +250,19 @@ export default function Dashboard() {
             {/* IVR Webhook Info */}
             <Card className="mt-4">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold">Twilio Webhook</CardTitle>
+                <CardTitle className="text-base font-semibold">Aircall Webhook</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">Inbound Voice</div>
+                  <div className="text-xs text-muted-foreground mb-1">Call Ended / Voicemail</div>
                   <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
-                    /api/ivr/voice
+                    /api/aircall/webhook
                   </code>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">Voicemail Recording</div>
+                  <div className="text-xs text-muted-foreground mb-1">Auth Token (HMAC)</div>
                   <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
-                    /api/ivr/voicemail
-                  </code>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Call Status</div>
-                  <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
-                    /api/ivr/status
+                    Set in Aircall Dashboard → Integrations
                   </code>
                 </div>
                 <Link href="/ivr-setup">

@@ -25,16 +25,15 @@ export default function NewIntake() {
   const [, navigate] = useLocation();
   const [form, setForm] = useState({
     callerPhone: "",
-    callerType: "unknown" as const,
+    callerType: "unknown" as "carrier" | "law_office" | "medical_provider" | "member" | "claimant" | "police" | "unknown",
     callerName: "",
-    organization: "",
+    callerOrg: "",
     whipClaimNumber: "",
-    callerReferenceNumber: "",
-    callPurpose: "",
+    callerRefNumber: "",
     message: "",
     callbackPhone: "",
     callbackEmail: "",
-    assignedHandler: "",
+    handlerName: "",
   });
 
   const createMutation = trpc.intake.create.useMutation({
@@ -81,7 +80,6 @@ export default function NewIntake() {
                   <SelectItem value="member">Member</SelectItem>
                   <SelectItem value="claimant">Claimant</SelectItem>
                   <SelectItem value="police">Police</SelectItem>
-                  <SelectItem value="wrong_department">Wrong Department</SelectItem>
                   <SelectItem value="unknown">Unknown</SelectItem>
                 </SelectContent>
               </Select>
@@ -107,8 +105,8 @@ export default function NewIntake() {
             <div>
               <Label className="text-xs">Organization / Company</Label>
               <Input
-                value={form.organization}
-                onChange={(e) => set("organization", e.target.value)}
+                value={form.callerOrg}
+                onChange={(e) => set("callerOrg", e.target.value)}
                 className="mt-1 h-9 text-sm"
                 placeholder="State Farm, Law Offices of..."
               />
@@ -152,24 +150,15 @@ export default function NewIntake() {
             <div>
               <Label className="text-xs">Their Reference Number</Label>
               <Input
-                value={form.callerReferenceNumber}
-                onChange={(e) => set("callerReferenceNumber", e.target.value)}
+                value={form.callerRefNumber}
+                onChange={(e) => set("callerRefNumber", e.target.value)}
                 className="mt-1 h-9 text-sm"
                 placeholder="Carrier / file reference"
               />
             </div>
             <div>
-              <Label className="text-xs">Purpose of Call</Label>
-              <Input
-                value={form.callPurpose}
-                onChange={(e) => set("callPurpose", e.target.value)}
-                className="mt-1 h-9 text-sm"
-                placeholder="Status check, demand, payment inquiry..."
-              />
-            </div>
-            <div>
               <Label className="text-xs">Assigned Handler</Label>
-              <Select value={form.assignedHandler} onValueChange={(v) => set("assignedHandler", v)}>
+              <Select value={form.handlerName} onValueChange={(v) => set("handlerName", v)}>
                 <SelectTrigger className="mt-1 h-9 text-sm">
                   <SelectValue placeholder="Select handler" />
                 </SelectTrigger>

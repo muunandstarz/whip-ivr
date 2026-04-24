@@ -5,6 +5,8 @@ import {
   text,
   timestamp,
   varchar,
+  boolean,
+  float,
   json,
 } from "drizzle-orm/mysql-core";
 
@@ -23,12 +25,27 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// Intake records created by AI IVR sessions or manual entry
+// Claims team handlers
+export const handlers = mysqlTable("handlers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  role: varchar("role", { length: 64 }), // e.g. "Claim Handler", "Claim Processor"
+  aircallUserId: int("aircallUserId"),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Handler = typeof handlers.$inferSelect;
+export type InsertHandler = typeof handlers.$inferInsert;
+
+// AI-processed intake records from voicemails
 export const intakeRecords = mysqlTable("intake_records", {
   id: int("id").autoincrement().primaryKey(),
-  // Call metadata
-  callSid: varchar("callSid", { length: 64 }),
+  aircallCallId: varchar("aircallCallId", { length: 64 }),
   callerPhone: varchar("callerPhone", { length: 32 }),
+  callerName: varchar("callerName", { length: 256 }),
+  callerOrg: varchar("callerOrg", { length: 256 }),
   callerType: mysqlEnum("callerType", [
     "carrier",
     "law_office",
@@ -36,27 +53,27 @@ export const intakeRecords = mysqlTable("intake_records", {
     "member",
     "claimant",
     "police",
-    "wrong_department",
     "unknown",
-  ]).notNull().default("unknown"),
-  // Collected intake fields
-  callerName: varchar("callerName", { length: 256 }),
-  organization: varchar("organization", { length: 256 }),
+  ]).default("unknown"),
   whipClaimNumber: varchar("whipClaimNumber", { length: 128 }),
-  callerReferenceNumber: varchar("callerReferenceNumber", { length: 128 }),
-  callPurpose: varchar("callPurpose", { length: 512 }),
-  message: text("message"),
+  callerRefNumber: varchar("callerRefNumber", { length: 128 }),
   callbackPhone: varchar("callbackPhone", { length: 32 }),
   callbackEmail: varchar("callbackEmail", { length: 320 }),
-  assignedHandler: varchar("assignedHandler", { length: 256 }),
-  // Status
-  status: mysqlEnum("status", ["open", "closed"]).notNull().default("open"),
-  // Transcript of the AI conversation
-  transcript: text("transcript"),
-  // Source of the record
-  source: mysqlEnum("source", ["ai_ivr", "voicemail", "manual"]).notNull().default("ai_ivr"),
-  // Notification sent
-  notificationSent: int("notificationSent").default(0),
+  message: text("message"),
+  rawTranscript: text("rawTranscript"),
+  handlerId: int("handlerId"),
+  handlerName: varchar("handlerName", { length: 128 }),
+  status: mysqlEnum("status", ["open", "closed", "escalated"]).default("open").notNull(),
+  isRepeatCaller: boolean("isRepeatCaller").default(false).notNull(),
+  repeatCallCount: int("repeatCallCount").default(0).notNull(),
+  priority: mysqlEnum("priority", ["normal", "high", "urgent"]).default("normal").notNull(),
+  source: mysqlEnum("source", ["voicemail", "manual", "live_call"]).default("voicemail").notNull(),
+  aircallRecordingUrl: text("aircallRecordingUrl"),
+  notes: text("notes"),
+  // Claim number matching
+  claimMatchType: varchar("claimMatchType", { length: 32 }), // exact | vin_fragment | claim_fragment | partial | none
+  claimMatchConfidence: int("claimMatchConfidence"), // 0-100
+  snapsheetClaimUrl: text("snapsheetClaimUrl"), // direct link to Snapsheet claim
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -64,15 +81,71 @@ export const intakeRecords = mysqlTable("intake_records", {
 export type IntakeRecord = typeof intakeRecords.$inferSelect;
 export type InsertIntakeRecord = typeof intakeRecords.$inferInsert;
 
-// Active call sessions for tracking ongoing AI conversations
-export const callSessions = mysqlTable("call_sessions", {
+// Full call history synced from Aircall API
+export const callHistory = mysqlTable("call_history", {
   id: int("id").autoincrement().primaryKey(),
-  callSid: varchar("callSid", { length: 64 }).notNull().unique(),
+  aircallCallId: varchar("aircallCallId", { length: 64 }).notNull().unique(),
+  direction: mysqlEnum("direction", ["inbound", "outbound"]).notNull(),
+  status: mysqlEnum("status", [
+    "answered",
+    "missed",
+    "voicemail",
+    "transferred",
+    "abandoned",
+  ]).notNull(),
   callerPhone: varchar("callerPhone", { length: 32 }),
-  state: varchar("state", { length: 64 }).notNull().default("greeting"),
-  // JSON blob of collected data so far
-  collectedData: json("collectedData"),
-  conversationHistory: json("conversationHistory"),
+  callerName: varchar("callerName", { length: 256 }),
+  aircallNumberId: int("aircallNumberId"),
+  aircallNumberName: varchar("aircallNumberName", { length: 128 }),
+  agentId: int("agentId"),
+  agentName: varchar("agentName", { length: 128 }),
+  handlerId: int("handlerId"),
+  durationSeconds: int("durationSeconds").default(0),
+  waitTimeSeconds: int("waitTimeSeconds").default(0),
+  recordingUrl: text("recordingUrl"),
+  voicemailUrl: text("voicemailUrl"),
+  hasIntakeRecord: boolean("hasIntakeRecord").default(false),
+  intakeRecordId: int("intakeRecordId"),
+  startedAt: timestamp("startedAt").notNull(),
+  endedAt: timestamp("endedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CallHistory = typeof callHistory.$inferSelect;
+export type InsertCallHistory = typeof callHistory.$inferInsert;
+
+// Weekly AI QA scores per call/agent
+export const qaScores = mysqlTable("qa_scores", {
+  id: int("id").autoincrement().primaryKey(),
+  callHistoryId: int("callHistoryId").notNull(),
+  aircallCallId: varchar("aircallCallId", { length: 64 }).notNull(),
+  agentId: int("agentId"),
+  agentName: varchar("agentName", { length: 128 }),
+  handlerId: int("handlerId"),
+  weekOf: timestamp("weekOf").notNull(),
+  transcript: text("transcript"),
+  // Scores 1-10
+  greetingScore: float("greetingScore"),
+  holdManagementScore: float("holdManagementScore"),
+  resolutionScore: float("resolutionScore"),
+  empathyScore: float("empathyScore"),
+  callControlScore: float("callControlScore"),
+  overallScore: float("overallScore"),
+  improvementNotes: text("improvementNotes"),
+  strengths: text("strengths"),
+  rawAiResponse: text("rawAiResponse"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type QaScore = typeof qaScores.$inferSelect;
+export type InsertQaScore = typeof qaScores.$inferInsert;
+
+// Repeat caller tracking
+export const callerProfiles = mysqlTable("caller_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  phone: varchar("phone", { length: 32 }).notNull().unique(),
+  name: varchar("name", { length: 256 }),
+  org: varchar("org", { length: 256 }),
   callerType: mysqlEnum("callerType", [
     "carrier",
     "law_office",
@@ -80,12 +153,14 @@ export const callSessions = mysqlTable("call_sessions", {
     "member",
     "claimant",
     "police",
-    "wrong_department",
     "unknown",
   ]).default("unknown"),
+  totalCalls: int("totalCalls").default(1).notNull(),
+  lastCallAt: timestamp("lastCallAt").defaultNow().notNull(),
+  claimNumbers: text("claimNumbers"), // JSON array of claim numbers seen
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-export type CallSession = typeof callSessions.$inferSelect;
-export type InsertCallSession = typeof callSessions.$inferInsert;
+export type CallerProfile = typeof callerProfiles.$inferSelect;
+export type InsertCallerProfile = typeof callerProfiles.$inferInsert;

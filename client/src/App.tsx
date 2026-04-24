@@ -10,6 +10,9 @@ import IntakeDetail from "./pages/IntakeDetail";
 import Analytics from "./pages/Analytics";
 import NewIntake from "./pages/NewIntake";
 import IVRSetup from "./pages/IVRSetup";
+import HandlerQueue from "./pages/HandlerQueue";
+import CallTracking from "./pages/CallTracking";
+import WeeklyQA from "./pages/WeeklyQA";
 
 function Router() {
   return (
@@ -19,6 +22,9 @@ function Router() {
       <Route path="/intake/new" component={NewIntake} />
       <Route path="/intake/:id" component={IntakeDetail} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/handler-queue" component={HandlerQueue} />
+      <Route path="/call-tracking" component={CallTracking} />
+      <Route path="/qa" component={WeeklyQA} />
       <Route path="/ivr-setup" component={IVRSetup} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
