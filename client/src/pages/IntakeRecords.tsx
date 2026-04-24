@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
+import { useUser } from "@clerk/react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +52,20 @@ const SOURCE_LABELS: Record<string, string> = {
 const PAGE_SIZE = 20;
 
 export default function IntakeRecords() {
+  const { user } = useUser();
+  const { data: trpcUser } = trpc.auth.me.useQuery();
+  const { impersonating, isImpersonating } = useImpersonation();
+
+  const isAdmin = trpcUser?.role === "admin";
+
+  // In handler view (impersonating or non-admin), lock the handlerName filter
+  // to the current handler so they only see their own records.
+  const effectiveHandlerName = isImpersonating
+    ? impersonating!.name
+    : !isAdmin
+    ? (user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "")
+    : null; // null = admin sees all
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
@@ -66,6 +82,7 @@ export default function IntakeRecords() {
     search: debouncedSearch || undefined,
     status: statusFilter === "all" ? undefined : statusFilter,
     callerType: typeFilter === "all" ? undefined : typeFilter,
+    handlerName: effectiveHandlerName ?? undefined,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   });
@@ -83,12 +100,21 @@ export default function IntakeRecords() {
   return (
     <WhipLayout>
       <div className="p-6 space-y-5">
+        {/* Handler-scoped view banner */}
+        {effectiveHandlerName && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+            Showing records assigned to <strong className="ml-1">{effectiveHandlerName}</strong>
+            {isImpersonating && <span className="ml-1 text-amber-600">(admin view)</span>}
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-[#171b31]">Intake Records</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              {data?.total ?? 0} total records
+              {data?.total ?? 0} {effectiveHandlerName ? "records assigned to you" : "total records"}
             </p>
           </div>
           <Link href="/intake/new">
