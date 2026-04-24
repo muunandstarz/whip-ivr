@@ -53,9 +53,9 @@ export default function IVRSetup() {
     <WhipLayout>
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#171b31]">IVR Setup — Option C</h1>
+          <h1 className="text-2xl font-bold text-[#171b31]">IVR Setup — Option 1</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Aircall webhook integration with AI voicemail processing. No third-party telephony required.
+            Aircall IVR with AI intake processing. Carriers, law offices, and medical providers press 1 to submit intake without a live agent.
           </p>
         </div>
 
@@ -63,22 +63,22 @@ export default function IVRSetup() {
         <Card className="border-[#171b31]/20 bg-[#171b31]/3">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Zap className="w-4 h-4 text-[#ff6221]" /> How Option C Works
+              <Zap className="w-4 h-4 text-[#ff6221]" /> How Option 1 Works
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-lg p-3 border">
                 <div className="font-semibold text-[#171b31] text-xs mb-1">1. Call comes in</div>
-                <p className="text-xs">Aircall receives the inbound call on your Claims line and fires a <code className="bg-muted px-1 rounded">call.created</code> webhook</p>
+                <p className="text-xs">Aircall receives the inbound call on your Claims line. The IVR greeting plays and prompts the caller to press 1 for intake (carriers, law offices, medical providers).</p>
               </div>
               <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">2. Voicemail left</div>
-                <p className="text-xs">If no agent answers, Aircall records a voicemail and fires <code className="bg-muted px-1 rounded">call.voicemail_left</code> with the recording URL</p>
+                <div className="font-semibold text-[#171b31] text-xs mb-1">2. Caller presses 1 → voicemail</div>
+                <p className="text-xs">Pressing 1 routes the caller to a dedicated voicemail prompt. Aircall records the message and fires <code className="bg-muted px-1 rounded">call.voicemail_left</code> with the recording URL.</p>
               </div>
               <div className="bg-white rounded-lg p-3 border">
                 <div className="font-semibold text-[#171b31] text-xs mb-1">3. AI processes intake</div>
-                <p className="text-xs">Whisper transcribes the audio. The LLM extracts caller type, claim #, org, message, and callback — creating a structured intake record automatically.</p>
+                <p className="text-xs">Whisper transcribes the audio. The LLM extracts caller type, claim #, org, message, and callback — creating a structured intake record automatically, no agent needed.</p>
               </div>
             </div>
           </CardContent>
@@ -94,10 +94,10 @@ export default function IVRSetup() {
           <CardContent>
             <div className="space-y-2 text-sm">
               {[
-                { type: "Insurance Carrier", action: "AI extracts full intake from voicemail — name, org, Whip claim #, ref #, message, callback", color: "bg-blue-100 text-blue-700" },
-                { type: "Law Office", action: "AI extracts full intake — same fields as carrier", color: "bg-purple-100 text-purple-700" },
-                { type: "Medical Provider", action: "AI extracts full intake — same fields as carrier", color: "bg-emerald-100 text-emerald-700" },
-                { type: "Member / Claimant / Police", action: "Routed to live agent (MJ Badua or Daryl Ochate). Missed calls flagged for callback.", color: "bg-green-100 text-green-700" },
+                { type: "Insurance Carrier", action: "Presses 1 → IVR voicemail → AI extracts full intake (name, org, claim #, ref #, message, callback). No live agent needed.", color: "bg-blue-100 text-blue-700" },
+                { type: "Law Office", action: "Presses 1 → IVR voicemail → AI extracts full intake. Same flow as carrier.", color: "bg-purple-100 text-purple-700" },
+                { type: "Medical Provider", action: "Presses 1 → IVR voicemail → AI extracts full intake. Same flow as carrier.", color: "bg-emerald-100 text-emerald-700" },
+                { type: "Member / Claimant / Police", action: "Routed to live agent (Mary Joy Badua or Daryl Ochate). Missed calls flagged for callback.", color: "bg-green-100 text-green-700" },
                 { type: "Answered Call", action: "Logged to call history with agent name, duration, and answer time — no intake created", color: "bg-gray-100 text-gray-600" },
               ].map((row, i) => (
                 <div key={i} className="flex items-start gap-3 py-2 border-b last:border-0">

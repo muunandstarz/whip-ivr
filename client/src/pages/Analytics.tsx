@@ -262,7 +262,7 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
                   <p className="font-medium text-emerald-800">IVR Self-Service Candidate</p>
                   <p className="text-emerald-700 text-xs mt-0.5">
                     This {(callerType ?? "").replace(/_/g, " ")} has called {calls.length} times.
-                    With IVR Option C, they could submit intake without tying up a live agent.
+                    With IVR Option 1 (Press 1), they could submit intake without tying up a live agent.
                   </p>
                 </div>
               </div>
@@ -364,9 +364,44 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
 
 export default function Analytics() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
-  const { data: full, isLoading } = trpc.calls.fullAnalytics.useQuery();
+  const [classifyRunning, setClassifyRunning] = useState(false);
+  const [classifyLog, setClassifyLog] = useState<string[]>([]);
+  const [classifyDone, setClassifyDone] = useState(false);
+  const { data: full, isLoading, refetch: refetchFull } = trpc.calls.fullAnalytics.useQuery();
   const { data: intakeAnalytics } = trpc.intake.analytics.useQuery();
   const { data: repeatCallers } = trpc.callers.repeats.useQuery();
+  const { data: classifyStatus, refetch: refetchStatus } = trpc.classify.status.useQuery();
+  const runBatch = trpc.classify.runBatch.useMutation();
+
+  async function runClassificationJob() {
+    setClassifyRunning(true);
+    setClassifyDone(false);
+    setClassifyLog(["Starting batch classification…"]);
+    let remaining = classifyStatus?.withRecording ?? 0;
+    let totalProcessed = 0;
+    let totalSucceeded = 0;
+    while (remaining > 0) {
+      try {
+        const result = await runBatch.mutateAsync({ batchSize: 20 });
+        totalProcessed += result.processed;
+        totalSucceeded += result.succeeded;
+        remaining = result.remaining;
+        setClassifyLog((prev) => [
+          ...prev,
+          `✓ Batch: ${result.processed} processed (${result.succeeded} classified, ${result.failed} failed) — ${remaining} remaining`,
+        ]);
+        if (result.processed === 0) break;
+      } catch (err: any) {
+        setClassifyLog((prev) => [...prev, `✗ Error: ${err.message}`]);
+        break;
+      }
+    }
+    setClassifyLog((prev) => [...prev, `✅ Done — ${totalSucceeded} calls classified out of ${totalProcessed} processed.`]);
+    setClassifyRunning(false);
+    setClassifyDone(true);
+    await refetchStatus();
+    await refetchFull();
+  }
 
   const totalCalls = full?.totals.reduce((s, r) => s + Number(r.count), 0) ?? 0;
   const answered = full?.totals.find((r) => r.status === "answered");
@@ -483,8 +518,8 @@ export default function Analytics() {
                     IVR Self-Service Opportunity: {ivrEligibleTotal.toLocaleString()} calls ({Math.round(ivrEligibleTotal / totalCalls * 100)}% of volume)
                   </p>
                   <p className="text-xs text-emerald-700 mt-0.5">
-                    Carriers, law offices, and medical providers are IVR-eligible — they can submit intake via Aircall Option C without a live agent.
-                    Routing these calls to IVR could free up significant agent capacity month over month.
+                    Carriers, law offices, and medical providers are IVR-eligible — they can submit intake by pressing 1 in the IVR (Option 1) without a live agent.
+                    Routing these calls to IVR Option 1 could free up significant agent capacity month over month.
                   </p>
                 </div>
               </div>
@@ -743,6 +778,60 @@ export default function Analytics() {
                 </tbody>
               </table>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* AI Call Classification Panel */}
+        <Card className={classifyDone ? "border-emerald-200" : "border-blue-200"}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Mic className="h-4 w-4 text-blue-600" />
+              AI Call Classification — Transcribe &amp; Identify Caller Types
+              {classifyStatus && (
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {classifyStatus.withRecording.toLocaleString()} calls with recordings unclassified
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground">
+                  {classifyStatus?.withRecording
+                    ? `${classifyStatus.withRecording.toLocaleString()} calls have recordings but no caller type. Running this job will transcribe each recording with Whisper and use AI to identify the caller type, name, org, and claim number.`
+                    : "All calls with recordings have been classified."}
+                </p>
+                {classifyStatus?.withRecording ? (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Estimated time: ~{Math.ceil(classifyStatus.withRecording / 20)} batches of 20 calls each. This may take 30–60 minutes depending on recording length.
+                  </p>
+                ) : null}
+              </div>
+              <Button
+                onClick={runClassificationJob}
+                disabled={classifyRunning || !classifyStatus?.withRecording}
+                className="flex-shrink-0"
+                variant={classifyDone ? "outline" : "default"}
+              >
+                {classifyRunning ? (
+                  <><RotateCcw className="h-4 w-4 mr-2 animate-spin" />Classifying…</>
+                ) : classifyDone ? (
+                  <><CheckCircle2 className="h-4 w-4 mr-2 text-emerald-600" />Done</>
+                ) : (
+                  <><Mic className="h-4 w-4 mr-2" />Start Classification</>
+                )}
+              </Button>
+            </div>
+            {classifyLog.length > 0 && (
+              <div className="bg-muted/60 rounded-lg p-3 font-mono text-xs space-y-1 max-h-48 overflow-y-auto">
+                {classifyLog.map((line, i) => (
+                  <div key={i} className={line.startsWith("✅") ? "text-emerald-700 font-semibold" : line.startsWith("✗") ? "text-red-600" : "text-foreground"}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

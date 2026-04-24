@@ -171,3 +171,22 @@
 
 - [x] Rebuild Softphone.tsx as a realistic mockup with dial pad, call controls, status toggle, recent calls, and dummy data
 - [x] Write Aircall support email requesting Phone SDK / CTI pricing
+
+## Analytics & Caller Type Fix + Softphone Dispositions (Apr 24)
+
+- [ ] Investigate why 2,067 call_history rows have no callerType — check if intake_records phone matching can backfill caller types
+- [ ] Backfill callerType on call_history rows by joining on callerPhone against intake_records
+- [ ] Update Analytics caller type breakdown to reflect backfilled data
+- [ ] Add call dispositions to Softphone mockup (dropdown: Intake Taken, Transferred, Callback Scheduled, Wrong Number, No Action Needed, Escalated)
+- [ ] Surface AI coaching tips prominently in handler workspace (HandlerDashboard and/or Softphone post-call)
+- [ ] Update IVR copy: Option C → Option 1 / Press 1 across all pages
+
+## Batch Call Classification (Apr 24)
+
+- [ ] Audit how many call_history rows with null callerType have a recordingUrl (answered calls)
+- [ ] Build server-side batch classification endpoint: transcribe recording via Whisper, classify caller type + extract caller name/org/claim# via LLM, update call_history row
+- [ ] Add a "Classify Calls" admin trigger UI in Analytics page with progress indicator
+- [ ] Store transcription text back on call_history (add rawTranscript column if not present)
+- [ ] Update Analytics caller type breakdown to reflect newly classified calls
+- [ ] Add call dispositions to Softphone mockup
+- [ ] Surface coaching tips prominently in HandlerDashboard

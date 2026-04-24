@@ -3,6 +3,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { classifyCallBatch, getUnclassifiedCount } from "./classifyCalls";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -234,6 +235,18 @@ export const appRouter = router({
       .input(z.object({ handlerName: z.string() }))
       .query(async ({ input }) => {
         return getHandlerCallMetrics(input.handlerName);
+      }),
+  }),
+
+  // ─── Batch Call Classification ────────────────────────────────────────
+  classify: router({
+    status: protectedProcedure.query(async () => {
+      return getUnclassifiedCount();
+    }),
+    runBatch: protectedProcedure
+      .input(z.object({ batchSize: z.number().min(1).max(50).default(10) }))
+      .mutation(async ({ input }) => {
+        return classifyCallBatch(input.batchSize);
       }),
   }),
 

@@ -240,7 +240,7 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
                   <p className="font-medium text-emerald-800">IVR Self-Service Candidate</p>
                   <p className="text-emerald-700 text-xs mt-0.5">
                     This {(callerType ?? "").replace(/_/g, " ")} has called {calls.length} times.
-                    With IVR Option C, they could submit intake without tying up a live agent.
+                    With IVR Option 1 (Press 1), they could submit intake without tying up a live agent.
                   </p>
                 </div>
               </div>
