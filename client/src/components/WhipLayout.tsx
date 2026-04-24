@@ -1,6 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { useUser, useClerk, SignIn } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -16,8 +15,6 @@ import {
   Star,
 } from "lucide-react";
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -31,16 +28,11 @@ const NAV_ITEMS = [
 
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { user, isAuthenticated, loading } = useAuth();
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const logout = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      window.location.href = "/";
-    },
-    onError: () => toast.error("Logout failed"),
-  });
 
-  if (loading) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
@@ -48,10 +40,10 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isSignedIn) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#171b31] gap-6">
-        <div className="flex flex-col items-center gap-2">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#171b31] gap-6 p-4">
+        <div className="flex flex-col items-center gap-2 mb-2">
           <img
             src="/manus-storage/whip_logo_5e114d45.webp"
             alt="Whip"
@@ -60,15 +52,33 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           <h1 className="text-2xl font-bold text-white">Claims IVR</h1>
           <p className="text-white/60 text-sm">AI-powered call intake management</p>
         </div>
-        <Button
-          className="bg-[#ff6221] hover:bg-[#e5541a] text-white px-8"
-          onClick={() => (window.location.href = getLoginUrl())}
-        >
-          Sign in to continue
-        </Button>
+        {/* Clerk's hosted Sign-In component with Google SSO */}
+        <SignIn
+          routing="hash"
+          appearance={{
+            elements: {
+              rootBox: "w-full max-w-sm",
+              card: "bg-white rounded-xl shadow-2xl",
+              headerTitle: "text-[#171b31] font-bold",
+              headerSubtitle: "text-gray-500",
+              socialButtonsBlockButton:
+                "border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium",
+              formButtonPrimary:
+                "bg-[#ff6221] hover:bg-[#e5541a] text-white font-semibold",
+              footerActionLink: "text-[#ff6221] hover:text-[#e5541a]",
+            },
+          }}
+        />
       </div>
     );
   }
+
+  const displayName =
+    user.fullName ||
+    user.primaryEmailAddress?.emailAddress ||
+    "User";
+  const displayEmail = user.primaryEmailAddress?.emailAddress || "";
+  const avatarInitial = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -136,19 +146,27 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
         {/* User */}
         <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-[#ff6221]/20 flex items-center justify-center text-[#ff6221] text-xs font-bold">
-              {user?.name?.charAt(0)?.toUpperCase() || "U"}
-            </div>
+            {user.imageUrl ? (
+              <img
+                src={user.imageUrl}
+                alt={displayName}
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#ff6221]/20 flex items-center justify-center text-[#ff6221] text-xs font-bold flex-shrink-0">
+                {avatarInitial}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">{user?.name || "User"}</div>
-              <div className="text-xs text-white/50 truncate">{user?.email || ""}</div>
+              <div className="text-sm font-medium text-white truncate">{displayName}</div>
+              <div className="text-xs text-white/50 truncate">{displayEmail}</div>
             </div>
           </div>
           <Button
             variant="ghost"
             size="sm"
             className="w-full text-white/60 hover:text-white hover:bg-white/10 gap-2 justify-start"
-            onClick={() => logout.mutate()}
+            onClick={() => signOut({ redirectUrl: "/" })}
           >
             <LogOut className="w-4 h-4" />
             Sign out

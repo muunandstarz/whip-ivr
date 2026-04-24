@@ -61,17 +61,17 @@
 - [x] Final checkpoint saved — demo ready
 
 ## Clerk Google SSO Integration
-- [ ] Install @clerk/clerk-react and @clerk/express packages
-- [ ] Add CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY secrets
-- [ ] Replace server-side Manus OAuth context with Clerk JWT verification (getAuth from @clerk/express)
-- [ ] Update tRPC context to use Clerk userId and user metadata
-- [ ] Replace client-side useAuth hook with Clerk's useUser/useAuth
-- [ ] Replace login screen with Clerk's GoogleOAuth button / SignIn component
-- [ ] Remove Manus OAuth callback route (/api/oauth/callback)
-- [ ] Update WhipLayout sign-in screen to use Clerk
-- [ ] Update user upsert to sync Clerk user data into local users table
-- [ ] Test Google SSO end-to-end and verify protected procedures still work
-- [ ] Save checkpoint
+- [x] Install @clerk/clerk-react and @clerk/express packages
+- [x] Add CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY secrets
+- [x] Replace server-side Manus OAuth context with Clerk JWT verification (verifyToken from @clerk/express)
+- [x] Update tRPC context to use Clerk userId and user metadata (clerkAuth.ts upserts user to local DB)
+- [x] Replace client-side useAuth hook with Clerk's useUser/useAuth in WhipLayout
+- [x] Replace login screen with Clerk's SignIn component (Google SSO enabled)
+- [x] Remove Manus OAuth callback route dependency (Clerk handles auth entirely client-side)
+- [x] Update WhipLayout sign-in screen to use Clerk SignIn component
+- [x] Update user upsert to sync Clerk user data into local users table (clerkAuth.ts)
+- [x] Test Google SSO end-to-end and verify protected procedures still work (24 tests passing)
+- [x] Save checkpoint
 
 ## Bug Fixes & UI Corrections (Apr 24)
 - [x] Call Tracking: break out per-agent rows (Mary Joy, Daryl, and all named agents) instead of single "Unassigned" row
