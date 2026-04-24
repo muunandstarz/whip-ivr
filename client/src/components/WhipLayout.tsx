@@ -2,6 +2,13 @@ import { Link, useLocation } from "wouter";
 import { useUser, useClerk, SignIn } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   LayoutDashboard,
   PhoneIncoming,
   BarChart3,
@@ -14,10 +21,15 @@ import {
   PhoneCall,
   Phone,
   Star,
+  UserCog,
+  LayoutGrid,
 } from "lucide-react";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 
-const NAV_ITEMS = [
+// ── Nav items for admin users ────────────────────────────────────────────────
+const ADMIN_NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/handler-queue", label: "Handler Queue", icon: Users },
@@ -28,11 +40,29 @@ const NAV_ITEMS = [
   { href: "/ivr-setup", label: "IVR Setup", icon: Settings },
 ];
 
+// ── Nav items for handler view (own or impersonated) ─────────────────────────
+const HANDLER_NAV_ITEMS = [
+  { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
+  { href: "/softphone", label: "Softphone", icon: Phone },
+  { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
+  { href: "/intake/new", label: "New Intake", icon: PlusCircle },
+];
+
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { impersonating, setImpersonating, isImpersonating } = useImpersonation();
+
+  // Fetch tRPC user to get role (server-side role, not Clerk metadata)
+  const { data: trpcUser } = trpc.auth.me.useQuery();
+  const isAdmin = trpcUser?.role === "admin";
+
+  // Fetch handlers list for admin impersonation dropdown
+  const { data: handlersList } = trpc.handlers.list.useQuery(undefined, {
+    enabled: isAdmin,
+  });
 
   if (!isLoaded) {
     return (
@@ -82,6 +112,12 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const displayEmail = user.primaryEmailAddress?.emailAddress || "";
   const avatarInitial = displayName.charAt(0).toUpperCase();
 
+  // Determine which nav to show:
+  // - Admin with no impersonation → full admin nav
+  // - Admin impersonating a handler → handler nav
+  // - Non-admin → handler nav (their own view)
+  const navItems = isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : HANDLER_NAV_ITEMS;
+
   return (
     <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
@@ -109,23 +145,77 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           </button>
         </div>
 
-        {/* New Intake Button */}
-        <div className="px-4 py-3">
-          <Link href="/intake/new">
-            <Button
-              size="sm"
-              className="w-full bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2"
-              onClick={() => setMobileOpen(false)}
+        {/* Admin Impersonation Dropdown */}
+        {isAdmin && (
+          <div className="px-4 py-3 border-b border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <UserCog className="w-3.5 h-3.5 text-[#ff6221]" />
+              <span className="text-xs font-semibold text-white/70 uppercase tracking-wide">
+                Viewing as
+              </span>
+            </div>
+            <Select
+              value={impersonating ? String(impersonating.id) : "admin"}
+              onValueChange={(val) => {
+                if (val === "admin") {
+                  setImpersonating(null);
+                } else {
+                  const handler = handlersList?.find((h) => String(h.id) === val);
+                  if (handler) {
+                    setImpersonating({ id: handler.id, name: handler.name, email: handler.email ?? "" });
+                    navigate("/my-dashboard");
+                  }
+                }
+              }}
             >
-              <PlusCircle className="w-4 h-4" />
-              New Intake
-            </Button>
-          </Link>
-        </div>
+              <SelectTrigger className="w-full bg-white/10 border-white/20 text-white text-sm h-8 focus:ring-[#ff6221]">
+                <SelectValue placeholder="Admin View" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">
+                  <span className="flex items-center gap-2">
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    Admin View
+                  </span>
+                </SelectItem>
+                {handlersList?.map((handler) => (
+                  <SelectItem key={handler.id} value={String(handler.id)}>
+                    <span className="flex items-center gap-2">
+                      <Users className="w-3.5 h-3.5" />
+                      {handler.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isImpersonating && (
+              <p className="text-xs text-amber-300 mt-1.5 flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Handler view active
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* New Intake Button — shown in admin view or handler view */}
+        {(!isImpersonating || !isAdmin) && (
+          <div className="px-4 py-3">
+            <Link href="/intake/new">
+              <Button
+                size="sm"
+                className="w-full bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2"
+                onClick={() => setMobileOpen(false)}
+              >
+                <PlusCircle className="w-4 h-4" />
+                New Intake
+              </Button>
+            </Link>
+          </div>
+        )}
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 space-y-0.5">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+          {navItems.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
             return (
               <Link key={href} href={href}>
@@ -143,6 +233,20 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
               </Link>
             );
           })}
+
+          {/* Admin: show "Exit Handler View" button when impersonating */}
+          {isAdmin && isImpersonating && (
+            <button
+              onClick={() => {
+                setImpersonating(null);
+                setMobileOpen(false);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-amber-300 hover:bg-white/8 hover:text-amber-200 mt-2 border border-amber-400/30"
+            >
+              <UserCog className="w-4 h-4 flex-shrink-0" />
+              Exit Handler View
+            </button>
+          )}
         </nav>
 
         {/* User */}
@@ -161,7 +265,9 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             )}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">{displayName}</div>
-              <div className="text-xs text-white/50 truncate">{displayEmail}</div>
+              <div className="text-xs text-white/50 truncate">
+                {isAdmin ? "Admin" : "Handler"} · {displayEmail}
+              </div>
             </div>
           </div>
           <Button
@@ -202,6 +308,11 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             />
             <span className="font-semibold text-sm text-[#171b31]">Claims IVR</span>
           </div>
+          {isAdmin && isImpersonating && (
+            <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+              Viewing as {impersonating!.name}
+            </span>
+          )}
         </header>
 
         <main className="flex-1 overflow-auto">{children}</main>

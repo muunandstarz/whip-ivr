@@ -15,6 +15,8 @@ import CallTracking from "./pages/CallTracking";
 import WeeklyQA from "./pages/WeeklyQA";
 import HandlerProfile from "./pages/HandlerProfile";
 import Softphone from "./pages/Softphone";
+import HandlerDashboard from "./pages/HandlerDashboard";
+import { ImpersonationProvider } from "./contexts/ImpersonationContext";
 
 function Router() {
   return (
@@ -30,6 +32,7 @@ function Router() {
       <Route path="/handlers/:id" component={HandlerProfile} />
       <Route path="/softphone" component={Softphone} />
       <Route path="/ivr-setup" component={IVRSetup} />
+      <Route path="/my-dashboard" component={HandlerDashboard} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -40,10 +43,12 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <ImpersonationProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </ImpersonationProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

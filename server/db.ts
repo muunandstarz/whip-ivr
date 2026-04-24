@@ -634,3 +634,74 @@ export async function saveHandlerScorecard(data: {
     return (result as any).insertId as number;
   }
 }
+
+// ─── Handler personal call metrics ───────────────────────────────────────────
+export async function getHandlerCallMetrics(handlerName: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const client = (db as any).$client;
+
+  const [statsRows] = await client.query(
+    `SELECT
+       COUNT(*) as total,
+       SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as answered,
+       SUM(CASE WHEN status='missed'   THEN 1 ELSE 0 END) as missed,
+       SUM(CASE WHEN direction='inbound'  THEN 1 ELSE 0 END) as inbound,
+       SUM(CASE WHEN direction='outbound' THEN 1 ELSE 0 END) as outbound,
+       ROUND(AVG(durationSeconds)/60,1) as avgDurationMin,
+       ROUND(SUM(durationSeconds)/3600,1) as totalHours
+     FROM call_history
+     WHERE agentName = ?`,
+    [handlerName]
+  );
+  const stats = statsRows[0] ?? {};
+
+  const [byDayRows] = await client.query(
+    `SELECT
+       DATE(startedAt) as day,
+       COUNT(*) as total,
+       SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as answered
+     FROM call_history
+     WHERE agentName = ? AND startedAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+     GROUP BY DATE(startedAt)
+     ORDER BY day ASC`,
+    [handlerName]
+  );
+
+  const [openRecords] = await client.query(
+    `SELECT id, callerName, callerOrg, whipClaimNumber, priority, createdAt, callbackDueBy, callbackAt, status
+     FROM intake_records
+     WHERE handlerName LIKE ? AND status IN ('open','pending')
+     ORDER BY FIELD(priority,'high','medium','low'), createdAt ASC
+     LIMIT 20`,
+    [`%${handlerName}%`]
+  );
+
+  const [qaRows] = await client.query(
+    `SELECT * FROM qa_scorecards WHERE handlerName LIKE ? ORDER BY weekOf DESC LIMIT 1`,
+    [`%${handlerName}%`]
+  );
+
+  const total = Number(stats.total ?? 0);
+  const answered = Number(stats.answered ?? 0);
+
+  return {
+    stats: {
+      total,
+      answered,
+      missed: Number(stats.missed ?? 0),
+      inbound: Number(stats.inbound ?? 0),
+      outbound: Number(stats.outbound ?? 0),
+      avgDurationMin: Number(stats.avgDurationMin ?? 0),
+      totalHours: Number(stats.totalHours ?? 0),
+      answerRate: total > 0 ? Math.round((answered / total) * 100) : 0,
+    },
+    byDay: byDayRows as { day: string; total: number; answered: number }[],
+    openRecords: openRecords as {
+      id: number; callerName: string; callerOrg: string; whipClaimNumber: string;
+      priority: string; createdAt: Date; callbackDueBy: Date | null; callbackAt: Date | null; status: string;
+    }[],
+    latestScorecard: qaRows[0] ?? null,
+  };
+}

@@ -154,3 +154,20 @@
 - [x] Show callback QA status in intake records list (on time / overdue / pending)
 - [ ] Webhook signature verification (Aircall-Signature header)
 - [x] Write Aircall Smartflow + webhook setup instructions doc
+
+## Handler View & Admin Impersonation (Apr 24)
+
+- [ ] Fix softphone blank widget — add domain-pending message explaining SDK requires published domain
+- [x] Admin impersonation dropdown in WhipLayout top nav (admin/Greg only) — "Viewing as: [Handler]"
+- [x] Build HandlerDashboard page: callback queue, personal IB/OB metrics, answered vs missed
+- [x] HandlerDashboard: AI coaching tips section (updated from QA review data)
+- [x] HandlerDashboard: hold reminders tip card
+- [x] HandlerDashboard: soft transfer tips card (IB processors → handlers)
+- [x] Role-based routing: handlers see only HandlerDashboard + Softphone; admins see full nav + impersonation
+- [x] Wire impersonation context: selecting a handler from dropdown shows their HandlerDashboard
+- [ ] Add Greg Bauder to admin users list
+
+## Softphone Mockup + Aircall Email (Apr 24)
+
+- [x] Rebuild Softphone.tsx as a realistic mockup with dial pad, call controls, status toggle, recent calls, and dummy data
+- [x] Write Aircall support email requesting Phone SDK / CTI pricing

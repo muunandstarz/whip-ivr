@@ -21,6 +21,7 @@ import {
   getHandlerScorecards,
   getAllScorecards,
   saveHandlerScorecard,
+  getHandlerCallMetrics,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -224,6 +225,15 @@ export const appRouter = router({
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
         return getCallerHistory(input.phone);
+      }),
+  }),
+
+  // ─── Handler Metrics ──────────────────────────────────────────────────
+  handlerMetrics: router({
+    byName: protectedProcedure
+      .input(z.object({ handlerName: z.string() }))
+      .query(async ({ input }) => {
+        return getHandlerCallMetrics(input.handlerName);
       }),
   }),
 
