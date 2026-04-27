@@ -61,7 +61,7 @@ function nextFirstPartyHandler() {
 }
 
 // Keyword patterns for content-based routing (checked against message + transcript)
-const SUBRO_REGEX    = /\b(subro(gation)?|demand( letter| package)?|payment|settlement|lien|reimbursement|recovery package)\b/i;
+const SUBRO_REGEX    = /\b(subro(gation)?|demand( letter| package)?|settlement|lien|reimbursement|recovery package)\b/i;
 const INJURY_REGEX   = /\b(pip|personal injury|bodily injury|bi claim|injury claim|medical treatment|pain and suffering|attorney|represented|lawsuit|litigation)\b/i;
 const PD_REGEX       = /\b(property damage|pd claim|third.?party|3rd party|vehicle damage|repair estimate|damage claim|collision damage)\b/i;
 const TOTAL_LOSS_REGEX = /\b(total loss|totaled|write.?off|salvage|ACV|actual cash value|total.?loss claim)\b/i;
@@ -107,8 +107,9 @@ function resolveHandler(
   if (PD_REGEX.test(text)) return HANDLER_ROUTING.carlito;
 
   // 3. Caller-type routing
-  if (callerType === "law_office")       return HANDLER_ROUTING.jayla;
+  // Medical providers always go to Jayla regardless of billing/payment keywords
   if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
+  if (callerType === "law_office")       return HANDLER_ROUTING.jayla;
   if (callerType === "carrier")          return nextFirstPartyHandler(); // carriers default to first-party team
   if (callerType === "member" || callerType === "claimant") return nextFirstPartyHandler();
 

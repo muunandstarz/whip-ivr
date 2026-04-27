@@ -198,3 +198,13 @@ Business routing logic to implement in resolveHandler():
 - [ ] Fix Intake Records page to default to showing only 'Open' status records (not all 226)
 - [ ] Re-check voicemail audio for +13054284161, +12166172557, +12023086303, +14704822636
 - [ ] If audio exists, re-transcribe, extract, and re-route those 4 specific records
+
+---
+
+## Routing Rule Corrections (Apr 27 2026)
+
+- [x] Fix routing: law_office type → Jayla by default, Carlito only if PD explicitly mentioned, never Madeline
+- [x] Fix routing: medical_provider → Jayla always (not Madeline)
+- [x] Tighten SUBRO_REGEX: removed standalone 'payment' trigger (too broad — medical billing false positives)
+- [x] Full sweep: 96 closed records re-transcribed, 89 re-opened with real data and correct routing
+- [x] Final handler distribution: Jayla 30, Lorraine 28, Jovel 28, Natashia 27, Annie 25, Madeline 19, MJ 19, Daryl 16, Carlito 13, Demily 4
