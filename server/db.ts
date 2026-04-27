@@ -262,13 +262,13 @@ export async function getCallHistoryAnalytics() {
         avgDuration: sql<number>`AVG(durationSeconds)`,
         total: sql<number>`count(*)`,
       })
-      .from(callHistory)
-      .where(sql`startedAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)`)
-      .groupBy(callHistory.agentName)
-      .orderBy(desc(sql`count(*)`)),
-    db
-      .select({
-        day: sql<string>`DATE(startedAt)`,
+        .from(callHistory)
+        .where(sql`agentName IN (${sql.raw(CLAIMS_TEAM.map(() => '?').join(','))})`)
+        .groupBy(callHistory.agentName)
+        .orderBy(desc(sql`count(*)`)),
+      db
+        .select({
+          day: sql<string>`DATE(startedAt)`,
         total: sql<number>`count(*)`,
         answered: sql<number>`SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END)`,
         missed: sql<number>`SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END)`,
@@ -395,7 +395,15 @@ export async function getRepeatCallers() {
   return enriched;
 }
 
-// ─── Full Call Analytics (all 1,866 calls) ─────────────────────────────────
+// ─── Claims team agent names (active only) ───────────────────────────────────
+export const CLAIMS_TEAM = [
+  'Ana Padilla', 'Annie Ortiz', 'Bennet Carlos', 'Carlito Legarde Jr',
+  'Catherine Cestina', 'Daniel Giono', 'Daryl Ochate', 'Demily Flores',
+  'Elizabeth Avilla', 'Jayla Bernard', 'Jovel Villa', 'Lorraine Tria',
+  'Madeline Green', 'Mary Joy Badua', 'Natashia Edulan',
+];
+
+// ─── Full Call Analytics (claims team only) ──────────────────────────────────
 export async function getFullCallAnalytics() {
   const db = await getDb();
   if (!db) return null;

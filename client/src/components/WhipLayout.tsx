@@ -42,8 +42,8 @@ const ADMIN_NAV_ITEMS = [
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
 const HANDLER_NAV_ITEMS = [
-  { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/softphone", label: "Softphone", icon: Phone },
+  { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/intake/new", label: "New Intake", icon: PlusCircle },
 ];

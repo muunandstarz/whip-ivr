@@ -116,6 +116,7 @@ export const callHistory = mysqlTable("call_history", {
   rawTranscript: text("rawTranscript"),
   callSummary: text("callSummary"),
   classifiedByAI: boolean("classifiedByAI").default(false),
+  ivrEligible: boolean("ivrEligible").default(false),
   startedAt: timestamp("startedAt").notNull(),
   endedAt: timestamp("endedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

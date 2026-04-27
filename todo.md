@@ -190,3 +190,38 @@
 - [ ] Update Analytics caller type breakdown to reflect newly classified calls
 - [ ] Add call dispositions to Softphone mockup
 - [ ] Surface coaching tips prominently in HandlerDashboard
+
+## Monday Demo Sprint (Apr 25)
+
+- [ ] Classify April calls by IVR eligibility from backfill transcripts — show how many would have gone to VM
+- [ ] Filter all data to claims team only (12-13 members — exclude other teams/departments)
+- [ ] Add tooltip info icons (hover 'i') to all metric cards across Dashboard, Analytics, CallTracking
+- [ ] Make dashboard metric cards clickable — link to relevant detail pages
+- [ ] Reorder handler nav: Softphone first, My Dashboard second, Intake Records third, New Intake fourth
+- [ ] Fix outbound call display on Softphone — show number dialed, contact name, duration for OB calls
+- [ ] Build handler call scripts — dynamic per caller type (carrier, law, medical, member) shown during active call
+- [ ] Build full disposition code system — 20+ codes, required wrap-up after every call
+- [ ] Add disposition analytics to dashboard (disposition breakdown chart)
+
+## Monday Demo Sprint — Additional (Apr 25)
+
+- [ ] Exclude Kim Francisco, Rionel Berdin, Jiever Nubog, Julius Cano, Karl Capati from all analytics/views (mark inactive in handlers table)
+- [ ] Fix repeat caller logic: same phone + different claim number = NOT a repeat caller (deduplicate by claim)
+- [ ] Add IVR eligibility breakdown to Analytics: 98/226 voicemails (43%) were IVR-eligible — carrier/law/medical
+- [ ] Surface batch AI classification panel prominently in Analytics for the 1,500 answered calls
+- [ ] Add tooltip info icons to all metric cards (Dashboard, Analytics, CallTracking, HandlerDashboard)
+- [ ] Make dashboard metric cards clickable — link to relevant detail pages
+- [ ] Reorder handler nav: Softphone first, My Dashboard second, Intake Records third, New Intake fourth
+- [ ] Fix OB call display on Softphone — show number dialed, contact name, duration
+- [ ] Add SMS texting panel to Softphone page (Textline API integration — claims text line only)
+- [ ] Build handler call scripts — dynamic per caller type shown during active call
+- [ ] Build full disposition code system — 20+ codes, required wrap-up after every call, disposition analytics
+
+## Batch AI Classification — All 1,556 Recorded Calls
+
+- [ ] Update batch classification script to process ALL recorded calls (answered + voicemail + missed-with-recording), not just voicemails
+- [ ] Extract per-call: caller type, topic/summary, IVR eligibility flag, claim number if mentioned
+- [ ] Add ivrEligible boolean and callSummary columns to call_history if not present
+- [ ] Run the full classification job (30-60 min)
+- [ ] Update Analytics: IVR eligibility breakdown (could have gone to IVR vs needed live agent), unclassified/no-recording counts
+- [ ] Show per-call summaries in Call Tracking detail view
