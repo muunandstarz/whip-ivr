@@ -200,7 +200,7 @@
 - [ ] Reorder handler nav: Softphone first, My Dashboard second, Intake Records third, New Intake fourth
 - [ ] Fix outbound call display on Softphone — show number dialed, contact name, duration for OB calls
 - [ ] Build handler call scripts — dynamic per caller type (carrier, law, medical, member) shown during active call
-- [ ] Build full disposition code system — 20+ codes, required wrap-up after every call
+- [x] Build full disposition code system — 20+ codes, required wrap-up after every call
 - [ ] Add disposition analytics to dashboard (disposition breakdown chart)
 
 ## Monday Demo Sprint — Additional (Apr 25)
@@ -209,13 +209,13 @@
 - [ ] Fix repeat caller logic: same phone + different claim number = NOT a repeat caller (deduplicate by claim)
 - [ ] Add IVR eligibility breakdown to Analytics: 98/226 voicemails (43%) were IVR-eligible — carrier/law/medical
 - [ ] Surface batch AI classification panel prominently in Analytics for the 1,500 answered calls
-- [ ] Add tooltip info icons to all metric cards (Dashboard, Analytics, CallTracking, HandlerDashboard)
+- [x] Add tooltip info icons to all metric cards (Dashboard, Analytics, CallTracking, HandlerDashboard)
 - [ ] Make dashboard metric cards clickable — link to relevant detail pages
 - [ ] Reorder handler nav: Softphone first, My Dashboard second, Intake Records third, New Intake fourth
-- [ ] Fix OB call display on Softphone — show number dialed, contact name, duration
+- [x] Fix OB call display on Softphone — show number dialed, contact name, duration
 - [ ] Add SMS texting panel to Softphone page (Textline API integration — claims text line only)
-- [ ] Build handler call scripts — dynamic per caller type shown during active call
-- [ ] Build full disposition code system — 20+ codes, required wrap-up after every call, disposition analytics
+- [x] Build handler call scripts — dynamic per caller type shown during active call
+- [x] Build full disposition code system — 20+ codes, required wrap-up after every call, disposition analytics
 
 ## Batch AI Classification — All 1,556 Recorded Calls
 
