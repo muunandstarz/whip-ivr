@@ -68,7 +68,7 @@ export default function IntakeRecords() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("open");
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(0);
 

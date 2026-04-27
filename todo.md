@@ -190,3 +190,11 @@ Business routing logic to implement in resolveHandler():
 - [x] Re-routed 104 records using new routing rules — load now spread across team (Jovel 20, Lorraine 20, Annie 19, Natashia 19, Madeline 16, Jayla 15, Carlito 6, MJ 6, Daryl 4, Demily 2)
 - [ ] Verify UI: closed/no-message records should not appear in open intake queue
 - [ ] Run quality check on remaining open records with null callerName to see if any can be further enriched
+
+---
+
+## Intake Records UI Fix (Urgent)
+
+- [ ] Fix Intake Records page to default to showing only 'Open' status records (not all 226)
+- [ ] Re-check voicemail audio for +13054284161, +12166172557, +12023086303, +14704822636
+- [ ] If audio exists, re-transcribe, extract, and re-route those 4 specific records
