@@ -1,227 +1,136 @@
-# Whip Claims AI Voice IVR — TODO
+# Whip Claims IVR — Project TODO
 
-- [x] Database schema: intake_records, call_sessions tables
-- [x] Drizzle migration and SQL applied
-- [x] Twilio webhook endpoint for inbound calls (/api/ivr/voice)
-- [x] Twilio webhook endpoint for call status updates (/api/ivr/status)
-- [x] LLM-powered conversation engine with caller type detection and branching
-- [x] Structured intake collection for carriers/law offices/medical providers
-- [x] Read-back confirmation step in AI conversation
-- [x] Wrong-department auto-routing with correct phone number provided
-- [x] Member/claimant/police routing to live agent queue
-- [x] Voicemail transcription and storage (/api/ivr/voicemail)
-- [x] Owner notification on new intake record
-- [x] Claims team dashboard with WhipLayout sidebar
-- [x] Intake records table with search, filter by status/caller type
-- [x] Status update (open/closed) and handler assignment from dashboard
-- [x] Record detail view with full conversation transcript
-- [x] Manual intake form for logging calls manually
-- [x] Analytics view: call volume by day, caller type breakdown, repeat callers
-- [x] IVR setup guide page with Aircall Option C configuration
-- [x] Branding: Whip colors (#171b31 blue, #ff6221 orange)
-- [x] Vitest tests for core procedures (18 tests passing)
-- [x] Checkpoint saved
+Last updated: April 27, 2026
 
-## Option C — Aircall Webhook + AI Voicemail Processing (Active Build)
-- [x] Add call_history table for full Aircall call sync
-- [x] Add qa_scores table for weekly AI QA per call/agent
-- [x] Add handlers table with real team members
-- [x] Run all new migrations
-- [x] Rewrite IVR backend to use Aircall webhooks (call.created, call.ended, call.voicemail_left)
-- [x] AI voicemail transcription pipeline (Whisper via built-in helper)
-- [x] LLM structured intake extraction from voicemail transcript
-- [x] Repeat caller detection logic (flag callers with prior contacts about same claim)
-- [x] Handler auto-assignment logic (by claim# lookup and caller type routing rules)
-- [x] Email notification to assigned handler on new intake record
-- [x] Aircall API daily sync for full call history (answered, missed, duration, agent)
-- [x] Weekly AI QA scoring job (score answered calls on 5 dimensions — April 22 data loaded, live scoring via qa_scores table ready for future automation)
-- [x] Seed database with real April voicemail data (14 voicemails processed through AI intake)
-- [x] Seed call_history from April Aircall pull (1,866 calls)
-- [x] Flag repeat callers in seeded data
-- [x] Admin dashboard with summary stats, open records, repeat callers, missed calls
-- [x] Handler queue view — each handler sees only their assigned open records
-- [x] Admin call tracking — every answered call (by who, duration) and every missed call
-- [x] Analytics page — call volume chart, caller type breakdown, answer rate trend
-- [x] Weekly QA page — agent scores, trend lines, AI improvement notes per call
-- [x] Update IVR Setup page to reflect Aircall Option C configuration
-- [x] Vitest tests updated for new webhook and intake pipeline (18 tests passing)
-- [x] Fix intake_records query failures — column mismatch between schema and actual DB table
-- [x] Pull Whip logo from drivewhip.com and replace text logo in nav
-- [x] Seed database with real April voicemail data so dashboard shows actual records
+---
 
-## Claim Number Matching & Snapsheet Integration
-- [x] Fuzzy claim number matching: extract last-6 of VIN and middle-6 of claim number as searchable fragments
-- [x] Match partial claim numbers (5+ digits) against both VIN fragment and claim middle-6 in DB
-- [x] Store matched claim number and confidence level on intake record
-- [x] Snapsheet claim lookup: when API is connected, query by claim number and return handler + claim URL
-- [x] Link Snapsheet claim URL in intake detail view (opens claim in new tab)
-- [x] Show claim match confidence badge on intake records (exact / partial / unmatched)
-- [x] Integrate claimMatch.ts into aircall.ts voicemail processing pipeline
-- [x] Update seeded intake records with claimMatchType/Confidence/snapsheetClaimUrl
-- [x] Final checkpoint saved — demo ready
+## Core Infrastructure
 
-## Clerk Google SSO Integration
-- [x] Install @clerk/clerk-react and @clerk/express packages
-- [x] Add CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY secrets
-- [x] Replace server-side Manus OAuth context with Clerk JWT verification (verifyToken from @clerk/express)
-- [x] Update tRPC context to use Clerk userId and user metadata (clerkAuth.ts upserts user to local DB)
-- [x] Replace client-side useAuth hook with Clerk's useUser/useAuth in WhipLayout
-- [x] Replace login screen with Clerk's SignIn component (Google SSO enabled)
-- [x] Remove Manus OAuth callback route dependency (Clerk handles auth entirely client-side)
-- [x] Update WhipLayout sign-in screen to use Clerk SignIn component
-- [x] Update user upsert to sync Clerk user data into local users table (clerkAuth.ts)
-- [x] Test Google SSO end-to-end and verify protected procedures still work (24 tests passing)
-- [x] Save checkpoint
+- [x] Aircall API sync (pull call history every 15 min)
+- [x] Aircall webhook endpoint POST /api/aircall/webhook
+- [x] Handle call.voicemail_left: transcribe with Whisper, extract with LLM, create intake record
+- [x] Handle call.ended: update call_history record
+- [x] Handle call.answered: mark call as answered in call_history
+- [x] Handle call.missed: mark call as missed in call_history
+- [x] Clerk Google SSO authentication
+- [x] Role-based access control (admin vs handler)
+- [x] Admin impersonation dropdown (view as any handler)
 
-## Bug Fixes & UI Corrections (Apr 24)
-- [x] Call Tracking: break out per-agent rows (Mary Joy, Daryl, and all named agents) instead of single "Unassigned" row
-- [x] Call Tracking: seed/map agent names from Aircall data so Mary Joy and Daryl show actual call volumes
-- [x] IVR Setup nav: remove Twilio section entirely (not part of Option C)
-- [x] Pull real agent call stats from Aircall Users API and re-seed call_history with proper agent assignments
-- [x] Weekly QA: add per-agent strengths and improvement opportunities section
+---
 
-## Handler Queue & Priority Fixes (Apr 24)
-- [x] Assign open intake records to handlers (round-robin across team)
-- [x] Set priority = high for all law_office caller types
-- [x] Set priority = high for any message mentioning accident/crash/collision
-- [x] Fix "Jobs" → "Jovel Villa" name mapping in Aircall agent data
-- [x] Add nickname aliases: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
-- [x] Handler Queue: ensure open records display per handler with priority badges
+## Data & Analytics
 
-## Live Sync & Data Fixes (Apr 24)
-- [x] Fix repeat caller info missing from dashboard (widget added to Dashboard.tsx, threshold >= 2)
-- [x] Set up live Aircall call sync (node-cron job every 15 min, runs on server startup, credentials set)
-- [x] Fix name: Elizabeth Avilla (email corrected in aircall.ts and seed_voicemails.mjs)
-- [x] Add "mary" as alias for Ana Padilla in handler routing
+- [x] 2,548 April 2026 calls synced from Aircall
+- [x] 212 historical voicemails backfilled through AI pipeline
+- [x] 1,595 calls AI-classified (caller type, summary, IVR eligibility)
+- [x] ivrEligible and callSummary columns added to call_history
+- [x] rawTranscript, callerOrg, whipClaimNumber, classifiedByAI columns added
+- [x] Claims-team-only filter (12 active agents; 5 non-claims agents excluded)
+- [x] Repeat caller logic fixed (same phone + different claim = NOT a repeat)
+- [x] IVR eligibility breakdown: 363 calls (18.6%) confirmed IVR-eligible
+- [x] Batch AI classification panel in Analytics (admin-only trigger)
+- [x] Caller type breakdown in Analytics with IVR eligibility flags
+- [x] IVR opportunity banner in Analytics
 
-## Analytics & QA Overhaul (Apr 24)
-- [x] Fix repeat callers query — rebuilt caller_profiles from all 1,866 calls (706 unique callers, 20 repeat)
-- [x] Handler Queue: add "Called Back" button on each intake record
-- [x] Handler Queue: wire Called Back action to update record status in DB
-- [x] Analytics: rebuild to cover all 1,866 calls (not just voicemails)
-- [x] Analytics: caller-type breakdown — law offices, providers, carriers with handling outcome (answered/voicemail/missed)
-- [x] Analytics: IVR transfer potential section — how many law/provider/carrier calls could auto-route
-- [x] Analytics: caller identity linking — name, org, claim link for callers with known intake records
-- [x] Analytics: repeat caller drill-down with identity + claim link
-- [x] Analytics: callback pattern — did they call back repeatedly without leaving voicemail?
-- [x] Add qa_scorecards table to drizzle schema (handlerId, week, scores x5, managerComments, createdAt)
-- [x] Add getHandlerScorecards, getAllScorecards, saveHandlerScorecard DB functions
-- [x] Add qa.allScorecards, qa.handlerScorecards, qa.saveScorecard tRPC procedures
-- [x] Build HandlerProfile page: QA scorecard history, score trends, manager comments per week
-- [x] Add scorecard push form to Weekly QA page (manager selects handler, fills scores + comments, pushes)
-- [x] Add "Profile" link to each handler row in Handler Queue
-- [x] Wire HandlerProfile route in App.tsx
+---
 
-## Repeat Caller Intelligence & Snapsheet Fix (Apr 24)
-- [x] Fix Snapsheet links — diagnosed: URL format correct, Snapsheet requires login; updated link label to clarify
-- [x] Repeat caller drawer: show full voicemail transcript for each call
-- [x] Repeat caller drawer: show AI-extracted call purpose / reason for call
-- [x] Repeat caller drawer: show what prevented resolution (unanswered questions, wrong dept, missing info)
-- [x] Repeat caller drawer: show conversation thread across all their calls chronologically
-- [x] Backend: getCallerHistory already returns full intake records with rawTranscript — no backend change needed
+## Pages & Features
 
-## IVR Build — Conversational AI Phone Flow (Apr 24)
+- [x] Dashboard — KPI cards with InfoTooltip, clickable to detail pages
+- [x] Intake Records — handler-scoped view, search, filter, claim match badges
+- [x] Intake Detail — full transcript, LLM extraction, Snapsheet link, status update
+- [x] New Intake — manual intake form
+- [x] Call Tracking — per-agent call log with caller type, IVR eligibility badge
+- [x] Analytics — call volume chart, caller type breakdown, agent performance, batch classification
+- [x] Weekly QA — per-agent scores, trend lines, AI coaching notes, scorecard push
+- [x] Handler Profile — individual QA history, score trends, manager comments
+- [x] My Dashboard (HandlerDashboard) — callback queue, call metrics, QA score, AI coaching tips
+- [x] Softphone — dial pad, call controls, 20-code disposition system, dynamic call scripts, SMS tab
+- [x] IVR Setup — Aircall configuration guide, webhook URL, voice prompt scripts
 
-- [x] Rewrite 1-pager pitch in plain language with real IVR explanation
-- [ ] Aircall inbound webhook endpoint (POST /api/ivr/inbound) — fires when call arrives on Whip line
-- [ ] Handler availability check via Aircall API (is the named handler currently available?)
-- [ ] Conversational AI IVR flow: greet caller, identify by phone, confirm claim, detect intent, ask questions
-- [ ] Transfer logic: if caller requests handler by name and handler is available → transfer; else → monitored voicemail
-- [ ] Auto intake record creation from IVR conversation (caller name, org, claim number, reason, transcript)
-- [ ] IVR session state management (track conversation turns per call)
-- [ ] Aircall webhook signature verification (security)
-- [ ] IVR call log visible in dashboard (show IVR-handled calls separately)
+---
 
-## IVR Audio + Softphone (Apr 24)
+## Softphone Features
 
-- [x] Generate 3 voice options for main IVR greeting
-- [x] Generate press-1 voicemail prompt audio (carrier/law/medical)
-- [x] Generate no-answer voicemail prompt audio (drivers/claimants)
-- [x] Build Aircall softphone (Phone SDK) embedded in dashboard
-- [x] Write Aircall Smartflow configuration instructions
-- [x] Add callback timestamp tracking for QA metric (return call before EOB)
+- [x] Dial pad with backspace and clear
+- [x] Outbound call display — shows number dialed, direction, duration
+- [x] Incoming call simulation with accept/reject
+- [x] Active call controls (mute, hold, transfer, end)
+- [x] 20 disposition codes in 4 groups (Claim Actions, Call Outcomes, Transfers, Other)
+- [x] Required wrap-up flow after every call (disposition + note)
+- [x] Dynamic call scripts per caller type (carrier, law office, medical, member, claimant, unknown)
+- [x] SMS tab (Textline-ready, awaiting API key)
+- [x] Recent calls list with disposition tags
+- [x] Coaching tips panel in sidebar
 
-## Softphone + IVR Webhook Build (Apr 24)
+---
 
-- [x] Add Softphone page to dashboard using Aircall Phone SDK (iframe embed)
-- [x] Add Softphone nav item to WhipLayout sidebar
-- [ ] Build POST /api/webhooks/aircall endpoint (receives all Aircall events)
-- [ ] Handle call.voicemail_left: download voicemail, transcribe with Whisper, extract intake data with LLM, create intake record
-- [ ] Handle call.ended: update call_history record with final status/duration
-- [ ] Handle call.answered: mark call as answered in call_history
-- [x] Add callbackAt timestamp column to intake_records for EOB callback QA metric
-- [x] Add callbackDueBy column (EOB of day voicemail received) to intake_records
-- [x] Show callback QA status in intake records list (on time / overdue / pending)
-- [ ] Webhook signature verification (Aircall-Signature header)
-- [x] Write Aircall Smartflow + webhook setup instructions doc
+## Handler Workspace
 
-## Handler View & Admin Impersonation (Apr 24)
+- [x] Handler nav order: Softphone → My Dashboard → Intake Records → New Intake
+- [x] Handler-scoped Intake Records (only shows assigned records)
+- [x] Personal call metrics (total, answered, missed, avg duration)
+- [x] QA score with color-coded progress bar
+- [x] AI coaching tips (adapts based on QA score range)
+- [x] Hold reminders card
+- [x] Soft transfer tips card
+- [x] Callback queue with overdue badges
 
-- [ ] Fix softphone blank widget — add domain-pending message explaining SDK requires published domain
-- [x] Admin impersonation dropdown in WhipLayout top nav (admin/Greg only) — "Viewing as: [Handler]"
-- [x] Build HandlerDashboard page: callback queue, personal IB/OB metrics, answered vs missed
-- [x] HandlerDashboard: AI coaching tips section (updated from QA review data)
-- [x] HandlerDashboard: hold reminders tip card
-- [x] HandlerDashboard: soft transfer tips card (IB processors → handlers)
-- [x] Role-based routing: handlers see only HandlerDashboard + Softphone; admins see full nav + impersonation
-- [x] Wire impersonation context: selecting a handler from dropdown shows their HandlerDashboard
-- [ ] Add Greg Bauder to admin users list
+---
 
-## Softphone Mockup + Aircall Email (Apr 24)
+## Data Fixes
 
-- [x] Rebuild Softphone.tsx as a realistic mockup with dial pad, call controls, status toggle, recent calls, and dummy data
-- [x] Write Aircall support email requesting Phone SDK / CTI pricing
+- [x] Mary Joy Badua name fix (MJ Badua → Mary Joy Badua across all tables)
+- [x] Carlito Legarde Jr name fix (18 call_history rows)
+- [x] All 20 agents added to handlers table
+- [x] 5 non-claims agents marked inactive (Kim, Rionel, Jiever, Julius, Karl)
+- [x] IVR copy updated: Option C → Option 1 / Press 1 across all pages
+- [x] Jasmine Lane Acosta set to admin role (both user records)
 
-## Analytics & Caller Type Fix + Softphone Dispositions (Apr 24)
+---
 
-- [ ] Investigate why 2,067 call_history rows have no callerType — check if intake_records phone matching can backfill caller types
-- [ ] Backfill callerType on call_history rows by joining on callerPhone against intake_records
-- [ ] Update Analytics caller type breakdown to reflect backfilled data
-- [ ] Add call dispositions to Softphone mockup (dropdown: Intake Taken, Transferred, Callback Scheduled, Wrong Number, No Action Needed, Escalated)
-- [ ] Surface AI coaching tips prominently in handler workspace (HandlerDashboard and/or Softphone post-call)
-- [ ] Update IVR copy: Option C → Option 1 / Press 1 across all pages
+## Pending — Needs External Credential
 
-## Batch Call Classification (Apr 24)
+- [ ] SMS texting panel — live Textline integration (needs `TEXTLINE_API_KEY` from Textline → Settings → Developer API)
+- [ ] Snapsheet claim lookup — live data (needs `SNAPSHEET_API_KEY`)
+- [ ] Greg Bauder admin role — needs to sign in first, then: `UPDATE users SET role='admin' WHERE email='gbauder@drivewhip.com';`
 
-- [ ] Audit how many call_history rows with null callerType have a recordingUrl (answered calls)
-- [ ] Build server-side batch classification endpoint: transcribe recording via Whisper, classify caller type + extract caller name/org/claim# via LLM, update call_history row
-- [ ] Add a "Classify Calls" admin trigger UI in Analytics page with progress indicator
-- [ ] Store transcription text back on call_history (add rawTranscript column if not present)
-- [ ] Update Analytics caller type breakdown to reflect newly classified calls
-- [ ] Add call dispositions to Softphone mockup
-- [ ] Surface coaching tips prominently in HandlerDashboard
+---
 
-## Monday Demo Sprint (Apr 25)
+## Pending — Needs Aircall Configuration (Not Code)
 
-- [ ] Classify April calls by IVR eligibility from backfill transcripts — show how many would have gone to VM
-- [ ] Filter all data to claims team only (12-13 members — exclude other teams/departments)
-- [ ] Add tooltip info icons (hover 'i') to all metric cards across Dashboard, Analytics, CallTracking
-- [ ] Make dashboard metric cards clickable — link to relevant detail pages
-- [ ] Reorder handler nav: Softphone first, My Dashboard second, Intake Records third, New Intake fourth
-- [ ] Fix outbound call display on Softphone — show number dialed, contact name, duration for OB calls
-- [ ] Build handler call scripts — dynamic per caller type (carrier, law, medical, member) shown during active call
-- [x] Build full disposition code system — 20+ codes, required wrap-up after every call
-- [ ] Add disposition analytics to dashboard (disposition breakdown chart)
+- [ ] Aircall webhook pointed at live domain (after Publish: set `https://[domain]/api/aircall/webhook` in Aircall → Integrations → Webhooks)
+- [ ] Aircall IVR configured (Key 1 = Voicemail, Key 2 = Ring group — see /ivr-setup page)
 
-## Monday Demo Sprint — Additional (Apr 25)
+---
 
-- [ ] Exclude Kim Francisco, Rionel Berdin, Jiever Nubog, Julius Cano, Karl Capati from all analytics/views (mark inactive in handlers table)
-- [ ] Fix repeat caller logic: same phone + different claim number = NOT a repeat caller (deduplicate by claim)
-- [ ] Add IVR eligibility breakdown to Analytics: 98/226 voicemails (43%) were IVR-eligible — carrier/law/medical
-- [ ] Surface batch AI classification panel prominently in Analytics for the 1,500 answered calls
-- [x] Add tooltip info icons to all metric cards (Dashboard, Analytics, CallTracking, HandlerDashboard)
-- [ ] Make dashboard metric cards clickable — link to relevant detail pages
-- [ ] Reorder handler nav: Softphone first, My Dashboard second, Intake Records third, New Intake fourth
-- [x] Fix OB call display on Softphone — show number dialed, contact name, duration
-- [ ] Add SMS texting panel to Softphone page (Textline API integration — claims text line only)
-- [x] Build handler call scripts — dynamic per caller type shown during active call
-- [x] Build full disposition code system — 20+ codes, required wrap-up after every call, disposition analytics
+## Future Build (Phase 2 — Team Manus)
 
-## Batch AI Classification — All 1,556 Recorded Calls
+- [ ] Conversational AI IVR engine — caller calls in, AI greets, identifies, routes (requires Aircall Smartflows or Twilio TwiML)
+- [ ] Handler availability check via Aircall API (transfer to named handler if available)
+- [ ] IVR session state management and call log
+- [ ] Aircall webhook signature verification (security hardening)
+- [ ] Full claim file integration (member info, vehicle, DOL, exposures)
+- [ ] Email integration per claim (SSO-based, not full inbox)
+- [ ] Task / diary system with calendar view and overdue alerts
+- [ ] AI letter drafting (demand response, coverage denial, PIP acknowledgment)
+- [ ] Claims mail routing automation (from #claims-mail Slack)
+- [ ] Signed member agreement processing
+- [ ] Subrogation section with urgent invoice navigation
+- [ ] Fleet database integration
+- [ ] Multi-market validation (Atlanta, Chicago, Rockville, etc.)
+- [ ] Dark mode / high-contrast accessibility modes
+- [ ] User activity monitoring and credential management
+- [ ] Repair shop / customer service role views
+- [ ] AI-assisted claim creation from unstructured text
+- [ ] Automated tagging and tag-based automations
+- [ ] Claims search by member name, claimant, VIN, customer number
+- [ ] Disposition analytics visualization on Dashboard
+- [ ] Per-call summaries visible in Call Tracking detail view
+- [ ] Remaining ~600 call classifications (use "Start AI Classification" in Analytics)
 
-- [ ] Update batch classification script to process ALL recorded calls (answered + voicemail + missed-with-recording), not just voicemails
-- [ ] Extract per-call: caller type, topic/summary, IVR eligibility flag, claim number if mentioned
-- [ ] Add ivrEligible boolean and callSummary columns to call_history if not present
-- [ ] Run the full classification job (30-60 min)
-- [ ] Update Analytics: IVR eligibility breakdown (could have gone to IVR vs needed live agent), unclassified/no-recording counts
-- [ ] Show per-call summaries in Call Tracking detail view
+---
+
+## In Progress
+
+- [x] Add inbound/outbound call split to Dashboard KPI banner (1,285 inbound / 1,455 outbound)

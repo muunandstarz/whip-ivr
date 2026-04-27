@@ -87,6 +87,8 @@ export default function Dashboard() {
   const answeredCalls = Number(callFull?.totals.find((r) => r.status === "answered")?.count ?? 0);
   const missedCalls = Number(callFull?.totals.find((r) => r.status === "missed")?.count ?? 0);
   const answerRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+  const inboundCalls = Number(callFull?.byDirection?.find((r) => r.direction === "inbound")?.count ?? 0);
+  const outboundCalls = Number(callFull?.byDirection?.find((r) => r.direction === "outbound")?.count ?? 0);
 
   return (
     <WhipLayout>
@@ -213,6 +215,16 @@ export default function Dashboard() {
                           <InfoTooltip text="Total calls handled by the claims team in April 2026 — includes inbound, outbound, answered, missed, and voicemail. Click to view full analytics." />
                         </div>
                         <div className="text-xs text-muted-foreground">Total Calls</div>
+                        {(inboundCalls > 0 || outboundCalls > 0) && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">
+                              ↙ {inboundCalls.toLocaleString()} in
+                            </span>
+                            <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded font-medium">
+                              ↗ {outboundCalls.toLocaleString()} out
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </CardContent>
