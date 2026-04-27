@@ -10,44 +10,110 @@ import { matchClaimNumber, resolveClaimFromSnapsheet } from "./claimMatch";
 export const aircallRouter = express.Router();
 
 // Handler routing rules — full names match the handlers table
-// Nicknames: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
+// Nicknames: MJ = Mary Joy Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
 const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string }> = {
-  natasha:    { id: 1,  name: "Natashia Edulan",   email: "natashiae@drivewhip.com" },
-  natashia:   { id: 1,  name: "Natashia Edulan",   email: "natashiae@drivewhip.com" },
-  jayla:      { id: 2,  name: "Jayla Bernard",      email: "jayla.bernard@drivewhip.com" },
-  jela:       { id: 2,  name: "Jayla Bernard",      email: "jayla.bernard@drivewhip.com" },
-  mj:         { id: 3,  name: "MJ Badua",           email: "mj.badua@drivewhip.com" },
-  "mary joy": { id: 3,  name: "MJ Badua",           email: "mj.badua@drivewhip.com" },
-  carlito:    { id: 4,  name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
-  annie:      { id: 5,  name: "Annie Ortiz",        email: "annie.ortiz@drivewhip.com" },
-  ana:        { id: 6,  name: "Ana Padilla",        email: "anap@drivewhip.com" },
-  mary:       { id: 6,  name: "Ana Padilla",        email: "anap@drivewhip.com" },  // Ana also goes by Mary
-  catherine:  { id: 7,  name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
-  elizabeth:  { id: 8,  name: "Elizabeth Avilla",   email: "elizabeth.avilla@drivewhip.com" },
-  lorraine:   { id: 9,  name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
-  raine:      { id: 9,  name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
-  daniel:     { id: 10, name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
-  jovel:      { id: 11, name: "Jovel Villa",         email: "jovel@drivewhip.com" },
-  jobs:       { id: 11, name: "Jovel Villa",         email: "jovel@drivewhip.com" },
-  daryl:      { id: 12, name: "Daryl Ochate",        email: "daryl@drivewhip.com" },
+  natasha:    { id: 1,     name: "Natashia Edulan",   email: "natashiae@drivewhip.com" },
+  natashia:   { id: 1,     name: "Natashia Edulan",   email: "natashiae@drivewhip.com" },
+  jayla:      { id: 2,     name: "Jayla Bernard",      email: "jayla.bernard@drivewhip.com" },
+  jela:       { id: 2,     name: "Jayla Bernard",      email: "jayla.bernard@drivewhip.com" },
+  mj:         { id: 3,     name: "Mary Joy Badua",     email: "mj.badua@drivewhip.com" },
+  "mary joy": { id: 3,     name: "Mary Joy Badua",     email: "mj.badua@drivewhip.com" },
+  carlito:    { id: 4,     name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
+  annie:      { id: 5,     name: "Annie Ortiz",        email: "annie.ortiz@drivewhip.com" },
+  ana:        { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
+  mary:       { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
+  catherine:  { id: 7,     name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
+  elizabeth:  { id: 8,     name: "Elizabeth Avilla",   email: "elizabeth.avilla@drivewhip.com" },
+  lorraine:   { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
+  raine:      { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
+  daniel:     { id: 10,    name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
+  jovel:      { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
+  jobs:       { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
+  daryl:      { id: 30002, name: "Daryl Ochate",        email: "daryl.ochate@drivewhip.com" },
+  madeline:   { id: 30004, name: "Madeline Green",      email: "madeline.green@drivewhip.com" },
+  demily:     { id: 30005, name: "Demily Flores",       email: "demily.flores@drivewhip.com" },
 };
+
+// Triage queue — for unknowns with no caller info; MJ and Daryl alternate
+const TRIAGE_HANDLERS = [
+  { id: 3,     name: "Mary Joy Badua", email: "mj.badua@drivewhip.com" },
+  { id: 30002, name: "Daryl Ochate",   email: "daryl.ochate@drivewhip.com" },
+];
+let _triageIndex = 0;
+function nextTriageHandler() {
+  const h = TRIAGE_HANDLERS[_triageIndex % TRIAGE_HANDLERS.length];
+  _triageIndex++;
+  return h;
+}
+
+// First-party team — for repairs/claim status/total loss; round-robin
+const FIRST_PARTY_TEAM = [
+  { id: 1,     name: "Natashia Edulan", email: "natashiae@drivewhip.com" },
+  { id: 9,     name: "Lorraine Tria",   email: "lorraine.tria@drivewhip.com" },
+  { id: 30001, name: "Jovel Villa",      email: "jovel.villa@drivewhip.com" },
+  { id: 5,     name: "Annie Ortiz",     email: "annie.ortiz@drivewhip.com" },
+];
+let _firstPartyIndex = 0;
+function nextFirstPartyHandler() {
+  const h = FIRST_PARTY_TEAM[_firstPartyIndex % FIRST_PARTY_TEAM.length];
+  _firstPartyIndex++;
+  return h;
+}
+
+// Keyword patterns for content-based routing (checked against message + transcript)
+const SUBRO_REGEX    = /\b(subro(gation)?|demand( letter| package)?|payment|settlement|lien|reimbursement|recovery package)\b/i;
+const INJURY_REGEX   = /\b(pip|personal injury|bodily injury|bi claim|injury claim|medical treatment|pain and suffering|attorney|represented|lawsuit|litigation)\b/i;
+const PD_REGEX       = /\b(property damage|pd claim|third.?party|3rd party|vehicle damage|repair estimate|damage claim|collision damage)\b/i;
+const TOTAL_LOSS_REGEX = /\b(total loss|totaled|write.?off|salvage|ACV|actual cash value|total.?loss claim)\b/i;
+const REPAIRS_REGEX  = /\b(repair(s|ing)?|body shop|rental|claim status|status update|supplement|estimate|parts|shop)\b/i;
+const SPAM_REGEX     = /\b(fema\.gov|irs\.gov|social security|medicare|press 1 to speak|reduce your (debt|interest)|car warranty|vehicle warranty|student loan|robocall|this call may be recorded for quality|your (amazon|apple|google|microsoft) account|suspicious activity on your account)\b/i;
 
 // Accident/new-loss detection — flag when a member is REPORTING an incident
 const ACCIDENT_REPORT_REGEX = /\b(reporting (a|an|the) (accident|loss|crash|collision)|just had an accident|was in an accident|got hit|rear.?ended|side.?swiped|totaled|total loss|vehicle was struck|car was hit|accident report|filing a claim for|backed into|made wrong turn|another driver|other driver|driver hit|driver ran)\b/i;
 
-// Determine handler from extracted data
-function resolveHandler(handlerMentioned: string | null, callerType: string): { id: number; name: string } {
+/**
+ * Determine handler assignment using this priority order:
+ * 1. Handler explicitly named by caller → route to that person
+ * 2. Content keywords in message/transcript → route by topic
+ * 3. Caller type → route by role
+ * 4. No info at all → triage queue (MJ / Daryl round-robin)
+ */
+function resolveHandler(
+  handlerMentioned: string | null,
+  callerType: string,
+  message: string | null,
+  transcript: string
+): { id: number; name: string } {
+  // 1. Caller named a specific handler
   if (handlerMentioned) {
     const key = handlerMentioned.toLowerCase().trim();
     for (const [k, v] of Object.entries(HANDLER_ROUTING)) {
       if (key.includes(k)) return v;
     }
   }
-  // Default routing by caller type
-  if (callerType === "law_office") return HANDLER_ROUTING.jayla;
-  if (callerType === "carrier") return HANDLER_ROUTING.natasha;
+
+  const text = ((message ?? "") + " " + transcript).toLowerCase();
+
+  // 2. Content-based routing (topic takes priority over caller type)
+  // Subro / demand / payment → Madeline
+  if (SUBRO_REGEX.test(text)) return HANDLER_ROUTING.madeline;
+  // Injury (PIP / BI) → Jayla
+  if (INJURY_REGEX.test(text)) return HANDLER_ROUTING.jayla;
+  // Total loss → Demily
+  if (TOTAL_LOSS_REGEX.test(text)) return HANDLER_ROUTING.demily;
+  // Active repairs / claim status → First Party team (round-robin)
+  if (REPAIRS_REGEX.test(text)) return nextFirstPartyHandler();
+  // PD / 3rd-party property damage → Carlito
+  if (PD_REGEX.test(text)) return HANDLER_ROUTING.carlito;
+
+  // 3. Caller-type routing
+  if (callerType === "law_office")       return HANDLER_ROUTING.jayla;
   if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
-  return HANDLER_ROUTING.natasha;
+  if (callerType === "carrier")          return nextFirstPartyHandler(); // carriers default to first-party team
+  if (callerType === "member" || callerType === "claimant") return nextFirstPartyHandler();
+
+  // 4. Unknown / no info → triage
+  return nextTriageHandler();
 }
 
 // Extract structured intake data from voicemail transcript using LLM
@@ -220,6 +286,46 @@ export async function processVoicemail(params: {
     };
   }
 
+  // 2b. Spam / robocall detection — skip intake creation for junk calls
+  if (SPAM_REGEX.test(transcript)) {
+    console.log(`[Aircall] Skipping intake for call ${params.aircallCallId} — detected as spam/robocall`);
+    // Mark in call_history so backfill doesn’t retry
+    await db.update(callHistory).set({ hasIntakeRecord: true }).where(eq(callHistory.aircallCallId, params.aircallCallId));
+    return { success: false, skipped: true, reason: "spam" };
+  }
+  // Also skip if transcript is blank or a single short word (empty voicemail)
+  if (!transcript || transcript.trim().length < 10) {
+    console.log(`[Aircall] Skipping intake for call ${params.aircallCallId} — empty/blank voicemail`);
+    await db.update(callHistory).set({ hasIntakeRecord: true }).where(eq(callHistory.aircallCallId, params.aircallCallId));
+    return { success: false, skipped: true, reason: "empty" };
+  }
+
+  // 2c. Phone history cross-reference — pre-populate caller info from prior calls if LLM found nothing
+  if (!extracted.callerName && !extracted.callerOrg && params.callerPhone) {
+    try {
+      const mysql = await import("mysql2/promise");
+      const client = await mysql.createConnection(process.env.DATABASE_URL!);
+      const [priorRows] = await client.query(
+        `SELECT callerName, callerOrg, callerType FROM intake_records
+         WHERE callerPhone = ? AND (callerName IS NOT NULL OR callerOrg IS NOT NULL)
+         ORDER BY createdAt DESC LIMIT 1`,
+        [params.callerPhone]
+      ) as any[];
+      await client.end();
+      if (priorRows.length > 0) {
+        const prior = priorRows[0];
+        extracted.callerName = extracted.callerName ?? prior.callerName ?? null;
+        extracted.callerOrg  = extracted.callerOrg  ?? prior.callerOrg  ?? null;
+        if (extracted.callerType === "unknown" && prior.callerType) {
+          extracted.callerType = prior.callerType;
+        }
+        console.log(`[Aircall] Pre-populated caller info from history for ${params.callerPhone}: ${prior.callerName} / ${prior.callerOrg}`);
+      }
+    } catch (err) {
+      console.warn("[Aircall] Phone history lookup failed:", err);
+    }
+  }
+
   // 3. Check for repeat caller
   const { isRepeat, callCount } = await checkRepeatCaller(
     db,
@@ -230,8 +336,8 @@ export async function processVoicemail(params: {
     extracted.whipClaimNumber
   );
 
-  // 4. Resolve handler assignment
-  const handler = resolveHandler(extracted.handlerMentioned, extracted.callerType);
+  // 4. Resolve handler assignment (uses message content + transcript for topic-based routing)
+  const handler = resolveHandler(extracted.handlerMentioned, extracted.callerType, extracted.message, transcript);
 
   // 5. Determine priority
   let priority: "normal" | "high" | "urgent" = "normal";

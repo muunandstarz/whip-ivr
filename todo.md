@@ -134,3 +134,32 @@ Last updated: April 27, 2026
 ## In Progress
 
 - [x] Add inbound/outbound call split to Dashboard KPI banner (1,285 inbound / 1,455 outbound)
+
+---
+
+## Routing & Enrichment (In Progress)
+
+- [ ] Add reverse phone lookup to voicemail intake pipeline (carrier, line type, business name)
+- [ ] Surface lookup results on intake record detail page (show carrier/business name if found)
+- [ ] Fix default handler routing: unknown/no-info records go to triage queue (MJ or Daryl), not Natashia
+- [ ] Add "Unassigned / Triage" as a valid handler option in the routing table
+- [ ] Auto-flag robocalls/spam (blank transcript, FEMA/IRS/scam patterns) — skip intake record creation
+
+---
+
+## Routing Rules (Defined by User — Apr 27 2026)
+
+Business routing logic to implement in resolveHandler():
+
+- Subro package / demand / payment (carrier calling) → Madeline
+- Active repairs / claim status → First Party team: Lorraine, Jovel, Natashia, Annie (round-robin)
+- Total loss → Demily or First Party team
+- Injury claims (PIP, BI) → Jayla
+- PD claims (3rd party property damage) → Carlito
+- Unknown / no info / no handler mentioned → Triage queue (MJ or Daryl)
+
+- [x] Implement keyword-based routing rules in resolveHandler() (subro→Madeline, PIP/BI→Jayla, PD→Carlito, total loss→Demily, repairs/status→first party round-robin)
+- [x] Cross-reference caller phone number against call_history to pre-populate name/org on new intake records
+- [x] Auto-detect and skip/flag robocall/spam transcripts (FEMA, IRS, press-1 patterns)
+- [x] Add Madeline to HANDLER_ROUTING table (Madeline Green, id 30004)
+- [x] Add Demily to HANDLER_ROUTING table (Demily Flores, id 30005)
