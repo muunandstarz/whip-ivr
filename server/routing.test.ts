@@ -195,3 +195,33 @@ describe("resolveHandler — triage for unknowns", () => {
     expect(h1.name).not.toBe(h2.name);
   });
 });
+
+// ─── Run-on claim number reformatting tests ──────────────────────────────────
+import { reformatRunOnClaimNumber } from "../server/claimMatch";
+
+describe("reformatRunOnClaimNumber — Whisper run-on transcription fix", () => {
+  it("reformats standard 18-char run-on (MD + 16 digits)", () => {
+    // MD-9845-790898-153720 → MD9845790898153720 (18 chars)
+    expect(reformatRunOnClaimNumber("MD9845790898153720")).toBe("MD-9845-790898-153720");
+  });
+
+  it("reformats GA run-on from the Shelly/Farmers voicemail", () => {
+    // GA-4899-430247-470636 → GA4899430247470636 (18 chars)
+    expect(reformatRunOnClaimNumber("GA4899430247470636")).toBe("GA-4899-430247-470636");
+  });
+
+  it("returns null for ambiguous 17-char run-on (requires DB lookup to resolve)", () => {
+    // MD984579089815372 is 17 chars — ambiguous split, handled by matchRunOnClaimNumber instead
+    expect(reformatRunOnClaimNumber("MD984579089815372")).toBeNull();
+  });
+
+  it("passes through already-formatted claim numbers unchanged", () => {
+    expect(reformatRunOnClaimNumber("MD-9562-020976-523574")).toBe("MD-9562-020976-523574");
+  });
+
+  it("returns null for strings that are not claim numbers", () => {
+    expect(reformatRunOnClaimNumber("701-006-6604-1")).toBeNull();
+    expect(reformatRunOnClaimNumber("4044437264")).toBeNull();
+    expect(reformatRunOnClaimNumber("")).toBeNull();
+  });
+});

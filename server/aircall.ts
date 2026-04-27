@@ -5,7 +5,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { notifyOwner } from "./_core/notification";
-import { matchClaimNumber, resolveClaimFromSnapsheet } from "./claimMatch";
+import { matchClaimNumber, resolveClaimFromSnapsheet, reformatRunOnClaimNumber, matchRunOnClaimNumber } from "./claimMatch";
 
 export const aircallRouter = express.Router();
 
@@ -142,6 +142,11 @@ Caller types:
 - "claimant": third-party claimant in an accident
 - "police": law enforcement
 - "unknown": cannot determine
+
+Whip claim number format: STATE-NNNN-VVVVVV-CCCCCC where STATE is a 2-letter US state code (MD, GA, TX, FL, CA, etc.), NNNN is 4 digits, VVVVVV is 6 digits (last 6 of VIN), CCCCCC is 6 digits (claim sequence).
+Examples: MD-9562-020976-523574, GA-4899-430247-470636, TX-1234-567890-123456
+
+IMPORTANT: Whisper often transcribes claim numbers as run-on strings without dashes (e.g. "MD984579089815372" or "GA489943024747063"). You MUST detect these and reformat them into the correct STATE-NNNN-VVVVVV-CCCCCC format. A run-on claim number starts with a 2-letter state code followed by 16 digits total.
 
 Return ONLY valid JSON with these exact fields. Use null for any field not found.`,
       },
@@ -357,6 +362,31 @@ export async function processVoicemail(params: {
   let claimMatchConfidence: number | null = null;
   let snapsheetClaimUrl: string | null = null;
 
+  // 2d. Normalize run-on claim numbers from Whisper (e.g. "GA4899430247470636" → "GA-4899-430247-470636")
+  if (extracted.whipClaimNumber) {
+    // First try unambiguous 18-char reformat
+    const reformatted = reformatRunOnClaimNumber(extracted.whipClaimNumber);
+    if (reformatted) {
+      console.log(`[Aircall] Reformatted run-on claim number: ${extracted.whipClaimNumber} → ${reformatted}`);
+      extracted.whipClaimNumber = reformatted;
+    } else {
+      // Ambiguous length (e.g. 17 chars) — try matching against known claims by stripping dashes
+      try {
+        const existingForMatch = await db
+          .select({ whipClaimNumber: intakeRecords.whipClaimNumber })
+          .from(intakeRecords);
+        const knownNums = existingForMatch.map(r => r.whipClaimNumber).filter((n): n is string => !!n);
+        const matched = matchRunOnClaimNumber(extracted.whipClaimNumber, knownNums);
+        if (matched) {
+          console.log(`[Aircall] Matched ambiguous run-on claim number: ${extracted.whipClaimNumber} → ${matched}`);
+          extracted.whipClaimNumber = matched;
+        }
+      } catch (err) {
+        console.warn("[Aircall] Run-on claim match lookup failed:", err);
+      }
+    }
+  }
+
   if (extracted.whipClaimNumber) {
     try {
       // Fetch all known claim numbers from DB
@@ -373,14 +403,18 @@ export async function processVoicemail(params: {
       claimMatchConfidence = matchResult.confidence;
 
       // Attempt Snapsheet lookup
-      const snapsheetKey = process.env.SNAPSHEET_API_KEY || "whip_us_api";
-      const snapsheetSecret = process.env.SNAPSHEET_API_SECRET || "966b25c04c9ae6ff38b6";
-      const snapResult = await resolveClaimFromSnapsheet(
-        matchResult.matchedClaimNumber ?? extracted.whipClaimNumber,
-        snapsheetKey,
-        snapsheetSecret
-      );
-      snapsheetClaimUrl = snapResult.claimUrl;
+      const snapsheetKey = process.env.SNAPSHEET_API_KEY;
+      const snapsheetSecret = process.env.SNAPSHEET_API_SECRET;
+      if (snapsheetKey && snapsheetSecret) {
+        const snapResult = await resolveClaimFromSnapsheet(
+          matchResult.matchedClaimNumber ?? extracted.whipClaimNumber,
+          snapsheetKey,
+          snapsheetSecret
+        );
+        snapsheetClaimUrl = snapResult.claimUrl;
+      } else {
+        console.warn("[Aircall] Snapsheet credentials not configured — skipping claim lookup");
+      }
     } catch (err) {
       console.warn("[Aircall] Claim matching failed:", err);
     }

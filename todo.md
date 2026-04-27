@@ -163,3 +163,30 @@ Business routing logic to implement in resolveHandler():
 - [x] Auto-detect and skip/flag robocall/spam transcripts (FEMA, IRS, press-1 patterns)
 - [x] Add Madeline to HANDLER_ROUTING table (Madeline Green, id 30004)
 - [x] Add Demily to HANDLER_ROUTING table (Demily Flores, id 30005)
+
+---
+
+## Backfill Data Quality Fix (Critical)
+
+- [ ] Diagnose why 76 intake records have no transcript and 110 have no caller name
+- [ ] Re-process all intake records with voicemail URLs but empty transcripts (transcribe + extract)
+- [ ] Re-apply new routing rules to all existing records (fix Natashia default assignments)
+- [ ] Delete or flag intake records that have no voicemail URL and no transcript (truly empty)
+
+---
+
+## Claim Number & Snapsheet Fixes
+
+- [x] Fix claim number extraction: add regex normalizer for Whip format (MD/GA/TX/FL + digits run-on from Whisper)
+- [ ] Set SNAPSHEET_API_URL = https://snapsheetvice.com/ and test claim lookup
+- [ ] Re-run claim matching on all existing intake records once Snapsheet is connected
+
+---
+
+## Backfill Reprocess (Priority Fix)
+
+- [x] Attempted re-transcription: 76 empty records had ~209-byte placeholder audio (callers hung up) — marked as 'No message left' and closed
+- [x] Re-extracted 31 records with transcripts but missing caller info; 22 junk/placeholder records auto-closed
+- [x] Re-routed 104 records using new routing rules — load now spread across team (Jovel 20, Lorraine 20, Annie 19, Natashia 19, Madeline 16, Jayla 15, Carlito 6, MJ 6, Daryl 4, Demily 2)
+- [ ] Verify UI: closed/no-message records should not appear in open intake queue
+- [ ] Run quality check on remaining open records with null callerName to see if any can be further enriched

@@ -33,6 +33,35 @@ export function normalizeClaimNumber(raw: string): string {
 }
 
 /**
+ * Reformat a run-on claim number that Whisper transcribed without dashes.
+ * Whisper often produces "MD984579089815372" instead of "MD-9845-790898-15372".
+ * Format: STATE(2) + NNNN(4) + VVVVVV(6) + CCCCCC(6) = 2 + 16 = 18 chars total
+ * Also handles the 15-digit variant seen in some older claims (2+4+5+6 = 17 chars).
+ */
+export function reformatRunOnClaimNumber(raw: string): string | null {
+  const upper = raw.trim().toUpperCase().replace(/[\s-]/g, "");
+  // Standard format: 2-letter state + exactly 16 digits (unambiguous split: 4+6+6)
+  const match18 = upper.match(/^([A-Z]{2})(\d{4})(\d{6})(\d{6})$/);
+  if (match18) return `${match18[1]}-${match18[2]}-${match18[3]}-${match18[4]}`;
+  // Already properly formatted — return normalized
+  if (/^[A-Z]{2}-\d{4}-\d{5,6}-\d{6}$/.test(upper)) return upper;
+  return null;
+}
+
+/**
+ * Match a run-on claim string against a list of known claim numbers by stripping dashes.
+ * This handles the ambiguous 17-char case (e.g. MD984579089815372) that can't be
+ * split deterministically without knowing the actual claim.
+ */
+export function matchRunOnClaimNumber(raw: string, knownClaimNumbers: string[]): string | null {
+  const stripped = raw.trim().toUpperCase().replace(/[\s-]/g, "");
+  for (const known of knownClaimNumbers) {
+    if (known.toUpperCase().replace(/-/g, "") === stripped) return known;
+  }
+  return null;
+}
+
+/**
  * Extract the two searchable fragments from a full Whip claim number.
  * Format: STATE-NNNN-VVVVVV-CCCCCC
  * Returns { vinFragment: "VVVVVV", claimFragment: "CCCCCC" } or null if not parseable.
