@@ -144,10 +144,22 @@ Caller types:
 - "police": law enforcement
 - "unknown": cannot determine
 
-Whip claim number format: STATE-NNNN-VVVVVV-CCCCCC where STATE is a 2-letter US state code (MD, GA, TX, FL, CA, etc.), NNNN is 4 digits, VVVVVV is 6 digits (last 6 of VIN), CCCCCC is 6 digits (claim sequence).
-Examples: MD-9562-020976-523574, GA-4899-430247-470636, TX-1234-567890-123456
+Whip claim number formats — there are TWO valid formats:
+1. NEW format: STATE-NNNN-VVVVVV-CCCCCC (2-letter state + 4 digits + 6 digits + 6 digits)
+   Examples: MD-9562-020976-523574, GA-4899-430247-470636, TX-1234-567890-123456
+2. OLD format: 6 to 8 digit number (last 6-8 digits of the vehicle VIN)
+   Examples: 501732, 2031368, 70608400, AU0000203231
 
-IMPORTANT: Whisper often transcribes claim numbers as run-on strings without dashes (e.g. "MD984579089815372" or "GA489943024747063"). You MUST detect these and reformat them into the correct STATE-NNNN-VVVVVV-CCCCCC format. A run-on claim number starts with a 2-letter state code followed by 16 digits total.
+Key phrases that indicate a Whip claim number:
+- "your reference number is", "Whip ref", "your ref", "reference number", "claim number is", "file number", "Whip claim"
+- When a caller says "your reference number is 501732" — that 501732 IS the Whip claim number
+- When a caller says "Whip ref AU0000203231" — that AU0000203231 IS the Whip claim number
+
+Distinguish carefully:
+- whipClaimNumber = the number that belongs to WHIP (what the caller refers to as "your" number, "Whip's" number)
+- callerRefNumber = the caller's OWN reference/file/claim number (their internal number, e.g. "our claim number is 268-002825")
+
+IMPORTANT: Whisper often transcribes NEW-format claim numbers as run-on strings without dashes (e.g. "MD984579089815372"). You MUST detect these and reformat them into STATE-NNNN-VVVVVV-CCCCCC format.
 
 Return ONLY valid JSON with these exact fields. Use null for any field not found.`,
       },

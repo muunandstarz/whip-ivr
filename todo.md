@@ -141,7 +141,7 @@ Last updated: April 27, 2026
 
 - [ ] Add reverse phone lookup to voicemail intake pipeline (carrier, line type, business name)
 - [ ] Surface lookup results on intake record detail page (show carrier/business name if found)
-- [ ] Fix default handler routing: unknown/no-info records go to triage queue (MJ or Daryl), not Natashia
+- [x] Fix default handler routing: unknown/no-info records go to triage queue (MJ or Daryl), not Natashia
 - [ ] Add "Unassigned / Triage" as a valid handler option in the routing table
 - [ ] Auto-flag robocalls/spam (blank transcript, FEMA/IRS/scam patterns) — skip intake record creation
 
@@ -195,7 +195,7 @@ Business routing logic to implement in resolveHandler():
 
 ## Intake Records UI Fix (Urgent)
 
-- [ ] Fix Intake Records page to default to showing only 'Open' status records (not all 226)
+- [x] Fix Intake Records page to default to showing only 'Open' status records (not all 226)
 - [ ] Re-check voicemail audio for +13054284161, +12166172557, +12023086303, +14704822636
 - [ ] If audio exists, re-transcribe, extract, and re-route those 4 specific records
 
@@ -208,3 +208,12 @@ Business routing logic to implement in resolveHandler():
 - [x] Tighten SUBRO_REGEX: removed standalone 'payment' trigger (too broad — medical billing false positives)
 - [x] Full sweep: 96 closed records re-transcribed, 89 re-opened with real data and correct routing
 - [x] Final handler distribution: Jayla 30, Lorraine 28, Jovel 28, Natashia 27, Annie 25, Madeline 19, MJ 19, Daryl 16, Carlito 13, Demily 4
+
+---
+
+## Claim Number Extraction Improvements (Apr 28 2026)
+
+- [x] Update LLM prompt: recognize old-format Whip claim numbers (6-8 digits, VIN-based, e.g. "501732", "AU0000203231")
+- [x] Update LLM prompt: key phrases to trigger Whip claim extraction: "your reference number", "Whip ref", "your ref", "reference number is", "claim number is"
+- [x] Update LLM prompt: distinguish caller's own reference number (theirReferenceNumber) vs Whip reference number (whipClaimNumber)
+- [ ] Re-run extraction on existing records that may have old-format claim numbers missed
