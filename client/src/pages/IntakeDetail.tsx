@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History, Headphones } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -217,7 +217,19 @@ export default function IntakeDetail() {
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm" onClick={startEdit}>Edit</Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-[#171b31]/30 text-[#171b31] hover:bg-[#171b31] hover:text-white"
+                  onClick={() => navigate(`/softphone?intakeId=${id}`)}
+                  title="Open in Softphone"
+                >
+                  <Headphones className="w-3.5 h-3.5" />
+                  Softphone
+                </Button>
+                <Button variant="outline" size="sm" onClick={startEdit}>Edit</Button>
+              </>
             )}
           </div>
         </div>

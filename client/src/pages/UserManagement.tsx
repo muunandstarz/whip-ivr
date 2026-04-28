@@ -316,8 +316,7 @@ export default function UserManagement() {
               intake records, and QA scores display correctly on their dashboard. When a user logs in for 
               the first time, the system tries to auto-link by matching their email address. If it doesn't 
               match automatically (e.g. different email), use the <strong>Handler Profile</strong> dropdown 
-              above to link them manually. New hires like Daniel Giono will auto-link once they log in with 
-              their <code>@drivewhip.com</code> email.
+              above to link them manually. Anyone with a <code>@drivewhip.com</code> email will auto-link on first login.
             </p>
           </CardContent>
         </Card>

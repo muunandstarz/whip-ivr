@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
+import { useSearch, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
+import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -194,6 +196,14 @@ type CallState = "idle" | "ringing" | "active" | "incoming" | "wrap_up";
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Softphone() {
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const params = new URLSearchParams(search);
+  const intakeId = params.get("intakeId") ? parseInt(params.get("intakeId")!) : null;
+  const { data: linkedRecord } = trpc.intake.get.useQuery(
+    { id: intakeId! },
+    { enabled: intakeId != null && intakeId > 0 }
+  );
   const [activeTab, setActiveTab] = useState<"phone" | "sms">("phone");
   const [dialValue, setDialValue] = useState("");
   const [callState, setCallState] = useState<CallState>("idle");
@@ -321,6 +331,51 @@ export default function Softphone() {
             Coming Soon
           </Badge>
         </div>
+
+        {/* Linked Intake Record Context */}
+        {linkedRecord && (
+          <div className="mb-5 rounded-xl border border-[#171b31]/20 bg-[#171b31]/5 px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="w-4 h-4 text-[#ff6221] flex-shrink-0" />
+                  <span className="text-xs font-semibold text-[#ff6221] uppercase tracking-wide">Linked Intake Record #{linkedRecord.id}</span>
+                  <Badge variant="outline" className={linkedRecord.status === "open" ? "border-amber-300 text-amber-700 bg-amber-50 text-xs" : "border-green-300 text-green-700 bg-green-50 text-xs"}>
+                    {linkedRecord.status}
+                  </Badge>
+                </div>
+                <div className="text-base font-bold text-[#171b31]">{linkedRecord.callerName || "Unknown caller"}</div>
+                {linkedRecord.callerOrg && <div className="text-sm text-muted-foreground">{linkedRecord.callerOrg}</div>}
+                <div className="flex flex-wrap gap-3 mt-2 text-xs">
+                  {linkedRecord.callbackPhone && (
+                    <a href={`tel:${linkedRecord.callbackPhone}`} className="flex items-center gap-1 text-[#ff6221] hover:underline font-medium">
+                      <Phone className="w-3 h-3" /> {linkedRecord.callbackPhone}
+                    </a>
+                  )}
+                  {linkedRecord.whipClaimNumber && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <ClipboardList className="w-3 h-3" /> Claim: <span className="font-mono font-medium text-[#171b31]">{linkedRecord.whipClaimNumber}</span>
+                    </span>
+                  )}
+                  {linkedRecord.handlerName && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <User className="w-3 h-3" /> {linkedRecord.handlerName}
+                    </span>
+                  )}
+                </div>
+                {linkedRecord.message && (
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2 italic">&#8220;{linkedRecord.message}&#8221;</p>
+                )}
+              </div>
+              <button
+                onClick={() => navigate(`/intake/${linkedRecord.id}`)}
+                className="flex-shrink-0 flex items-center gap-1 text-xs text-[#171b31] hover:text-[#ff6221] font-medium transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> View Record
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ── Left column: Phone + SMS tabs ── */}
