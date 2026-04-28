@@ -70,7 +70,9 @@ export default function IntakeRecords() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("open");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [handlerFilter, setHandlerFilter] = useState("all");
   const [page, setPage] = useState(0);
+  const { data: handlersData } = trpc.handlers.list.useQuery();
 
   // Debounce search
   useMemo(() => {
@@ -82,7 +84,7 @@ export default function IntakeRecords() {
     search: debouncedSearch || undefined,
     status: statusFilter === "all" ? undefined : statusFilter,
     callerType: typeFilter === "all" ? undefined : typeFilter,
-    handlerName: effectiveHandlerName ?? undefined,
+    handlerName: effectiveHandlerName ?? (handlerFilter !== "all" ? handlerFilter : undefined),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   });
@@ -177,6 +179,26 @@ export default function IntakeRecords() {
               <SelectItem value="unknown">Unknown</SelectItem>
             </SelectContent>
           </Select>
+          {/* Handler filter — visible to admins only */}
+          {!effectiveHandlerName && (
+            <Select
+              value={handlerFilter}
+              onValueChange={(v) => {
+                setHandlerFilter(v);
+                setPage(0);
+              }}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Handler" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Handlers</SelectItem>
+                {handlersData?.map((h) => (
+                  <SelectItem key={h.id} value={h.name}>{h.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Table */}

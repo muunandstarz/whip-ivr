@@ -28,6 +28,11 @@ import {
   updateUserRole,
   deleteUser,
   linkUserToHandler,
+  listPreAuthorizations,
+  addPreAuthorization,
+  removePreAuthorization,
+  logCallback,
+  getCallbackLogs,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -282,9 +287,35 @@ export const appRouter = router({
         await linkUserToHandler(input.userId, input.handlerProfileId);
         return { success: true };
       }),
-  }),
-
-  // ─── Handler Actions ───────────────────────────────────────────────────
+    // Pre-authorizations
+    listPreAuths: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listPreAuthorizations();
+    }),
+    addPreAuth: protectedProcedure
+      .input(z.object({
+        email: z.string().email(),
+        role: z.enum(["admin", "user"]),
+        handlerProfileId: z.number().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await addPreAuthorization(
+          input.email,
+          input.role,
+          input.handlerProfileId ?? null,
+          ctx.user.name ?? ctx.user.email ?? "admin"
+        );
+        return { success: true };
+      }),
+    removePreAuth: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await removePreAuthorization(input.id);
+        return { success: true };
+      }),
+  }),  // ─── Handler Actions ───────────────────────────────────────────────────────
   handlerActions: router({
     calledBack: protectedProcedure
       .input(z.object({ intakeId: z.number(), handlerName: z.string().optional() }))
@@ -293,6 +324,46 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
-});
 
+  // ─── Callback Logs ───────────────────────────────────────────────────────
+  callbacks: router({
+    log: protectedProcedure
+      .input(z.object({
+        intakeId: z.number(),
+        disposition: z.enum(["reached", "no_answer", "left_voicemail", "wrong_number", "busy"]),
+        notes: z.string().optional(),
+        outcome: z.enum(["resolved", "escalated", "follow_up", "closed"]).optional(),
+        closeRecord: z.boolean().optional(),
+        newNotes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const handlerName = ctx.user?.name ?? undefined;
+        const logId = await logCallback({
+          intakeId: input.intakeId,
+          handlerName,
+          disposition: input.disposition,
+          notes: input.notes,
+          outcome: input.outcome ?? "follow_up",
+        });
+        // Update the intake record
+        const updates: Record<string, unknown> = {
+          callbackAt: new Date(),
+          callbackHandlerName: handlerName,
+        };
+        if (input.closeRecord || input.outcome === "resolved" || input.outcome === "closed") {
+          updates.status = "closed";
+        }
+        if (input.newNotes) {
+          updates.notes = input.newNotes;
+        }
+        await updateIntakeRecord(input.intakeId, updates as any);
+        return { success: true, logId };
+      }),
+    history: protectedProcedure
+      .input(z.object({ intakeId: z.number() }))
+      .query(async ({ input }) => {
+        return getCallbackLogs(input.intakeId);
+      }),
+  }),
+});
 export type AppRouter = typeof appRouter;

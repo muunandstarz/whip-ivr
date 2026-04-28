@@ -9,6 +9,8 @@ import {
   handlers,
   qaScores,
   qaScorecards,
+  preAuthorizations,
+  callbackLogs,
   InsertIntakeRecord,
   InsertCallHistory,
   InsertCallerProfile,
@@ -108,7 +110,6 @@ export async function deleteUser(userId: number) {
   if (!db) throw new Error("Database not available");
   await db.delete(users).where(eq(users.id, userId));
 }
-
 /** Try to auto-link a user to their handler profile by email match */
 export async function autoLinkHandlerProfile(userId: number, email: string | null | undefined) {
   if (!email) return;
@@ -120,7 +121,60 @@ export async function autoLinkHandlerProfile(userId: number, email: string | nul
   }
 }
 
-// ─── Intake Records ────────────────────────────────────────────────────────
+// ─── Pre-Authorizations ────────────────────────────────────────────────────
+
+export async function listPreAuthorizations() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(preAuthorizations).orderBy(preAuthorizations.createdAt);
+}
+
+export async function addPreAuthorization(
+  email: string,
+  role: "admin" | "user",
+  handlerProfileId: number | null,
+  addedBy: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(preAuthorizations).values({
+    email: email.toLowerCase().trim(),
+    role,
+    handlerProfileId: handlerProfileId ?? undefined,
+    addedBy,
+  });
+}
+
+export async function removePreAuthorization(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(preAuthorizations).where(eq(preAuthorizations.id, id));
+}
+
+/**
+ * Called on every login: if a pre-authorization exists for this email,
+ * apply the role (and optional handlerProfileId) and remove the pre-auth.
+ */
+export async function applyPreAuthorization(userId: number, email: string | null | undefined) {
+  if (!email) return;
+  const db = await getDb();
+  if (!db) return;
+  const preAuth = await db
+    .select()
+    .from(preAuthorizations)
+    .where(eq(preAuthorizations.email, email.toLowerCase().trim()))
+    .limit(1);
+  if (preAuth.length === 0) return;
+  const pa = preAuth[0];
+  const updates: Record<string, unknown> = { role: pa.role };
+  if (pa.handlerProfileId) updates.handlerProfileId = pa.handlerProfileId;
+  await db.update(users).set(updates).where(eq(users.id, userId));
+  // Remove the pre-auth once applied so it doesn't re-apply on next login
+  await db.delete(preAuthorizations).where(eq(preAuthorizations.id, pa.id));
+}
+
+//
+// ─── Intake Records ─────────────────────────────────────────────────────────
 
 export async function createIntakeRecord(data: InsertIntakeRecord): Promise<number> {
   const db = await getDb();
@@ -756,4 +810,35 @@ export async function getHandlerCallMetrics(handlerName: string) {
     }[],
     latestScorecard: qaRows[0] ?? null,
   };
+}
+
+// ─── Callback Logs ─────────────────────────────────────────────────────────
+
+export async function logCallback(data: {
+  intakeId: number;
+  handlerName?: string;
+  disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy";
+  notes?: string;
+  outcome?: "resolved" | "escalated" | "follow_up" | "closed";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(callbackLogs).values({
+    intakeId: data.intakeId,
+    handlerName: data.handlerName,
+    disposition: data.disposition,
+    notes: data.notes,
+    outcome: data.outcome ?? "follow_up",
+  });
+  return (result[0] as any).insertId as number;
+}
+
+export async function getCallbackLogs(intakeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(callbackLogs)
+    .where(eq(callbackLogs.intakeId, intakeId))
+    .orderBy(desc(callbackLogs.calledAt));
 }

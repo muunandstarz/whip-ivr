@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useParams, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
@@ -15,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -42,6 +43,34 @@ export default function IntakeDetail() {
   const { data: record, isLoading, refetch } = trpc.intake.get.useQuery({ id });
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [callbackOpen, setCallbackOpen] = useState(false);
+  const [callbackForm, setCallbackForm] = useState<{
+    disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy";
+    outcome: "resolved" | "escalated" | "follow_up" | "closed";
+    notes: string;
+    closeRecord: boolean;
+    newNotes: string;
+  }>({
+    disposition: "reached",
+    outcome: "follow_up",
+    notes: "",
+    closeRecord: false,
+    newNotes: "",
+  });
+  const { data: callbackHistory, refetch: refetchCallbacks } = trpc.callbacks.history.useQuery(
+    { intakeId: id },
+    { enabled: id > 0 }
+  );
+  const logCallbackMutation = trpc.callbacks.log.useMutation({
+    onSuccess: () => {
+      refetch();
+      refetchCallbacks();
+      setCallbackOpen(false);
+      setCallbackForm({ disposition: "reached", outcome: "follow_up", notes: "", closeRecord: false, newNotes: "" });
+      toast.success("Callback logged");
+    },
+    onError: () => toast.error("Failed to log callback"),
+  });
 
   const updateMutation = trpc.intake.update.useMutation({
     onSuccess: () => {
@@ -411,6 +440,179 @@ export default function IntakeDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* Callback Panel */}
+        <Card className="border-[#ff6221]/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <PhoneCall className="w-4 h-4 text-[#ff6221]" />
+                Callback
+              </CardTitle>
+              <Button
+                size="sm"
+                className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-1.5 h-8 text-xs"
+                onClick={() => setCallbackOpen(true)}
+              >
+                <Phone className="w-3.5 h-3.5" />
+                Log Callback
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
+              <div className="font-medium text-[#171b31]">{record.callerName || "Unknown caller"}</div>
+              {record.callerOrg && <div className="text-muted-foreground text-xs">{record.callerOrg}</div>}
+              <div className="flex items-center gap-3 mt-1">
+                {record.callbackPhone && (
+                  <a href={`tel:${record.callbackPhone}`} className="flex items-center gap-1 text-[#ff6221] hover:underline text-xs font-medium">
+                    <Phone className="w-3 h-3" /> {record.callbackPhone}
+                  </a>
+                )}
+                {record.callbackEmail && (
+                  <a href={`mailto:${record.callbackEmail}`} className="flex items-center gap-1 text-[#ff6221] hover:underline text-xs font-medium">
+                    <Mail className="w-3 h-3" /> {record.callbackEmail}
+                  </a>
+                )}
+                {!record.callbackPhone && !record.callbackEmail && (
+                  <span className="text-muted-foreground text-xs">No contact info on file</span>
+                )}
+              </div>
+              {record.whipClaimNumber && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  Claim: <span className="font-mono font-medium text-[#171b31]">{record.whipClaimNumber}</span>
+                </div>
+              )}
+            </div>
+            {callbackHistory && callbackHistory.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <History className="w-3.5 h-3.5" /> Callback History
+                </div>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {(callbackHistory as any[]).map((log) => (
+                    <div key={log.id} className="flex items-start gap-2 text-xs bg-muted/20 rounded p-2">
+                      <div className="flex-shrink-0 mt-0.5">
+                        {log.disposition === "reached" ? (
+                          <PhoneCall className="w-3.5 h-3.5 text-green-600" />
+                        ) : log.disposition === "left_voicemail" ? (
+                          <PhoneForwarded className="w-3.5 h-3.5 text-blue-500" />
+                        ) : (
+                          <PhoneOff className="w-3.5 h-3.5 text-red-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium capitalize">{log.disposition.replace(/_/g, " ")}</span>
+                          <span className="text-muted-foreground">&bull;</span>
+                          <span className="text-muted-foreground">{log.handlerName || "Unknown"}</span>
+                          <span className="text-muted-foreground ml-auto">
+                            {log.calledAt ? format(new Date(log.calledAt), "MMM d, h:mm a") : ""}
+                          </span>
+                        </div>
+                        {log.notes && <div className="text-muted-foreground mt-0.5 truncate">{log.notes}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Log Callback Dialog */}
+        <Dialog open={callbackOpen} onOpenChange={setCallbackOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <PhoneCall className="w-4 h-4 text-[#ff6221]" />
+                Log Callback
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/30 rounded-lg p-3 text-sm">
+                <div className="font-medium">{record.callerName || "Unknown caller"}</div>
+                {record.callerOrg && <div className="text-xs text-muted-foreground">{record.callerOrg}</div>}
+                {record.callbackPhone && <div className="text-xs text-[#ff6221] font-medium mt-1">{record.callbackPhone}</div>}
+                {record.whipClaimNumber && (
+                  <div className="text-xs text-muted-foreground mt-1">Claim: <span className="font-mono">{record.whipClaimNumber}</span></div>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Disposition</Label>
+                <Select
+                  value={callbackForm.disposition}
+                  onValueChange={(v) => setCallbackForm({ ...callbackForm, disposition: v as any })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reached">Reached — spoke with caller</SelectItem>
+                    <SelectItem value="no_answer">No answer</SelectItem>
+                    <SelectItem value="left_voicemail">Left voicemail</SelectItem>
+                    <SelectItem value="busy">Busy</SelectItem>
+                    <SelectItem value="wrong_number">Wrong number</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Outcome</Label>
+                <Select
+                  value={callbackForm.outcome}
+                  onValueChange={(v) => setCallbackForm({ ...callbackForm, outcome: v as any, closeRecord: v === "resolved" || v === "closed" })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="follow_up">Follow-up needed</SelectItem>
+                    <SelectItem value="resolved">Resolved — close record</SelectItem>
+                    <SelectItem value="escalated">Escalated</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Call Notes</Label>
+                <Textarea
+                  value={callbackForm.notes}
+                  onChange={(e) => setCallbackForm({ ...callbackForm, notes: e.target.value })}
+                  placeholder="What was discussed, next steps..."
+                  rows={3}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Update Internal Notes (optional)</Label>
+                <Textarea
+                  value={callbackForm.newNotes}
+                  onChange={(e) => setCallbackForm({ ...callbackForm, newNotes: e.target.value })}
+                  placeholder="Append to record notes..."
+                  rows={2}
+                  className="text-sm"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCallbackOpen(false)}>Cancel</Button>
+              <Button
+                className="bg-[#ff6221] hover:bg-[#e5541a] text-white"
+                disabled={logCallbackMutation.isPending}
+                onClick={() => logCallbackMutation.mutate({
+                  intakeId: id,
+                  disposition: callbackForm.disposition,
+                  outcome: callbackForm.outcome,
+                  notes: callbackForm.notes || undefined,
+                  closeRecord: callbackForm.closeRecord,
+                  newNotes: callbackForm.newNotes || undefined,
+                })}
+              >
+                {logCallbackMutation.isPending ? "Saving..." : "Save Callback"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Voicemail Transcript */}
         {record.rawTranscript && (

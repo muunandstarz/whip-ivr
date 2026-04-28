@@ -200,3 +200,28 @@ export const qaScorecards = mysqlTable("qa_scorecards", {
 
 export type QaScorecard = typeof qaScorecards.$inferSelect;
 export type InsertQaScorecard = typeof qaScorecards.$inferInsert;
+
+// ─── Callback Logs ────────────────────────────────────────────────────────────
+export const callbackLogs = mysqlTable("callback_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  intakeId: int("intakeId").notNull(),
+  handlerName: varchar("handlerName", { length: 128 }),
+  calledAt: timestamp("calledAt").defaultNow(),
+  disposition: mysqlEnum("disposition", ["reached", "no_answer", "left_voicemail", "wrong_number", "busy"]).notNull(),
+  notes: text("notes"),
+  outcome: mysqlEnum("outcome", ["resolved", "escalated", "follow_up", "closed"]).default("follow_up"),
+});
+export type CallbackLog = typeof callbackLogs.$inferSelect;
+export type InsertCallbackLog = typeof callbackLogs.$inferInsert;
+
+// ─── Pre-Authorizations ───────────────────────────────────────────────────────
+export const preAuthorizations = mysqlTable("pre_authorizations", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  role: mysqlEnum("role", ["admin", "user"]).notNull().default("user"),
+  handlerProfileId: int("handlerProfileId"),
+  addedBy: varchar("addedBy", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PreAuthorization = typeof preAuthorizations.$inferSelect;
+export type InsertPreAuthorization = typeof preAuthorizations.$inferInsert;

@@ -282,8 +282,9 @@ class SDKServer {
           lastSignedIn: signedInAt,
         });
         user = await db.getUserByOpenId(userInfo.openId);
-        // Auto-link to handler profile by email on first login
+        // Apply pre-authorization (role set before first login) then auto-link handler profile
         if (user) {
+          await db.applyPreAuthorization(user.id, user.email).catch(() => {});
           await db.autoLinkHandlerProfile(user.id, user.email).catch(() => {});
           user = await db.getUserByOpenId(userInfo.openId);
         }
@@ -297,6 +298,8 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
+    // Apply any pending pre-authorization on every login (in case email was pre-authed after first login)
+    await db.applyPreAuthorization(user.id, user.email).catch(() => {});
     // Also try auto-link on every login in case email was added later
     if (!user.handlerProfileId) {
       await db.autoLinkHandlerProfile(user.id, user.email).catch(() => {});
