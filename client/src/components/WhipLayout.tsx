@@ -38,6 +38,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/qa", label: "Weekly QA", icon: Star },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/ivr-setup", label: "IVR Setup", icon: Settings },
+  { href: "/users", label: "User Management", icon: UserCog },
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────

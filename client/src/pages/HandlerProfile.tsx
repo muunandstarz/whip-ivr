@@ -82,6 +82,11 @@ export default function HandlerProfile() {
     { handlerName: handler?.name, limit: 50, offset: 0 },
     { enabled: !!handler?.name }
   );
+  const { data: metricsData } = trpc.handlerMetrics.byName.useQuery(
+    { handlerName: handler?.name ?? "" },
+    { enabled: !!handler?.name }
+  );
+  const callMetrics = metricsData?.stats ?? null;
 
   const handlerIntakes = intakeData?.records ?? [];
 
@@ -148,6 +153,46 @@ export default function HandlerProfile() {
             </p>
           </div>
         </div>
+
+        {/* Call Performance Metrics */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Phone className="w-4 h-4 text-muted-foreground" />
+              Call Performance — This Month
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {callMetrics && callMetrics.total > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[#171b31]">{callMetrics.total}</div>
+                  <div className="text-xs text-muted-foreground">Total Calls</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {callMetrics.total > 0 ? Math.round((callMetrics.answered / callMetrics.total) * 100) : 0}%
+                  </div>
+                  <div className="text-xs text-muted-foreground">Answer Rate</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[#171b31]">{callMetrics.avgDurationMin ?? "—"}m</div>
+                  <div className="text-xs text-muted-foreground">Avg Handle Time</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[#171b31]">{callMetrics.totalHours ?? "—"}h</div>
+                  <div className="text-xs text-muted-foreground">Total Talk Time</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground text-sm py-4">
+                <TrendingUp className="w-7 h-7 mx-auto mb-2 opacity-25" />
+                No call data found for <strong>{handler?.name}</strong>.
+                <p className="text-xs mt-1">Make sure the name in Aircall matches exactly: <code className="bg-muted px-1 rounded">{handler?.name}</code></p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Average score cards */}
         {avgScores && (

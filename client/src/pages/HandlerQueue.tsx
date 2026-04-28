@@ -13,6 +13,8 @@ import {
   ChevronDown,
   ChevronRight,
   PhoneCall,
+  ChevronsDownUp,
+  ChevronsUpDown,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -45,8 +47,6 @@ function CalledBackButton({ intakeId }: { intakeId: number }) {
   );
 }
 
-// Full name → color mapping
-// Nicknames: MJ = MJ Badua, Raine = Lorraine Tria, Jobs = Jovel Villa
 const HANDLER_COLORS: Record<string, string> = {
   "Natashia Edulan":    "bg-blue-100 text-blue-800 border-blue-200",
   "Jayla Bernard":      "bg-purple-100 text-purple-800 border-purple-200",
@@ -54,8 +54,10 @@ const HANDLER_COLORS: Record<string, string> = {
   "Annie Ortiz":        "bg-pink-100 text-pink-800 border-pink-200",
   "Lorraine Tria":      "bg-yellow-100 text-yellow-800 border-yellow-200",
   "Jovel Villa":        "bg-orange-100 text-orange-800 border-orange-200",
-  "MJ Badua":           "bg-teal-100 text-teal-800 border-teal-200",
+  "Mary Joy Badua":     "bg-teal-100 text-teal-800 border-teal-200",
   "Daryl Ochate":       "bg-indigo-100 text-indigo-800 border-indigo-200",
+  "Madeline Green":     "bg-emerald-100 text-emerald-800 border-emerald-200",
+  "Demily Flores":      "bg-rose-100 text-rose-800 border-rose-200",
   "Ana Padilla":        "bg-rose-100 text-rose-800 border-rose-200",
   "Catherine Cestina":  "bg-cyan-100 text-cyan-800 border-cyan-200",
   "Elizabeth Avilla":   "bg-lime-100 text-lime-800 border-lime-200",
@@ -135,6 +137,13 @@ export default function HandlerQueue() {
     return b.length - a.length;
   });
 
+  const allHandlerNames = sortedHandlers.map(([name]) => name);
+  const allExpanded = allHandlerNames.length > 0 && allHandlerNames.every((n) => expandedHandlers.has(n));
+  const allCollapsed = allHandlerNames.length === 0 || allHandlerNames.every((n) => !expandedHandlers.has(n));
+
+  const expandAll = () => setExpandedHandlers(new Set(allHandlerNames));
+  const collapseAll = () => setExpandedHandlers(new Set());
+
   const totalOpen = data?.total ?? 0;
   const urgentCount = data?.records?.filter((r) => r.priority === "urgent").length ?? 0;
   const highCount = data?.records?.filter((r) => r.priority === "high").length ?? 0;
@@ -143,11 +152,38 @@ export default function HandlerQueue() {
     <WhipLayout>
       <div className="p-6 space-y-5">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-[#171b31]">Handler Queue</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Open intake records grouped by assigned handler — urgent and high priority shown first
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-[#171b31]">Handler Queue</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              Open intake records grouped by assigned handler — urgent and high priority shown first
+            </p>
+          </div>
+          {/* Expand / Collapse All */}
+          {sortedHandlers.length > 0 && (
+            <div className="flex items-center gap-2 flex-shrink-0 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={expandAll}
+                disabled={allExpanded}
+              >
+                <ChevronsUpDown className="w-3.5 h-3.5" />
+                Expand All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={collapseAll}
+                disabled={allCollapsed}
+              >
+                <ChevronsDownUp className="w-3.5 h-3.5" />
+                Collapse All
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Summary stats */}

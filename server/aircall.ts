@@ -92,7 +92,19 @@ function resolveHandler(
     }
   }
 
-  const text = ((message ?? "") + " " + transcript).toLowerCase();
+    const text = ((message ?? "") + " " + transcript).toLowerCase();
+
+  // Law offices always go to Jayla UNLESS the transcript explicitly mentions
+  // property damage (PD) — in that case Carlito handles it.
+  // This check runs before all other content-based routing to prevent
+  // subro/repairs keywords from accidentally rerouting law office calls.
+  if (callerType === "law_office") {
+    if (PD_REGEX.test(text)) return HANDLER_ROUTING.carlito;
+    return HANDLER_ROUTING.jayla;
+  }
+
+  // Medical providers always go to Jayla regardless of any other keywords
+  if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
 
   // 2. Content-based routing (topic takes priority over caller type)
   // Subro / demand / payment → Madeline
@@ -105,11 +117,6 @@ function resolveHandler(
   if (REPAIRS_REGEX.test(text)) return nextFirstPartyHandler();
   // PD / 3rd-party property damage → Carlito
   if (PD_REGEX.test(text)) return HANDLER_ROUTING.carlito;
-
-  // 3. Caller-type routing
-  // Medical providers always go to Jayla regardless of billing/payment keywords
-  if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
-  if (callerType === "law_office")       return HANDLER_ROUTING.jayla;
   if (callerType === "carrier")          return nextFirstPartyHandler(); // carriers default to first-party team
   if (callerType === "member" || callerType === "claimant") return nextFirstPartyHandler();
 

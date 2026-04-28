@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { classifyCallBatch, getUnclassifiedCount } from "./classifyCalls";
+import { TRPCError } from "@trpc/server";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -23,6 +24,9 @@ import {
   getAllScorecards,
   saveHandlerScorecard,
   getHandlerCallMetrics,
+  listAllUsers,
+  updateUserRole,
+  deleteUser,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -247,6 +251,28 @@ export const appRouter = router({
       .input(z.object({ batchSize: z.number().min(1).max(50).default(10) }))
       .mutation(async ({ input }) => {
         return classifyCallBatch(input.batchSize);
+      }),
+  }),
+
+  // ─── User Management (admin only) ──────────────────────────────────
+  userManagement: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listAllUsers();
+    }),
+    updateRole: protectedProcedure
+      .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await updateUserRole(input.userId, input.role);
+        return { success: true };
+      }),
+    remove: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await deleteUser(input.userId);
+        return { success: true };
       }),
   }),
 

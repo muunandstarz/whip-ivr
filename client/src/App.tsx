@@ -16,6 +16,7 @@ import WeeklyQA from "./pages/WeeklyQA";
 import HandlerProfile from "./pages/HandlerProfile";
 import Softphone from "./pages/Softphone";
 import HandlerDashboard from "./pages/HandlerDashboard";
+import UserManagement from "./pages/UserManagement";
 import { ImpersonationProvider } from "./contexts/ImpersonationContext";
 
 function Router() {
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/softphone" component={Softphone} />
       <Route path="/ivr-setup" component={IVRSetup} />
       <Route path="/my-dashboard" component={HandlerDashboard} />
+      <Route path="/users" component={UserManagement} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

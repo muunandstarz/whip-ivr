@@ -19,9 +19,7 @@ import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2,
 import { format } from "date-fns";
 import { toast } from "sonner";
 
-const HANDLERS = [
-  "Natasha", "Jayla", "Carlito", "Annie", "Lorraine", "Jovel", "MJ", "Daryl",
-];
+// Handler list fetched dynamically — see trpc.handlers.list below
 
 const CALLER_TYPE_LABELS: Record<string, string> = {
   carrier: "Insurance Carrier",
@@ -37,6 +35,9 @@ export default function IntakeDetail() {
   const params = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const id = parseInt(params.id || "0");
+
+  const { data: handlersData } = trpc.handlers.list.useQuery();
+  const handlerNames = (handlersData ?? []).map((h: { id: number; name: string }) => h.name);
 
   const { data: record, isLoading, refetch } = trpc.intake.get.useQuery({ id });
   const [editing, setEditing] = useState(false);
@@ -334,7 +335,7 @@ export default function IntakeDetail() {
                       <SelectValue placeholder="Select handler" />
                     </SelectTrigger>
                     <SelectContent>
-                      {HANDLERS.map((h) => (
+                      {handlerNames.map((h) => (
                         <SelectItem key={h} value={h}>{h}</SelectItem>
                       ))}
                     </SelectContent>

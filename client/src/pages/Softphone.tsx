@@ -303,14 +303,23 @@ export default function Softphone() {
           <p className="text-sm text-gray-500 mt-1">Make calls, send texts, and log dispositions from one place</p>
         </div>
 
-        <div className="mb-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-amber-800">
-            <span className="font-semibold">Preview mockup</span> — Calls and texts shown here are simulated. Once the Aircall Phone SDK and Textline API are connected, this will be fully live.{" "}
-            <a href="https://dashboard.aircall.io" target="_blank" rel="noopener noreferrer" className="underline font-medium inline-flex items-center gap-0.5">
-              Open Aircall <ExternalLink className="w-3 h-3" />
-            </a>
+        {/* Under Construction Banner */}
+        <div className="mb-5 flex items-center gap-4 rounded-xl border-2 border-amber-400 bg-amber-50 px-5 py-4">
+          <span className="text-3xl flex-shrink-0">🚧</span>
+          <div className="flex-1">
+            <p className="font-bold text-amber-900 text-base">Softphone — Under Construction</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              The in-app softphone is not yet connected to Aircall. All calls, texts, and data shown below are <strong>simulated previews</strong> of the planned interface.
+              In the meantime, use the{" "}
+              <a href="https://dashboard.aircall.io" target="_blank" rel="noopener noreferrer" className="underline font-semibold inline-flex items-center gap-0.5">
+                Aircall desktop or mobile app <ExternalLink className="w-3 h-3" />
+              </a>{" "}
+              to make and receive calls.
+            </p>
           </div>
+          <Badge className="flex-shrink-0 bg-amber-200 text-amber-900 border-amber-400 border text-xs font-semibold px-3 py-1">
+            Coming Soon
+          </Badge>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

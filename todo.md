@@ -217,3 +217,17 @@ Business routing logic to implement in resolveHandler():
 - [x] Update LLM prompt: key phrases to trigger Whip claim extraction: "your reference number", "Whip ref", "your ref", "reference number is", "claim number is"
 - [x] Update LLM prompt: distinguish caller's own reference number (theirReferenceNumber) vs Whip reference number (whipClaimNumber)
 - [ ] Re-run extraction on existing records that may have old-format claim numbers missed
+
+---
+
+## UI & Routing Fixes (Apr 28 2026 — Batch 2)
+
+- [x] Handler Queue: add Expand All / Collapse All buttons to page header
+- [x] Handler Queue: fix HANDLER_COLORS map — add "Mary Joy Badua" key (was "MJ Badua")
+- [x] Handler metrics (HandlerDashboard): connect call performance metrics to handler profile via Aircall name lookup, not exact string match
+- [x] Softphone page: add "Under Construction" banner — feature not yet live
+- [x] Law office routing: fix to always go to Jayla UNLESS caller explicitly requests another handler by name OR transcript explicitly mentions PD/property damage
+- [x] Intake reassign dropdown: fix handler list to show full names (first + last) so they match handlerName in DB
+- [x] QA push handler dropdown: fix handler name matching — "MJ" / "Mary Joy" aliases must resolve to "Mary Joy Badua"
+- [x] User management page: admin-only page to view all users, assign roles (admin/handler), invite/add new users
+- [x] Promote Greg Bauder to admin: have Greg log in once, then go to User Management → find Greg Bauder → change role to Admin
