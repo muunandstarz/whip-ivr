@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Users, ShieldCheck, User, Trash2, Clock, LogIn } from "lucide-react";
+import { Users, ShieldCheck, User, Trash2, Clock, LogIn, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -32,6 +32,7 @@ export default function UserManagement() {
   const utils = trpc.useUtils();
 
   const { data: users, isLoading } = trpc.userManagement.list.useQuery();
+  const { data: handlersList } = trpc.handlers.list.useQuery();
 
   const updateRoleMutation = trpc.userManagement.updateRole.useMutation({
     onSuccess: () => {
@@ -49,6 +50,14 @@ export default function UserManagement() {
     onError: (e) => toast.error("Failed to remove user: " + e.message),
   });
 
+  const linkToHandlerMutation = trpc.userManagement.linkToHandler.useMutation({
+    onSuccess: () => {
+      utils.userManagement.list.invalidate();
+      toast.success("Handler profile linked");
+    },
+    onError: (e) => toast.error("Failed to link handler: " + e.message),
+  });
+
   if (currentUser?.role !== "admin") {
     return (
       <WhipLayout>
@@ -63,6 +72,7 @@ export default function UserManagement() {
 
   const adminCount = (users ?? []).filter((u) => u.role === "admin").length;
   const userCount = (users ?? []).filter((u) => u.role === "user").length;
+  const activeHandlers = (handlersList ?? []).filter((h) => h.active);
 
   return (
     <WhipLayout>
@@ -94,7 +104,8 @@ export default function UserManagement() {
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           <strong>How it works:</strong> Users appear here after their first login. To grant someone access,
           have them log in via the Whip IVR portal — they'll be added as a <em>Handler</em> by default.
-          Promote them to <em>Admin</em> using the role dropdown below.
+          Promote them to <em>Admin</em> using the role dropdown. Use the <strong>Handler Profile</strong> column
+          to link their login to their Aircall profile so their call stats appear correctly.
         </div>
 
         {/* Users table */}
@@ -120,14 +131,15 @@ export default function UserManagement() {
                       <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Name</th>
                       <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Email</th>
                       <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Role</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Handler Profile</th>
                       <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Last Sign-In</th>
-                      <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Joined</th>
                       <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {users.map((u) => {
                       const isSelf = u.openId === currentUser?.openId;
+                      const linkedHandler = activeHandlers.find((h) => h.id === u.handlerProfileId);
                       return (
                         <tr key={u.id} className={`hover:bg-muted/20 ${isSelf ? "bg-blue-50/40" : ""}`}>
                           <td className="px-4 py-3">
@@ -143,7 +155,7 @@ export default function UserManagement() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">{u.email ?? "—"}</td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs">{u.email ?? "—"}</td>
                           <td className="px-4 py-3">
                             <Select
                               value={u.role}
@@ -175,18 +187,45 @@ export default function UserManagement() {
                               </SelectContent>
                             </Select>
                           </td>
+                          <td className="px-4 py-3">
+                            <Select
+                              value={u.handlerProfileId?.toString() ?? "none"}
+                              onValueChange={(val) => {
+                                const handlerProfileId = val === "none" ? null : parseInt(val, 10);
+                                linkToHandlerMutation.mutate({ userId: u.id, handlerProfileId });
+                              }}
+                              disabled={linkToHandlerMutation.isPending}
+                            >
+                              <SelectTrigger className="h-7 w-44 text-xs">
+                                <SelectValue placeholder="Not linked" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">
+                                  <span className="text-muted-foreground italic">Not linked</span>
+                                </SelectItem>
+                                {activeHandlers.map((h) => (
+                                  <SelectItem key={h.id} value={h.id.toString()}>
+                                    <span className="flex items-center gap-1.5">
+                                      <Link2 className="w-3 h-3 text-[#ff6221]" />
+                                      {h.name}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {linkedHandler && (
+                              <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                                <Link2 className="w-3 h-3" />
+                                Linked to {linkedHandler.name}
+                              </p>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <LogIn className="w-3 h-3" />
                               {u.lastSignedIn
-                                ? format(new Date(u.lastSignedIn), "MMM d, yyyy h:mm a")
+                                ? format(new Date(u.lastSignedIn), "MMM d, h:mm a")
                                 : "Never"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {format(new Date(u.createdAt), "MMM d, yyyy")}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -264,6 +303,24 @@ export default function UserManagement() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Handler profile link guide */}
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Link2 className="w-4 h-4 text-amber-600" />
+              <span className="font-semibold text-sm text-amber-800">About Handler Profile Links</span>
+            </div>
+            <p className="text-xs text-amber-700 leading-relaxed">
+              Each user's login account needs to be linked to their handler profile so their call metrics, 
+              intake records, and QA scores display correctly on their dashboard. When a user logs in for 
+              the first time, the system tries to auto-link by matching their email address. If it doesn't 
+              match automatically (e.g. different email), use the <strong>Handler Profile</strong> dropdown 
+              above to link them manually. New hires like Daniel Giono will auto-link once they log in with 
+              their <code>@drivewhip.com</code> email.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </WhipLayout>
   );

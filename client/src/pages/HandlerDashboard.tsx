@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useUser } from "@clerk/react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -169,16 +169,27 @@ function CalledBackButton({ intakeId, handlerName, onSuccess }: { intakeId: numb
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function HandlerDashboard() {
-  const { user } = useUser();
+  const { user: authUser } = useAuth();
   const { impersonating, isImpersonating } = useImpersonation();
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Determine which handler name to use
-  // Admin impersonating a handler → use impersonated handler's name
-  // Regular user → use their own name (matched against handlers table)
+  // Fetch handlers list to resolve linked handler profile
+  const { data: handlersList } = trpc.handlers.list.useQuery();
+
+  // Determine which handler name to use:
+  // 1. Admin impersonating → use impersonated handler's name
+  // 2. User with linked handler profile → use handler profile name (matches Aircall exactly)
+  // 3. Fallback → use login display name
+  const linkedHandler = authUser?.handlerProfileId
+    ? handlersList?.find((h) => h.id === authUser.handlerProfileId)
+    : null;
   const effectiveName = isImpersonating
     ? impersonating!.name
-    : user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "";
+    : linkedHandler?.name ?? authUser?.name ?? "";
+  const handlerRecord = isImpersonating
+    ? handlersList?.find((h) => h.name.toLowerCase() === impersonating!.name.toLowerCase())
+    : linkedHandler ?? handlersList?.find((h) => h.name.toLowerCase() === effectiveName.toLowerCase());
+  const handlerId = handlerRecord?.id ?? null;
 
   // Fetch this handler's open intake records (callback queue)
   const { data: intakeData, isLoading: intakeLoading } = trpc.intake.list.useQuery(
@@ -191,13 +202,6 @@ export default function HandlerDashboard() {
     { handlerName: effectiveName },
     { enabled: !!effectiveName }
   );
-
-  // Fetch handlers list to get handlerId for QA scorecards
-  const { data: handlersList } = trpc.handlers.list.useQuery();
-  const handlerRecord = handlersList?.find(
-    (h) => h.name.toLowerCase() === effectiveName.toLowerCase()
-  );
-  const handlerId = handlerRecord?.id ?? null;
 
   // Fetch QA scorecards for coaching tips
   const { data: scorecards } = trpc.qa.handlerScorecards.useQuery(

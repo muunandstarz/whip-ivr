@@ -27,6 +27,7 @@ import {
   listAllUsers,
   updateUserRole,
   deleteUser,
+  linkUserToHandler,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -272,6 +273,13 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         await deleteUser(input.userId);
+        return { success: true };
+      }),
+    linkToHandler: protectedProcedure
+      .input(z.object({ userId: z.number(), handlerProfileId: z.number().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await linkUserToHandler(input.userId, input.handlerProfileId);
         return { success: true };
       }),
   }),

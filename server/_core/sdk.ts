@@ -282,6 +282,11 @@ class SDKServer {
           lastSignedIn: signedInAt,
         });
         user = await db.getUserByOpenId(userInfo.openId);
+        // Auto-link to handler profile by email on first login
+        if (user) {
+          await db.autoLinkHandlerProfile(user.id, user.email).catch(() => {});
+          user = await db.getUserByOpenId(userInfo.openId);
+        }
       } catch (error) {
         console.error("[Auth] Failed to sync user from OAuth:", error);
         throw ForbiddenError("Failed to sync user info");
@@ -290,6 +295,12 @@ class SDKServer {
 
     if (!user) {
       throw ForbiddenError("User not found");
+    }
+
+    // Also try auto-link on every login in case email was added later
+    if (!user.handlerProfileId) {
+      await db.autoLinkHandlerProfile(user.id, user.email).catch(() => {});
+      user = await db.getUserByOpenId(user.openId) ?? user;
     }
 
     await db.upsertUser({

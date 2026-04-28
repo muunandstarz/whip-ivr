@@ -231,3 +231,14 @@ Business routing logic to implement in resolveHandler():
 - [x] QA push handler dropdown: fix handler name matching — "MJ" / "Mary Joy" aliases must resolve to "Mary Joy Badua"
 - [x] User management page: admin-only page to view all users, assign roles (admin/handler), invite/add new users
 - [x] Promote Greg Bauder to admin: have Greg log in once, then go to User Management → find Greg Bauder → change role to Admin
+
+---
+
+## Login-to-Profile Linking & Metrics Fix (Apr 28 2026 — Batch 3)
+
+- [ ] Fix call performance metrics: empty for all handlers — diagnose Aircall agentName vs handler name mismatch
+- [ ] Fix getHandlerCallMetrics to use flexible name matching (first name, last name, partial match) not exact string
+- [ ] Add handlerProfileId column to users table — links a logged-in user to their handler profile
+- [ ] Auto-link on login: when user signs in, match their name/email to handlers table and set handlerProfileId
+- [ ] Admin UI in User Management: dropdown to manually link a user to a handler profile (for new hires like Daniel Giono)
+- [ ] Add Daniel Giono to handlers table as subro handler

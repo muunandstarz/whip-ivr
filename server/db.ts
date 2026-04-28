@@ -85,6 +85,7 @@ export async function listAllUsers() {
     email: users.email,
     role: users.role,
     loginMethod: users.loginMethod,
+    handlerProfileId: users.handlerProfileId,
     createdAt: users.createdAt,
     lastSignedIn: users.lastSignedIn,
   }).from(users).orderBy(users.createdAt);
@@ -96,10 +97,27 @@ export async function updateUserRole(userId: number, role: "user" | "admin") {
   await db.update(users).set({ role }).where(eq(users.id, userId));
 }
 
+export async function linkUserToHandler(userId: number, handlerProfileId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ handlerProfileId }).where(eq(users.id, userId));
+}
+
 export async function deleteUser(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(users).where(eq(users.id, userId));
+}
+
+/** Try to auto-link a user to their handler profile by email match */
+export async function autoLinkHandlerProfile(userId: number, email: string | null | undefined) {
+  if (!email) return;
+  const db = await getDb();
+  if (!db) return;
+  const match = await db.select({ id: handlers.id }).from(handlers).where(eq(handlers.email, email)).limit(1);
+  if (match.length > 0) {
+    await db.update(users).set({ handlerProfileId: match[0].id }).where(and(eq(users.id, userId), sql`handlerProfileId IS NULL`));
+  }
 }
 
 // ─── Intake Records ────────────────────────────────────────────────────────
@@ -675,8 +693,7 @@ export async function getHandlerCallMetrics(handlerName: string) {
   const db = await getDb();
   if (!db) return null;
 
-  const client = (db as any).$client;
-
+   const client = (db as any).$client.promise();
   const [statsRows] = await client.query(
     `SELECT
        COUNT(*) as total,
