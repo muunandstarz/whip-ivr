@@ -1,4 +1,4 @@
-import { eq, desc, like, and, or, sql } from "drizzle-orm";
+import { eq, desc, like, and, or, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -362,7 +362,7 @@ export async function getCallHistoryAnalytics() {
         total: sql<number>`count(*)`,
       })
         .from(callHistory)
-        .where(sql`agentName IN (${sql.raw(CLAIMS_TEAM.map(() => '?').join(','))})`)
+        .where(inArray(callHistory.agentName, CLAIMS_TEAM))
         .groupBy(callHistory.agentName)
         .orderBy(desc(sql`count(*)`)),
       db
