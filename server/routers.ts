@@ -58,6 +58,15 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    markOnboardingSeen: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await import("./db").then((m) => m.getDb());
+      if (db) {
+        const { eq } = await import("drizzle-orm");
+        const { users } = await import("../drizzle/schema");
+        await db.update(users).set({ onboardingSeenAt: new Date() }).where(eq(users.id, ctx.user.id));
+      }
+      return { success: true } as const;
+    }),
   }),
 
   // ─── Intake Records ────────────────────────────────────────────────────

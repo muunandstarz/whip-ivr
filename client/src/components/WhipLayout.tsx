@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import OnboardingModal from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -59,6 +60,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const [location, navigate] = useLocation();
   const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const showOnboarding = !!user && !user.onboardingSeenAt && !onboardingDismissed;
   const { impersonating, setImpersonating, isImpersonating } = useImpersonation();
   const { theme, setTheme } = useTheme();
 
@@ -117,6 +120,9 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen flex bg-background">
+      {showOnboarding && (
+        <OnboardingModal onDismiss={() => setOnboardingDismissed(true)} />
+      )}
       {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col transition-transform duration-200 ${

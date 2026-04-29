@@ -338,3 +338,10 @@ Business routing logic to implement in resolveHandler():
 - [x] Update clerkAuth.ts server middleware to use Manus JWT session instead
 - [x] Add active-handler deactivation check on sign-in (block inactive handlers)
 - [x] Test sign-in flow end to end on dev and published site
+
+---
+## First-Sign-In Onboarding Modal (Apr 29 2026)
+- [x] Add onboardingSeenAt column to users table (nullable timestamp)
+- [x] Add auth.markOnboardingSeen tRPC mutation (sets onboardingSeenAt = now())
+- [x] Build OnboardingModal component: 6-slide tour (Welcome, Dashboard, Intake Records, 4-hour SLA, How to close a record, Softphone)
+- [x] Wire modal into WhipLayout: shows when user.onboardingSeenAt is null, dismissed permanently on "Get started" or "Skip tour"
