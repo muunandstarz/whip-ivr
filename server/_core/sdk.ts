@@ -311,6 +311,15 @@ class SDKServer {
       lastSignedIn: signedInAt,
     });
 
+    // Active-handler deactivation check: if the user is linked to a handler profile
+    // that has been deactivated, block access with a clear message.
+    if (user.handlerProfileId) {
+      const handlerProfile = await db.getHandlerById(user.handlerProfileId).catch(() => undefined);
+      if (handlerProfile && handlerProfile.active === false) {
+        throw ForbiddenError("Your account has been deactivated. Contact your administrator.");
+      }
+    }
+
     return user;
   }
 }

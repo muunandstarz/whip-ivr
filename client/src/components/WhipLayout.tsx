@@ -1,5 +1,4 @@
 import { Link, useLocation } from "wouter";
-import { useUser, useClerk, SignIn } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -30,6 +29,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { getLoginUrl } from "@/const";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 
@@ -56,22 +57,19 @@ const HANDLER_NAV_ITEMS = [
 
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { signOut } = useClerk();
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { impersonating, setImpersonating, isImpersonating } = useImpersonation();
   const { theme, setTheme } = useTheme();
 
-  // Fetch tRPC user to get role (server-side role, not Clerk metadata)
-  const { data: trpcUser } = trpc.auth.me.useQuery();
-  const isAdmin = trpcUser?.role === "admin";
+  const isAdmin = user?.role === "admin";
 
   // Fetch handlers list for admin impersonation dropdown
   const { data: handlersList } = trpc.handlers.list.useQuery(undefined, {
     enabled: isAdmin,
   });
 
-  if (!isLoaded) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
@@ -79,7 +77,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
-  if (!isSignedIn) {
+  if (!user) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-primary gap-6 p-4">
         <div className="flex flex-col items-center gap-2 mb-2">
@@ -91,32 +89,24 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           <h1 className="text-2xl font-bold text-white">Claims IVR</h1>
           <p className="text-white/60 text-sm">AI-powered call intake management</p>
         </div>
-        {/* Clerk's hosted Sign-In component with Google SSO */}
-        <SignIn
-          routing="hash"
-          appearance={{
-            elements: {
-              rootBox: "w-full max-w-sm",
-              card: "bg-background rounded-xl shadow-2xl",
-              headerTitle: "text-foreground font-bold",
-              headerSubtitle: "text-gray-500",
-              socialButtonsBlockButton:
-                "border border-gray-200 hover:bg-muted text-gray-700 font-medium",
-              formButtonPrimary:
-                "bg-[#ff6221] hover:bg-[#e5541a] text-white font-semibold",
-              footerActionLink: "text-[#ff6221] hover:text-[#e5541a]",
-            },
-          }}
-        />
+        <div className="bg-background rounded-xl shadow-2xl p-8 w-full max-w-sm flex flex-col items-center gap-4">
+          <div className="text-foreground font-bold text-lg">Sign in to continue</div>
+          <p className="text-muted-foreground text-sm text-center">
+            Use your Whip Google account to sign in.
+          </p>
+          <Button
+            className="w-full bg-[#ff6221] hover:bg-[#e5541a] text-white font-semibold gap-2"
+            onClick={() => { window.location.href = getLoginUrl(); }}
+          >
+            Sign in with Google
+          </Button>
+        </div>
       </div>
     );
   }
 
-  const displayName =
-    user.fullName ||
-    user.primaryEmailAddress?.emailAddress ||
-    "User";
-  const displayEmail = user.primaryEmailAddress?.emailAddress || "";
+  const displayName = user.name || user.email || "User";
+  const displayEmail = user.email || "";
   const avatarInitial = displayName.charAt(0).toUpperCase();
 
   // Determine which nav to show:
@@ -259,17 +249,9 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
         {/* User */}
         <div className="px-4 py-4 border-t border-white/10">
           <div className="flex items-center gap-3 mb-3">
-            {user.imageUrl ? (
-              <img
-                src={user.imageUrl}
-                alt={displayName}
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-[#ff6221]/20 flex items-center justify-center text-[#ff6221] text-xs font-bold flex-shrink-0">
-                {avatarInitial}
-              </div>
-            )}
+            <div className="w-8 h-8 rounded-full bg-[#ff6221]/20 flex items-center justify-center text-[#ff6221] text-xs font-bold flex-shrink-0">
+              {avatarInitial}
+            </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">{displayName}</div>
               <div className="text-xs text-white/50 truncate">
@@ -303,7 +285,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             variant="ghost"
             size="sm"
             className="w-full text-white/60 hover:text-white hover:bg-background/10 gap-2 justify-start"
-            onClick={() => signOut({ redirectUrl: "/" })}
+            onClick={() => logout().then(() => { window.location.href = "/"; })}
           >
             <LogOut className="w-4 h-4" />
             Sign out

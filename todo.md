@@ -329,3 +329,12 @@ Business routing logic to implement in resolveHandler():
 ---
 ## Team Access Pre-Authorization (Apr 29 2026)
 - [x] Pre-authorize all 15 team members so they can sign in immediately
+
+---
+## Auth Migration: Clerk → Manus OAuth (Apr 29 2026)
+- [x] Remove Clerk from frontend (ClerkProvider, SignIn, useUser, useClerk)
+- [x] Wire Manus OAuth sign-in button in WhipLayout (already in server/_core/oauth.ts)
+- [x] Update useAuth hook to use Manus OAuth session (trpc.auth.me.useQuery)
+- [x] Update clerkAuth.ts server middleware to use Manus JWT session instead
+- [x] Add active-handler deactivation check on sign-in (block inactive handlers)
+- [x] Test sign-in flow end to end on dev and published site

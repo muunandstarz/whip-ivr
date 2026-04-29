@@ -498,6 +498,13 @@ export async function getHandlers() {
   return db.select().from(handlers).where(eq(handlers.active, true)).orderBy(handlers.name);
 }
 
+export async function getHandlerById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(handlers).where(eq(handlers.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 export async function upsertHandler(data: InsertHandler): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

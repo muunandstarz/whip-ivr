@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useUser } from "@clerk/react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,18 +57,28 @@ const SOURCE_LABELS: Record<string, string> = {
 const PAGE_SIZE = 20;
 
 export default function IntakeRecords() {
-  const { user } = useUser();
-  const { data: trpcUser } = trpc.auth.me.useQuery();
+  const { user: authUser } = useAuth();
   const { impersonating, isImpersonating } = useImpersonation();
 
-  const isAdmin = trpcUser?.role === "admin";
+  const isAdmin = authUser?.role === "admin";
 
   // In handler view (impersonating or non-admin), lock the handlerName filter
   // to the current handler so they only see their own records.
+  // Use the linked handler profile name (from handlerProfileId) if available,
+  // otherwise fall back to the login name.
+  const { data: handlersListForName } = trpc.handlers.list.useQuery(undefined, {
+    enabled: !isAdmin && !isImpersonating,
+  });
+  const linkedHandlerName = useMemo(() => {
+    if (!authUser?.handlerProfileId || !handlersListForName) return null;
+    const h = handlersListForName.find((h) => h.id === authUser.handlerProfileId);
+    return h?.name ?? null;
+  }, [authUser?.handlerProfileId, handlersListForName]);
+
   const effectiveHandlerName = isImpersonating
     ? impersonating!.name
     : !isAdmin
-    ? (user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "")
+    ? (linkedHandlerName ?? authUser?.name ?? "")
     : null; // null = admin sees all
 
   // Read initial filter values from URL query params (e.g. from Dashboard links)
@@ -117,7 +127,10 @@ export default function IntakeRecords() {
     setPage(0);
   }, []);
 
-  const { data: handlersData } = trpc.handlers.list.useQuery();
+  // handlersData for admin handler filter dropdown
+  const { data: handlersData } = trpc.handlers.list.useQuery(undefined, {
+    enabled: isAdmin,
+  });
 
   // Debounce search
   useMemo(() => {

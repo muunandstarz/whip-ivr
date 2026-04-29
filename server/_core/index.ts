@@ -3,7 +3,6 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { clerkMiddleware } from "@clerk/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
@@ -38,13 +37,6 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-  // Clerk middleware — attaches auth state to all requests
-  // clerkMiddleware reads the __session cookie or Authorization: Bearer token
-  app.use(clerkMiddleware({
-    publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
-    secretKey: process.env.CLERK_SECRET_KEY,
-  }));
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
