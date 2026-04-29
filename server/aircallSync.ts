@@ -1,13 +1,18 @@
 /**
  * Aircall Sync Service
  * Polls the Aircall API every 15 minutes to pull recent calls into call_history.
- * Also pulls voicemail/transcription data and triggers intake processing for new voicemails.
+ * Only syncs calls from the Whip Claims Line — all other Aircall numbers are ignored.
  */
 import cron from "node-cron";
 import { upsertCallHistory } from "./db";
-import { ENV } from "./_core/env";
 
 const AIRCALL_API_BASE = "https://api.aircall.io/v1";
+
+// Only sync calls from the Whip Claims Line (ID 1125090, name "Whip Claims Line")
+// This prevents calls from Whip Outbound, Collections, HelpDesk, HR, etc. from polluting analytics.
+const WHIP_CLAIMS_NUMBER_ID = 1125090;
+const WHIP_CLAIMS_NUMBER_NAME = "Whip Claims Line";
+
 // Credentials stored as env vars (set via webdev_request_secrets)
 function getAircallAuth(): string {
   const id = process.env.AIRCALL_API_ID;
@@ -34,11 +39,13 @@ async function aircallFetch(path: string): Promise<any> {
 /**
  * Sync calls from the last N minutes into call_history.
  * Uses the Aircall /calls endpoint filtered by from/to timestamps.
+ * Only stores calls from the Whip Claims Line (number ID 1125090).
  */
 export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
   const from = Math.floor((Date.now() - lookbackMinutes * 60 * 1000) / 1000);
   let page = 1;
   let synced = 0;
+  let skipped = 0;
 
   while (true) {
     const data = await aircallFetch(
@@ -48,6 +55,18 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
     if (calls.length === 0) break;
 
     for (const call of calls) {
+      // Filter: only process calls on the Whip Claims Line
+      const numberId = call.number?.id ? Number(call.number.id) : null;
+      const numberName: string = call.number?.name ?? "";
+      const isClaimsLine =
+        numberId === WHIP_CLAIMS_NUMBER_ID ||
+        numberName === WHIP_CLAIMS_NUMBER_NAME;
+
+      if (!isClaimsLine) {
+        skipped++;
+        continue;
+      }
+
       const agentUser = call.user ?? null;
       const agentName = agentUser
         ? `${agentUser.first_name ?? ""} ${agentUser.last_name ?? ""}`.trim()
@@ -66,7 +85,7 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
         endedAt: call.ended_at ? new Date(call.ended_at * 1000) : null,
         direction: (call.direction === "outbound" ? "outbound" : "inbound") as "inbound" | "outbound",
         aircallNumberName: call.number?.name ?? null,
-        aircallNumberId: call.number?.id ? Number(call.number.id) : null,
+        aircallNumberId: numberId,
       });
       synced++;
     }
@@ -76,6 +95,9 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
     page++;
   }
 
+  if (skipped > 0) {
+    console.log(`[AircallSync] Skipped ${skipped} calls from non-Claims lines`);
+  }
   return synced;
 }
 
@@ -100,7 +122,7 @@ async function runSync() {
   try {
     const count = await syncRecentCalls(20);
     if (count > 0) {
-      console.log(`[AircallSync] Synced ${count} calls`);
+      console.log(`[AircallSync] Synced ${count} calls from Whip Claims Line`);
     }
   } catch (err: any) {
     console.error("[AircallSync] Error:", err.message ?? err);
@@ -121,5 +143,5 @@ export function startAircallSyncJob() {
   // Run immediately on startup, then every 15 minutes
   runSync();
   cron.schedule("*/15 * * * *", runSync);
-  console.log("[AircallSync] Scheduled sync every 15 minutes");
+  console.log("[AircallSync] Scheduled sync every 15 minutes (Whip Claims Line only)");
 }

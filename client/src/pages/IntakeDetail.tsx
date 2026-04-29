@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useParams, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
@@ -22,6 +22,17 @@ import { toast } from "sonner";
 
 // Handler list fetched dynamically — see trpc.handlers.list below
 
+const CALL_SCRIPTS: Record<string, string> = {
+  carrier: `Hi, this is [your name] calling from Whip Claims on behalf of our insured. I'm returning a call regarding claim [claim #]. I wanted to follow up on [reason for call]. Could you please confirm the status and let me know if there's anything needed from our side?`,
+  law_office: `Hello, this is [your name] with Whip Claims. I'm returning a call from your office regarding claim [claim #] for [insured name]. I'd like to discuss the matter and see how we can assist. Is [attorney name] available?`,
+  medical_provider: `Hi, this is [your name] from Whip Claims. I'm returning a call about a billing or treatment inquiry for claim [claim #]. I wanted to make sure we have everything needed to process the claim promptly.`,
+  member: `Hi [caller name], this is [your name] calling from Whip Claims. I'm returning your call about your claim [claim #]. I wanted to follow up and make sure all your questions are answered. Is now a good time?`,
+  claimant: `Hello [caller name], this is [your name] with Whip Claims. I'm returning your call regarding your claim [claim #]. I'd like to help resolve your inquiry. Is now a good time to talk?`,
+  police: `Hello, this is [your name] from Whip Claims. I'm returning a call from your department regarding an incident related to claim [claim #]. How can I assist?`,
+  wrong_department: `Hi, this is [your name] from Whip Claims. I'm returning a call — it looks like this may have been routed to us in error. Could you let me know how I can direct you to the right department?`,
+  unknown: `Hi, this is [your name] calling from Whip Claims. I'm returning a call regarding claim [claim #]. Could you let me know how I can assist you today?`,
+};
+
 const CALLER_TYPE_LABELS: Record<string, string> = {
   carrier: "Insurance Carrier",
   law_office: "Law Office",
@@ -36,6 +47,17 @@ export default function IntakeDetail() {
   const params = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const id = parseInt(params.id || "0");
+
+  // Auto-open callback dialog when navigated from list with ?openCallback=1
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("openCallback") === "1") {
+      setCallbackOpen(true);
+      // Clean up the query param without a page reload
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, "", cleanUrl);
+    }
+  }, []);
 
   const { data: handlersData } = trpc.handlers.list.useQuery();
   const handlerNames = (handlersData ?? []).map((h: { id: number; name: string }) => h.name);
@@ -204,6 +226,12 @@ export default function IntakeDetail() {
                     <ShieldX className="w-3 h-3 mr-1" />
                   )}
                   Claim Match: {record.claimMatchType?.replace("_", " ")} ({record.claimMatchConfidence ?? 0}%)
+                </Badge>
+              )}
+              {record.callbackAt && (
+                <Badge variant="outline" className="border-teal-400 text-teal-700 bg-teal-50 text-xs font-medium">
+                  <PhoneCall className="w-3 h-3 mr-1" />
+                  Returned
                 </Badge>
               )}
             </div>
@@ -542,14 +570,41 @@ export default function IntakeDetail() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
-              <div className="bg-muted/30 rounded-lg p-3 text-sm">
-                <div className="font-medium">{record.callerName || "Unknown caller"}</div>
+              <div className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{record.callerName || "Unknown caller"}</div>
+                  {record.callerType && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+                      {CALLER_TYPE_LABELS[record.callerType] ?? record.callerType}
+                    </span>
+                  )}
+                </div>
                 {record.callerOrg && <div className="text-xs text-muted-foreground">{record.callerOrg}</div>}
-                {record.callbackPhone && <div className="text-xs text-[#ff6221] font-medium mt-1">{record.callbackPhone}</div>}
+                {record.callbackPhone && <div className="text-xs text-[#ff6221] font-medium">{record.callbackPhone}</div>}
                 {record.whipClaimNumber && (
-                  <div className="text-xs text-muted-foreground mt-1">Claim: <span className="font-mono">{record.whipClaimNumber}</span></div>
+                  <div className="text-xs text-muted-foreground">Claim: <span className="font-mono">{record.whipClaimNumber}</span></div>
+                )}
+                {record.message && (
+                  <div className="text-xs text-muted-foreground border-t pt-1 mt-1 line-clamp-2">
+                    <span className="font-medium text-foreground">Message: </span>{record.message}
+                  </div>
                 )}
               </div>
+              {/* Call script tailored to caller type */}
+              {record.callerType && CALL_SCRIPTS[record.callerType] && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="text-xs font-semibold text-blue-700 mb-1.5 flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    Suggested Script
+                  </div>
+                  <p className="text-xs text-blue-800 leading-relaxed whitespace-pre-wrap">
+                    {CALL_SCRIPTS[record.callerType]
+                      .replace(/\[claim #\]/g, record.whipClaimNumber || "[claim #]")
+                      .replace(/\[caller name\]/g, record.callerName || "[caller name]")
+                      .replace(/\[insured name\]/g, record.callerName || "[insured name]")}
+                  </p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs">Disposition</Label>
                 <Select

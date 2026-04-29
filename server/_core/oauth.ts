@@ -36,6 +36,14 @@ export function registerOAuthRoutes(app: Express) {
         lastSignedIn: new Date(),
       });
 
+      // Apply pre-authorization (role + handler link) if one exists for this email.
+      // Also auto-link to handler profile by email match if not already linked.
+      const freshUser = await db.getUserByOpenId(userInfo.openId);
+      if (freshUser) {
+        await db.applyPreAuthorization(freshUser.id, userInfo.email ?? null);
+        await db.autoLinkHandlerProfile(freshUser.id, userInfo.email ?? null);
+      }
+
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,

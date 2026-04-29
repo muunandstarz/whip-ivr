@@ -22,7 +22,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Users, ShieldCheck, User, Trash2, Clock, LogIn, Link2 } from "lucide-react";
+import { Users, ShieldCheck, User, Trash2, Clock, LogIn, Link2, Plus, Mail } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -33,6 +34,29 @@ export default function UserManagement() {
 
   const { data: users, isLoading } = trpc.userManagement.list.useQuery();
   const { data: handlersList } = trpc.handlers.list.useQuery();
+  const { data: preAuths, isLoading: preAuthsLoading } = trpc.userManagement.listPreAuths.useQuery();
+
+  // Pre-auth form state
+  const [newPreAuthEmail, setNewPreAuthEmail] = useState("");
+  const [newPreAuthRole, setNewPreAuthRole] = useState<"admin" | "user">("user");
+
+  const addPreAuthMutation = trpc.userManagement.addPreAuth.useMutation({
+    onSuccess: () => {
+      utils.userManagement.listPreAuths.invalidate();
+      setNewPreAuthEmail("");
+      setNewPreAuthRole("user");
+      toast.success("Pre-authorization added");
+    },
+    onError: (e) => toast.error("Failed to add pre-auth: " + e.message),
+  });
+
+  const removePreAuthMutation = trpc.userManagement.removePreAuth.useMutation({
+    onSuccess: () => {
+      utils.userManagement.listPreAuths.invalidate();
+      toast.success("Pre-authorization removed");
+    },
+    onError: (e) => toast.error("Failed to remove pre-auth: " + e.message),
+  });
 
   const updateRoleMutation = trpc.userManagement.updateRole.useMutation({
     onSuccess: () => {
@@ -303,6 +327,96 @@ export default function UserManagement() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Pre-Authorized Users */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Mail className="w-4 h-4 text-muted-foreground" />
+              Pre-Authorized Users
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Add an email here before someone logs in. When they sign in for the first time, they'll
+              automatically receive the specified role instead of the default Handler role.
+            </p>
+            {/* Add form */}
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="Email address"
+                value={newPreAuthEmail}
+                onChange={e => setNewPreAuthEmail(e.target.value)}
+                className="flex-1 h-8 text-sm"
+              />
+              <Select value={newPreAuthRole} onValueChange={(v) => setNewPreAuthRole(v as "admin" | "user")}>
+                <SelectTrigger className="h-8 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-3 h-3 text-[#ff6221]" />
+                      Admin
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="user">
+                    <span className="flex items-center gap-1.5">
+                      <User className="w-3 h-3 text-muted-foreground" />
+                      Handler
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                className="h-8 bg-[#ff6221] hover:bg-[#e5541a] text-white px-3"
+                disabled={!newPreAuthEmail || addPreAuthMutation.isPending}
+                onClick={() => addPreAuthMutation.mutate({ email: newPreAuthEmail, role: newPreAuthRole })}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Add
+              </Button>
+            </div>
+            {/* List */}
+            {preAuthsLoading ? (
+              <div className="text-xs text-muted-foreground py-2">Loading…</div>
+            ) : !preAuths || preAuths.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2 italic">No pre-authorizations configured.</div>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {preAuths.map((pa) => (
+                  <div key={pa.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="font-medium text-[#171b31]">{pa.email}</span>
+                      <Badge
+                        variant="outline"
+                        className={pa.role === "admin" ? "text-[#ff6221] border-[#ff6221]/40 text-xs" : "text-muted-foreground text-xs"}
+                      >
+                        {pa.role === "admin" ? "Admin" : "Handler"}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Added {format(new Date(pa.createdAt), "MMM d")}
+                        </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-red-600"
+                      onClick={() => removePreAuthMutation.mutate({ id: pa.id })}
+                      disabled={removePreAuthMutation.isPending}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Handler profile link guide */}
         <Card className="border-amber-200 bg-amber-50/50">

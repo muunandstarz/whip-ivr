@@ -235,32 +235,36 @@ Business routing logic to implement in resolveHandler():
 ---
 
 ## Login-to-Profile Linking & Metrics Fix (Apr 28 2026 — Batch 3)
-
-- [ ] Fix call performance metrics: empty for all handlers — diagnose Aircall agentName vs handler name mismatch
-- [ ] Fix getHandlerCallMetrics to use flexible name matching (first name, last name, partial match) not exact string
-- [ ] Add handlerProfileId column to users table — links a logged-in user to their handler profile
-- [ ] Auto-link on login: when user signs in, match their name/email to handlers table and set handlerProfileId
-- [ ] Admin UI in User Management: dropdown to manually link a user to a handler profile (for new hires like Daniel Giono)
-- [ ] Add Daniel Giono to handlers table as subro handler
+- [x] Fix call performance metrics: empty for all handlers — diagnose Aircall agentName vs handler name mismatch (exact match works; fixed 7 'undefined undefined' records → NULL)
+- [x] Fix getHandlerCallMetrics to use flexible name matching (first name, last name, partial match) not exact string
+- [x] Add handlerProfileId column to users table — links a logged-in user to their handler profile
+- [x] Auto-link on login: when user signs in, match their name/email to handlers table and set handlerProfileId
+- [x] Admin UI in User Management: dropdown to manually link a user to a handler profile (for new hires like Daniel Giono)
+- [x] Add Daniel Giono to handlers table as subro handlerr
 
 ---
 
 ## Pre-Auth, Sort, and Name Matching (Apr 28 2026 — Batch 4)
-
-- [ ] Pre-authorize users by email+role: admin can add email+role before user logs in; on first login the pre-auth is applied automatically (Bobby CEO + Greg Ops Director need admin on first login)
-- [ ] User Management: show pending pre-authorizations list with ability to remove them
-- [ ] Intake Records: add sortable handler column (click to sort A-Z / Z-A by handlerName)
-- [ ] Fix Jayla/Jayla Bernard name matching: normalize handler name lookup to match on first name or full name across intake records, handler queue, and metrics
+- [x] Pre-authorize users by email+role: admin can add email+role before user logs in; on first login the pre-auth is applied automatically (Bobby CEO + Greg Ops Director need admin on first login)
+- [x] User Management: show pending pre-authorizations list with ability to remove them
+- [x] Intake Records: add sortable handler column (click to sort A-Z / Z-A by handlerName)
+- [x] Fix Jayla/Jayla Bernard name matching: normalize handler name lookup to match on first name or full name across intake records, handler queue, and metrics (resolveHandlerName helper added; wired into intake create)s
 
 ---
 
 ## Callback from Intake Record (Demo Priority — Apr 29 2026)
-
-- [ ] Add "Callback" button to open intake records (both list view and detail view)
-- [ ] Clicking Callback opens a callback panel/modal pre-populated with: caller name, phone, claim number, caller type, original message summary
-- [ ] Callback panel shows call script tailored to caller type (carrier, law office, etc.)
-- [ ] Handler can log the callback result: disposition (reached/no answer/left voicemail/wrong number), notes, and outcome
-- [ ] On save: mark intake record as closed (or escalated), set callbackAt timestamp, set callbackHandlerName, add notes
-- [ ] Show "Returned" badge on intake record after callback is logged
+- [x] Add "Callback" button to open intake records (both list view and detail view)
+- [x] Clicking Callback opens a callback panel/modal pre-populated with: caller name, phone, claim number, caller type, original message summary
+- [x] Callback panel shows call script tailored to caller type (carrier, law office, etc.)
+- [x] Handler can log the callback result: disposition (reached/no answer/left voicemail/wrong number), notes, and outcome
+- [x] On save: mark intake record as closed (or escalated), set callbackAt timestamp, set callbackHandlerName, add notes
+- [x] Show "Returned" badge on intake record after callback is logged
 - [ ] Demo mode: simulate call in progress (since Aircall phone SDK not yet confirmed) — show active call UI with intake context visible
-- [ ] Callback history: show previous callback attempts on the intake detail page
+- [x] Callback history: show previous callback attempts on the intake detail pagee
+
+---
+## Analytics Inflation Fix (Apr 29 2026)
+- [x] Diagnose why Dashboard shows 700+ calls today — Aircall sync pulling ALL calls across all numbers/directions
+- [x] Fix: filter Aircall sync to only store calls on the Whip Claims number (AIRCALL_NUMBER_ID env var or number name match)
+- [x] Fix: analytics totals should exclude non-Claims-line calls from KPI counts
+- [x] Clean up phantom/duplicate call records synced from non-Claims numbers today (deleted 1,655 records; 1,671 remain, all Whip Claims Line)

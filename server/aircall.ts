@@ -507,6 +507,17 @@ export async function processVoicemail(params: {
   return { success: true, handlerName: handler.name, isRepeat, priority };
 }
 
+// Only process calls from the Whip Claims Line (ID 1125090)
+const WHIP_CLAIMS_NUMBER_ID = 1125090;
+const WHIP_CLAIMS_NUMBER_NAME = "Whip Claims Line";
+function isWhipClaimsCall(call: any): boolean {
+  const numberId = call?.number?.id ? Number(call.number.id) : null;
+  const numberName: string = call?.number?.name ?? "";
+  // Allow calls with no number info (legacy/manual) to pass through
+  if (!numberId && !numberName) return true;
+  return numberId === WHIP_CLAIMS_NUMBER_ID || numberName === WHIP_CLAIMS_NUMBER_NAME;
+}
+
 // Aircall webhook endpoint
 aircallRouter.post("/webhook", express.json(), async (req, res) => {
   const { event, data } = req.body ?? {};
@@ -522,6 +533,8 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
       // Log the call start
       const call = data;
       if (!call?.id) return;
+      // Skip calls from non-Claims lines
+      if (!isWhipClaimsCall(call)) return;
 
       await db
         .insert(callHistory)
@@ -558,7 +571,9 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
         .set({
           status,
           agentId: call.user?.id,
-          agentName: call.user ? `${call.user.first_name} ${call.user.last_name}` : undefined,
+          agentName: call.user?.first_name || call.user?.last_name
+            ? `${call.user.first_name ?? ""} ${call.user.last_name ?? ""}`.trim() || undefined
+            : undefined,
           durationSeconds: call.duration ?? 0,
           recordingUrl: call.recording ?? undefined,
           voicemailUrl: call.voicemail ?? undefined,
@@ -570,6 +585,8 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
     if (event === "call.voicemail_left") {
       const call = data;
       if (!call?.id || !call?.voicemail) return;
+      // Skip voicemails from non-Claims lines
+      if (!isWhipClaimsCall(call)) return;
 
       await processVoicemail({
         aircallCallId: String(call.id),

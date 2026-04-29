@@ -29,6 +29,16 @@ vi.mock("./db", () => ({
   getRepeatCallers: vi.fn().mockResolvedValue([]),
   upsertUser: vi.fn(),
   getUserByOpenId: vi.fn(),
+  resolveHandlerName: vi.fn().mockImplementation((name: string | null | undefined) => Promise.resolve(name ?? undefined)),
+  linkUserToHandler: vi.fn().mockResolvedValue(undefined),
+  applyPreAuth: vi.fn().mockResolvedValue(undefined),
+  listPreAuthorizations: vi.fn().mockResolvedValue([]),
+  addPreAuthorization: vi.fn().mockResolvedValue({ id: 1 }),
+  removePreAuthorization: vi.fn().mockResolvedValue(undefined),
+  logCallback: vi.fn().mockResolvedValue(undefined),
+  getCallbackLogs: vi.fn().mockResolvedValue([]),
+  getFullCallAnalytics: vi.fn().mockResolvedValue({ totals: {}, byDay: [], byAgent: [], byHour: [], byDirection: [] }),
+  getHandlerCallMetrics: vi.fn().mockResolvedValue({ totalCalls: 0, answeredCalls: 0, avgDuration: 0, missedCalls: 0 }),
 }));
 
 function createAuthContext(): TrpcContext {

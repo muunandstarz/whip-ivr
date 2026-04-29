@@ -191,6 +191,8 @@ export async function getIntakeRecords(opts: {
   priority?: string;
   limit?: number;
   offset?: number;
+  sortBy?: "createdAt" | "handlerName" | "priority" | "status";
+  sortDir?: "asc" | "desc";
 }) {
   const db = await getDb();
   if (!db) return { records: [], total: 0 };
@@ -222,12 +224,23 @@ export async function getIntakeRecords(opts: {
   const limit = opts.limit ?? 50;
   const offset = opts.offset ?? 0;
 
+  // Build sort expression — whitelist column names to prevent SQL injection
+  const allowedSortCols: Record<string, string> = {
+    createdAt: "createdAt",
+    handlerName: "handlerName",
+    priority: "priority",
+    status: "status",
+  };
+  const sortCol = allowedSortCols[opts.sortBy ?? "createdAt"] ?? "createdAt";
+  const sortDir = opts.sortDir === "asc" ? "ASC" : "DESC";
+  const orderExpr = sql.raw(`${sortCol} ${sortDir}`);
+
   const [records, countResult] = await Promise.all([
     db
       .select()
       .from(intakeRecords)
       .where(where)
-      .orderBy(desc(intakeRecords.createdAt))
+      .orderBy(sql`${orderExpr}`)
       .limit(limit)
       .offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(intakeRecords).where(where),
@@ -437,7 +450,32 @@ export async function getQaAgentSummary() {
     .orderBy(desc(sql`AVG(overallScore)`));
 }
 
-// ─── Handlers ──────────────────────────────────────────────────────────────
+/// ─── Handlers ──────────────────────────────────────────────────────────────
+
+/**
+ * Resolve a partial handler name (e.g. "Jayla") to the full name ("Jayla Bernard").
+ * Returns the original input if no match is found.
+ */
+export async function resolveHandlerName(name: string | null | undefined): Promise<string | undefined> {
+  if (!name) return undefined;
+  const trimmed = name.trim();
+  if (!trimmed) return undefined;
+  const db = await getDb();
+  if (!db) return trimmed;
+  // Exact match first
+  const exact = await db.select({ name: handlers.name }).from(handlers)
+    .where(eq(handlers.name, trimmed)).limit(1);
+  if (exact.length > 0) return exact[0].name;
+  // First-name-only match (e.g. "Jayla" → "Jayla Bernard")
+  const partial = await db.select({ name: handlers.name }).from(handlers)
+    .where(like(handlers.name, `${trimmed} %`)).limit(1);
+  if (partial.length > 0) return partial[0].name;
+  // Last-name-only match (e.g. "Bernard" → "Jayla Bernard")
+  const lastNameMatch = await db.select({ name: handlers.name }).from(handlers)
+    .where(like(handlers.name, `% ${trimmed}`)).limit(1);
+  if (lastNameMatch.length > 0) return lastNameMatch[0].name;
+  return trimmed;
+}
 
 export async function getHandlers() {
   const db = await getDb();

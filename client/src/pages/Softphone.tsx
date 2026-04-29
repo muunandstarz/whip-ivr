@@ -12,7 +12,17 @@ import {
   ChevronRight, ExternalLink, Info, CheckCircle2, ClipboardList,
   Lightbulb, ArrowRightLeft, Pause, MessageSquare, Send, Building2,
   Scale, Stethoscope, AlertTriangle, FileText, RefreshCw,
+  PhoneCall, ArrowRight, ChevronDown, ChevronUp,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 // ─── Dummy data ──────────────────────────────────────────────────────────────
@@ -222,6 +232,41 @@ export default function Softphone() {
   const [smsMessages, setSmsMessages] = useState(SMS_MESSAGES);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [incomingCaller] = useState({ name: "State Farm – Claims", number: "+1 (800) 732-5246", callerType: "carrier" });
+  // Callback logging state
+  const [showCallbackDialog, setShowCallbackDialog] = useState(false);
+  const [cbDisposition, setCbDisposition] = useState("");
+  const [cbOutcome, setCbOutcome] = useState("");
+  const [cbNotes, setCbNotes] = useState("");
+  const [cbUpdateNotes, setCbUpdateNotes] = useState(false);
+
+  const logCallbackMutation = trpc.callbacks.log.useMutation({
+    onSuccess: () => {
+      toast.success("Callback logged — record updated.");
+      setShowCallbackDialog(false);
+      setCbDisposition(""); setCbOutcome(""); setCbNotes(""); setCbUpdateNotes(false);
+    },
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const handleLogCallback = () => {
+    if (!linkedRecord || !cbDisposition) return;
+    logCallbackMutation.mutate({
+      intakeId: linkedRecord.id,
+      disposition: cbDisposition as "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy",
+      outcome: (cbOutcome || undefined) as "resolved" | "escalated" | "follow_up" | "closed" | undefined,
+      notes: cbNotes || undefined,
+      newNotes: cbUpdateNotes && cbNotes ? cbNotes : undefined,
+    });
+  };
+
+  // Next open record navigation
+  const { data: openRecords } = trpc.intake.list.useQuery(
+    { limit: 50, status: "open" },
+    { enabled: intakeId != null }
+  );
+  const nextRecord = openRecords?.records?.find(
+    (r: { id: number }) => r.id !== intakeId
+  ) ?? null;
 
   const handleDial = (key: string) => setDialValue((v) => (v.length < 14 ? v + key : v));
   const handleDelete = () => setDialValue((v) => v.slice(0, -1));
@@ -367,12 +412,30 @@ export default function Softphone() {
                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2 italic">&#8220;{linkedRecord.message}&#8221;</p>
                 )}
               </div>
-              <button
-                onClick={() => navigate(`/intake/${linkedRecord.id}`)}
-                className="flex-shrink-0 flex items-center gap-1 text-xs text-[#171b31] hover:text-[#ff6221] font-medium transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> View Record
-              </button>
+              <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                <button
+                  onClick={() => navigate(`/intake/${linkedRecord.id}`)}
+                  className="flex items-center gap-1 text-xs text-[#171b31] hover:text-[#ff6221] font-medium transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> View Record
+                </button>
+                <Button
+                  size="sm"
+                  className="text-xs bg-[#ff6221] hover:bg-[#e5541a] text-white h-7 px-3"
+                  onClick={() => setShowCallbackDialog(true)}
+                >
+                  <PhoneCall className="w-3 h-3 mr-1" /> Log Callback
+                </Button>
+                {nextRecord && (
+                  <button
+                    onClick={() => navigate(`/softphone?intakeId=${nextRecord.id}`)}
+                    className="flex items-center gap-1 text-xs text-[#171b31]/60 hover:text-[#171b31] font-medium transition-colors"
+                    title={`Next: #${nextRecord.id} — ${nextRecord.callerName || 'Unknown'}`}
+                  >
+                    Next record <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -818,6 +881,85 @@ export default function Softphone() {
           </div>
         </div>
       </div>
+
+      {/* ── Log Callback Dialog ── */}
+      <Dialog open={showCallbackDialog} onOpenChange={setShowCallbackDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#171b31]">Log Callback</DialogTitle>
+          </DialogHeader>
+          {linkedRecord && (
+            <div className="text-sm text-gray-500 -mt-2 mb-1">
+              Record #{linkedRecord.id} &mdash; <span className="font-medium text-gray-700">{linkedRecord.callerName || "Unknown"}</span>
+            </div>
+          )}
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                Disposition <span className="text-red-500">*</span>
+              </Label>
+              <Select value={cbDisposition} onValueChange={setCbDisposition}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select disposition…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="reached">Reached</SelectItem>
+                  <SelectItem value="no_answer">No Answer</SelectItem>
+                  <SelectItem value="left_voicemail">Left Voicemail</SelectItem>
+                  <SelectItem value="busy">Busy</SelectItem>
+                  <SelectItem value="wrong_number">Wrong Number</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-gray-700 mb-1 block">Outcome</Label>
+              <Select value={cbOutcome} onValueChange={setCbOutcome}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select outcome…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="follow_up">Follow-up needed</SelectItem>
+                  <SelectItem value="resolved">Resolved — close record</SelectItem>
+                  <SelectItem value="escalated">Escalated</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-gray-700 mb-1 block">Notes</Label>
+              <Textarea
+                value={cbNotes}
+                onChange={e => setCbNotes(e.target.value)}
+                placeholder="Add call notes…"
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+            {cbNotes && (
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cbUpdateNotes}
+                  onChange={e => setCbUpdateNotes(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Also append these notes to the intake record
+              </label>
+            )}
+          </div>
+          <DialogFooter className="mt-2">
+            <Button variant="ghost" onClick={() => setShowCallbackDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleLogCallback}
+              className="bg-[#ff6221] hover:bg-[#e5541a] text-white"
+            >
+              {logCallbackMutation.isPending ? "Saving…" : "Save Callback"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </WhipLayout>
   );
 }

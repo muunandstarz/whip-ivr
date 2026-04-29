@@ -33,6 +33,7 @@ import {
   removePreAuthorization,
   logCallback,
   getCallbackLogs,
+  resolveHandlerName,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -68,6 +69,8 @@ export const appRouter = router({
           priority: z.string().optional(),
           limit: z.number().min(1).max(500).default(50),
           offset: z.number().min(0).default(0),
+          sortBy: z.enum(["createdAt", "handlerName", "priority", "status"]).optional(),
+          sortDir: z.enum(["asc", "desc"]).optional(),
         })
       )
       .query(async ({ input }) => {
@@ -100,10 +103,13 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
+        // Normalize partial handler names (e.g. "Jayla" → "Jayla Bernard")
+        if (data.handlerName) {
+          data.handlerName = await resolveHandlerName(data.handlerName);
+        }
         await updateIntakeRecord(id, data);
         return { success: true };
       }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -123,8 +129,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Normalize partial handler names (e.g. "Jayla" → "Jayla Bernard")
+        const resolvedHandlerName = await resolveHandlerName(input.handlerName);
         const id = await createIntakeRecord({
           ...input,
+          handlerName: resolvedHandlerName,
           source: "manual",
           status: "open",
         });

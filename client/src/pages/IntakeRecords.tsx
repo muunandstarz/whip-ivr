@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useUser } from "@clerk/react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
@@ -28,6 +28,10 @@ import {
   PlusCircle,
   ShieldCheck,
   ShieldAlert,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
+  PhoneCall,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
@@ -72,6 +76,21 @@ export default function IntakeRecords() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [handlerFilter, setHandlerFilter] = useState("all");
   const [page, setPage] = useState(0);
+  const [sortBy, setSortBy] = useState<"createdAt" | "handlerName" | "priority" | "status">("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = useCallback((col: "createdAt" | "handlerName" | "priority" | "status") => {
+    setSortBy((prev) => {
+      if (prev === col) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir("asc");
+      return col;
+    });
+    setPage(0);
+  }, []);
+
   const { data: handlersData } = trpc.handlers.list.useQuery();
 
   // Debounce search
@@ -87,6 +106,8 @@ export default function IntakeRecords() {
     handlerName: effectiveHandlerName ?? (handlerFilter !== "all" ? handlerFilter : undefined),
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    sortBy,
+    sortDir,
   });
 
   const updateMutation = trpc.intake.update.useMutation({
@@ -221,7 +242,19 @@ export default function IntakeRecords() {
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Caller</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Whip Claim #</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Type</th>
-                        <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Handler</th>
+                        <th
+                          className="text-left px-4 py-3 font-medium text-muted-foreground text-xs cursor-pointer select-none hover:text-foreground transition-colors"
+                          onClick={() => toggleSort("handlerName")}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            Handler
+                            {sortBy === "handlerName" ? (
+                              sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronsUpDown className="w-3 h-3 opacity-40" />
+                            )}
+                          </span>
+                        </th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Source</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Status</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Callback</th>
@@ -345,11 +378,26 @@ export default function IntakeRecords() {
                               {format(new Date(record.createdAt), "MMM d, h:mm a")}
                             </td>
                             <td className="px-4 py-3">
-                              <Link href={`/intake/${record.id}`}>
-                                <Button variant="ghost" size="sm" className="h-7 text-xs">
-                                  View
-                                </Button>
-                              </Link>
+                              <div className="flex items-center gap-1">
+                                {record.status === "open" && record.callbackPhone && (
+                                  <Link href={`/intake/${record.id}?openCallback=1`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs gap-1 text-teal-700 hover:bg-teal-50"
+                                      title="Log callback"
+                                    >
+                                      <PhoneCall className="w-3 h-3" />
+                                      Call
+                                    </Button>
+                                  </Link>
+                                )}
+                                <Link href={`/intake/${record.id}`}>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs">
+                                    View
+                                  </Button>
+                                </Link>
+                              </div>
                             </td>
                           </tr>
                         );
