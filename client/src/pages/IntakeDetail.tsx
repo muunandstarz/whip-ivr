@@ -61,6 +61,12 @@ export default function IntakeDetail() {
 
   const { data: handlersData } = trpc.handlers.list.useQuery();
   const handlerNames = (handlersData ?? []).map((h: { id: number; name: string }) => h.name);
+  const { data: callScriptsData } = trpc.settings.getCallScripts.useQuery();
+  // Merge DB-backed scripts over hardcoded fallbacks so Settings editor takes effect immediately
+  const activeCallScripts: Record<string, string> = {
+    ...CALL_SCRIPTS,
+    ...Object.fromEntries((callScriptsData ?? []).map((s: { callerType: string; script: string }) => [s.callerType, s.script])),
+  };
 
   const { data: record, isLoading, refetch } = trpc.intake.get.useQuery({ id });
   const [editing, setEditing] = useState(false);
@@ -590,15 +596,15 @@ export default function IntakeDetail() {
                   </div>
                 )}
               </div>
-              {/* Call script tailored to caller type */}
-              {record.callerType && CALL_SCRIPTS[record.callerType] && (
+              {/* Call script tailored to caller type — sourced from Settings > Script Editor (DB-backed) */}
+              {record.callerType && activeCallScripts[record.callerType] && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <div className="text-xs font-semibold text-blue-700 mb-1.5 flex items-center gap-1">
                     <FileText className="w-3 h-3" />
                     Suggested Script
                   </div>
                   <p className="text-xs text-blue-800 leading-relaxed whitespace-pre-wrap">
-                    {CALL_SCRIPTS[record.callerType]
+                    {activeCallScripts[record.callerType]
                       .replace(/\[claim #\]/g, record.whipClaimNumber || "[claim #]")
                       .replace(/\[caller name\]/g, record.callerName || "[caller name]")
                       .replace(/\[insured name\]/g, record.callerName || "[insured name]")}

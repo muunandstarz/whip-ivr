@@ -225,3 +225,15 @@ export const preAuthorizations = mysqlTable("pre_authorizations", {
 });
 export type PreAuthorization = typeof preAuthorizations.$inferSelect;
 export type InsertPreAuthorization = typeof preAuthorizations.$inferInsert;
+
+// ─── Call Scripts (editable by admins in Settings) ────────────────────────────
+export const callScripts = mysqlTable("call_scripts", {
+  id: int("id").autoincrement().primaryKey(),
+  callerType: varchar("callerType", { length: 64 }).notNull().unique(),
+  label: varchar("label", { length: 128 }).notNull(),
+  script: text("script").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedBy: varchar("updatedBy", { length: 255 }),
+});
+export type CallScript = typeof callScripts.$inferSelect;
+export type InsertCallScript = typeof callScripts.$inferInsert;

@@ -23,6 +23,7 @@ import {
   Star,
   UserCog,
   LayoutGrid,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -39,6 +40,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/ivr-setup", label: "IVR Setup", icon: Settings },
   { href: "/users", label: "User Management", icon: UserCog },
+  { href: "/settings", label: "Settings", icon: SlidersHorizontal },
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────

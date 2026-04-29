@@ -34,6 +34,8 @@ import {
   logCallback,
   getCallbackLogs,
   resolveHandlerName,
+  getCallScripts,
+  updateCallScript,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -372,6 +374,24 @@ export const appRouter = router({
       .input(z.object({ intakeId: z.number() }))
       .query(async ({ input }) => {
         return getCallbackLogs(input.intakeId);
+      }),
+  }),
+
+  // ─── Settings (admin only) ────────────────────────────────────────────────
+  settings: router({
+    getCallScripts: protectedProcedure.query(async () => {
+      return getCallScripts();
+    }),
+    updateCallScript: protectedProcedure
+      .input(z.object({
+        callerType: z.string(),
+        script: z.string().min(1),
+        label: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await updateCallScript(input.callerType, input.script, ctx.user.name ?? undefined, input.label);
+        return { success: true };
       }),
   }),
 });

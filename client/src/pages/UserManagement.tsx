@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLocation } from "wouter";
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
@@ -82,16 +83,11 @@ export default function UserManagement() {
     onError: (e) => toast.error("Failed to link handler: " + e.message),
   });
 
-  if (currentUser?.role !== "admin") {
-    return (
-      <WhipLayout>
-        <div className="p-6 text-center text-muted-foreground">
-          <ShieldCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="font-semibold">Admin access required</p>
-          <p className="text-sm mt-1">Only admins can manage users.</p>
-        </div>
-      </WhipLayout>
-    );
+  const [, setLocation] = useLocation();
+  // Redirect non-admins to dashboard (only after auth is loaded — currentUser undefined means still loading)
+  if (currentUser !== undefined && currentUser?.role !== "admin") {
+    setLocation("/");
+    return null;
   }
 
   const adminCount = (users ?? []).filter((u) => u.role === "admin").length;

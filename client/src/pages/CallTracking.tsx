@@ -526,7 +526,21 @@ export default function CallTracking() {
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">Loading call history...</div>
+              <div className="divide-y">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-4 py-3">
+                    <div className="w-8 h-8 rounded-full bg-muted animate-pulse flex-shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 w-32 bg-muted rounded animate-pulse" />
+                      <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+                    </div>
+                    <div className="h-5 w-16 bg-muted rounded animate-pulse" />
+                    <div className="h-3.5 w-20 bg-muted rounded animate-pulse" />
+                    <div className="h-3.5 w-14 bg-muted rounded animate-pulse" />
+                    <div className="h-3.5 w-28 bg-muted rounded animate-pulse" />
+                  </div>
+                ))}
+              </div>
             ) : data?.calls.length === 0 ? (
               <div className="p-12 text-center">
                 <PhoneIncoming className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />

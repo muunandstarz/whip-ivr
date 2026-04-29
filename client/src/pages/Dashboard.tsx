@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import {
   Tooltip,
   TooltipContent,
@@ -22,14 +22,15 @@ import {
   User,
   HelpCircle,
   Info,
-  BarChart2,
   Phone,
   PhoneCall,
   PhoneMissed,
   TrendingUp,
-  Mic,
+  Flame,
+  CalendarDays,
+  CheckCheck,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 
 const CALLER_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   carrier: { label: "Carrier", icon: Building2, color: "bg-blue-100 text-blue-700" },
@@ -57,9 +58,23 @@ function InfoTooltip({ text }: { text: string }) {
   );
 }
 
-export default function Dashboard() {
-  const [, navigate] = useLocation();
+function StatCardSkeleton() {
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-muted animate-pulse" />
+          <div className="flex-1 space-y-2">
+            <div className="h-6 w-16 bg-muted rounded animate-pulse" />
+            <div className="h-3 w-24 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
+export default function Dashboard() {
   const { data: recentData, isLoading } = trpc.intake.list.useQuery({
     limit: 8,
     offset: 0,
@@ -71,16 +86,29 @@ export default function Dashboard() {
     offset: 0,
   });
 
+  const { data: urgentData } = trpc.intake.list.useQuery({
+    status: "open",
+    priority: "urgent",
+    limit: 1,
+    offset: 0,
+  });
+
   const { data: analyticsData } = trpc.intake.analytics.useQuery();
   const { data: callFull } = trpc.calls.fullAnalytics.useQuery();
 
   const totalRecords = recentData?.total ?? 0;
   const openCount = openData?.total ?? 0;
   const closedCount = totalRecords - openCount;
+  const urgentCount = urgentData?.total ?? 0;
 
   const callerTypeBreakdown = analyticsData?.byCallerType ?? [];
   const repeatCallers = analyticsData?.repeatCallers ?? [];
+  const priorityBreakdown = analyticsData?.byPriority ?? [];
   const carrierCount = callerTypeBreakdown.find((c) => c.callerType === "carrier")?.count ?? 0;
+
+  // Today's intake count from byDay analytics
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const todayCount = analyticsData?.byDay?.find((d) => d.day === todayStr)?.count ?? 0;
 
   // Call analytics KPIs
   const totalCalls = callFull?.totals.reduce((s, r) => s + Number(r.count), 0) ?? 0;
@@ -109,6 +137,46 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* Today's Activity Banner */}
+        {analyticsData && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="flex items-center gap-3 bg-[#171b31]/5 border border-[#171b31]/10 rounded-xl px-4 py-3">
+              <CalendarDays className="w-5 h-5 text-[#171b31] flex-shrink-0" />
+              <div>
+                <div className="text-lg font-bold text-[#171b31]">{Number(todayCount)}</div>
+                <div className="text-xs text-muted-foreground">New intakes today</div>
+              </div>
+            </div>
+            <Link href="/intake?status=open&priority=urgent">
+              <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border cursor-pointer transition-all ${
+                urgentCount > 0
+                  ? "bg-red-50 border-red-200 hover:border-red-400"
+                  : "bg-gray-50 border-gray-200"
+              }`}>
+                <Flame className={`w-5 h-5 flex-shrink-0 ${urgentCount > 0 ? "text-red-500" : "text-gray-400"}`} />
+                <div>
+                  <div className={`text-lg font-bold ${urgentCount > 0 ? "text-red-600" : "text-gray-500"}`}>
+                    {urgentCount}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Urgent open records</div>
+                </div>
+                {urgentCount > 0 && (
+                  <span className="ml-auto text-xs text-red-500 font-medium flex items-center gap-0.5">
+                    View <ArrowRight className="w-3 h-3" />
+                  </span>
+                )}
+              </div>
+            </Link>
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+              <CheckCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
+              <div>
+                <div className="text-lg font-bold text-green-700">{closedCount}</div>
+                <div className="text-xs text-muted-foreground">Total resolved</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Intake Stats Row */}
         <div>
           <div className="flex items-center gap-2 mb-3">
@@ -116,81 +184,87 @@ export default function Dashboard() {
             <InfoTooltip text="AI-processed voicemail intake records collected from the Whip Claims line. Each record represents a caller who left a voicemail with their claim information." />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link href="/intake">
-              <Card className="cursor-pointer hover:border-[#171b31]/40 hover:shadow-sm transition-all">
-                <CardContent className="pt-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[#171b31]/10 flex items-center justify-center">
-                      <PhoneIncoming className="w-5 h-5 text-[#171b31]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <div className="text-2xl font-bold text-[#171b31]">{totalRecords}</div>
-                        <InfoTooltip text="Total AI-processed intake records since the IVR went live. Click to view all records." />
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+            ) : (
+              <>
+                <Link href="/intake">
+                  <Card className="cursor-pointer hover:border-[#171b31]/40 hover:shadow-sm transition-all">
+                    <CardContent className="pt-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-[#171b31]/10 flex items-center justify-center">
+                          <PhoneIncoming className="w-5 h-5 text-[#171b31]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-2xl font-bold text-[#171b31]">{totalRecords}</div>
+                            <InfoTooltip text="Total AI-processed intake records since the IVR went live. Click to view all records." />
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total Intake Records</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">Total Intake Records</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
 
-            <Link href="/intake?status=open">
-              <Card className="cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all">
-                <CardContent className="pt-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                      <Clock className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <div className="text-2xl font-bold text-amber-600">{openCount}</div>
-                        <InfoTooltip text="Open intake records that still need a callback. Handlers should call these back within the same business day. Click to view open records." />
+                <Link href="/intake?status=open">
+                  <Card className="cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all">
+                    <CardContent className="pt-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                          <Clock className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-2xl font-bold text-amber-600">{openCount}</div>
+                            <InfoTooltip text="Open intake records that still need a callback. Handlers should call these back within the same business day. Click to view open records." />
+                          </div>
+                          <div className="text-xs text-muted-foreground">Open / Pending Callback</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">Open / Pending Callback</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
 
-            <Link href="/intake?status=closed">
-              <Card className="cursor-pointer hover:border-green-300 hover:shadow-sm transition-all">
-                <CardContent className="pt-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                      <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <div className="text-2xl font-bold text-green-600">{closedCount}</div>
-                        <InfoTooltip text="Intake records that have been resolved — the handler called back and the issue was addressed. Click to view closed records." />
+                <Link href="/intake?status=closed">
+                  <Card className="cursor-pointer hover:border-green-300 hover:shadow-sm transition-all">
+                    <CardContent className="pt-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-2xl font-bold text-green-600">{closedCount}</div>
+                            <InfoTooltip text="Intake records that have been resolved — the handler called back and the issue was addressed. Click to view closed records." />
+                          </div>
+                          <div className="text-xs text-muted-foreground">Closed / Resolved</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">Closed / Resolved</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
 
-            <Link href="/intake?callerType=carrier">
-              <Card className="cursor-pointer hover:border-[#ff6221]/40 hover:shadow-sm transition-all">
-                <CardContent className="pt-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[#ff6221]/10 flex items-center justify-center">
-                      <AlertCircle className="w-5 h-5 text-[#ff6221]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <div className="text-2xl font-bold text-[#ff6221]">{Number(carrierCount)}</div>
-                        <InfoTooltip text="Intake records from insurance carriers (GEICO, State Farm, Allstate, etc.). These are IVR-eligible — once the IVR is live, carriers can submit via Press 1 without a live agent. Click to view carrier intakes." />
+                <Link href="/intake?callerType=carrier">
+                  <Card className="cursor-pointer hover:border-[#ff6221]/40 hover:shadow-sm transition-all">
+                    <CardContent className="pt-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-[#ff6221]/10 flex items-center justify-center">
+                          <AlertCircle className="w-5 h-5 text-[#ff6221]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-2xl font-bold text-[#ff6221]">{Number(carrierCount)}</div>
+                            <InfoTooltip text="Intake records from insurance carriers (GEICO, State Farm, Allstate, etc.). These are IVR-eligible — once the IVR is live, carriers can submit via Press 1 without a live agent. Click to view carrier intakes." />
+                          </div>
+                          <div className="text-xs text-muted-foreground">Carrier Intakes</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">Carrier Intakes</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -199,7 +273,7 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Call Volume — April 2026</p>
-              <InfoTooltip text="Live call statistics from Aircall for the claims team. Includes all inbound and outbound calls handled by the 12 claims team members." />
+              <InfoTooltip text="Live call statistics from Aircall for the Whip Claims line. Includes all inbound calls handled by the claims team." />
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Link href="/analytics">
@@ -212,7 +286,7 @@ export default function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <div className="text-2xl font-bold text-blue-600">{totalCalls.toLocaleString()}</div>
-                          <InfoTooltip text="Total calls handled by the claims team in April 2026 — includes inbound, outbound, answered, missed, and voicemail. Click to view full analytics." />
+                          <InfoTooltip text="Total calls on the Whip Claims line — includes inbound answered, missed, and voicemail. Click to view full analytics." />
                         </div>
                         <div className="text-xs text-muted-foreground">Total Calls</div>
                         {(inboundCalls > 0 || outboundCalls > 0) && (
@@ -220,9 +294,11 @@ export default function Dashboard() {
                             <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">
                               ↙ {inboundCalls.toLocaleString()} in
                             </span>
-                            <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded font-medium">
-                              ↗ {outboundCalls.toLocaleString()} out
-                            </span>
+                            {outboundCalls > 0 && (
+                              <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded font-medium">
+                                ↗ {outboundCalls.toLocaleString()} out
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -308,7 +384,18 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="p-0">
                 {isLoading ? (
-                  <div className="p-6 text-center text-muted-foreground text-sm">Loading...</div>
+                  <div className="divide-y">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-3">
+                        <div className="w-8 h-8 rounded-full bg-muted animate-pulse flex-shrink-0" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3.5 w-40 bg-muted rounded animate-pulse" />
+                          <div className="h-3 w-24 bg-muted rounded animate-pulse" />
+                        </div>
+                        <div className="h-5 w-14 bg-muted rounded animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
                 ) : recentData?.records.length === 0 ? (
                   <div className="p-8 text-center">
                     <PhoneIncoming className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
@@ -322,9 +409,11 @@ export default function Dashboard() {
                     {recentData?.records.map((record) => {
                       const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                       const Icon = cfg.icon;
+                      const isUrgent = record.priority === "urgent";
+                      const isHigh = record.priority === "high";
                       return (
                         <Link key={record.id} href={`/intake/${record.id}`}>
-                          <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 cursor-pointer transition-colors">
+                          <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 cursor-pointer transition-colors group">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.color}`}>
                               <Icon className="w-4 h-4" />
                             </div>
@@ -334,8 +423,18 @@ export default function Dashboard() {
                                   {record.callerName || record.callerPhone || "Unknown Caller"}
                                 </span>
                                 {record.callerOrg && (
-                                  <span className="text-xs text-muted-foreground truncate">
+                                  <span className="text-xs text-muted-foreground truncate hidden sm:block">
                                     — {record.callerOrg}
+                                  </span>
+                                )}
+                                {isUrgent && (
+                                  <span className="flex-shrink-0 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">
+                                    URGENT
+                                  </span>
+                                )}
+                                {isHigh && !isUrgent && (
+                                  <span className="flex-shrink-0 text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                    HIGH
                                   </span>
                                 )}
                               </div>
@@ -351,11 +450,16 @@ export default function Dashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
+                              {record.callbackAt && (
+                                <TooltipProvider><Tooltip><TooltipTrigger asChild><CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /></TooltipTrigger><TooltipContent side="top" className="text-xs">Returned</TooltipContent></Tooltip></TooltipProvider>
+                              )}
                               <Badge
                                 variant="outline"
                                 className={`text-xs ${
                                   record.status === "open"
                                     ? "border-amber-300 text-amber-700 bg-amber-50"
+                                    : record.status === "escalated"
+                                    ? "border-red-300 text-red-700 bg-red-50"
                                     : "border-green-300 text-green-700 bg-green-50"
                                 }`}
                               >
@@ -429,7 +533,7 @@ export default function Dashboard() {
                       <AlertCircle className="w-4 h-4 text-[#ff6221]" />
                       Repeat Callers
                     </CardTitle>
-                    <InfoTooltip text="Callers who have left multiple voicemails about the same claim without receiving a callback. These represent unresolved cases that need urgent attention. Carrier repeat calls (same phone, different claims) are excluded." />
+                    <InfoTooltip text="Callers who have left multiple voicemails about the same claim without receiving a callback. These represent unresolved cases that need urgent attention." />
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -450,30 +554,62 @@ export default function Dashboard() {
               </Card>
             )}
 
-            {/* IVR Webhook Info */}
+            {/* Priority Breakdown */}
+            {priorityBreakdown.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold">Priority Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {["urgent", "high", "normal"].map((p) => {
+                    const item = priorityBreakdown.find((x) => x.priority === p);
+                    const count = Number(item?.count ?? 0);
+                    const total = priorityBreakdown.reduce((s, x) => s + Number(x.count), 0);
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const colors: Record<string, { bar: string; label: string }> = {
+                      urgent: { bar: "bg-red-500", label: "text-red-600" },
+                      high:   { bar: "bg-orange-400", label: "text-orange-600" },
+                      normal: { bar: "bg-slate-400", label: "text-slate-600" },
+                    };
+                    const cfg = colors[p];
+                    return (
+                      <div key={p}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className={`font-medium capitalize ${cfg.label}`}>{p}</span>
+                          <span className="text-muted-foreground">{count}</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${cfg.bar}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Quick Links */}
             <Card>
               <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-base font-semibold">Aircall Webhook</CardTitle>
-                  <InfoTooltip text="The webhook URL that Aircall sends events to. Configure this in your Aircall dashboard under Integrations → Webhooks. Events: call.voicemail_left, call.ended, call.answered, call.missed." />
-                </div>
+                <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Webhook Endpoint</div>
-                  <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
-                    /api/aircall/webhook
-                  </code>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Auth Token (HMAC)</div>
-                  <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
-                    Set in Aircall Dashboard → Integrations
-                  </code>
-                </div>
-                <Link href="/ivr-setup">
-                  <Button variant="outline" size="sm" className="w-full mt-2 text-xs gap-1">
-                    View Setup Guide <ArrowRight className="w-3 h-3" />
+                <Link href="/handler-queue">
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
+                    <Phone className="w-3.5 h-3.5" />
+                    Handler Queue
+                  </Button>
+                </Link>
+                <Link href="/analytics">
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    Full Analytics
+                  </Button>
+                </Link>
+                <Link href="/call-tracking">
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    Call Tracking
                   </Button>
                 </Link>
               </CardContent>

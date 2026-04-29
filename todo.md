@@ -268,3 +268,20 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix: filter Aircall sync to only store calls on the Whip Claims number (AIRCALL_NUMBER_ID env var or number name match)
 - [x] Fix: analytics totals should exclude non-Claims-line calls from KPI counts
 - [x] Clean up phantom/duplicate call records synced from non-Claims numbers today (deleted 1,655 records; 1,671 remain, all Whip Claims Line)
+
+---
+## UX, Access Control & Script Editor (Apr 29 2026)
+- [x] Restrict User Management nav item to admin-only (hide from non-admin users in sidebar) — already implemented via ADMIN_NAV_ITEMS; added frontend route guard
+- [x] Restrict User Management route to admin-only (redirect non-admins away from /user-management) — admin guard added to UserManagement.tsx
+- [x] Add Softphone Script Editor to Settings page (admin-only): DB-backed editable scripts per caller type, replaces hardcoded CALL_SCRIPTS in IntakeDetail.tsx
+- [x] UX: Add loading skeletons to Intake Records, Call Tracking, Analytics, and Handler Queue tables instead of blank flash
+- [x] UX: Priority quick-filter chips on Intake Records (All / Urgent / High / Normal)
+- [x] UX: Priority badge inline in caller name cell (URGENT / HIGH pill badges)
+- [x] UX: Priority Breakdown card added to Dashboard sidebar
+- [ ] UX: Sticky table headers on Intake Records and Call Tracking so column headers stay visible while scrolling
+- [ ] UX: Add "Back to top" button on long list pages
+- [ ] UX: Improve mobile responsiveness of the sidebar navigation (collapse to icon-only on small screens)
+- [ ] UX: Add keyboard shortcut hints to primary actions (e.g. N = new intake, C = callback)
+- [ ] UX: Show callback due date countdown badge on open intake records (e.g. "Due in 2h", "Overdue")
+- [ ] UX: Add bulk-select and bulk-assign handler on Intake Records list
+- [ ] UX: Highlight overdue callbacks in red on the Intake Records list

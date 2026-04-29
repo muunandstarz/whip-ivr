@@ -244,7 +244,20 @@ export default function HandlerQueue() {
 
         {/* Handler queues */}
         {isLoading ? (
-          <div className="text-center text-muted-foreground text-sm py-8">Loading queues...</div>
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="border rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-muted animate-pulse" />
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-4 w-36 bg-muted rounded animate-pulse" />
+                    <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+                  </div>
+                  <div className="h-6 w-16 bg-muted rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : sortedHandlers.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">

@@ -11,6 +11,7 @@ import {
   qaScorecards,
   preAuthorizations,
   callbackLogs,
+  callScripts,
   InsertIntakeRecord,
   InsertCallHistory,
   InsertCallerProfile,
@@ -879,4 +880,32 @@ export async function getCallbackLogs(intakeId: number) {
     .from(callbackLogs)
     .where(eq(callbackLogs.intakeId, intakeId))
     .orderBy(desc(callbackLogs.calledAt));
+}
+
+// ─── Call Scripts ─────────────────────────────────────────────────────────
+
+export async function getCallScripts() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(callScripts).orderBy(callScripts.callerType);
+}
+
+export async function updateCallScript(
+  callerType: string,
+  script: string,
+  updatedBy?: string,
+  label?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .insert(callScripts)
+    .values({ callerType, script, label: label ?? callerType, updatedBy })
+    .onDuplicateKeyUpdate({
+      set: {
+        script,
+        updatedBy: updatedBy ?? null,
+        ...(label ? { label } : {}),
+      },
+    });
 }

@@ -78,6 +78,7 @@ export default function IntakeRecords() {
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState<"createdAt" | "handlerName" | "priority" | "status">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "urgent" | "high" | "normal">("all");
 
   const toggleSort = useCallback((col: "createdAt" | "handlerName" | "priority" | "status") => {
     setSortBy((prev) => {
@@ -104,6 +105,7 @@ export default function IntakeRecords() {
     status: statusFilter === "all" ? undefined : statusFilter,
     callerType: typeFilter === "all" ? undefined : typeFilter,
     handlerName: effectiveHandlerName ?? (handlerFilter !== "all" ? handlerFilter : undefined),
+    priority: priorityFilter === "all" ? undefined : priorityFilter,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     sortBy,
@@ -146,6 +148,26 @@ export default function IntakeRecords() {
               New Intake
             </Button>
           </Link>
+        </div>
+
+        {/* Priority quick-filter chips */}
+        <div className="flex items-center gap-2">
+          {(["all", "urgent", "high", "normal"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => { setPriorityFilter(p); setPage(0); }}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                priorityFilter === p
+                  ? p === "urgent" ? "bg-red-600 text-white border-red-600"
+                  : p === "high" ? "bg-orange-500 text-white border-orange-500"
+                  : p === "normal" ? "bg-slate-600 text-white border-slate-600"
+                  : "bg-[#171b31] text-white border-[#171b31]"
+                  : "bg-white text-muted-foreground border-border hover:border-foreground/40"
+              }`}
+            >
+              {p === "all" ? "All Priority" : p.charAt(0).toUpperCase() + p.slice(1)}
+            </button>
+          ))}
         </div>
 
         {/* Filters */}
@@ -226,7 +248,18 @@ export default function IntakeRecords() {
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">Loading records...</div>
+              <div className="divide-y">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-7 h-7 rounded-full bg-muted animate-pulse flex-shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 w-36 bg-muted rounded animate-pulse" />
+                      <div className="h-3 w-24 bg-muted rounded animate-pulse" />
+                    </div>
+                    <div className="h-5 w-16 bg-muted rounded animate-pulse" />
+                  </div>
+                ))}
+              </div>
             ) : data?.records.length === 0 ? (
               <div className="p-12 text-center">
                 <PhoneIncoming className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
@@ -274,8 +307,14 @@ export default function IntakeRecords() {
                                   <Icon className="w-3.5 h-3.5" />
                                 </div>
                                 <div>
-                                  <div className="font-medium text-[#171b31]">
-                                    {record.callerName || "—"}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-medium text-[#171b31]">{record.callerName || "—"}</span>
+                                    {record.priority === "urgent" && (
+                                      <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full leading-none">URGENT</span>
+                                    )}
+                                    {record.priority === "high" && (
+                                      <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full leading-none">HIGH</span>
+                                    )}
                                   </div>
                                   {record.callerOrg && (
                                     <div className="text-xs text-muted-foreground">{record.callerOrg}</div>
