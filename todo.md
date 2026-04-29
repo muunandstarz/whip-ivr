@@ -125,7 +125,7 @@ Last updated: April 27, 2026
 - [ ] AI-assisted claim creation from unstructured text
 - [ ] Automated tagging and tag-based automations
 - [ ] Claims search by member name, claimant, VIN, customer number
-- [ ] Disposition analytics visualization on Dashboard
+- [x] Disposition analytics visualization on Dashboard
 - [ ] Per-call summaries visible in Call Tracking detail view
 - [ ] Remaining ~600 call classifications (use "Start AI Classification" in Analytics)
 
@@ -279,7 +279,7 @@ Business routing logic to implement in resolveHandler():
 - [x] UX: Priority quick-filter chips on Intake Records (All / Urgent / High / Normal)
 - [x] UX: Priority badge inline in caller name cell (URGENT / HIGH pill badges)
 - [x] UX: Priority Breakdown card added to Dashboard sidebar
-- [ ] UX: Sticky table headers on Intake Records and Call Tracking so column headers stay visible while scrolling
+- [x] UX: Sticky table headers on Intake Records and Call Tracking so column headers stay visible while scrolling
 - [ ] UX: Add "Back to top" button on long list pages
 - [ ] UX: Improve mobile responsiveness of the sidebar navigation (collapse to icon-only on small screens)
 - [ ] UX: Add keyboard shortcut hints to primary actions (e.g. N = new intake, C = callback)

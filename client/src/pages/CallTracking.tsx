@@ -550,8 +550,8 @@ export default function CallTracking() {
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b bg-background/95 backdrop-blur-sm">
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Caller</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Status</th>
                         <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Agent</th>

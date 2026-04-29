@@ -276,7 +276,7 @@ export async function getIntakeAnalytics() {
   const db = await getDb();
   if (!db) return null;
 
-  const [byCallerType, byStatus, byDay, repeatCallers, byHandler, byPriority] = await Promise.all([
+  const [byCallerType, byStatus, byDay, repeatCallers, byHandler, byPriority, byCallbackDisposition] = await Promise.all([
     db
       .select({ callerType: intakeRecords.callerType, count: sql<number>`count(*)` })
       .from(intakeRecords)
@@ -313,9 +313,14 @@ export async function getIntakeAnalytics() {
       .select({ priority: intakeRecords.priority, count: sql<number>`count(*)` })
       .from(intakeRecords)
       .groupBy(intakeRecords.priority),
+    db
+      .select({ disposition: callbackLogs.disposition, count: sql<number>`count(*)` })
+      .from(callbackLogs)
+      .groupBy(callbackLogs.disposition)
+      .orderBy(desc(sql`count(*)`)),
   ]);
 
-  return { byCallerType, byStatus, byDay, repeatCallers, byHandler, byPriority };
+  return { byCallerType, byStatus, byDay, repeatCallers, byHandler, byPriority, byCallbackDisposition };
 }
 
 // ─── Call History ──────────────────────────────────────────────────────────

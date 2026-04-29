@@ -111,6 +111,7 @@ export default function Dashboard() {
   const callerTypeBreakdown = analyticsData?.byCallerType ?? [];
   const repeatCallers = analyticsData?.repeatCallers ?? [];
   const priorityBreakdown = analyticsData?.byPriority ?? [];
+  const dispositionBreakdown = analyticsData?.byCallbackDisposition ?? [];
   const carrierCount = callerTypeBreakdown.find((c) => c.callerType === "carrier")?.count ?? 0;
 
   // Today's intake count from byDay analytics
@@ -604,6 +605,45 @@ export default function Dashboard() {
               </Card>
             )}
 
+            {/* Callback Disposition Breakdown */}
+            {dispositionBreakdown.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-semibold">Callback Outcomes</CardTitle>
+                    <InfoTooltip text="Breakdown of callback dispositions logged by handlers — how many calls were answered, went to voicemail, had no answer, etc." />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {["reached", "left_voicemail", "no_answer", "busy", "wrong_number"].map((d) => {
+                    const item = dispositionBreakdown.find((x) => x.disposition === d);
+                    const count = Number(item?.count ?? 0);
+                    const total = dispositionBreakdown.reduce((s, x) => s + Number(x.count), 0);
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const cfg: Record<string, { bar: string; label: string; text: string }> = {
+                      reached:       { bar: "bg-green-500",  label: "text-green-700",  text: "Reached" },
+                      left_voicemail:{ bar: "bg-blue-400",   label: "text-blue-700",   text: "Left Voicemail" },
+                      no_answer:     { bar: "bg-amber-400",  label: "text-amber-700",  text: "No Answer" },
+                      busy:          { bar: "bg-orange-400", label: "text-orange-700", text: "Busy" },
+                      wrong_number:  { bar: "bg-red-400",    label: "text-red-700",    text: "Wrong Number" },
+                    };
+                    const c = cfg[d];
+                    if (!c || count === 0) return null;
+                    return (
+                      <div key={d}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className={`font-medium ${c.label}`}>{c.text}</span>
+                          <span className="text-muted-foreground">{count}</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${c.bar}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
             {/* Quick Links */}
             <Card>
               <CardHeader className="pb-2">
