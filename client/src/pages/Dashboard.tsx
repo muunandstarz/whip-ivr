@@ -29,6 +29,7 @@ import {
   Flame,
   CalendarDays,
   CheckCheck,
+  Archive,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -129,24 +130,26 @@ export default function Dashboard() {
               AI-powered call intake management for Whip Claims
             </p>
           </div>
-          <Link href="/intake/new">
-            <Button className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2">
-              <PhoneIncoming className="w-4 h-4" />
-              Log Manual Intake
-            </Button>
-          </Link>
+
         </div>
 
         {/* Today's Activity Banner */}
         {analyticsData && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="flex items-center gap-3 bg-[#171b31]/5 border border-[#171b31]/10 rounded-xl px-4 py-3">
-              <CalendarDays className="w-5 h-5 text-[#171b31] flex-shrink-0" />
-              <div>
-                <div className="text-lg font-bold text-[#171b31]">{Number(todayCount)}</div>
-                <div className="text-xs text-muted-foreground">New intakes today</div>
+            <Link href={`/intake?dateFrom=${todayStr}&dateTo=${todayStr}`}>
+              <div className="flex items-center gap-3 bg-[#171b31]/5 border border-[#171b31]/10 rounded-xl px-4 py-3 cursor-pointer hover:border-[#171b31]/30 transition-all">
+                <CalendarDays className="w-5 h-5 text-[#171b31] flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="text-lg font-bold text-[#171b31]">{Number(todayCount)}</div>
+                  <div className="text-xs text-muted-foreground">New intakes today</div>
+                </div>
+                {Number(todayCount) > 0 && (
+                  <span className="ml-auto text-xs text-[#171b31]/60 font-medium flex items-center gap-0.5">
+                    View <ArrowRight className="w-3 h-3" />
+                  </span>
+                )}
               </div>
-            </div>
+            </Link>
             <Link href="/intake?status=open&priority=urgent">
               <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border cursor-pointer transition-all ${
                 urgentCount > 0
@@ -167,13 +170,20 @@ export default function Dashboard() {
                 )}
               </div>
             </Link>
-            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-              <CheckCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
-              <div>
-                <div className="text-lg font-bold text-green-700">{closedCount}</div>
-                <div className="text-xs text-muted-foreground">Total resolved</div>
+            <Link href="/intake?status=closed">
+              <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-gray-400 transition-all">
+                <Archive className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="text-lg font-bold text-gray-700">{closedCount}</div>
+                  <div className="text-xs text-muted-foreground">Closed / no message</div>
+                </div>
+                {closedCount > 0 && (
+                  <span className="ml-auto text-xs text-gray-500 font-medium flex items-center gap-0.5">
+                    View <ArrowRight className="w-3 h-3" />
+                  </span>
+                )}
               </div>
-            </div>
+            </Link>
           </div>
         )}
 

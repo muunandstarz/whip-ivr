@@ -190,6 +190,8 @@ export async function getIntakeRecords(opts: {
   callerType?: string;
   handlerName?: string;
   priority?: string;
+  dateFrom?: string;
+  dateTo?: string;
   limit?: number;
   offset?: number;
   sortBy?: "createdAt" | "handlerName" | "priority" | "status";
@@ -208,6 +210,12 @@ export async function getIntakeRecords(opts: {
   }
   if (opts.priority) {
     conditions.push(eq(intakeRecords.priority, opts.priority as IntakeRecord["priority"]));
+  }
+  if (opts.dateFrom) {
+    conditions.push(sql`${intakeRecords.createdAt} >= ${opts.dateFrom}`);
+  }
+  if (opts.dateTo) {
+    conditions.push(sql`${intakeRecords.createdAt} <= ${opts.dateTo}`);
   }
   if (opts.search) {
     conditions.push(

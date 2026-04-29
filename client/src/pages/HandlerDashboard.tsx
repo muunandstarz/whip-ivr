@@ -289,7 +289,9 @@ export default function HandlerDashboard() {
                     <span className="text-xs text-muted-foreground font-medium">Total Calls</span>
                   </div>
                   <div className="text-2xl font-bold text-[#171b31]">{metrics.total ?? 0}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">inbound + outbound</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {metrics.inbound ?? 0} inbound · {metrics.outbound ?? 0} outbound
+                  </div>
                 </CardContent>
               </Card>
 

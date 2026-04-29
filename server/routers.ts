@@ -69,6 +69,8 @@ export const appRouter = router({
           callerType: z.string().optional(),
           handlerName: z.string().optional(),
           priority: z.string().optional(),
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
           limit: z.number().min(1).max(500).default(50),
           offset: z.number().min(0).default(0),
           sortBy: z.enum(["createdAt", "handlerName", "priority", "status"]).optional(),

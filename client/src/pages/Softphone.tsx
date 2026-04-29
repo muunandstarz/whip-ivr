@@ -2,6 +2,8 @@ import { useState, useRef } from "react";
 import { useSearch, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -259,10 +261,23 @@ export default function Softphone() {
     });
   };
 
-  // Next open record navigation
+  // Resolve current handler identity (same pattern as HandlerDashboard)
+  const { user: authUser } = useAuth();
+  const { impersonating, isImpersonating } = useImpersonation();
+  const { data: handlersList } = trpc.handlers.list.useQuery();
+  const linkedHandler = authUser?.handlerProfileId
+    ? handlersList?.find((h: { id: number; name: string }) => h.id === authUser.handlerProfileId)
+    : null;
+  const effectiveName = isImpersonating
+    ? impersonating!.name
+    : linkedHandler?.name ?? authUser?.name ?? "";
+  const isAdmin = authUser?.role === "admin";
+  // Next open record — scoped to handler's own records for non-admins
   const { data: openRecords } = trpc.intake.list.useQuery(
-    { limit: 50, status: "open" },
-    { enabled: intakeId != null }
+    isAdmin
+      ? { limit: 50, status: "open" }
+      : { limit: 50, status: "open", handlerName: effectiveName || undefined },
+    { enabled: intakeId != null && (isAdmin || !!effectiveName) }
   );
   const nextRecord = openRecords?.records?.find(
     (r: { id: number }) => r.id !== intakeId

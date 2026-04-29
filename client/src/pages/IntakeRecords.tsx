@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
@@ -70,15 +71,39 @@ export default function IntakeRecords() {
     ? (user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "")
     : null; // null = admin sees all
 
+  // Read initial filter values from URL query params (e.g. from Dashboard links)
+  const [location] = useLocation();
+  const urlParams = useMemo(() => new URLSearchParams(window.location.search), [location]);
+  const initStatus = (urlParams.get("status") as "all" | "open" | "closed") || "open";
+  const initPriority = (urlParams.get("priority") as "all" | "urgent" | "high" | "normal") || "all";
+  const initDateFrom = urlParams.get("dateFrom") || "";
+  const initDateTo = urlParams.get("dateTo") || "";
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("open");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">(initStatus);
   const [typeFilter, setTypeFilter] = useState("all");
   const [handlerFilter, setHandlerFilter] = useState("all");
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState<"createdAt" | "handlerName" | "priority" | "status">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [priorityFilter, setPriorityFilter] = useState<"all" | "urgent" | "high" | "normal">("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "urgent" | "high" | "normal">(initPriority);
+  const [dateFrom, setDateFrom] = useState(initDateFrom);
+  const [dateTo, setDateTo] = useState(initDateTo);
+
+  // Sync filters when URL params change (e.g. navigating from Dashboard)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const s = p.get("status") as "all" | "open" | "closed" | null;
+    const pr = p.get("priority") as "all" | "urgent" | "high" | "normal" | null;
+    const df = p.get("dateFrom");
+    const dt = p.get("dateTo");
+    if (s) setStatusFilter(s);
+    if (pr) setPriorityFilter(pr);
+    if (df !== null) setDateFrom(df);
+    if (dt !== null) setDateTo(dt);
+    setPage(0);
+  }, [location]);
 
   const toggleSort = useCallback((col: "createdAt" | "handlerName" | "priority" | "status") => {
     setSortBy((prev) => {
@@ -106,6 +131,8 @@ export default function IntakeRecords() {
     callerType: typeFilter === "all" ? undefined : typeFilter,
     handlerName: effectiveHandlerName ?? (handlerFilter !== "all" ? handlerFilter : undefined),
     priority: priorityFilter === "all" ? undefined : priorityFilter,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     sortBy,

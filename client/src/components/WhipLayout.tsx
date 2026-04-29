@@ -48,7 +48,6 @@ const HANDLER_NAV_ITEMS = [
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
-  { href: "/intake/new", label: "New Intake", icon: PlusCircle },
 ];
 
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
@@ -200,8 +199,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
-        {/* New Intake Button — shown in admin view or handler view */}
-        {(!isImpersonating || !isAdmin) && (
+        {/* New Intake Button — admin only */}
+        {isAdmin && !isImpersonating && (
           <div className="px-4 py-3">
             <Link href="/intake/new">
               <Button
