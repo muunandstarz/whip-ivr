@@ -84,7 +84,7 @@ export default function Settings() {
             <SlidersHorizontal className="w-5 h-5 text-[#ff6221]" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#171b31]">Settings</h1>
+            <h1 className="text-xl font-bold text-foreground">Settings</h1>
             <p className="text-sm text-muted-foreground">Manage call scripts and system configuration</p>
           </div>
         </div>
@@ -107,7 +107,7 @@ export default function Settings() {
               scripts.map((s) => (
                 <div
                   key={s.callerType}
-                  className="border rounded-lg p-4 space-y-3 bg-white hover:border-[#ff6221]/30 transition-colors"
+                  className="border rounded-lg p-4 space-y-3 bg-background hover:border-[#ff6221]/30 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -168,7 +168,7 @@ export default function Settings() {
                       autoFocus
                     />
                   ) : (
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-md px-3 py-2">
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-muted rounded-md px-3 py-2">
                       {s.script}
                     </p>
                   )}

@@ -34,7 +34,7 @@ function CalledBackButton({ intakeId }: { intakeId: number }) {
     <Button
       variant="outline"
       size="sm"
-      className="h-7 text-xs gap-1 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+      className="h-7 text-xs gap-1 bg-green-500/15 border-green-300 text-green-700 dark:text-green-400 hover:bg-green-500/25"
       disabled={mutation.isPending}
       onClick={(e) => {
         e.stopPropagation();
@@ -48,25 +48,25 @@ function CalledBackButton({ intakeId }: { intakeId: number }) {
 }
 
 const HANDLER_COLORS: Record<string, string> = {
-  "Natashia Edulan":    "bg-blue-100 text-blue-800 border-blue-200",
-  "Jayla Bernard":      "bg-purple-100 text-purple-800 border-purple-200",
-  "Carlito Legarde Jr": "bg-green-100 text-green-800 border-green-200",
-  "Annie Ortiz":        "bg-pink-100 text-pink-800 border-pink-200",
-  "Lorraine Tria":      "bg-yellow-100 text-yellow-800 border-yellow-200",
-  "Jovel Villa":        "bg-orange-100 text-orange-800 border-orange-200",
-  "Mary Joy Badua":     "bg-teal-100 text-teal-800 border-teal-200",
-  "Daryl Ochate":       "bg-indigo-100 text-indigo-800 border-indigo-200",
-  "Madeline Green":     "bg-emerald-100 text-emerald-800 border-emerald-200",
-  "Demily Flores":      "bg-rose-100 text-rose-800 border-rose-200",
-  "Ana Padilla":        "bg-rose-100 text-rose-800 border-rose-200",
-  "Catherine Cestina":  "bg-cyan-100 text-cyan-800 border-cyan-200",
-  "Unassigned":         "bg-gray-100 text-gray-600 border-gray-200",
+  "Natashia Edulan":    "bg-blue-500/15 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-500/30",
+  "Jayla Bernard":      "bg-purple-500/15 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-500/30",
+  "Carlito Legarde Jr": "bg-green-500/15 text-green-800 dark:text-green-300 border-green-300 dark:border-green-500/30",
+  "Annie Ortiz":        "bg-pink-500/15 text-pink-800 dark:text-pink-300 border-pink-300 dark:border-pink-500/30",
+  "Lorraine Tria":      "bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border-yellow-300 dark:border-yellow-500/30",
+  "Jovel Villa":        "bg-orange-500/15 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-500/30",
+  "Mary Joy Badua":     "bg-teal-500/15 text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-500/30",
+  "Daryl Ochate":       "bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-500/30",
+  "Madeline Green":     "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30",
+  "Demily Flores":      "bg-rose-500/15 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/30",
+  "Ana Padilla":        "bg-rose-500/15 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/30",
+  "Catherine Cestina":  "bg-cyan-500/15 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-500/30",
+  "Unassigned":         "bg-muted text-muted-foreground border-border",
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; className: string }> = {
-  urgent: { label: "Urgent", className: "bg-red-50 text-red-700 border-red-200" },
-  high:   { label: "High",   className: "bg-orange-50 text-orange-700 border-orange-200" },
-  normal: { label: "Normal", className: "bg-gray-50 text-gray-600 border-gray-200" },
+  urgent: { label: "Urgent", className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30" },
+  high:   { label: "High",   className: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-500/30" },
+  normal: { label: "Normal", className: "bg-muted text-muted-foreground border-border" },
 };
 
 const CALLER_TYPE_LABELS: Record<string, string> = {
@@ -153,7 +153,7 @@ export default function HandlerQueue() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31]">Handler Queue</h1>
+            <h1 className="text-2xl font-bold text-foreground">Handler Queue</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
               Open intake records grouped by assigned handler — urgent and high priority shown first
             </p>
@@ -190,11 +190,11 @@ export default function HandlerQueue() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/15 flex items-center justify-center">
                   <Clock className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{totalOpen}</div>
+                  <div className="text-2xl font-bold text-foreground">{totalOpen}</div>
                   <div className="text-xs text-muted-foreground">Open Records</div>
                 </div>
               </div>
@@ -203,11 +203,11 @@ export default function HandlerQueue() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center">
                   <AlertTriangle className="w-4 h-4 text-red-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{urgentCount}</div>
+                  <div className="text-2xl font-bold text-foreground">{urgentCount}</div>
                   <div className="text-xs text-muted-foreground">Urgent</div>
                 </div>
               </div>
@@ -216,11 +216,11 @@ export default function HandlerQueue() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-orange-500/15 flex items-center justify-center">
                   <AlertTriangle className="w-4 h-4 text-orange-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{highCount}</div>
+                  <div className="text-2xl font-bold text-foreground">{highCount}</div>
                   <div className="text-xs text-muted-foreground">High Priority</div>
                 </div>
               </div>
@@ -229,11 +229,11 @@ export default function HandlerQueue() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-blue-500/15 flex items-center justify-center">
                   <Users className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{sortedHandlers.length}</div>
+                  <div className="text-2xl font-bold text-foreground">{sortedHandlers.length}</div>
                   <div className="text-xs text-muted-foreground">Active Handlers</div>
                 </div>
               </div>
@@ -289,7 +289,7 @@ export default function HandlerQueue() {
                         {initials}
                       </div>
                       <div className="flex-1">
-                        <div className="font-semibold text-[#171b31]">{handlerName}</div>
+                        <div className="font-semibold text-foreground">{handlerName}</div>
                         <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
                           <span>{records.length} open record{records.length !== 1 ? "s" : ""}</span>
                           {urgentInQueue > 0 && (
@@ -302,12 +302,12 @@ export default function HandlerQueue() {
                       </div>
                       <div className="flex items-center gap-2">
                         {urgentInQueue > 0 && (
-                          <Badge className="text-xs bg-red-100 text-red-700 border-red-200 border">
+                          <Badge className="text-xs bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30 border">
                             {urgentInQueue} urgent
                           </Badge>
                         )}
                         {highInQueue > 0 && (
-                          <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-200 border">
+                          <Badge className="text-xs bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-500/30 border">
                             {highInQueue} high
                           </Badge>
                         )}
@@ -357,11 +357,11 @@ export default function HandlerQueue() {
                               <div className={`w-1 h-10 rounded-full flex-shrink-0 ${
                                 record.priority === "urgent" ? "bg-red-400" :
                                 record.priority === "high" ? "bg-orange-400" :
-                                "bg-gray-200"
+                                "bg-muted-foreground/30"
                               }`} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-medium text-sm text-[#171b31]">
+                                  <span className="font-medium text-sm text-foreground">
                                     {record.callerName || record.callerPhone || "Unknown"}
                                   </span>
                                   {record.callerOrg && (
@@ -371,7 +371,7 @@ export default function HandlerQueue() {
                                     {priorityCfg.label}
                                   </Badge>
                                   {record.isRepeatCaller && (
-                                    <Badge variant="outline" className="text-xs border-red-200 text-red-600 bg-red-50">
+                                    <Badge variant="outline" className="text-xs border-red-300 text-red-600 dark:text-red-400 bg-red-500/15">
                                       Repeat
                                     </Badge>
                                   )}

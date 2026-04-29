@@ -238,10 +238,10 @@ const TEAM_REPORT = {
 
 function ScoreBadge({ score }: { score: number }) {
   const color =
-    score >= 8 ? "bg-green-50 text-green-700 border-green-200" :
-    score >= 7 ? "bg-blue-50 text-blue-700 border-blue-200" :
-    score >= 6 ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
-    "bg-red-50 text-red-700 border-red-200";
+    score >= 8 ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" :
+    score >= 7 ? "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30" :
+    score >= 6 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/30" :
+    "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30";
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded border ${color}`}>
       <Star className="w-2.5 h-2.5" />
@@ -440,7 +440,7 @@ function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose
 
         <div className="p-4 border-t sticky bottom-0 bg-background">
           <Button
-            className="w-full bg-[#171b31] hover:bg-[#171b31]/90 text-white gap-2"
+            className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
             onClick={handleSubmit}
             disabled={saveScorecard.isPending}
           >
@@ -510,12 +510,12 @@ export default function WeeklyQA() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31]">Weekly QA Scoring</h1>
+            <h1 className="text-2xl font-bold text-foreground">Weekly QA Scoring</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
               AI-powered quality analysis — Week of {TEAM_REPORT.weekOf}
             </p>
           </div>
-          <Badge variant="outline" className="bg-[#171b31] text-white border-[#171b31] text-xs">
+          <Badge variant="outline" className="bg-primary text-white border-primary text-xs">
             {TEAM_REPORT.totalCallsAnalyzed} calls analyzed
           </Badge>
         </div>
@@ -529,7 +529,7 @@ export default function WeeklyQA() {
                   <Star className="w-4 h-4 text-[#ff6221]" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{TEAM_REPORT.teamAvgScore}</div>
+                  <div className="text-2xl font-bold text-foreground">{TEAM_REPORT.teamAvgScore}</div>
                   <div className="text-xs text-muted-foreground">Team Avg Score</div>
                 </div>
               </div>
@@ -542,7 +542,7 @@ export default function WeeklyQA() {
                   <Phone className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{TEAM_REPORT.answerRate}%</div>
+                  <div className="text-2xl font-bold text-foreground">{TEAM_REPORT.answerRate}%</div>
                   <div className="text-xs text-muted-foreground">Answer Rate</div>
                 </div>
               </div>
@@ -555,7 +555,7 @@ export default function WeeklyQA() {
                   <Clock className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{TEAM_REPORT.avgHandleTime}</div>
+                  <div className="text-2xl font-bold text-foreground">{TEAM_REPORT.avgHandleTime}</div>
                   <div className="text-xs text-muted-foreground">Avg Handle Time</div>
                 </div>
               </div>
@@ -568,7 +568,7 @@ export default function WeeklyQA() {
                   <User className="w-4 h-4 text-purple-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{displayData.length}</div>
+                  <div className="text-2xl font-bold text-foreground">{displayData.length}</div>
                   <div className="text-xs text-muted-foreground">Agents Scored</div>
                 </div>
               </div>
@@ -607,13 +607,13 @@ export default function WeeklyQA() {
                       <tr
                         key={agent.agentName}
                         className={`hover:bg-muted/20 transition-colors cursor-pointer ${
-                          selectedAgent === agent.agentName ? "bg-[#171b31]/5 border-l-2 border-l-[#ff6221]" : ""
+                          selectedAgent === agent.agentName ? "bg-primary/5 border-l-2 border-l-[#ff6221]" : ""
                         }`}
                         onClick={() => setSelectedAgent(
                           selectedAgent === agent.agentName ? null : agent.agentName
                         )}
                       >
-                        <td className="px-4 py-3 font-medium text-[#171b31]">
+                        <td className="px-4 py-3 font-medium text-foreground">
                           <div className="flex items-center gap-2">
                             {agent.agentName}
                             {pushedThisWeek.has(agent.agentName) && (
@@ -635,7 +635,7 @@ export default function WeeklyQA() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs h-7 gap-1 border-[#171b31]/30 hover:bg-[#171b31] hover:text-white"
+                            className="text-xs h-7 gap-1 border-primary/30 hover:bg-primary hover:text-white"
                             onClick={(e) => { e.stopPropagation(); setPushAgent(agent.agentName); }}
                           >
                             <Send className="h-3 w-3" />
@@ -656,7 +656,7 @@ export default function WeeklyQA() {
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <User className="w-4 h-4 text-[#ff6221]" />
-                <span className="text-[#171b31]">{selected.agentName}</span>
+                <span className="text-foreground">{selected.agentName}</span>
                 <span className="text-muted-foreground font-normal">— Detailed Feedback</span>
                 <Badge variant="outline" className="text-xs ml-auto">{selected.weekOf}</Badge>
                 <Button
@@ -680,14 +680,14 @@ export default function WeeklyQA() {
                 ].map(({ label, score, icon: Icon }) => (
                   <div key={label} className="bg-muted/30 rounded-lg p-3 text-center">
                     <Icon className="w-4 h-4 text-muted-foreground mx-auto mb-1" />
-                    <div className="text-lg font-bold text-[#171b31]">{score.toFixed(1)}</div>
+                    <div className="text-lg font-bold text-foreground">{score.toFixed(1)}</div>
                     <div className="text-xs text-muted-foreground">{label}</div>
                   </div>
                 ))}
               </div>
 
               {/* Strengths */}
-              <div className="bg-green-50 rounded-lg p-4">
+              <div className="bg-green-500/10 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Award className="w-4 h-4 text-green-600" />
                   <span className="text-sm font-semibold text-green-800">What {selected.agentName.split(" ")[0]} Does Well</span>
@@ -720,12 +720,12 @@ export default function WeeklyQA() {
 
               {/* Coaching note */}
               {selected.coachingNote && (
-                <div className="bg-[#171b31]/5 rounded-lg p-4 border border-[#171b31]/10">
+                <div className="bg-primary/5 rounded-lg p-4 border border-primary/10">
                   <div className="flex items-center gap-2 mb-1">
-                    <TrendingUp className="w-4 h-4 text-[#171b31]" />
-                    <span className="text-xs font-semibold text-[#171b31]">Supervisor Coaching Note</span>
+                    <TrendingUp className="w-4 h-4 text-foreground" />
+                    <span className="text-xs font-semibold text-foreground">Supervisor Coaching Note</span>
                   </div>
-                  <p className="text-sm text-[#171b31]/70">{selected.coachingNote}</p>
+                  <p className="text-sm text-foreground/70">{selected.coachingNote}</p>
                 </div>
               )}
             </CardContent>
@@ -828,7 +828,7 @@ export default function WeeklyQA() {
         </Card>
 
         {/* AI summary */}
-        <Card className="bg-[#171b31] text-white">
+        <Card className="bg-primary text-white">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
               <Star className="w-4 h-4 text-[#ff6221]" />

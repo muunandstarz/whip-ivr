@@ -81,7 +81,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#171b31] gap-6 p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-primary gap-6 p-4">
         <div className="flex flex-col items-center gap-2 mb-2">
           <img
             src="/manus-storage/whip_logo_5e114d45.webp"
@@ -97,11 +97,11 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           appearance={{
             elements: {
               rootBox: "w-full max-w-sm",
-              card: "bg-white rounded-xl shadow-2xl",
-              headerTitle: "text-[#171b31] font-bold",
+              card: "bg-background rounded-xl shadow-2xl",
+              headerTitle: "text-foreground font-bold",
               headerSubtitle: "text-gray-500",
               socialButtonsBlockButton:
-                "border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium",
+                "border border-gray-200 hover:bg-muted text-gray-700 font-medium",
               formButtonPrimary:
                 "bg-[#ff6221] hover:bg-[#e5541a] text-white font-semibold",
               footerActionLink: "text-[#ff6221] hover:text-[#e5541a]",
@@ -129,7 +129,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#171b31] text-white flex flex-col transition-transform duration-200 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col transition-transform duration-200 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 lg:static lg:flex`}
       >
@@ -175,7 +175,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 }
               }}
             >
-              <SelectTrigger className="w-full bg-white/10 border-white/20 text-white text-sm h-8 focus:ring-[#ff6221]">
+              <SelectTrigger className="w-full bg-background/10 border-white/20 text-white text-sm h-8 focus:ring-[#ff6221]">
                 <SelectValue placeholder="Admin View" />
               </SelectTrigger>
               <SelectContent>
@@ -230,8 +230,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                   onClick={() => setMobileOpen(false)}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                     active
-                      ? "bg-white/15 text-white font-medium"
-                      : "text-white/60 hover:bg-white/8 hover:text-white"
+                      ? "bg-background/15 text-white font-medium"
+                      : "text-white/60 hover:bg-background/8 hover:text-white"
                   }`}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
@@ -248,7 +248,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 setImpersonating(null);
                 setMobileOpen(false);
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-amber-300 hover:bg-white/8 hover:text-amber-200 mt-2 border border-amber-400/30"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-amber-300 hover:bg-background/8 hover:text-amber-200 mt-2 border border-amber-400/30"
             >
               <UserCog className="w-4 h-4 flex-shrink-0" />
               Exit Handler View
@@ -290,8 +290,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 onClick={() => setTheme(value)}
                 className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition-all ${
                   theme === value
-                    ? "bg-white/20 text-white font-medium"
-                    : "text-white/40 hover:text-white/70 hover:bg-white/10"
+                    ? "bg-background/20 text-white font-medium"
+                    : "text-white/40 hover:text-white/70 hover:bg-background/10"
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -302,7 +302,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           <Button
             variant="ghost"
             size="sm"
-            className="w-full text-white/60 hover:text-white hover:bg-white/10 gap-2 justify-start"
+            className="w-full text-white/60 hover:text-white hover:bg-background/10 gap-2 justify-start"
             onClick={() => signOut({ redirectUrl: "/" })}
           >
             <LogOut className="w-4 h-4" />
@@ -322,7 +322,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile header */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b bg-white sticky top-0 z-30">
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b bg-background sticky top-0 z-30">
           <button
             onClick={() => setMobileOpen(true)}
             className="text-gray-600 hover:text-gray-900"
@@ -335,7 +335,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
               alt="Whip"
               className="h-7 w-auto object-contain"
             />
-            <span className="font-semibold text-sm text-[#171b31]">Claims IVR</span>
+            <span className="font-semibold text-sm text-foreground">Claims IVR</span>
           </div>
           {isAdmin && isImpersonating && (
             <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">

@@ -34,14 +34,14 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 
 const CALLER_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  carrier: { label: "Carrier", icon: Building2, color: "bg-blue-100 text-blue-700" },
-  law_office: { label: "Law Office", icon: Scale, color: "bg-purple-100 text-purple-700" },
-  medical_provider: { label: "Medical", icon: Stethoscope, color: "bg-green-100 text-green-700" },
-  member: { label: "Member", icon: User, color: "bg-orange-100 text-orange-700" },
-  claimant: { label: "Claimant", icon: User, color: "bg-yellow-100 text-yellow-700" },
-  police: { label: "Police", icon: User, color: "bg-red-100 text-red-700" },
-  wrong_department: { label: "Wrong Dept", icon: HelpCircle, color: "bg-gray-100 text-gray-600" },
-  unknown: { label: "Unknown", icon: HelpCircle, color: "bg-gray-100 text-gray-600" },
+  carrier: { label: "Carrier", icon: Building2, color: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
+  law_office: { label: "Law Office", icon: Scale, color: "bg-purple-500/15 text-purple-700 dark:text-purple-400" },
+  medical_provider: { label: "Medical", icon: Stethoscope, color: "bg-green-500/15 text-green-700 dark:text-green-400" },
+  member: { label: "Member", icon: User, color: "bg-orange-500/15 text-orange-700 dark:text-orange-400" },
+  claimant: { label: "Claimant", icon: User, color: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400" },
+  police: { label: "Police", icon: User, color: "bg-red-500/15 text-red-700 dark:text-red-400" },
+  wrong_department: { label: "Wrong Dept", icon: HelpCircle, color: "bg-muted text-muted-foreground" },
+  unknown: { label: "Unknown", icon: HelpCircle, color: "bg-muted text-muted-foreground" },
 };
 
 function InfoTooltip({ text }: { text: string }) {
@@ -133,7 +133,7 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31]">Claims IVR Dashboard</h1>
+            <h1 className="text-2xl font-bold text-foreground">Claims IVR Dashboard</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
               AI-powered call intake management for Whip Claims
             </p>
@@ -145,9 +145,9 @@ export default function Dashboard() {
         {analyticsData && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Link href={`/intake?dateFrom=${todayStr}&dateTo=${todayStr}`}>
-              <div className="flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3.5 cursor-pointer hover:shadow-md hover:border-[#171b31]/40 transition-all group">
-                <div className="w-10 h-10 rounded-lg bg-[#171b31]/10 flex items-center justify-center flex-shrink-0">
-                  <CalendarDays className="w-5 h-5 text-[#171b31]" />
+              <div className="flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3.5 cursor-pointer hover:shadow-md hover:border-primary/40 transition-all group">
+                <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
+                  <CalendarDays className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-2xl font-bold text-foreground">{Number(todayCount)}</div>
@@ -203,15 +203,15 @@ export default function Dashboard() {
             ) : (
               <>
                 <Link href="/intake">
-                  <Card className="cursor-pointer hover:border-[#171b31]/40 hover:shadow-sm transition-all">
+                  <Card className="cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all">
                     <CardContent className="pt-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-[#171b31]/10 flex items-center justify-center">
-                          <PhoneIncoming className="w-5 h-5 text-[#171b31]" />
+                        <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
+                          <PhoneIncoming className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-[#171b31]">{totalRecords}</div>
+                            <div className="text-2xl font-bold text-foreground">{totalRecords}</div>
                             <InfoTooltip text="Total AI-processed intake records since the IVR went live. Click to view all records." />
                           </div>
                           <div className="text-xs text-muted-foreground">Total Intake Records</div>
@@ -225,12 +225,12 @@ export default function Dashboard() {
                   <Card className="cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all">
                     <CardContent className="pt-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                          <Clock className="w-5 h-5 text-amber-600" />
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                          <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-amber-600">{openCount}</div>
+                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{openCount}</div>
                             <InfoTooltip text="Open intake records that still need a callback. Handlers should call these back within the same business day. Click to view open records." />
                           </div>
                           <div className="text-xs text-muted-foreground">Open / Pending Callback</div>
@@ -244,12 +244,12 @@ export default function Dashboard() {
                   <Card className="cursor-pointer hover:border-green-300 hover:shadow-sm transition-all">
                     <CardContent className="pt-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        <div className="w-10 h-10 rounded-lg bg-green-500/15 flex items-center justify-center">
+                          <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-green-600">{closedCount}</div>
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{closedCount}</div>
                             <InfoTooltip text="Intake records that have been resolved — the handler called back and the issue was addressed. Click to view closed records." />
                           </div>
                           <div className="text-xs text-muted-foreground">Auto-closed / No message</div>
@@ -294,22 +294,22 @@ export default function Dashboard() {
                 <Card className="cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all">
                   <CardContent className="pt-5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                        <Phone className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                        <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <div className="text-2xl font-bold text-blue-600">{totalCalls.toLocaleString()}</div>
+                          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalCalls.toLocaleString()}</div>
                           <InfoTooltip text="Total calls on the Whip Claims line — includes inbound answered, missed, and voicemail. Click to view full analytics." />
                         </div>
                         <div className="text-xs text-muted-foreground">Total Calls</div>
                         {(inboundCalls > 0 || outboundCalls > 0) && (
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">
+                            <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded font-medium">
                               ↙ {inboundCalls.toLocaleString()} in
                             </span>
                             {outboundCalls > 0 && (
-                              <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded font-medium">
+                              <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-medium">
                                 ↗ {outboundCalls.toLocaleString()} out
                               </span>
                             )}
@@ -325,12 +325,12 @@ export default function Dashboard() {
                 <Card className="cursor-pointer hover:border-green-300 hover:shadow-sm transition-all">
                   <CardContent className="pt-5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                        <PhoneCall className="w-5 h-5 text-green-600" />
+                      <div className="w-10 h-10 rounded-lg bg-green-500/15 flex items-center justify-center">
+                        <PhoneCall className="w-5 h-5 text-green-600 dark:text-green-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <div className="text-2xl font-bold text-green-600">{answeredCalls.toLocaleString()}</div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{answeredCalls.toLocaleString()}</div>
                           <InfoTooltip text="Calls where a handler picked up and spoke with the caller. Click to view agent performance breakdown." />
                         </div>
                         <div className="text-xs text-muted-foreground">Answered</div>
@@ -344,12 +344,12 @@ export default function Dashboard() {
                 <Card className="cursor-pointer hover:border-red-300 hover:shadow-sm transition-all">
                   <CardContent className="pt-5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                        <PhoneMissed className="w-5 h-5 text-red-500" />
+                      <div className="w-10 h-10 rounded-lg bg-red-500/15 flex items-center justify-center">
+                        <PhoneMissed className="w-5 h-5 text-red-500 dark:text-red-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <div className="text-2xl font-bold text-red-500">{missedCalls.toLocaleString()}</div>
+                          <div className="text-2xl font-bold text-red-500 dark:text-red-400">{missedCalls.toLocaleString()}</div>
                           <InfoTooltip text="Calls that rang but no handler picked up. High missed call rates indicate understaffing or calls outside business hours. Click to view missed call patterns." />
                         </div>
                         <div className="text-xs text-muted-foreground">Missed</div>
@@ -363,12 +363,12 @@ export default function Dashboard() {
                 <Card className="cursor-pointer hover:border-orange-300 hover:shadow-sm transition-all">
                   <CardContent className="pt-5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                        <TrendingUp className="w-5 h-5 text-orange-500" />
+                      <div className="w-10 h-10 rounded-lg bg-orange-500/15 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-orange-500 dark:text-orange-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <div className="text-2xl font-bold text-orange-500">{answerRate}%</div>
+                          <div className="text-2xl font-bold text-orange-500 dark:text-orange-400">{answerRate}%</div>
                           <InfoTooltip text="Percentage of all calls that were answered by a live handler. Industry benchmark for claims teams is 85%+. Click to view trends." />
                         </div>
                         <div className="text-xs text-muted-foreground">Answer Rate</div>
@@ -442,19 +442,19 @@ export default function Dashboard() {
                                   </span>
                                 )}
                                 {isUrgent && (
-                                  <span className="flex-shrink-0 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">
+                                  <span className="flex-shrink-0 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 px-1.5 py-0.5 rounded-full">
                                     URGENT
                                   </span>
                                 )}
                                 {isHigh && !isUrgent && (
-                                  <span className="flex-shrink-0 text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                  <span className="flex-shrink-0 text-[10px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 border border-orange-200 dark:border-orange-500/30 px-1.5 py-0.5 rounded-full">
                                     HIGH
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 mt-0.5">
                                 {record.whipClaimNumber && (
-                                  <span className="text-xs text-[#171b31] font-mono bg-[#171b31]/8 px-1.5 py-0.5 rounded">
+                                  <span className="text-xs text-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
                                     {record.whipClaimNumber}
                                   </span>
                                 )}
@@ -471,10 +471,10 @@ export default function Dashboard() {
                                 variant="outline"
                                 className={`text-xs ${
                                   record.status === "open"
-                                    ? "border-amber-300 text-amber-700 bg-amber-50"
+                                    ? "border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15"
                                     : record.status === "escalated"
-                                    ? "border-red-300 text-red-700 bg-red-50"
-                                    : "border-green-300 text-green-700 bg-green-50"
+                                    ? "border-red-300 text-red-700 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15"
+                                    : "border-green-300 text-green-700 dark:text-green-400 bg-green-500/10 dark:bg-green-500/15"
                                 }`}
                               >
                                 {record.status}
@@ -519,14 +519,14 @@ export default function Dashboard() {
                             <div className="flex items-center gap-1">
                               <span className="font-medium">{cfg.label}</span>
                               {isIvrEligible && (
-                                <span className="text-[10px] text-emerald-600 font-medium bg-emerald-50 px-1 rounded">IVR</span>
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-500/15 px-1 rounded">IVR</span>
                               )}
                             </div>
                             <span className="text-muted-foreground">{Number(item.count)}</span>
                           </div>
                           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full ${isIvrEligible ? "bg-emerald-500" : "bg-[#171b31]"}`}
+                              className={`h-full rounded-full ${isIvrEligible ? "bg-emerald-500" : "bg-primary"}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -559,7 +559,7 @@ export default function Dashboard() {
                           <div className="text-xs text-muted-foreground truncate">{caller.callerOrg}</div>
                         )}
                       </div>
-                      <span className="ml-2 flex-shrink-0 bg-[#ff6221]/10 text-[#ff6221] font-semibold px-2 py-0.5 rounded text-xs">
+                      <span className="ml-2 flex-shrink-0 bg-[#ff6221]/15 text-[#ff6221] dark:text-orange-400 font-semibold px-2 py-0.5 rounded text-xs">
                         {Number(caller.count)}x
                       </span>
                     </div>
@@ -581,9 +581,9 @@ export default function Dashboard() {
                     const total = priorityBreakdown.reduce((s, x) => s + Number(x.count), 0);
                     const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                     const colors: Record<string, { bar: string; label: string }> = {
-                      urgent: { bar: "bg-red-500", label: "text-red-600" },
-                      high:   { bar: "bg-orange-400", label: "text-orange-600" },
-                      normal: { bar: "bg-slate-400", label: "text-slate-600" },
+                      urgent: { bar: "bg-red-500", label: "text-red-600 dark:text-red-400" },
+                      high:   { bar: "bg-orange-400", label: "text-orange-600 dark:text-orange-400" },
+                      normal: { bar: "bg-slate-400", label: "text-muted-foreground" },
                     };
                     const cfg = colors[p];
                     return (
@@ -618,11 +618,11 @@ export default function Dashboard() {
                     const total = dispositionBreakdown.reduce((s, x) => s + Number(x.count), 0);
                     const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                     const cfg: Record<string, { bar: string; label: string; text: string }> = {
-                      reached:       { bar: "bg-green-500",  label: "text-green-700",  text: "Reached" },
-                      left_voicemail:{ bar: "bg-blue-400",   label: "text-blue-700",   text: "Left Voicemail" },
-                      no_answer:     { bar: "bg-amber-400",  label: "text-amber-700",  text: "No Answer" },
-                      busy:          { bar: "bg-orange-400", label: "text-orange-700", text: "Busy" },
-                      wrong_number:  { bar: "bg-red-400",    label: "text-red-700",    text: "Wrong Number" },
+                      reached:       { bar: "bg-green-500",  label: "text-green-700 dark:text-green-400",  text: "Reached" },
+                      left_voicemail:{ bar: "bg-blue-400",   label: "text-blue-700 dark:text-blue-400",   text: "Left Voicemail" },
+                      no_answer:     { bar: "bg-amber-400",  label: "text-amber-700 dark:text-amber-400",  text: "No Answer" },
+                      busy:          { bar: "bg-orange-400", label: "text-orange-700 dark:text-orange-400", text: "Busy" },
+                      wrong_number:  { bar: "bg-red-400",    label: "text-red-700 dark:text-red-400",    text: "Wrong Number" },
                     };
                     const c = cfg[d];
                     if (!c || count === 0) return null;
@@ -653,11 +653,11 @@ export default function Dashboard() {
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className={`text-2xl font-bold ${
-                      teamSLA.complianceRate >= 90 ? "text-green-600" :
-                      teamSLA.complianceRate >= 70 ? "text-amber-600" : "text-red-600"
+                      teamSLA.complianceRate >= 90 ? "text-green-600 dark:text-green-400" :
+                      teamSLA.complianceRate >= 70 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"
                     }`}>{teamSLA.complianceRate}%</span>
                     {teamSLA.overdue > 0 && (
-                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                      <span className="text-xs bg-red-500/15 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full font-medium">
                         {teamSLA.overdue} overdue
                       </span>
                     )}

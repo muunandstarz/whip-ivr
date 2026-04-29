@@ -169,7 +169,7 @@ export default function IntakeDetail() {
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31]">
+            <h1 className="text-2xl font-bold text-foreground">
               {record.callerName || record.callerPhone || "Unknown Caller"}
             </h1>
             {record.callerOrg && (
@@ -179,10 +179,10 @@ export default function IntakeDetail() {
               <Badge
                 variant="outline"
                 className={record.status === "open"
-                  ? "border-amber-300 text-amber-700 bg-amber-50"
+                  ? "border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-500/15"
                   : record.status === "escalated"
-                  ? "border-red-300 text-red-700 bg-red-50"
-                  : "border-green-300 text-green-700 bg-green-50"}
+                  ? "border-red-300 text-red-700 dark:text-red-400 bg-red-500/15"
+                  : "border-green-300 text-green-700 dark:text-green-400 bg-green-500/15"}
               >
                 {record.status === "open" ? (
                   <><Clock className="w-3 h-3 mr-1" />Open</>
@@ -198,17 +198,17 @@ export default function IntakeDetail() {
                 </Badge>
               )}
               {record.isRepeatCaller && (
-                <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50 text-xs">
+                <Badge variant="outline" className="border-red-300 text-red-700 dark:text-red-400 bg-red-500/15 text-xs">
                   🔁 Repeat Caller ({record.repeatCallCount}x)
                 </Badge>
               )}
               {record.priority === "urgent" && (
-                <Badge variant="outline" className="border-red-400 text-red-700 bg-red-50 text-xs font-semibold">
+                <Badge variant="outline" className="border-red-400 text-red-700 dark:text-red-400 bg-red-500/15 text-xs font-semibold">
                   🔴 URGENT
                 </Badge>
               )}
               {record.priority === "high" && (
-                <Badge variant="outline" className="border-orange-400 text-orange-700 bg-orange-50 text-xs">
+                <Badge variant="outline" className="border-orange-400 text-orange-700 dark:text-orange-400 bg-orange-500/15 text-xs">
                   🟠 HIGH
                 </Badge>
               )}
@@ -218,10 +218,10 @@ export default function IntakeDetail() {
                   variant="outline"
                   className={
                     record.claimMatchConfidence != null && record.claimMatchConfidence >= 95
-                      ? "border-green-400 text-green-700 bg-green-50 text-xs"
+                      ? "border-green-400 text-green-700 dark:text-green-400 bg-green-500/15 text-xs"
                       : record.claimMatchConfidence != null && record.claimMatchConfidence >= 70
-                      ? "border-yellow-400 text-yellow-700 bg-yellow-50 text-xs"
-                      : "border-gray-400 text-gray-600 bg-gray-50 text-xs"
+                      ? "border-yellow-400 text-yellow-700 dark:text-yellow-400 bg-yellow-500/15 text-xs"
+                      : "border-muted text-muted-foreground bg-muted text-xs"
                   }
                 >
                   {record.claimMatchConfidence != null && record.claimMatchConfidence >= 95 ? (
@@ -235,7 +235,7 @@ export default function IntakeDetail() {
                 </Badge>
               )}
               {record.callbackAt && (
-                <Badge variant="outline" className="border-teal-400 text-teal-700 bg-teal-50 text-xs font-medium">
+                <Badge variant="outline" className="border-teal-400 text-teal-700 dark:text-teal-400 bg-teal-500/15 text-xs font-medium">
                   <PhoneCall className="w-3 h-3 mr-1" />
                   Returned
                 </Badge>
@@ -255,7 +255,7 @@ export default function IntakeDetail() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1.5 border-[#171b31]/30 text-[#171b31] hover:bg-[#171b31] hover:text-white"
+                  className="gap-1.5 border-foreground/20 text-foreground hover:bg-foreground hover:text-background"
                   onClick={() => navigate(`/softphone?intakeId=${id}`)}
                   title="Open in Softphone"
                 >
@@ -507,7 +507,7 @@ export default function IntakeDetail() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
-              <div className="font-medium text-[#171b31]">{record.callerName || "Unknown caller"}</div>
+              <div className="font-medium text-foreground">{record.callerName || "Unknown caller"}</div>
               {record.callerOrg && <div className="text-muted-foreground text-xs">{record.callerOrg}</div>}
               <div className="flex items-center gap-3 mt-1">
                 {record.callbackPhone && (
@@ -526,7 +526,7 @@ export default function IntakeDetail() {
               </div>
               {record.whipClaimNumber && (
                 <div className="text-xs text-muted-foreground mt-1">
-                  Claim: <span className="font-mono font-medium text-[#171b31]">{record.whipClaimNumber}</span>
+                  Claim: <span className="font-mono font-medium text-foreground">{record.whipClaimNumber}</span>
                 </div>
               )}
             </div>
@@ -598,7 +598,7 @@ export default function IntakeDetail() {
               </div>
               {/* Call script tailored to caller type — sourced from Settings > Script Editor (DB-backed) */}
               {record.callerType && activeCallScripts[record.callerType] && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="bg-blue-500/10 border border-blue-200 rounded-lg p-3">
                   <div className="text-xs font-semibold text-blue-700 mb-1.5 flex items-center gap-1">
                     <FileText className="w-3 h-3" />
                     Suggested Script

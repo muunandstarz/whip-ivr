@@ -24,7 +24,7 @@ export function InfoTooltip({ text, className = "" }: InfoTooltipProps) {
       </button>
       {visible && (
         <span
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg bg-[#171b31] text-white text-xs px-3 py-2 shadow-lg leading-relaxed pointer-events-none"
+          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg bg-primary text-white text-xs px-3 py-2 shadow-lg leading-relaxed pointer-events-none"
           role="tooltip"
         >
           {text}

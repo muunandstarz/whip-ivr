@@ -100,7 +100,7 @@ export default function UserManagement() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31] flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
               <Users className="w-6 h-6" />
               User Management
             </h1>
@@ -110,18 +110,18 @@ export default function UserManagement() {
           </div>
           <div className="flex gap-3">
             <div className="text-center">
-              <div className="text-xl font-bold text-[#171b31]">{adminCount}</div>
+              <div className="text-xl font-bold text-foreground">{adminCount}</div>
               <div className="text-xs text-muted-foreground">Admins</div>
             </div>
             <div className="text-center">
-              <div className="text-xl font-bold text-[#171b31]">{userCount}</div>
+              <div className="text-xl font-bold text-foreground">{userCount}</div>
               <div className="text-xs text-muted-foreground">Handlers</div>
             </div>
           </div>
         </div>
 
         {/* Info banner */}
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div className="rounded-lg border border-blue-200 bg-blue-500/10 px-4 py-3 text-sm text-blue-800">
           <strong>How it works:</strong> Users appear here after their first login. To grant someone access,
           have them log in via the Whip IVR portal — they'll be added as a <em>Handler</em> by default.
           Promote them to <em>Admin</em> using the role dropdown. Use the <strong>Handler Profile</strong> column
@@ -161,14 +161,14 @@ export default function UserManagement() {
                       const isSelf = u.openId === currentUser?.openId;
                       const linkedHandler = activeHandlers.find((h) => h.id === u.handlerProfileId);
                       return (
-                        <tr key={u.id} className={`hover:bg-muted/20 ${isSelf ? "bg-blue-50/40" : ""}`}>
+                        <tr key={u.id} className={`hover:bg-muted/20 ${isSelf ? "bg-blue-500/10/40" : ""}`}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-[#171b31] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                              <div className="w-7 h-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                                 {(u.name ?? "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <span className="font-medium text-[#171b31]">{u.name ?? "—"}</span>
+                                <span className="font-medium text-foreground">{u.name ?? "—"}</span>
                                 {isSelf && (
                                   <Badge className="ml-2 text-xs bg-blue-100 text-blue-700 border-blue-200 border">You</Badge>
                                 )}
@@ -386,7 +386,7 @@ export default function UserManagement() {
                   <div key={pa.id} className="flex items-center justify-between px-3 py-2 text-sm">
                     <div className="flex items-center gap-2">
                       <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="font-medium text-[#171b31]">{pa.email}</span>
+                      <span className="font-medium text-foreground">{pa.email}</span>
                       <Badge
                         variant="outline"
                         className={pa.role === "admin" ? "text-[#ff6221] border-[#ff6221]/40 text-xs" : "text-muted-foreground text-xs"}

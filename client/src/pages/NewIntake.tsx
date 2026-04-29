@@ -75,7 +75,7 @@ export default function NewIntake() {
         </div>
 
         <div>
-          <h1 className="text-2xl font-bold text-[#171b31]">New Manual Intake</h1>
+          <h1 className="text-2xl font-bold text-foreground">New Manual Intake</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Log a call intake record manually for the claims team.
           </p>
@@ -213,7 +213,7 @@ export default function NewIntake() {
             Cancel
           </Button>
           <Button
-            className="bg-[#171b31] hover:bg-[#1e2440] text-white gap-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
             onClick={() => createMutation.mutate(form)}
             disabled={createMutation.isPending}
           >

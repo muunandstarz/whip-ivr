@@ -324,3 +324,4 @@ Business routing logic to implement in resolveHandler():
 - [x] Add dark mode (lean navy theme) accessible to all users via toggle in nav
 - [x] Add high contrast mode accessible to all users via toggle in nav
 - [x] Persist theme preference (dark/light/high-contrast) in localStorage
+- [x] Fix dark mode font contrast: card labels, section headers, and muted text washing out on navy background — replaced all hardcoded text-[#171b31] with text-foreground, all light-only bg-*-50/100 with /15 opacity variants across all pages

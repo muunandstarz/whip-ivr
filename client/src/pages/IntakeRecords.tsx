@@ -38,14 +38,14 @@ import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 
 const CALLER_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  carrier: { label: "Carrier", icon: Building2, color: "bg-blue-100 text-blue-700" },
-  law_office: { label: "Law Office", icon: Scale, color: "bg-purple-100 text-purple-700" },
-  medical_provider: { label: "Medical", icon: Stethoscope, color: "bg-green-100 text-green-700" },
-  member: { label: "Member", icon: User, color: "bg-orange-100 text-orange-700" },
-  claimant: { label: "Claimant", icon: User, color: "bg-yellow-100 text-yellow-700" },
-  police: { label: "Police", icon: User, color: "bg-red-100 text-red-700" },
-  wrong_department: { label: "Wrong Dept", icon: HelpCircle, color: "bg-gray-100 text-gray-600" },
-  unknown: { label: "Unknown", icon: HelpCircle, color: "bg-gray-100 text-gray-600" },
+  carrier: { label: "Carrier", icon: Building2, color: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
+  law_office: { label: "Law Office", icon: Scale, color: "bg-purple-500/15 text-purple-700 dark:text-purple-400" },
+  medical_provider: { label: "Medical", icon: Stethoscope, color: "bg-green-500/15 text-green-700 dark:text-green-400" },
+  member: { label: "Member", icon: User, color: "bg-orange-500/15 text-orange-700 dark:text-orange-400" },
+  claimant: { label: "Claimant", icon: User, color: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400" },
+  police: { label: "Police", icon: User, color: "bg-red-500/15 text-red-700 dark:text-red-400" },
+  wrong_department: { label: "Wrong Dept", icon: HelpCircle, color: "bg-muted text-muted-foreground" },
+  unknown: { label: "Unknown", icon: HelpCircle, color: "bg-muted text-muted-foreground" },
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -164,7 +164,7 @@ export default function IntakeRecords() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31]">Intake Records</h1>
+            <h1 className="text-2xl font-bold text-foreground">Intake Records</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
               {data?.total ?? 0} {effectiveHandlerName ? "records assigned to you" : "total records"}
             </p>
@@ -188,8 +188,8 @@ export default function IntakeRecords() {
                   ? p === "urgent" ? "bg-red-600 text-white border-red-600"
                   : p === "high" ? "bg-orange-500 text-white border-orange-500"
                   : p === "normal" ? "bg-slate-600 text-white border-slate-600"
-                  : "bg-[#171b31] text-white border-[#171b31]"
-                  : "bg-white text-muted-foreground border-border hover:border-foreground/40"
+                  : "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-border hover:border-foreground/40"
               }`}
             >
               {p === "all" ? "All Priority" : p.charAt(0).toUpperCase() + p.slice(1)}
@@ -335,12 +335,12 @@ export default function IntakeRecords() {
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-medium text-[#171b31]">{record.callerName || "—"}</span>
+                                    <span className="font-medium text-foreground">{record.callerName || "—"}</span>
                                     {record.priority === "urgent" && (
-                                      <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full leading-none">URGENT</span>
+                                      <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 px-1.5 py-0.5 rounded-full leading-none">URGENT</span>
                                     )}
                                     {record.priority === "high" && (
-                                      <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full leading-none">HIGH</span>
+                                      <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/15 border border-orange-200 dark:border-orange-500/30 px-1.5 py-0.5 rounded-full leading-none">HIGH</span>
                                     )}
                                   </div>
                                   {record.callerOrg && (
@@ -355,7 +355,7 @@ export default function IntakeRecords() {
                             <td className="px-4 py-3">
                               <div className="flex flex-col gap-1">
                                 {record.whipClaimNumber ? (
-                                  <span className="font-mono text-xs bg-[#171b31]/8 text-[#171b31] px-2 py-0.5 rounded">
+                                  <span className="font-mono text-xs bg-muted text-foreground px-2 py-0.5 rounded">
                                     {record.whipClaimNumber}
                                   </span>
                                 ) : (
@@ -364,10 +364,10 @@ export default function IntakeRecords() {
                                 {record.claimMatchType && record.claimMatchType !== "none" && (
                                   <span className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded w-fit ${
                                     (record.claimMatchConfidence ?? 0) >= 95
-                                      ? "bg-green-50 text-green-700"
+                                      ? "bg-green-500/15 text-green-700 dark:text-green-400"
                                       : (record.claimMatchConfidence ?? 0) >= 70
-                                      ? "bg-yellow-50 text-yellow-700"
-                                      : "bg-gray-50 text-gray-600"
+                                      ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                                      : "bg-muted text-muted-foreground"
                                   }`}>
                                     {(record.claimMatchConfidence ?? 0) >= 95 ? (
                                       <ShieldCheck className="w-2.5 h-2.5" />
@@ -404,8 +404,8 @@ export default function IntakeRecords() {
                               >
                                 <SelectTrigger className={`h-7 w-24 text-xs border-0 ${
                                   record.status === "open"
-                                    ? "bg-amber-50 text-amber-700"
-                                    : "bg-green-50 text-green-700"
+                                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                    : "bg-green-500/15 text-green-700 dark:text-green-400"
                                 }`}>
                                   <SelectValue />
                                 </SelectTrigger>
@@ -419,7 +419,7 @@ export default function IntakeRecords() {
                               {record.source === "voicemail" && (
                                 record.callbackAt ? (
                                   <div className="flex flex-col gap-0.5">
-                                    <Badge variant="outline" className="text-xs border-green-300 text-green-700 bg-green-50 w-fit">
+                                    <Badge variant="outline" className="text-xs border-green-300 text-green-700 dark:text-green-400 bg-green-500/15 w-fit">
                                       ✓ Called Back
                                     </Badge>
                                     <span className="text-xs text-muted-foreground">
@@ -431,8 +431,8 @@ export default function IntakeRecords() {
                                     variant="outline"
                                     className={`text-xs w-fit ${
                                       new Date() > new Date(record.callbackDueBy)
-                                        ? "border-red-300 text-red-700 bg-red-50"
-                                        : "border-blue-300 text-blue-700 bg-blue-50"
+                                        ? "border-red-300 text-red-700 dark:text-red-400 bg-red-500/15"
+                                        : "border-blue-300 text-blue-700 dark:text-blue-400 bg-blue-500/15"
                                     }`}
                                   >
                                     {new Date() > new Date(record.callbackDueBy) ? "⚠ Overdue" : "Due EOB"}
@@ -450,7 +450,7 @@ export default function IntakeRecords() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-7 text-xs gap-1 text-teal-700 hover:bg-teal-50"
+                                      className="h-7 text-xs gap-1 text-teal-700 dark:text-teal-400 hover:bg-teal-500/15"
                                       title="Log callback"
                                     >
                                       <PhoneCall className="w-3 h-3" />
@@ -496,8 +496,8 @@ export default function IntakeRecords() {
                             variant="outline"
                             className={`text-xs flex-shrink-0 ${
                               record.status === "open"
-                                ? "border-amber-300 text-amber-700 bg-amber-50"
-                                : "border-green-300 text-green-700 bg-green-50"
+                                ? "border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-500/15"
+                                : "border-green-300 text-green-700 dark:text-green-400 bg-green-500/15"
                             }`}
                           >
                             {record.status}

@@ -67,7 +67,7 @@ const DISPOSITION_GROUPS = [
   {
     group: "Claim Actions",
     items: [
-      { value: "claim_update", label: "Claim Status Update", color: "bg-blue-100 text-blue-700 border-blue-200" },
+      { value: "claim_update", label: "Claim Status Update", color: "bg-blue-500/15 text-blue-700 border-blue-200" },
       { value: "new_claim_fnol", label: "New Claim / FNOL", color: "bg-orange-100 text-orange-700 border-orange-200" },
       { value: "coverage_question", label: "Coverage Question", color: "bg-purple-100 text-purple-700 border-purple-200" },
       { value: "pip_billing_inquiry", label: "PIP / Billing Inquiry", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
@@ -78,8 +78,8 @@ const DISPOSITION_GROUPS = [
   {
     group: "Call Outcomes",
     items: [
-      { value: "callback_completed", label: "Callback Completed", color: "bg-green-100 text-green-700 border-green-200" },
-      { value: "left_voicemail", label: "Left Voicemail", color: "bg-gray-100 text-gray-700 border-gray-200" },
+      { value: "callback_completed", label: "Callback Completed", color: "bg-green-500/15 text-green-700 border-green-200" },
+      { value: "left_voicemail", label: "Left Voicemail", color: "bg-muted text-muted-foreground border-border" },
       { value: "no_answer", label: "No Answer", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
       { value: "follow_up_scheduled", label: "Follow-Up Scheduled", color: "bg-amber-100 text-amber-700 border-amber-200" },
       { value: "resolved_closed", label: "Resolved — Case Closed", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
@@ -89,7 +89,7 @@ const DISPOSITION_GROUPS = [
     group: "Transfers & Routing",
     items: [
       { value: "transfer_to_handler", label: "Transferred to Handler", color: "bg-teal-100 text-teal-700 border-teal-200" },
-      { value: "transfer_to_supervisor", label: "Escalated to Supervisor", color: "bg-red-100 text-red-700 border-red-200" },
+      { value: "transfer_to_supervisor", label: "Escalated to Supervisor", color: "bg-red-500/15 text-red-700 border-red-200" },
       { value: "transfer_to_adjuster", label: "Transferred to Adjuster", color: "bg-violet-100 text-violet-700 border-violet-200" },
       { value: "ivr_eligible", label: "IVR Eligible — Advised Press 1", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
     ],
@@ -97,10 +97,10 @@ const DISPOSITION_GROUPS = [
   {
     group: "Other",
     items: [
-      { value: "wrong_number", label: "Wrong Number / Misrouted", color: "bg-red-100 text-red-700 border-red-200" },
-      { value: "duplicate_call", label: "Duplicate / Repeat Call", color: "bg-gray-100 text-gray-500 border-gray-200" },
+      { value: "wrong_number", label: "Wrong Number / Misrouted", color: "bg-red-500/15 text-red-700 border-red-200" },
+      { value: "duplicate_call", label: "Duplicate / Repeat Call", color: "bg-muted text-muted-foreground border-border" },
       { value: "language_barrier", label: "Language Barrier", color: "bg-orange-100 text-orange-600 border-orange-200" },
-      { value: "spam_robocall", label: "Spam / Robocall", color: "bg-gray-100 text-gray-400 border-gray-200" },
+      { value: "spam_robocall", label: "Spam / Robocall", color: "bg-muted text-muted-foreground border-border" },
       { value: "test_call", label: "Test Call (Internal)", color: "bg-slate-100 text-slate-500 border-slate-200" },
     ],
   },
@@ -114,7 +114,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   carrier: {
     title: "Carrier Script",
     icon: Building2,
-    color: "bg-blue-50 border-blue-200",
+    color: "bg-blue-500/10 border-blue-200",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and the insurance company you're calling from?\"",
     steps: [
       "Ask for claim number and insured's name",
@@ -128,7 +128,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   law_office: {
     title: "Law Office Script",
     icon: Scale,
-    color: "bg-purple-50 border-purple-200",
+    color: "bg-purple-500/10 border-purple-200",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name, the firm you're calling from, and the claim number you're referencing?\"",
     steps: [
       "Confirm attorney name, firm name, and bar number if needed",
@@ -142,7 +142,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   medical_provider: {
     title: "Medical Provider Script",
     icon: Stethoscope,
-    color: "bg-green-50 border-green-200",
+    color: "bg-green-500/10 border-green-200",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. Are you calling regarding a PIP billing inquiry or treatment authorization?\"",
     steps: [
       "Get provider name, NPI number, and billing contact",
@@ -156,7 +156,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   member: {
     title: "Member / Insured Script",
     icon: User,
-    color: "bg-orange-50 border-orange-200",
+    color: "bg-orange-500/10 border-orange-200",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and policy number so I can pull up your account?\"",
     steps: [
       "Verify identity: full name, DOB, last 4 of SSN or policy number",
@@ -170,7 +170,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   claimant: {
     title: "Claimant Script",
     icon: User,
-    color: "bg-yellow-50 border-yellow-200",
+    color: "bg-yellow-500/10 border-yellow-200",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. Are you calling regarding an existing claim or a new incident?\"",
     steps: [
       "Get claimant's full name and callback number",
@@ -184,7 +184,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   unknown: {
     title: "General Script",
     icon: Phone,
-    color: "bg-gray-50 border-gray-200",
+    color: "bg-muted border-gray-200",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. How can I help you today?\"",
     steps: [
       "Listen to understand the nature of the call",
@@ -354,12 +354,12 @@ export default function Softphone() {
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === status)!;
   const callerTypeColor = (t: string) => {
     switch (t) {
-      case "carrier": return "bg-blue-100 text-blue-700";
+      case "carrier": return "bg-blue-500/15 text-blue-700";
       case "law_office": return "bg-purple-100 text-purple-700";
-      case "medical_provider": return "bg-green-100 text-green-700";
+      case "medical_provider": return "bg-green-500/15 text-green-700";
       case "claimant": return "bg-orange-100 text-orange-700";
       case "member": return "bg-yellow-100 text-yellow-700";
-      default: return "bg-gray-100 text-gray-500";
+      default: return "bg-muted text-muted-foreground";
     }
   };
   const dispositionLabel = (val: string | null) => val ? ALL_DISPOSITIONS.find((d) => d.value === val) : null;
@@ -369,7 +369,7 @@ export default function Softphone() {
     <WhipLayout>
       <div className="p-6 max-w-7xl mx-auto">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-[#171b31]">Softphone</h1>
+          <h1 className="text-2xl font-bold text-foreground">Softphone</h1>
           <p className="text-sm text-gray-500 mt-1">Make calls, send texts, and log dispositions from one place</p>
         </div>
 
@@ -394,17 +394,17 @@ export default function Softphone() {
 
         {/* Linked Intake Record Context */}
         {linkedRecord && (
-          <div className="mb-5 rounded-xl border border-[#171b31]/20 bg-[#171b31]/5 px-5 py-4">
+          <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <FileText className="w-4 h-4 text-[#ff6221] flex-shrink-0" />
                   <span className="text-xs font-semibold text-[#ff6221] uppercase tracking-wide">Linked Intake Record #{linkedRecord.id}</span>
-                  <Badge variant="outline" className={linkedRecord.status === "open" ? "border-amber-300 text-amber-700 bg-amber-50 text-xs" : "border-green-300 text-green-700 bg-green-50 text-xs"}>
+                  <Badge variant="outline" className={linkedRecord.status === "open" ? "border-amber-300 text-amber-700 bg-amber-50 text-xs" : "border-green-300 text-green-700 bg-green-500/10 text-xs"}>
                     {linkedRecord.status}
                   </Badge>
                 </div>
-                <div className="text-base font-bold text-[#171b31]">{linkedRecord.callerName || "Unknown caller"}</div>
+                <div className="text-base font-bold text-foreground">{linkedRecord.callerName || "Unknown caller"}</div>
                 {linkedRecord.callerOrg && <div className="text-sm text-muted-foreground">{linkedRecord.callerOrg}</div>}
                 <div className="flex flex-wrap gap-3 mt-2 text-xs">
                   {linkedRecord.callbackPhone && (
@@ -414,7 +414,7 @@ export default function Softphone() {
                   )}
                   {linkedRecord.whipClaimNumber && (
                     <span className="flex items-center gap-1 text-muted-foreground">
-                      <ClipboardList className="w-3 h-3" /> Claim: <span className="font-mono font-medium text-[#171b31]">{linkedRecord.whipClaimNumber}</span>
+                      <ClipboardList className="w-3 h-3" /> Claim: <span className="font-mono font-medium text-foreground">{linkedRecord.whipClaimNumber}</span>
                     </span>
                   )}
                   {linkedRecord.handlerName && (
@@ -430,7 +430,7 @@ export default function Softphone() {
               <div className="flex-shrink-0 flex flex-col items-end gap-2">
                 <button
                   onClick={() => navigate(`/intake/${linkedRecord.id}`)}
-                  className="flex items-center gap-1 text-xs text-[#171b31] hover:text-[#ff6221] font-medium transition-colors"
+                  className="flex items-center gap-1 text-xs text-foreground hover:text-[#ff6221] font-medium transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> View Record
                 </button>
@@ -444,7 +444,7 @@ export default function Softphone() {
                 {nextRecord && (
                   <button
                     onClick={() => navigate(`/softphone?intakeId=${nextRecord.id}`)}
-                    className="flex items-center gap-1 text-xs text-[#171b31]/60 hover:text-[#171b31] font-medium transition-colors"
+                    className="flex items-center gap-1 text-xs text-foreground/60 hover:text-foreground font-medium transition-colors"
                     title={`Next: #${nextRecord.id} — ${nextRecord.callerName || 'Unknown'}`}
                   >
                     Next record <ArrowRight className="w-3 h-3" />
@@ -459,16 +459,16 @@ export default function Softphone() {
           {/* ── Left column: Phone + SMS tabs ── */}
           <div className="lg:col-span-1 space-y-4">
             <Card className="border border-gray-200 shadow-sm overflow-hidden">
-              <div className="bg-[#171b31] px-4 py-3 flex items-center justify-between">
+              <div className="bg-primary px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setActiveTab("phone")}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded transition-colors ${activeTab === "phone" ? "bg-white/20 text-white" : "text-white/60 hover:text-white"}`}>
+                    className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded transition-colors ${activeTab === "phone" ? "bg-background/20 text-white" : "text-white/60 hover:text-white"}`}>
                     <Phone className="w-3.5 h-3.5" /> Phone
                   </button>
                   <button
                     onClick={() => setActiveTab("sms")}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded transition-colors ${activeTab === "sms" ? "bg-white/20 text-white" : "text-white/60 hover:text-white"}`}>
+                    className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded transition-colors ${activeTab === "sms" ? "bg-background/20 text-white" : "text-white/60 hover:text-white"}`}>
                     <MessageSquare className="w-3.5 h-3.5" /> SMS
                     {SMS_THREADS.some((t) => t.unread) && <span className="w-1.5 h-1.5 rounded-full bg-[#ff6221]" />}
                   </button>
@@ -478,7 +478,7 @@ export default function Softphone() {
                   <select value={status} onChange={(e) => setStatus(e.target.value)}
                     className="text-xs text-white bg-transparent border-none outline-none cursor-pointer">
                     {STATUS_OPTIONS.map((s) => (
-                      <option key={s.value} value={s.value} className="text-black bg-white">{s.label}</option>
+                      <option key={s.value} value={s.value} className="text-black bg-background">{s.label}</option>
                     ))}
                   </select>
                 </div>
@@ -489,7 +489,7 @@ export default function Softphone() {
                 <CardContent className="p-4 space-y-4">
                   {/* Incoming */}
                   {callState === "incoming" && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center space-y-2">
+                    <div className="bg-green-500/10 border border-green-200 rounded-lg p-3 text-center space-y-2">
                       <div className="flex items-center justify-center gap-2 animate-pulse">
                         <PhoneIncoming className="w-5 h-5 text-green-600" />
                         <span className="text-sm font-semibold text-green-800">Incoming Call</span>
@@ -503,7 +503,7 @@ export default function Softphone() {
                         <button className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-xs font-medium transition-colors" onClick={handleAnswer}>
                           <Phone className="w-3 h-3" /> Answer
                         </button>
-                        <button className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-red-300 text-red-600 hover:bg-red-50 text-xs font-medium transition-colors" onClick={handleSkipDisposition}>
+                        <button className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-red-300 text-red-600 hover:bg-red-500/10 text-xs font-medium transition-colors" onClick={handleSkipDisposition}>
                           <PhoneOff className="w-3 h-3" /> Decline
                         </button>
                       </div>
@@ -512,7 +512,7 @@ export default function Softphone() {
 
                   {/* Active call */}
                   {callState === "active" && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center space-y-1">
+                    <div className="bg-green-500/10 border border-green-200 rounded-lg p-3 text-center space-y-1">
                       <div className="flex items-center justify-center gap-1.5">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                         <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">
@@ -532,7 +532,7 @@ export default function Softphone() {
 
                   {/* Ringing / outbound */}
                   {callState === "ringing" && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center space-y-1">
+                    <div className="bg-blue-500/10 border border-blue-200 rounded-lg p-3 text-center space-y-1">
                       <div className="flex items-center justify-center gap-1.5 animate-pulse">
                         <PhoneOutgoing className="w-4 h-4 text-blue-600" />
                         <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Calling…</span>
@@ -565,7 +565,7 @@ export default function Softphone() {
                                 {group.items.map((d) => (
                                   <button key={d.value} onClick={() => setSelectedDisposition(d.value)}
                                     className={`w-full text-left text-xs px-2.5 py-1.5 rounded-md border transition-all ${
-                                      selectedDisposition === d.value ? d.color + " ring-1 ring-offset-1 ring-current" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                                      selectedDisposition === d.value ? d.color + " ring-1 ring-offset-1 ring-current" : "bg-background border-gray-200 text-gray-700 hover:bg-muted"
                                     }`}>
                                     {d.label}
                                   </button>
@@ -577,10 +577,10 @@ export default function Softphone() {
                       </ScrollArea>
                       <textarea value={dispositionNote} onChange={(e) => setDispositionNote(e.target.value)}
                         placeholder="Optional note (claim #, action taken…)"
-                        className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-[#171b31] bg-white"
+                        className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-[#171b31] bg-background"
                         rows={2} />
                       <div className="flex gap-2">
-                        <Button size="sm" className="flex-1 text-xs bg-[#171b31] hover:bg-[#2a3050] text-white"
+                        <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-[#2a3050] text-white"
                           onClick={handleSaveDisposition} disabled={!selectedDisposition}>
                           <CheckCircle2 className="w-3 h-3 mr-1" /> Save &amp; Close
                         </Button>
@@ -593,7 +593,7 @@ export default function Softphone() {
 
                   {/* Idle dial display */}
                   {callState === "idle" && (
-                    <div className="bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between min-h-[44px]">
+                    <div className="bg-muted rounded-lg px-3 py-2 flex items-center justify-between min-h-[44px]">
                       <span className="text-xl font-mono tracking-widest text-gray-800">
                         {dialValue || <span className="text-gray-400 text-sm font-sans">Enter number…</span>}
                       </span>
@@ -610,7 +610,7 @@ export default function Softphone() {
                     <div className="grid grid-cols-3 gap-2">
                       {DIAL_KEYS.flat().map((key) => (
                         <button key={key} onClick={() => handleDial(key)}
-                          className="h-11 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-base transition-colors active:scale-95">
+                          className="h-11 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-semibold text-base transition-colors active:scale-95">
                           {key}
                         </button>
                       ))}
@@ -623,7 +623,7 @@ export default function Softphone() {
                       {callState === "active" ? (
                         <>
                           <button onClick={() => setMuted(!muted)}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${muted ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${muted ? "bg-red-500/15 text-red-600" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
                             {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                           </button>
                           <button onClick={handleHangUp}
@@ -631,7 +631,7 @@ export default function Softphone() {
                             <PhoneOff className="w-6 h-6" />
                           </button>
                           <button onClick={() => setSpeakerOff(!speakerOff)}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${speakerOff ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${speakerOff ? "bg-red-500/15 text-red-600" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
                             {speakerOff ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                           </button>
                         </>
@@ -643,7 +643,7 @@ export default function Softphone() {
                       ) : callState === "idle" ? (
                         <>
                           <button onClick={() => setCallState("incoming")}
-                            className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center"
+                            className="w-10 h-10 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center"
                             title="Simulate incoming call (demo only)">
                             <PhoneIncoming className="w-4 h-4" />
                           </button>
@@ -666,9 +666,9 @@ export default function Softphone() {
                   <div className="border-b divide-y">
                     {SMS_THREADS.map((thread) => (
                       <button key={thread.id} onClick={() => setSmsThread(thread.id)}
-                        className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${smsThread === thread.id ? "bg-blue-50" : ""}`}>
+                        className={`w-full text-left px-4 py-3 hover:bg-muted transition-colors ${smsThread === thread.id ? "bg-blue-500/10" : ""}`}>
                         <div className="flex items-center justify-between">
-                          <span className={`text-sm font-medium ${thread.unread ? "text-[#171b31]" : "text-gray-700"}`}>{thread.name}</span>
+                          <span className={`text-sm font-medium ${thread.unread ? "text-foreground" : "text-gray-700"}`}>{thread.name}</span>
                           <span className="text-[10px] text-gray-400">{thread.time}</span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
@@ -685,7 +685,7 @@ export default function Softphone() {
                       {smsMessages.map((msg) => (
                         <div key={msg.id} className={`flex ${msg.from === "us" ? "justify-end" : "justify-start"}`}>
                           <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${
-                            msg.from === "us" ? "bg-[#171b31] text-white rounded-br-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                            msg.from === "us" ? "bg-primary text-white rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
                           }`}>
                             <p>{msg.text}</p>
                             <p className={`text-[10px] mt-1 ${msg.from === "us" ? "text-white/60" : "text-gray-400"}`}>{msg.time}</p>
@@ -714,9 +714,9 @@ export default function Softphone() {
             </Card>
 
             {/* Coaching tips */}
-            <Card className="border border-blue-100 bg-blue-50/40">
+            <Card className="border border-blue-100 bg-blue-500/10/40">
               <CardHeader className="pb-2 pt-4">
-                <CardTitle className="text-sm font-semibold text-[#171b31] flex items-center gap-2">
+                <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Lightbulb className="w-4 h-4 text-[#ff6221]" />
                   Call Coaching Tips
                 </CardTitle>
@@ -724,8 +724,8 @@ export default function Softphone() {
               <CardContent className="space-y-3 pb-4">
                 {COACHING_TIPS.map(({ icon: Icon, tip }, i) => (
                   <div key={i} className="flex items-start gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-[#171b31]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Icon className="w-3 h-3 text-[#171b31]" />
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Icon className="w-3 h-3 text-foreground" />
                     </div>
                     <p className="text-xs text-gray-700 leading-relaxed">{tip}</p>
                   </div>
@@ -749,7 +749,7 @@ export default function Softphone() {
                       <Icon className="w-4 h-4 text-[#ff6221]" />
                       <span className="text-xs text-gray-500 font-medium">{label}</span>
                     </div>
-                    <div className="text-2xl font-bold text-[#171b31]">{value}</div>
+                    <div className="text-2xl font-bold text-foreground">{value}</div>
                     <div className="text-xs text-gray-400 mt-0.5">{sub}</div>
                   </CardContent>
                 </Card>
@@ -760,7 +760,7 @@ export default function Softphone() {
             <Card className={`border ${activeScript.color}`}>
               <CardHeader className="pb-2 pt-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-[#171b31] flex items-center gap-2">
+                  <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <FileText className="w-4 h-4 text-[#ff6221]" />
                     Call Script
                   </CardTitle>
@@ -769,7 +769,7 @@ export default function Softphone() {
                     <select
                       value={scriptCallerType}
                       onChange={(e) => setScriptCallerType(e.target.value)}
-                      className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#171b31] bg-white">
+                      className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#171b31] bg-background">
                       <option value="unknown">General</option>
                       <option value="carrier">Carrier</option>
                       <option value="law_office">Law Office</option>
@@ -783,7 +783,7 @@ export default function Softphone() {
               <CardContent className="pb-4 space-y-3">
                 <div>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Greeting</p>
-                  <p className="text-xs text-gray-700 italic leading-relaxed bg-white/70 rounded-md px-3 py-2 border border-white">
+                  <p className="text-xs text-gray-700 italic leading-relaxed bg-background/70 rounded-md px-3 py-2 border border-white">
                     {activeScript.greeting}
                   </p>
                 </div>
@@ -792,7 +792,7 @@ export default function Softphone() {
                   <ol className="space-y-1.5">
                     {activeScript.steps.map((step, i) => (
                       <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
-                        <span className="w-4 h-4 rounded-full bg-[#171b31] text-white text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">{i + 1}</span>
+                        <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">{i + 1}</span>
                         {step}
                       </li>
                     ))}
@@ -800,7 +800,7 @@ export default function Softphone() {
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Closing</p>
-                  <p className="text-xs text-gray-700 italic leading-relaxed bg-white/70 rounded-md px-3 py-2 border border-white">
+                  <p className="text-xs text-gray-700 italic leading-relaxed bg-background/70 rounded-md px-3 py-2 border border-white">
                     {activeScript.closing}
                   </p>
                 </div>
@@ -811,7 +811,7 @@ export default function Softphone() {
             {savedDispositions.length > 0 && (
               <Card className="border border-emerald-200 bg-emerald-50/30">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold text-[#171b31] flex items-center gap-2">
+                  <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     Logged This Session
                   </CardTitle>
@@ -834,7 +834,7 @@ export default function Softphone() {
             {/* Recent calls */}
             <Card className="border border-gray-200 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold text-[#171b31]">Recent Calls</CardTitle>
+                <CardTitle className="text-base font-semibold text-foreground">Recent Calls</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="h-[340px]">
@@ -842,9 +842,9 @@ export default function Softphone() {
                     {RECENT_CALLS.map((call) => {
                       const disp = dispositionLabel(call.disposition);
                       return (
-                        <div key={call.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                        <div key={call.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            call.status === "missed" || call.status === "no_answer" ? "bg-red-100" : call.status === "voicemail" ? "bg-gray-100" : call.type === "inbound" ? "bg-green-100" : "bg-blue-100"
+                            call.status === "missed" || call.status === "no_answer" ? "bg-red-500/15" : call.status === "voicemail" ? "bg-muted" : call.type === "inbound" ? "bg-green-500/15" : "bg-blue-500/15"
                           }`}>
                             {call.status === "missed" || call.status === "no_answer" ? <PhoneMissed className="w-3.5 h-3.5 text-red-500" /> :
                              call.type === "inbound" ? <PhoneIncoming className="w-3.5 h-3.5 text-green-600" /> :
@@ -873,7 +873,7 @@ export default function Softphone() {
                               setActiveTab("phone");
                               setCallState("idle");
                             }}
-                            className="ml-1 w-7 h-7 rounded-full bg-gray-100 hover:bg-green-100 hover:text-green-700 text-gray-400 flex items-center justify-center transition-colors"
+                            className="ml-1 w-7 h-7 rounded-full bg-muted hover:bg-green-500/15 hover:text-green-700 text-gray-400 flex items-center justify-center transition-colors"
                             title="Call back">
                             <Phone className="w-3.5 h-3.5" />
                           </button>
@@ -882,7 +882,7 @@ export default function Softphone() {
                               setActiveTab("sms");
                               setSmsThread(1);
                             }}
-                            className="w-7 h-7 rounded-full bg-gray-100 hover:bg-blue-100 hover:text-blue-700 text-gray-400 flex items-center justify-center transition-colors"
+                            className="w-7 h-7 rounded-full bg-muted hover:bg-blue-500/15 hover:text-blue-700 text-gray-400 flex items-center justify-center transition-colors"
                             title="Send SMS">
                             <MessageSquare className="w-3.5 h-3.5" />
                           </button>
@@ -901,7 +901,7 @@ export default function Softphone() {
       <Dialog open={showCallbackDialog} onOpenChange={setShowCallbackDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-[#171b31]">Log Callback</DialogTitle>
+            <DialogTitle className="text-foreground">Log Callback</DialogTitle>
           </DialogHeader>
           {linkedRecord && (
             <div className="text-sm text-gray-500 -mt-2 mb-1">

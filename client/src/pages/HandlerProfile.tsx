@@ -28,10 +28,10 @@ function ScoreBadge({ score }: { score: number | null | undefined }) {
   if (!score) return <span className="text-xs text-muted-foreground">—</span>;
   const n = Number(score);
   const color =
-    n >= 8 ? "bg-green-50 text-green-700 border-green-200" :
-    n >= 7 ? "bg-blue-50 text-blue-700 border-blue-200" :
-    n >= 6 ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
-    "bg-red-50 text-red-700 border-red-200";
+    n >= 8 ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" :
+    n >= 7 ? "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30" :
+    n >= 6 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/30" :
+    "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30";
   return (
     <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded border ${color}`}>
       <Star className="w-2.5 h-2.5" />
@@ -136,12 +136,12 @@ export default function HandlerProfile() {
 
         {/* Header */}
         <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-xl bg-[#171b31] flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+          <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
             {handler?.name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() ?? "?"}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-[#171b31]">{handler?.name ?? `Handler #${handlerId}`}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{handler?.name ?? `Handler #${handlerId}`}</h1>
               {latestScorecard?.overallScore && (
                 <ScoreBadge score={latestScorecard.overallScore} />
               )}
@@ -166,7 +166,7 @@ export default function HandlerProfile() {
             {callMetrics && callMetrics.total > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-[#171b31]">{callMetrics.total}</div>
+                  <div className="text-2xl font-bold text-foreground">{callMetrics.total}</div>
                   <div className="text-xs text-muted-foreground">Total Calls</div>
                 </div>
                 <div className="text-center">
@@ -176,11 +176,11 @@ export default function HandlerProfile() {
                   <div className="text-xs text-muted-foreground">Answer Rate</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-[#171b31]">{callMetrics.avgDurationMin ?? "—"}m</div>
+                  <div className="text-2xl font-bold text-foreground">{callMetrics.avgDurationMin ?? "—"}m</div>
                   <div className="text-xs text-muted-foreground">Avg Handle Time</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-[#171b31]">{callMetrics.totalHours ?? "—"}h</div>
+                  <div className="text-2xl font-bold text-foreground">{callMetrics.totalHours ?? "—"}h</div>
                   <div className="text-xs text-muted-foreground">Total Talk Time</div>
                 </div>
               </div>
@@ -208,7 +208,7 @@ export default function HandlerProfile() {
               <Card key={label}>
                 <CardContent className="p-3 text-center">
                   <Icon className="w-4 h-4 text-muted-foreground mx-auto mb-1" />
-                  <div className="text-lg font-bold text-[#171b31]">{score > 0 ? score.toFixed(1) : "—"}</div>
+                  <div className="text-lg font-bold text-foreground">{score > 0 ? score.toFixed(1) : "—"}</div>
                   <div className="text-xs text-muted-foreground">{label}</div>
                   <div className="mt-1.5">
                     <ScoreBar score={score} />
@@ -258,7 +258,7 @@ export default function HandlerProfile() {
                   <div key={sc.id} className="p-4 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-[#171b31]">Week of {sc.weekOf}</span>
+                        <span className="text-sm font-semibold text-foreground">Week of {sc.weekOf}</span>
                         <ScoreBadge score={sc.overallScore} />
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -276,7 +276,7 @@ export default function HandlerProfile() {
                         { label: "Call Control", score: sc.callControlScore },
                       ].map(({ label, score }) => (
                         <div key={label} className="bg-muted/30 rounded p-2 text-center">
-                          <div className="text-sm font-bold text-[#171b31]">{score ? Number(score).toFixed(1) : "—"}</div>
+                          <div className="text-sm font-bold text-foreground">{score ? Number(score).toFixed(1) : "—"}</div>
                           <div className="text-xs text-muted-foreground">{label}</div>
                         </div>
                       ))}
@@ -284,7 +284,7 @@ export default function HandlerProfile() {
 
                     {/* Strengths */}
                     {sc.strengths && (
-                      <div className="bg-green-50 rounded p-3">
+                      <div className="bg-green-500/10 rounded p-3">
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <Award className="w-3.5 h-3.5 text-green-600" />
                           <span className="text-xs font-semibold text-green-800">Strengths</span>
@@ -306,12 +306,12 @@ export default function HandlerProfile() {
 
                     {/* Manager comments */}
                     {sc.managerComments && (
-                      <div className="bg-[#171b31]/5 rounded p-3 border border-[#171b31]/10">
+                      <div className="bg-primary/5 rounded p-3 border border-primary/10">
                         <div className="flex items-center gap-1.5 mb-1.5">
-                          <TrendingUp className="w-3.5 h-3.5 text-[#171b31]" />
-                          <span className="text-xs font-semibold text-[#171b31]">Supervisor Coaching Note</span>
+                          <TrendingUp className="w-3.5 h-3.5 text-foreground" />
+                          <span className="text-xs font-semibold text-foreground">Supervisor Coaching Note</span>
                         </div>
-                        <p className="text-xs text-[#171b31]/70 whitespace-pre-wrap">{sc.managerComments}</p>
+                        <p className="text-xs text-foreground/70 whitespace-pre-wrap">{sc.managerComments}</p>
                       </div>
                     )}
                   </div>
@@ -350,20 +350,20 @@ export default function HandlerProfile() {
                       createdAt: string | Date;
                     }) => (
                       <tr key={r.id} className="hover:bg-muted/20">
-                        <td className="px-4 py-2.5 font-medium text-[#171b31]">{r.callerName ?? "Unknown"}</td>
+                        <td className="px-4 py-2.5 font-medium text-foreground">{r.callerName ?? "Unknown"}</td>
                         <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{r.whipClaimNumber ?? "—"}</td>
                         <td className="px-4 py-2.5">
                           <Badge variant="outline" className={`text-xs ${
-                            r.status === "open" ? "text-orange-600 border-orange-200 bg-orange-50" :
-                            r.status === "closed" ? "text-green-600 border-green-200 bg-green-50" :
-                            "text-purple-600 border-purple-200 bg-purple-50"
+                            r.status === "open" ? "text-orange-600 border-orange-200 bg-orange-500/10" :
+                            r.status === "closed" ? "text-green-600 border-green-200 bg-green-500/10" :
+                            "text-purple-600 border-purple-200 bg-purple-500/10"
                           }`}>{r.status}</Badge>
                         </td>
                         <td className="px-4 py-2.5">
                           {r.priority ? (
                             <Badge variant="outline" className={`text-xs ${
-                              r.priority === "urgent" ? "text-red-600 border-red-200 bg-red-50" :
-                              r.priority === "high" ? "text-orange-600 border-orange-200 bg-orange-50" :
+                              r.priority === "urgent" ? "text-red-600 border-red-200 bg-red-500/10" :
+                              r.priority === "high" ? "text-orange-600 border-orange-200 bg-orange-500/10" :
                               "text-gray-600 border-gray-200"
                             }`}>{r.priority}</Badge>
                           ) : "—"}

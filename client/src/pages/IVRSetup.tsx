@@ -11,7 +11,7 @@ function CopyCode({ value }: { value: string }) {
   };
   return (
     <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 mt-1">
-      <code className="text-xs flex-1 break-all font-mono text-[#171b31]">{value}</code>
+      <code className="text-xs flex-1 break-all font-mono text-foreground">{value}</code>
       <button onClick={copy} className="text-muted-foreground hover:text-foreground flex-shrink-0">
         <Copy className="w-3.5 h-3.5" />
       </button>
@@ -53,14 +53,14 @@ export default function IVRSetup() {
     <WhipLayout>
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#171b31]">IVR Setup — Option 1</h1>
+          <h1 className="text-2xl font-bold text-foreground">IVR Setup — Option 1</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Aircall IVR with AI intake processing. Carriers, law offices, and medical providers press 1 to submit intake without a live agent.
           </p>
         </div>
 
         {/* How it works */}
-        <Card className="border-[#171b31]/20 bg-[#171b31]/3">
+        <Card className="border-border bg-muted/30">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <Zap className="w-4 h-4 text-[#ff6221]" /> How Option 1 Works
@@ -68,16 +68,16 @@ export default function IVRSetup() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="grid md:grid-cols-3 gap-3">
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">1. Call comes in</div>
+              <div className="bg-background rounded-lg p-3 border">
+                <div className="font-semibold text-foreground text-xs mb-1">1. Call comes in</div>
                 <p className="text-xs">Aircall receives the inbound call on your Claims line. The IVR greeting plays and prompts the caller to press 1 for intake (carriers, law offices, medical providers).</p>
               </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">2. Caller presses 1 → voicemail</div>
+              <div className="bg-background rounded-lg p-3 border">
+                <div className="font-semibold text-foreground text-xs mb-1">2. Caller presses 1 → voicemail</div>
                 <p className="text-xs">Pressing 1 routes the caller to a dedicated voicemail prompt. Aircall records the message and fires <code className="bg-muted px-1 rounded">call.voicemail_left</code> with the recording URL.</p>
               </div>
-              <div className="bg-white rounded-lg p-3 border">
-                <div className="font-semibold text-[#171b31] text-xs mb-1">3. AI processes intake</div>
+              <div className="bg-background rounded-lg p-3 border">
+                <div className="font-semibold text-foreground text-xs mb-1">3. AI processes intake</div>
                 <p className="text-xs">Whisper transcribes the audio. The LLM extracts caller type, claim #, org, message, and callback — creating a structured intake record automatically, no agent needed.</p>
               </div>
             </div>
@@ -94,11 +94,11 @@ export default function IVRSetup() {
           <CardContent>
             <div className="space-y-2 text-sm">
               {[
-                { type: "Insurance Carrier", action: "Presses 1 → IVR voicemail → AI extracts full intake (name, org, claim #, ref #, message, callback). No live agent needed.", color: "bg-blue-100 text-blue-700" },
-                { type: "Law Office", action: "Presses 1 → IVR voicemail → AI extracts full intake. Same flow as carrier.", color: "bg-purple-100 text-purple-700" },
-                { type: "Medical Provider", action: "Presses 1 → IVR voicemail → AI extracts full intake. Same flow as carrier.", color: "bg-emerald-100 text-emerald-700" },
-                { type: "Member / Claimant / Police", action: "Routed to live agent (Mary Joy Badua or Daryl Ochate). Missed calls flagged for callback.", color: "bg-green-100 text-green-700" },
-                { type: "Answered Call", action: "Logged to call history with agent name, duration, and answer time — no intake created", color: "bg-gray-100 text-gray-600" },
+                { type: "Insurance Carrier", action: "Presses 1 → IVR voicemail → AI extracts full intake (name, org, claim #, ref #, message, callback). No live agent needed.", color: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
+                { type: "Law Office", action: "Presses 1 → IVR voicemail → AI extracts full intake. Same flow as carrier.", color: "bg-purple-500/15 text-purple-700 dark:text-purple-400" },
+                { type: "Medical Provider", action: "Presses 1 → IVR voicemail → AI extracts full intake. Same flow as carrier.", color: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+                { type: "Member / Claimant / Police", action: "Routed to live agent (Mary Joy Badua or Daryl Ochate). Missed calls flagged for callback.", color: "bg-green-500/15 text-green-700 dark:text-green-400" },
+                { type: "Answered Call", action: "Logged to call history with agent name, duration, and answer time — no intake created", color: "bg-muted text-muted-foreground" },
               ].map((row, i) => (
                 <div key={i} className="flex items-start gap-3 py-2 border-b last:border-0">
                   <Badge className={`text-xs flex-shrink-0 border-0 ${row.color}`}>{row.type}</Badge>
@@ -123,7 +123,7 @@ export default function IVRSetup() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-semibold">Aircall Webhook Handler</span>
-                <Badge className="text-xs bg-green-100 text-green-700 border-0">POST</Badge>
+                <Badge className="text-xs bg-green-500/15 text-green-700 dark:text-green-400 border-0">POST</Badge>
               </div>
               <p className="text-xs text-muted-foreground mb-1">
                 Paste this URL into Aircall → Integrations → Webhooks. Handles <strong>call.created</strong>, <strong>call.ended</strong>, and <strong>call.voicemail_left</strong> events.
@@ -133,7 +133,7 @@ export default function IVRSetup() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-semibold">Voicemail Processing</span>
-                <Badge className="text-xs bg-amber-100 text-amber-700 border-0">POST</Badge>
+                <Badge className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">POST</Badge>
               </div>
               <p className="text-xs text-muted-foreground mb-1">
                 Called automatically when <code className="bg-muted px-1 rounded">call.voicemail_left</code> fires. Transcribes audio via Whisper and runs LLM intake extraction.
@@ -149,19 +149,19 @@ export default function IVRSetup() {
             <Card key={step.num}>
               <CardContent className="pt-5">
                 <div className="flex gap-4">
-                  <div className="w-8 h-8 rounded-full bg-[#171b31] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
                     {step.num}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm text-[#171b31]">{step.title}</h3>
+                    <h3 className="font-semibold text-sm text-foreground">{step.title}</h3>
                     <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
                     {step.num === 4 && (
-                      <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
-                        <div className="flex items-center gap-2 text-green-700 text-xs font-semibold">
+                      <div className="mt-3 bg-green-500/15 border border-green-300 dark:border-green-500/30 rounded-lg p-3">
+                        <div className="flex items-center gap-2 text-green-700 dark:text-green-400 text-xs font-semibold">
                           <CheckCircle2 className="w-4 h-4" />
                           Expected result
                         </div>
-                        <p className="text-xs text-green-600 mt-1">
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                           A new intake record will appear in Intake Records with the caller's name, organization, claim number, and message — all extracted automatically by AI from the voicemail.
                         </p>
                       </div>
@@ -173,11 +173,11 @@ export default function IVRSetup() {
           ))}
         </div>
 
-        <div className="bg-[#171b31]/5 border border-[#171b31]/15 rounded-lg p-4 text-sm">
-          <div className="font-semibold text-[#171b31] mb-1 flex items-center gap-2">
+        <div className="bg-muted/40 border border-border rounded-lg p-4 text-sm">
+          <div className="font-semibold text-foreground mb-1 flex items-center gap-2">
             <Phone className="w-4 h-4 text-[#ff6221]" /> Aircall Configuration Notes
           </div>
-          <ul className="text-[#171b31]/70 text-xs space-y-1 list-disc list-inside">
+          <ul className="text-muted-foreground text-xs space-y-1 list-disc list-inside">
             <li>Webhook secret (optional): set in Aircall and add as <code className="bg-muted px-1 rounded">AIRCALL_WEBHOOK_SECRET</code> env var for signature verification</li>
             <li>Voicemail recordings are fetched directly from the Aircall recording URL — no additional storage setup needed</li>
             <li>The daily call sync pulls the last 30 days of call history automatically on server start</li>

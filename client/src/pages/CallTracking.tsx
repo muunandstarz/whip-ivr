@@ -39,11 +39,11 @@ import { format } from "date-fns";
 const PAGE_SIZE = 50;
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
-  answered: { label: "Answered", icon: PhoneCall, className: "bg-green-50 text-green-700 border-green-200" },
-  missed: { label: "Missed", icon: PhoneMissed, className: "bg-red-50 text-red-700 border-red-200" },
-  voicemail: { label: "Voicemail", icon: Voicemail, className: "bg-blue-50 text-blue-700 border-blue-200" },
-  transferred: { label: "Transferred", icon: PhoneIncoming, className: "bg-purple-50 text-purple-700 border-purple-200" },
-  abandoned: { label: "Abandoned", icon: PhoneMissed, className: "bg-gray-50 text-gray-600 border-gray-200" },
+  answered: { label: "Answered", icon: PhoneCall, className: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" },
+  missed: { label: "Missed", icon: PhoneMissed, className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30" },
+  voicemail: { label: "Voicemail", icon: Voicemail, className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30" },
+  transferred: { label: "Transferred", icon: PhoneIncoming, className: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-300 dark:border-purple-500/30" },
+  abandoned: { label: "Abandoned", icon: PhoneMissed, className: "bg-muted text-muted-foreground border-border" },
 };
 
 function formatSeconds(seconds: number): string {
@@ -57,12 +57,12 @@ function formatSeconds(seconds: number): string {
 function callerTypeBadge(type: string | null | undefined) {
   if (!type) return <Badge variant="outline" className="text-xs text-muted-foreground">Unknown</Badge>;
   const map: Record<string, string> = {
-    carrier: "bg-blue-50 text-blue-700 border-blue-200",
-    law_office: "bg-red-50 text-red-700 border-red-200",
-    medical_provider: "bg-purple-50 text-purple-700 border-purple-200",
-    member: "bg-green-50 text-green-700 border-green-200",
-    claimant: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    police: "bg-gray-50 text-gray-700 border-gray-200",
+    carrier: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30",
+    law_office: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30",
+    medical_provider: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-300 dark:border-purple-500/30",
+    member: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30",
+    claimant: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/30",
+    police: "bg-muted text-muted-foreground border-border",
   };
   return (
     <Badge variant="outline" className={`text-xs capitalize ${map[type] ?? ""}`}>
@@ -87,12 +87,12 @@ function IntakeCardCT({ r, blocker, hasTranscript, hasRecording }: {
               {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
             </span>
             {r.whipClaimNumber && (
-              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+              <span className="text-xs bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 rounded px-1.5 py-0.5">
                 Claim: {r.whipClaimNumber}
               </span>
             )}
             {r.source && (
-              <span className="text-xs bg-slate-50 text-slate-600 border border-slate-200 rounded px-1.5 py-0.5 capitalize">
+              <span className="text-xs bg-muted text-muted-foreground border border-border rounded px-1.5 py-0.5 capitalize">
                 {r.source === "voicemail" ? "Voicemail" : r.source === "live_call" ? "Live Call" : r.source}
               </span>
             )}
@@ -105,8 +105,8 @@ function IntakeCardCT({ r, blocker, hasTranscript, hasRecording }: {
         <div className="flex items-center gap-2 flex-shrink-0">
           <Badge variant="outline" className={
             r.status === "open"
-              ? "text-orange-600 border-orange-200 bg-orange-50"
-              : "text-green-600 border-green-200 bg-green-50"
+              ? "text-orange-600 border-orange-200 bg-orange-500/10"
+              : "text-green-600 border-green-200 bg-green-500/10"
           }>{r.status}</Badge>
           {r.whipClaimNumber && (
             <a
@@ -372,7 +372,7 @@ export default function CallTracking() {
       <div className="p-6 space-y-5">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-[#171b31]">Call Tracking</h1>
+          <h1 className="text-2xl font-bold text-foreground">Call Tracking</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             All inbound calls — answered, missed, and voicemail. Click any row to view full caller profile.
           </p>
@@ -383,11 +383,11 @@ export default function CallTracking() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#171b31]/10 flex items-center justify-center">
-                  <PhoneIncoming className="w-4 h-4 text-[#171b31]" />
+                <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+                  <PhoneIncoming className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{totalCalls.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-foreground">{totalCalls.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">Total Calls</div>
                 </div>
               </div>
@@ -396,11 +396,11 @@ export default function CallTracking() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-green-500/15 flex items-center justify-center">
                   <PhoneCall className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{Number(answeredCount).toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-foreground">{Number(answeredCount).toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">Answered</div>
                 </div>
               </div>
@@ -409,11 +409,11 @@ export default function CallTracking() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center">
                   <PhoneMissed className="w-4 h-4 text-red-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{Number(missedCount).toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-foreground">{Number(missedCount).toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">Missed</div>
                 </div>
               </div>
@@ -426,7 +426,7 @@ export default function CallTracking() {
                   <TrendingUp className="w-4 h-4 text-[#ff6221]" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#171b31]">{answerRate}%</div>
+                  <div className="text-2xl font-bold text-foreground">{answerRate}%</div>
                   <div className="text-xs text-muted-foreground">Answer Rate</div>
                 </div>
               </div>
@@ -469,7 +469,7 @@ export default function CallTracking() {
                       const rate = agent.total > 0 ? Math.round((Number(agent.answered) / Number(agent.total)) * 100) : 0;
                       return (
                         <tr key={agent.agentName ?? "unknown"} className="hover:bg-muted/20">
-                          <td className="px-4 py-2.5 font-medium text-[#171b31]">
+                          <td className="px-4 py-2.5 font-medium text-foreground">
                             {agent.agentName || "Unassigned"}
                           </td>
                           <td className="px-4 py-2.5 text-right text-muted-foreground">{Number(agent.total).toLocaleString()}</td>
@@ -574,7 +574,7 @@ export default function CallTracking() {
                           >
                             <td className="px-4 py-3">
                               <div>
-                                <div className="font-medium text-[#171b31]">
+                                <div className="font-medium text-foreground">
                                   {call.callerName || call.callerPhone || "Unknown"}
                                 </div>
                                 {call.callerPhone && call.callerName && (
@@ -604,7 +604,7 @@ export default function CallTracking() {
                             </td>
                             <td className="px-4 py-3">
                               {call.hasIntakeRecord ? (
-                                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                <Badge variant="outline" className="text-xs bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30">
                                   ✓ Intake
                                 </Badge>
                               ) : (

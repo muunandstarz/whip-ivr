@@ -52,12 +52,12 @@ function fmtDuration(seconds: number | null | undefined): string {
 function callerTypeBadge(type: string | null | undefined) {
   if (!type) return <Badge variant="outline" className="text-xs text-muted-foreground">Unknown</Badge>;
   const map: Record<string, string> = {
-    carrier: "bg-blue-50 text-blue-700 border-blue-200",
-    law_office: "bg-red-50 text-red-700 border-red-200",
-    medical_provider: "bg-purple-50 text-purple-700 border-purple-200",
-    member: "bg-green-50 text-green-700 border-green-200",
-    claimant: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    police: "bg-gray-50 text-gray-700 border-gray-200",
+    carrier: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30",
+    law_office: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30",
+    medical_provider: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-300 dark:border-purple-500/30",
+    member: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30",
+    claimant: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/30",
+    police: "bg-muted text-muted-foreground border-border",
   };
   return (
     <Badge variant="outline" className={`text-xs capitalize ${map[type] ?? ""}`}>
@@ -70,7 +70,7 @@ function ivrRoutingBadge(type: string | null | undefined) {
   const ivrEligible = ["carrier", "law_office", "medical_provider"];
   if (type && ivrEligible.includes(type)) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-300 dark:border-emerald-500/30 rounded px-1.5 py-0.5">
         <CheckCircle2 className="h-3 w-3" /> IVR Eligible
       </span>
     );
@@ -104,12 +104,12 @@ function IntakeRecordExpanded({ r }: { r: any }) {
               {r.callerName ?? "Unknown"}{r.callerOrg ? ` · ${r.callerOrg}` : ""}
             </span>
             {r.whipClaimNumber && (
-              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+              <span className="text-xs bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 rounded px-1.5 py-0.5">
                 Claim: {r.whipClaimNumber}
               </span>
             )}
             {r.source && (
-              <span className="text-xs bg-slate-50 text-slate-600 border border-slate-200 rounded px-1.5 py-0.5 capitalize">
+              <span className="text-xs bg-muted text-muted-foreground border border-border rounded px-1.5 py-0.5 capitalize">
                 {r.source === "voicemail" ? "Voicemail" : r.source === "live_call" ? "Live Call" : r.source}
               </span>
             )}
@@ -122,8 +122,8 @@ function IntakeRecordExpanded({ r }: { r: any }) {
         <div className="flex items-center gap-2 flex-shrink-0">
           <Badge variant="outline" className={
             r.status === "open"
-              ? "text-orange-600 border-orange-200 bg-orange-50"
-              : "text-green-600 border-green-200 bg-green-50"
+              ? "text-orange-600 dark:text-orange-400 border-orange-300 bg-orange-500/15"
+              : "text-green-600 dark:text-green-400 border-green-300 bg-green-500/15"
           }>{r.status}</Badge>
           {r.whipClaimNumber && (
             <a
@@ -154,9 +154,9 @@ function IntakeRecordExpanded({ r }: { r: any }) {
       {/* Resolution blocker */}
       {blocker && (
         <div className="px-3 pb-2">
-          <div className="flex items-center gap-1.5 bg-amber-50 rounded p-2 border border-amber-200">
-            <HelpCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
-            <p className="text-xs text-amber-800"><span className="font-medium">Resolution blocker:</span> {blocker}</p>
+          <div className="flex items-center gap-1.5 bg-amber-500/15 rounded p-2 border border-amber-300 dark:border-amber-500/30">
+            <HelpCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <p className="text-xs text-amber-800 dark:text-amber-300"><span className="font-medium">Resolution blocker:</span> {blocker}</p>
           </div>
         </div>
       )}
@@ -689,7 +689,7 @@ export default function Analytics() {
                         </td>
                         <td className="px-4 py-2.5">
                           {claim ? (
-                            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5">
+                            <span className="text-xs bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 rounded px-1.5 py-0.5">
                               {claim}
                             </span>
                           ) : "—"}

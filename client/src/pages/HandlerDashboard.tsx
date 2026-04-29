@@ -156,7 +156,7 @@ function CalledBackButton({ intakeId, handlerName, onSuccess }: { intakeId: numb
     <Button
       size="sm"
       variant="outline"
-      className="text-xs h-7 border-green-300 text-green-700 hover:bg-green-50"
+      className="text-xs h-7 border-green-300 text-green-700 hover:bg-green-500/10"
       disabled={calledBack.isPending}
       onClick={() => calledBack.mutate({ intakeId, handlerName })}
     >
@@ -240,7 +240,7 @@ export default function HandlerDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#171b31]">
+            <h1 className="text-2xl font-bold text-foreground">
               {isImpersonating ? (
                 <span>
                   Viewing as{" "}
@@ -333,7 +333,7 @@ export default function HandlerDashboard() {
                     <PhoneIncoming className="w-4 h-4 text-blue-500" />
                     <span className="text-xs text-muted-foreground font-medium">Total Calls</span>
                   </div>
-                  <div className="text-2xl font-bold text-[#171b31]">{metrics.total ?? 0}</div>
+                  <div className="text-2xl font-bold text-foreground">{metrics.total ?? 0}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {metrics.inbound ?? 0} inbound · {metrics.outbound ?? 0} outbound
                   </div>
@@ -346,7 +346,7 @@ export default function HandlerDashboard() {
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
                     <span className="text-xs text-muted-foreground font-medium">Answered</span>
                   </div>
-                  <div className="text-2xl font-bold text-[#171b31]">{metrics.answered ?? 0}</div>
+                  <div className="text-2xl font-bold text-foreground">{metrics.answered ?? 0}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {metrics.total
                       ? `${Math.round(((metrics.answered ?? 0) / metrics.total) * 100)}% answer rate`
@@ -361,7 +361,7 @@ export default function HandlerDashboard() {
                     <PhoneOff className="w-4 h-4 text-red-400" />
                     <span className="text-xs text-muted-foreground font-medium">Missed</span>
                   </div>
-                  <div className="text-2xl font-bold text-[#171b31]">{metrics.missed ?? 0}</div>
+                  <div className="text-2xl font-bold text-foreground">{metrics.missed ?? 0}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {metrics.total
                       ? `${Math.round(((metrics.missed ?? 0) / metrics.total) * 100)}% miss rate`
@@ -376,7 +376,7 @@ export default function HandlerDashboard() {
                     <Clock className="w-4 h-4 text-purple-500" />
                     <span className="text-xs text-muted-foreground font-medium">Avg Handle Time</span>
                   </div>
-                  <div className="text-2xl font-bold text-[#171b31]">
+                  <div className="text-2xl font-bold text-foreground">
                     {metrics.avgDurationMin != null
                       ? `${metrics.avgDurationMin}m`
                       : "—"}
@@ -477,7 +477,7 @@ export default function HandlerDashboard() {
                   key={record.id}
                   className={`transition-colors ${
                     record.callbackDueBy && new Date(record.callbackDueBy) < new Date()
-                      ? "border-red-200 bg-red-50/30"
+                      ? "border-red-200 bg-red-500/10/30"
                       : "border-amber-200 bg-amber-50/20"
                   }`}
                 >
@@ -485,7 +485,7 @@ export default function HandlerDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-sm text-[#171b31]">
+                          <span className="font-medium text-sm text-foreground">
                             {record.callerName || record.callerPhone || "Unknown Caller"}
                           </span>
                           {record.callerOrg && (
@@ -558,7 +558,7 @@ export default function HandlerDashboard() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-sm text-[#171b31]">
+                          <span className="font-medium text-sm text-foreground">
                             {record.callerName || record.callerPhone || "Unknown Caller"}
                           </span>
                           {record.callerOrg && (
@@ -608,7 +608,7 @@ export default function HandlerDashboard() {
             {coachingTips.map((tip, i) => (
               <Card key={i} className="border-amber-100 bg-amber-50/30">
                 <CardContent className="p-4">
-                  <p className="text-sm text-[#171b31] leading-relaxed">{tip}</p>
+                  <p className="text-sm text-foreground leading-relaxed">{tip}</p>
                 </CardContent>
               </Card>
             ))}
@@ -625,12 +625,12 @@ export default function HandlerDashboard() {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {HOLD_REMINDERS.map((item, i) => (
-              <Card key={i} className="border-blue-100 bg-blue-50/20">
+              <Card key={i} className="border-blue-100 bg-blue-500/10/20">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <span className="text-xl flex-shrink-0">{item.icon}</span>
                     <div>
-                      <div className="font-semibold text-sm text-[#171b31] mb-1">{item.title}</div>
+                      <div className="font-semibold text-sm text-foreground mb-1">{item.title}</div>
                       <p className="text-xs text-muted-foreground leading-relaxed">{item.body}</p>
                     </div>
                   </div>
@@ -650,12 +650,12 @@ export default function HandlerDashboard() {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {SOFT_TRANSFER_TIPS.map((item, i) => (
-              <Card key={i} className="border-purple-100 bg-purple-50/20">
+              <Card key={i} className="border-purple-100 bg-purple-500/10/20">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <span className="text-xl flex-shrink-0">{item.icon}</span>
                     <div>
-                      <div className="font-semibold text-sm text-[#171b31] mb-1">{item.title}</div>
+                      <div className="font-semibold text-sm text-foreground mb-1">{item.title}</div>
                       <p className="text-xs text-muted-foreground leading-relaxed">{item.body}</p>
                     </div>
                   </div>
