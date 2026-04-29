@@ -94,12 +94,18 @@ export default function Dashboard() {
     offset: 0,
   });
 
+  const { data: closedData } = trpc.intake.list.useQuery({
+    status: "closed",
+    limit: 1,
+    offset: 0,
+  });
+
   const { data: analyticsData } = trpc.intake.analytics.useQuery();
   const { data: callFull } = trpc.calls.fullAnalytics.useQuery();
 
   const totalRecords = recentData?.total ?? 0;
   const openCount = openData?.total ?? 0;
-  const closedCount = totalRecords - openCount;
+  const closedCount = closedData?.total ?? 0;
   const urgentCount = urgentData?.total ?? 0;
 
   const callerTypeBreakdown = analyticsData?.byCallerType ?? [];
@@ -248,7 +254,7 @@ export default function Dashboard() {
                             <div className="text-2xl font-bold text-green-600">{closedCount}</div>
                             <InfoTooltip text="Intake records that have been resolved — the handler called back and the issue was addressed. Click to view closed records." />
                           </div>
-                          <div className="text-xs text-muted-foreground">Closed / Resolved</div>
+                          <div className="text-xs text-muted-foreground">Auto-closed / No message</div>
                         </div>
                       </div>
                     </CardContent>

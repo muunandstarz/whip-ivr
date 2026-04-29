@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
@@ -17,12 +17,18 @@ import {
 import { ArrowLeft, Save } from "lucide-react";
 import { toast } from "sonner";
 
-const HANDLERS = [
-  "Natasha", "Jayla", "Carlito", "Annie", "Lorraine", "Jovel", "MJ", "Daryl",
-];
-
 export default function NewIntake() {
   const [, navigate] = useLocation();
+  const { data: trpcUser } = trpc.auth.me.useQuery();
+  const { data: handlersData } = trpc.handlers.list.useQuery();
+
+  // Admin-only guard: redirect non-admins
+  useEffect(() => {
+    if (trpcUser && trpcUser.role !== "admin") {
+      navigate("/intake");
+    }
+  }, [trpcUser, navigate]);
+
   const [form, setForm] = useState({
     callerPhone: "",
     callerType: "unknown" as "carrier" | "law_office" | "medical_provider" | "member" | "claimant" | "police" | "unknown",
@@ -45,6 +51,19 @@ export default function NewIntake() {
   });
 
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Don't render form until we know the user is an admin
+  if (!trpcUser || trpcUser.role !== "admin") {
+    return (
+      <WhipLayout>
+        <div className="p-6 flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </WhipLayout>
+    );
+  }
+
+  const handlers = handlersData?.filter((h) => h.active) ?? [];
 
   return (
     <WhipLayout>
@@ -163,8 +182,10 @@ export default function NewIntake() {
                   <SelectValue placeholder="Select handler" />
                 </SelectTrigger>
                 <SelectContent>
-                  {HANDLERS.map((h) => (
-                    <SelectItem key={h} value={h}>{h}</SelectItem>
+                  {handlers.map((h) => (
+                    <SelectItem key={h.id} value={h.name}>
+                      {h.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

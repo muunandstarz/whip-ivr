@@ -215,7 +215,8 @@ export async function getIntakeRecords(opts: {
     conditions.push(sql`${intakeRecords.createdAt} >= ${opts.dateFrom}`);
   }
   if (opts.dateTo) {
-    conditions.push(sql`${intakeRecords.createdAt} <= ${opts.dateTo}`);
+    // Include the full day: use < next day so 2026-04-29 includes all records up to 23:59:59
+    conditions.push(sql`${intakeRecords.createdAt} < DATE_ADD(${opts.dateTo}, INTERVAL 1 DAY)`);
   }
   if (opts.search) {
     conditions.push(

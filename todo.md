@@ -260,6 +260,7 @@ Business routing logic to implement in resolveHandler():
 - [x] On save: mark intake record as closed (or escalated), set callbackAt timestamp, set callbackHandlerName, add notes
 - [x] Show "Returned" badge on intake record after callback is logged
 - [ ] Demo mode: simulate call in progress (since Aircall phone SDK not yet confirmed) — show active call UI with intake context visible
+- [x] Admin-only guard added to /intake/new route (redirect non-admins to /intake)
 - [x] Callback history: show previous callback attempts on the intake detail pagee
 
 ---
@@ -288,21 +289,21 @@ Business routing logic to implement in resolveHandler():
 
 ---
 ## Dashboard Fixes (Apr 29 2026)
-- [ ] Make "New intakes today" card clickable — link to Intake Records filtered to today's date
-- [ ] Fix incorrect "15 Total resolved" count — investigate what records are being counted as resolved and correct the logic
+- [x] Make "New intakes today" card clickable — link to Intake Records filtered to today's date
+- [x] Fix incorrect "15 Total resolved" count — investigate what records are being counted as resolved and correct the logic
 
 ---
 ## Handler Workspace & Dashboard Fixes (Apr 29 2026 — Batch 5)
-- [ ] Handler workspace: show inbound vs outbound call split on the Total Calls card (e.g. "72 inbound · 27 outbound")
-- [ ] Dashboard: wire dateFrom/dateTo query params in IntakeRecords so "New intakes today" card link actually filters the list
+- [x] Handler workspace: show inbound vs outbound call split on the Total Calls card (e.g. "72 inbound · 27 outbound")
+- [x] Dashboard: wire dateFrom/dateTo query params in IntakeRecords so "New intakes today" card link actually filters the list
 
 ---
 ## Manual Intake Cleanup & Handler Workspace (Apr 29 2026 — Batch 6)
-- [ ] Remove "Log Manual Intake" button from Dashboard header
-- [ ] Hide "New Intake" nav link from non-admin users (keep /intake/new route accessible for admins only)
-- [ ] Add inbound vs outbound split to handler workspace Total Calls card
-- [ ] Wire dateFrom/dateTo query params in IntakeRecords so "New intakes today" dashboard link actually filters the list
+- [x] Remove "Log Manual Intake" button from Dashboard header
+- [x] Hide "New Intake" nav link from non-admin users (keep /intake/new route accessible for admins only)
+- [x] Add inbound vs outbound split to handler workspace Total Calls card
+- [x] Wire dateFrom/dateTo query params in IntakeRecords so "New intakes today" dashboard link actually filters the list
 
 ---
 ## Next Record Navigation Fix (Apr 29 2026)
-- [ ] Fix "Next record" navigation in IntakeDetail: for non-admin handlers, only navigate through their own assigned records (not all records globally)
+- [x] Fix "Next record" navigation in IntakeDetail: for non-admin handlers, only navigate through their own assigned records (not all records globally)
