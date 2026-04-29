@@ -145,51 +145,47 @@ export default function Dashboard() {
         {analyticsData && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Link href={`/intake?dateFrom=${todayStr}&dateTo=${todayStr}`}>
-              <div className="flex items-center gap-3 bg-[#171b31]/5 border border-[#171b31]/10 rounded-xl px-4 py-3 cursor-pointer hover:border-[#171b31]/30 transition-all">
-                <CalendarDays className="w-5 h-5 text-[#171b31] flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="text-lg font-bold text-[#171b31]">{Number(todayCount)}</div>
+              <div className="flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3.5 cursor-pointer hover:shadow-md hover:border-[#171b31]/40 transition-all group">
+                <div className="w-10 h-10 rounded-lg bg-[#171b31]/10 flex items-center justify-center flex-shrink-0">
+                  <CalendarDays className="w-5 h-5 text-[#171b31]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-2xl font-bold text-foreground">{Number(todayCount)}</div>
                   <div className="text-xs text-muted-foreground">New intakes today</div>
                 </div>
-                {Number(todayCount) > 0 && (
-                  <span className="ml-auto text-xs text-[#171b31]/60 font-medium flex items-center gap-0.5">
-                    View <ArrowRight className="w-3 h-3" />
-                  </span>
-                )}
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
               </div>
             </Link>
             <Link href="/intake?status=open&priority=urgent">
-              <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border cursor-pointer transition-all ${
-                urgentCount > 0
-                  ? "bg-red-50 border-red-200 hover:border-red-400"
-                  : "bg-gray-50 border-gray-200"
+              <div className={`flex items-center gap-4 bg-card border rounded-xl px-4 py-3.5 cursor-pointer hover:shadow-md transition-all group ${
+                urgentCount > 0 ? "border-red-300 hover:border-red-400" : "border-border hover:border-border/80"
               }`}>
-                <Flame className={`w-5 h-5 flex-shrink-0 ${urgentCount > 0 ? "text-red-500" : "text-gray-400"}`} />
-                <div>
-                  <div className={`text-lg font-bold ${urgentCount > 0 ? "text-red-600" : "text-gray-500"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  urgentCount > 0 ? "bg-red-100" : "bg-muted"
+                }`}>
+                  <Flame className={`w-5 h-5 ${urgentCount > 0 ? "text-red-500" : "text-muted-foreground"}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-2xl font-bold ${urgentCount > 0 ? "text-red-600" : "text-foreground"}`}>
                     {urgentCount}
                   </div>
                   <div className="text-xs text-muted-foreground">Urgent open records</div>
                 </div>
-                {urgentCount > 0 && (
-                  <span className="ml-auto text-xs text-red-500 font-medium flex items-center gap-0.5">
-                    View <ArrowRight className="w-3 h-3" />
-                  </span>
-                )}
+                <ArrowRight className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                  urgentCount > 0 ? "text-red-400 group-hover:text-red-600" : "text-muted-foreground"
+                }`} />
               </div>
             </Link>
             <Link href="/intake?status=closed">
-              <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-gray-400 transition-all">
-                <Archive className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="text-lg font-bold text-gray-700">{closedCount}</div>
+              <div className="flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3.5 cursor-pointer hover:shadow-md hover:border-border/80 transition-all group">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  <Archive className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-2xl font-bold text-foreground">{closedCount}</div>
                   <div className="text-xs text-muted-foreground">Closed / no message</div>
                 </div>
-                {closedCount > 0 && (
-                  <span className="ml-auto text-xs text-gray-500 font-medium flex items-center gap-0.5">
-                    View <ArrowRight className="w-3 h-3" />
-                  </span>
-                )}
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
               </div>
             </Link>
           </div>

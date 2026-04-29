@@ -24,10 +24,14 @@ import {
   UserCog,
   LayoutGrid,
   SlidersHorizontal,
+  Sun,
+  Moon,
+  Contrast,
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
+import { useTheme, type Theme } from "@/contexts/ThemeContext";
 
 // ── Nav items for admin users ────────────────────────────────────────────────
 const ADMIN_NAV_ITEMS = [
@@ -56,6 +60,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { impersonating, setImpersonating, isImpersonating } = useImpersonation();
+  const { theme, setTheme } = useTheme();
 
   // Fetch tRPC user to get role (server-side role, not Clerk metadata)
   const { data: trpcUser } = trpc.auth.me.useQuery();
@@ -271,6 +276,28 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 {isAdmin ? "Admin" : "Handler"} · {displayEmail}
               </div>
             </div>
+          </div>
+          {/* Theme toggle */}
+          <div className="flex items-center gap-1 mb-2">
+            {([
+              { value: "light" as Theme,         icon: Sun,      label: "Light" },
+              { value: "dark" as Theme,           icon: Moon,     label: "Dark" },
+              { value: "high-contrast" as Theme,  icon: Contrast, label: "HC" },
+            ]).map(({ value, icon: Icon, label }) => (
+              <button
+                key={value}
+                title={label + " mode"}
+                onClick={() => setTheme(value)}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition-all ${
+                  theme === value
+                    ? "bg-white/20 text-white font-medium"
+                    : "text-white/40 hover:text-white/70 hover:bg-white/10"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
           <Button
             variant="ghost"

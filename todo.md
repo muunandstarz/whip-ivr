@@ -320,3 +320,7 @@ Business routing logic to implement in resolveHandler():
 - [ ] SLA compliance card on Admin Dashboard: team-wide callback compliance rate
 - [ ] getCallbackSLAMetrics(handlerName?) DB helper — returns total, onTime, overdue, pending counts
 - [x] Remove Elizabeth Avilla from handler dropdown list and routing table
+- [x] Fix Dashboard KPI cards: remove gray background, use clean white card with colored accent border/icon instead
+- [x] Add dark mode (lean navy theme) accessible to all users via toggle in nav
+- [x] Add high contrast mode accessible to all users via toggle in nav
+- [x] Persist theme preference (dark/light/high-contrast) in localStorage
