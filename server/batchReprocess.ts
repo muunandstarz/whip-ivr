@@ -20,7 +20,6 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string }> = {
   annie:      { id: 5,     name: "Annie Ortiz" },
   ana:        { id: 6,     name: "Ana Padilla" },
   catherine:  { id: 7,     name: "Catherine Cestina" },
-  elizabeth:  { id: 8,     name: "Elizabeth Avilla" },
   lorraine:   { id: 9,     name: "Lorraine Tria" },
   raine:      { id: 9,     name: "Lorraine Tria" },
   daniel:     { id: 10,    name: "Daniel Giono" },

@@ -551,7 +551,7 @@ export async function getRepeatCallers() {
 export const CLAIMS_TEAM = [
   'Ana Padilla', 'Annie Ortiz', 'Bennet Carlos', 'Carlito Legarde Jr',
   'Catherine Cestina', 'Daniel Giono', 'Daryl Ochate', 'Demily Flores',
-  'Elizabeth Avilla', 'Jayla Bernard', 'Jovel Villa', 'Lorraine Tria',
+  'Jayla Bernard', 'Jovel Villa', 'Lorraine Tria',
   'Madeline Green', 'Mary Joy Badua', 'Natashia Edulan',
 ];
 
@@ -922,4 +922,95 @@ export async function updateCallScript(
         ...(label ? { label } : {}),
       },
     });
+}
+
+// ─── Callback SLA ──────────────────────────────────────────────────────────
+
+/**
+ * Add N business hours to a date.
+ * Business hours = Mon–Fri, 8am–6pm (10 hrs/day).
+ * If the start time is outside business hours, it snaps to the next open window.
+ */
+export function addBusinessHours(start: Date, hours: number): Date {
+  const BIZ_START = 8;  // 8am
+  const BIZ_END   = 18; // 6pm
+  const BIZ_HRS   = BIZ_END - BIZ_START; // 10 hrs/day
+
+  let d = new Date(start.getTime());
+
+  // Snap to start of next business window if outside hours
+  const snapToNextBizOpen = (dt: Date) => {
+    const day = dt.getDay(); // 0=Sun, 6=Sat
+    const h = dt.getHours() + dt.getMinutes() / 60;
+    if (day === 0) { dt.setDate(dt.getDate() + 1); dt.setHours(BIZ_START, 0, 0, 0); return; }
+    if (day === 6) { dt.setDate(dt.getDate() + 2); dt.setHours(BIZ_START, 0, 0, 0); return; }
+    if (h < BIZ_START) { dt.setHours(BIZ_START, 0, 0, 0); return; }
+    if (h >= BIZ_END)  { dt.setDate(dt.getDate() + (day === 5 ? 3 : 1)); dt.setHours(BIZ_START, 0, 0, 0); }
+  };
+
+  snapToNextBizOpen(d);
+
+  let remaining = hours;
+  while (remaining > 0) {
+    const h = d.getHours() + d.getMinutes() / 60;
+    const hoursLeftToday = BIZ_END - h;
+    if (remaining <= hoursLeftToday) {
+      d.setTime(d.getTime() + remaining * 3600_000);
+      remaining = 0;
+    } else {
+      remaining -= hoursLeftToday;
+      // Move to next business day open
+      const day = d.getDay();
+      d.setDate(d.getDate() + (day === 5 ? 3 : 1));
+      d.setHours(BIZ_START, 0, 0, 0);
+    }
+  }
+  return d;
+}
+
+/**
+ * Returns callback SLA metrics for a handler (or all handlers if handlerName is omitted).
+ * Only counts voicemail-sourced intake records that have not been closed before the due date.
+ */
+export async function getCallbackSLAMetrics(handlerName?: string) {
+  const db = await getDb();
+  if (!db) return { total: 0, onTime: 0, overdue: 0, pending: 0, complianceRate: 0 };
+
+  const handlerCondition = handlerName
+    ? sql`handlerName LIKE ${`%${handlerName}%`}`
+    : sql`1=1`;
+
+  const rows = await db.execute<{
+    total: number;
+    onTime: number;
+    overdue: number;
+    pending: number;
+  }>(sql`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE
+        WHEN callbackAt IS NOT NULL AND callbackDueBy IS NOT NULL AND callbackAt <= callbackDueBy THEN 1
+        ELSE 0
+      END) AS onTime,
+      SUM(CASE
+        WHEN callbackAt IS NULL AND callbackDueBy IS NOT NULL AND callbackDueBy < NOW() THEN 1
+        ELSE 0
+      END) AS overdue,
+      SUM(CASE
+        WHEN callbackAt IS NULL AND (callbackDueBy IS NULL OR callbackDueBy >= NOW()) THEN 1
+        ELSE 0
+      END) AS pending
+    FROM intake_records
+    WHERE source = 'voicemail'
+      AND status != 'closed'
+      AND ${handlerCondition}
+  `);
+
+  const r = (rows as any)[0] ?? { total: 0, onTime: 0, overdue: 0, pending: 0 };
+  const total = Number(r.total ?? 0);
+  const onTime = Number(r.onTime ?? 0);
+  const overdue = Number(r.overdue ?? 0);
+  const pending = Number(r.pending ?? 0);
+  const complianceRate = total > 0 ? Math.round((onTime / (onTime + overdue)) * 100) : 100;
+  return { total, onTime, overdue, pending, complianceRate };
 }

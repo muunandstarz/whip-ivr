@@ -11,6 +11,27 @@ const AIRCALL_API_ID = process.env.AIRCALL_API_ID ?? "";
 const AIRCALL_API_TOKEN = process.env.AIRCALL_API_TOKEN ?? "";
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 
+function addBizHours(start: Date, hours: number): Date {
+  const BIZ_START = 8, BIZ_END = 18;
+  const d = new Date(start.getTime());
+  const snap = (dt: Date) => {
+    const day = dt.getDay(), h = dt.getHours() + dt.getMinutes() / 60;
+    if (day === 0) { dt.setDate(dt.getDate() + 1); dt.setHours(BIZ_START, 0, 0, 0); return; }
+    if (day === 6) { dt.setDate(dt.getDate() + 2); dt.setHours(BIZ_START, 0, 0, 0); return; }
+    if (h < BIZ_START) { dt.setHours(BIZ_START, 0, 0, 0); return; }
+    if (h >= BIZ_END) { dt.setDate(dt.getDate() + (day === 5 ? 3 : 1)); dt.setHours(BIZ_START, 0, 0, 0); }
+  };
+  snap(d);
+  let rem = hours;
+  while (rem > 0) {
+    const h = d.getHours() + d.getMinutes() / 60;
+    const left = BIZ_END - h;
+    if (rem <= left) { d.setTime(d.getTime() + rem * 3600_000); rem = 0; }
+    else { rem -= left; const day = d.getDay(); d.setDate(d.getDate() + (day === 5 ? 3 : 1)); d.setHours(BIZ_START, 0, 0, 0); }
+  }
+  return d;
+}
+
 async function fetchFreshVoicemailUrl(aircallCallId: string): Promise<string | null> {
   try {
     const auth = Buffer.from(`${AIRCALL_API_ID}:${AIRCALL_API_TOKEN}`).toString("base64");
@@ -164,14 +185,8 @@ async function main() {
       // 5. Determine priority
       const priority = isRepeat && repeatCount >= 3 ? "urgent" : isRepeat ? "high" : "normal";
 
-      // 6. Callback due by (5pm today or next business day)
-      const eob = new Date();
-      eob.setHours(17, 0, 0, 0);
-      if (new Date() > eob) {
-        eob.setDate(eob.getDate() + 1);
-        if (eob.getDay() === 6) eob.setDate(eob.getDate() + 2);
-        if (eob.getDay() === 0) eob.setDate(eob.getDate() + 1);
-      }
+      // 6. Callback SLA: due within 4 business hours of receipt
+      const eob = addBizHours(new Date(), 4);
 
       // 7. Insert using raw SQL
       const [insertResult] = await conn.execute(`

@@ -60,7 +60,6 @@ const HANDLER_COLORS: Record<string, string> = {
   "Demily Flores":      "bg-rose-100 text-rose-800 border-rose-200",
   "Ana Padilla":        "bg-rose-100 text-rose-800 border-rose-200",
   "Catherine Cestina":  "bg-cyan-100 text-cyan-800 border-cyan-200",
-  "Elizabeth Avilla":   "bg-lime-100 text-lime-800 border-lime-200",
   "Unassigned":         "bg-gray-100 text-gray-600 border-gray-200",
 };
 

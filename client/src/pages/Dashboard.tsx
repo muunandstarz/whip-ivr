@@ -102,6 +102,7 @@ export default function Dashboard() {
 
   const { data: analyticsData } = trpc.intake.analytics.useQuery();
   const { data: callFull } = trpc.calls.fullAnalytics.useQuery();
+  const { data: teamSLA } = trpc.handlerMetrics.callbackSLA.useQuery({});
 
   const totalRecords = recentData?.total ?? 0;
   const openCount = openData?.total ?? 0;
@@ -641,6 +642,43 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                </CardContent>
+              </Card>
+            )}
+            {/* Team Callback SLA */}
+            {teamSLA && (teamSLA.onTime > 0 || teamSLA.overdue > 0) && (
+              <Card className={teamSLA.overdue > 0 ? "border-red-200" : "border-green-200"}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-semibold">Callback SLA</CardTitle>
+                    <InfoTooltip text="Team-wide callback compliance rate. Voicemail callbacks must be returned within 4 business hours of receipt." />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-2xl font-bold ${
+                      teamSLA.complianceRate >= 90 ? "text-green-600" :
+                      teamSLA.complianceRate >= 70 ? "text-amber-600" : "text-red-600"
+                    }`}>{teamSLA.complianceRate}%</span>
+                    {teamSLA.overdue > 0 && (
+                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                        {teamSLA.overdue} overdue
+                      </span>
+                    )}
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        teamSLA.complianceRate >= 90 ? "bg-green-500" :
+                        teamSLA.complianceRate >= 70 ? "bg-amber-500" : "bg-red-500"
+                      }`}
+                      style={{ width: `${teamSLA.complianceRate}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{teamSLA.onTime} on time</span>
+                    <span>{teamSLA.pending} pending</span>
+                  </div>
                 </CardContent>
               </Card>
             )}

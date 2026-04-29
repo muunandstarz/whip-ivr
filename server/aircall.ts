@@ -1,5 +1,5 @@
 import express from "express";
-import { getDb } from "./db";
+import { getDb, addBusinessHours } from "./db";
 import { intakeRecords, callHistory, callerProfiles, handlers } from "../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
@@ -23,7 +23,6 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   ana:        { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
   mary:       { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
   catherine:  { id: 7,     name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
-  elizabeth:  { id: 8,     name: "Elizabeth Avilla",   email: "elizabeth.avilla@drivewhip.com" },
   lorraine:   { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   raine:      { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   daniel:     { id: 10,    name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
@@ -464,17 +463,8 @@ export async function processVoicemail(params: {
     claimMatchType: claimMatchType ?? undefined,
     claimMatchConfidence: claimMatchConfidence ?? undefined,
     snapsheetClaimUrl: snapsheetClaimUrl ?? undefined,
-    // Callback QA: due by 5pm on the day the voicemail was received
-    callbackDueBy: (() => {
-      const eob = new Date();
-      eob.setHours(17, 0, 0, 0);
-      if (new Date() > eob) {
-        eob.setDate(eob.getDate() + 1);
-        if (eob.getDay() === 6) eob.setDate(eob.getDate() + 2);
-        if (eob.getDay() === 0) eob.setDate(eob.getDate() + 1);
-      }
-      return eob;
-    })(),
+    // Callback SLA: due within 4 business hours of receipt
+    callbackDueBy: addBusinessHours(new Date(), 4),
   });
 
   // 7. Update call_history record

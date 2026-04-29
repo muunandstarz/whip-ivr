@@ -307,3 +307,16 @@ Business routing logic to implement in resolveHandler():
 ---
 ## Next Record Navigation Fix (Apr 29 2026)
 - [x] Fix "Next record" navigation in IntakeDetail: for non-admin handlers, only navigate through their own assigned records (not all records globally)
+
+---
+## Callback SLA System (Apr 29 2026 — Demo Prep)
+- [ ] Add addBusinessHours(date, hours) utility — skips weekends, respects 8am–6pm business hours
+- [ ] Update voicemail intake pipeline: set callbackDueBy = addBusinessHours(createdAt, 4) on new records
+- [ ] Backfill callbackDueBy on existing open voicemail records that have null callbackDueBy
+- [ ] Countdown badge on Intake Records rows: "Due in 2h", "Overdue 3h ago" (replaces flat "Due EOB")
+- [ ] Overdue row highlight: red tinted row background when callback is overdue and not yet completed
+- [ ] Add "Unassigned / Triage" as a valid handler option in the reassign dropdown
+- [ ] SLA compliance metric on Handler Dashboard: "X of Y callbacks within SLA" with % bar
+- [ ] SLA compliance card on Admin Dashboard: team-wide callback compliance rate
+- [ ] getCallbackSLAMetrics(handlerName?) DB helper — returns total, onTime, overdue, pending counts
+- [x] Remove Elizabeth Avilla from handler dropdown list and routing table

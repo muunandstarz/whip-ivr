@@ -202,6 +202,11 @@ export default function HandlerDashboard() {
     { handlerName: effectiveName },
     { enabled: !!effectiveName }
   );
+  // Fetch callback SLA metrics for this handler
+  const { data: slaData } = trpc.handlerMetrics.callbackSLA.useQuery(
+    { handlerName: effectiveName },
+    { enabled: !!effectiveName }
+  );
 
   // Fetch QA scorecards for coaching tips
   const { data: scorecards } = trpc.qa.handlerScorecards.useQuery(
@@ -267,6 +272,46 @@ export default function HandlerDashboard() {
           </div>
         </div>
 
+        {/* Callback SLA Compliance */}
+        {slaData && (slaData.onTime > 0 || slaData.overdue > 0 || slaData.pending > 0) && (
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Callback SLA — 4 Business Hours
+            </h2>
+            <Card className={slaData.overdue > 0 ? "border-red-200" : "border-green-200"}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className={`w-4 h-4 ${slaData.overdue > 0 ? "text-red-500" : "text-green-500"}`} />
+                    <span className="text-sm font-medium">
+                      {slaData.complianceRate}% compliance
+                    </span>
+                    {slaData.overdue > 0 && (
+                      <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">
+                        {slaData.overdue} overdue
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {slaData.onTime} on time · {slaData.pending} pending
+                  </div>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      slaData.complianceRate >= 90 ? "bg-green-500" :
+                      slaData.complianceRate >= 70 ? "bg-amber-500" : "bg-red-500"
+                    }`}
+                    style={{ width: `${slaData.complianceRate}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Voicemail callbacks must be returned within 4 business hours of receipt.
+                </p>
+              </CardContent>
+            </Card>
+          </section>
+        )}
         {/* Personal Call Metrics */}
         <section>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
