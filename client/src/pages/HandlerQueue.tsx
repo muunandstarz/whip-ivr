@@ -84,6 +84,12 @@ export default function HandlerQueue() {
   const [initialized, setInitialized] = useState(false);
 
   const { data: handlersData } = trpc.handlers.list.useQuery();
+  const { data: teamCbStats } = trpc.handlerMetrics.callbackStats.useQuery({});
+  // Build a quick lookup: handlerName -> completed count (last 30 days)
+  const completedByHandler: Record<string, { completed: number; today: number }> = {};
+  for (const h of teamCbStats?.byHandler ?? []) {
+    completedByHandler[h.handlerName] = { completed: h.completed, today: h.today };
+  }
   const handlerIdMap = Object.fromEntries(
     (handlersData ?? []).map((h: { id: number; name: string }) => [h.name, h.id])
   );
@@ -292,6 +298,9 @@ export default function HandlerQueue() {
                         <div className="font-semibold text-foreground">{handlerName}</div>
                         <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
                           <span>{records.length} open record{records.length !== 1 ? "s" : ""}</span>
+                          {completedByHandler[handlerName]?.completed != null && (
+                            <span className="text-emerald-600 font-medium">• {completedByHandler[handlerName].completed} completed (30d)</span>
+                          )}
                           {urgentInQueue > 0 && (
                             <span className="text-red-600 font-medium">• {urgentInQueue} urgent</span>
                           )}

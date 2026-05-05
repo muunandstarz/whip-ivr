@@ -208,6 +208,12 @@ export default function HandlerDashboard() {
     { enabled: !!effectiveName }
   );
 
+  // Fetch completed callback stats for this handler
+  const { data: cbStats } = trpc.handlerMetrics.callbackStats.useQuery(
+    { handlerName: effectiveName },
+    { enabled: !!effectiveName }
+  );
+
   // Fetch QA scorecards for coaching tips
   const { data: scorecards } = trpc.qa.handlerScorecards.useQuery(
     { handlerId: handlerId! },
@@ -312,6 +318,61 @@ export default function HandlerDashboard() {
             </Card>
           </section>
         )}
+        {/* Callbacks Completed */}
+        {cbStats && (cbStats.today > 0 || cbStats.thisWeek > 0 || cbStats.thisMonth > 0 || cbStats.allTime > 0) && (
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Callbacks Completed
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="border-l-4 border-l-emerald-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span className="text-xs text-muted-foreground font-medium">Today</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">{cbStats.today}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">callbacks logged</div>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs text-muted-foreground font-medium">This Week</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">{cbStats.thisWeek}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">last 7 days</div>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-purple-500" />
+                    <span className="text-xs text-muted-foreground font-medium">This Month</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">{cbStats.thisMonth}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">last 30 days</div>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-orange-400">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-orange-400" />
+                    <span className="text-xs text-muted-foreground font-medium">Reached</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {cbStats.byDisposition?.reached ?? 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    of {cbStats.allTime} total attempts
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+        )}
+
         {/* Personal Call Metrics */}
         <section>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">

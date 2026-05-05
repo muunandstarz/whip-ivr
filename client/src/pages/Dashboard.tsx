@@ -103,6 +103,7 @@ export default function Dashboard() {
   const { data: analyticsData } = trpc.intake.analytics.useQuery();
   const { data: callFull } = trpc.calls.fullAnalytics.useQuery();
   const { data: teamSLA } = trpc.handlerMetrics.callbackSLA.useQuery({});
+  const { data: teamCbStats } = trpc.handlerMetrics.callbackStats.useQuery({});
 
   const totalRecords = recentData?.total ?? 0;
   const openCount = openData?.total ?? 0;
@@ -598,6 +599,44 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Callback Completion Leaderboard */}
+            {teamCbStats && teamCbStats.byHandler.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-semibold">Callbacks Completed — Last 30 Days</CardTitle>
+                    <InfoTooltip text="Number of voicemail callbacks each handler has logged in the last 30 days. 'Today' shows callbacks logged since midnight." />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {teamCbStats.byHandler.map((h, i) => (
+                    <div key={h.handlerName} className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground w-4 text-right">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-sm font-medium truncate">{h.handlerName}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            {h.today > 0 && (
+                              <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200">
+                                +{h.today} today
+                              </Badge>
+                            )}
+                            <span className="text-sm font-bold text-foreground">{h.completed}</span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{ width: `${Math.min(100, (h.completed / (teamCbStats.byHandler[0]?.completed || 1)) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             )}

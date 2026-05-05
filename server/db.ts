@@ -1021,3 +1021,84 @@ export async function getCallbackSLAMetrics(handlerName?: string) {
   const complianceRate = total > 0 ? Math.round((onTime / (onTime + overdue)) * 100) : 100;
   return { total, onTime, overdue, pending, complianceRate };
 }
+
+/**
+ * Returns completed callback counts for a handler (or all handlers) broken down
+ * by time period and disposition.  A "completed" callback is any intake_record
+ * where callbackAt IS NOT NULL (i.e. the handler logged a callback attempt).
+ */
+export async function getCallbackCompletionStats(handlerName?: string) {
+  const db = await getDb();
+  if (!db) return { today: 0, thisWeek: 0, thisMonth: 0, allTime: 0, byDisposition: {} as Record<string, number>, byHandler: [] as { handlerName: string; completed: number; reached: number; today: number }[] };
+
+  const handlerCondition = handlerName
+    ? sql`callbackHandlerName LIKE ${`%${handlerName}%`}`
+    : sql`1=1`;
+
+  // Aggregate counts from intake_records where callbackAt is set
+  const rows = await db.execute<{
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    allTime: number;
+  }>(sql`
+    SELECT
+      SUM(CASE WHEN DATE(callbackAt) = CURDATE() THEN 1 ELSE 0 END) AS today,
+      SUM(CASE WHEN callbackAt >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS thisWeek,
+      SUM(CASE WHEN callbackAt >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS thisMonth,
+      COUNT(*) AS allTime
+    FROM intake_records
+    WHERE callbackAt IS NOT NULL
+      AND ${handlerCondition}
+  `);
+
+  const r = (rows as any)[0] ?? {};
+  const today = Number(r.today ?? 0);
+  const thisWeek = Number(r.thisWeek ?? 0);
+  const thisMonth = Number(r.thisMonth ?? 0);
+  const allTime = Number(r.allTime ?? 0);
+
+  // Disposition breakdown from callback_logs (more granular — one row per attempt)
+  const dispositionRows = await db.execute<{ disposition: string; count: number }>(sql`
+    SELECT disposition, COUNT(*) AS count
+    FROM callback_logs
+    WHERE 1=1
+    ${handlerName ? sql`AND handlerName LIKE ${`%${handlerName}%`}` : sql``}
+    GROUP BY disposition
+  `);
+  const byDisposition: Record<string, number> = {};
+  for (const row of dispositionRows as any[]) {
+    byDisposition[row.disposition] = Number(row.count ?? 0);
+  }
+
+  // Per-handler leaderboard (only when no specific handler is requested)
+  let byHandler: { handlerName: string; completed: number; reached: number; today: number }[] = [];
+  if (!handlerName) {
+    const leaderRows = await db.execute<{
+      handlerName: string;
+      completed: number;
+      reached: number;
+      today: number;
+    }>(sql`
+      SELECT
+        callbackHandlerName AS handlerName,
+        COUNT(*) AS completed,
+        SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS reached,
+        SUM(CASE WHEN DATE(callbackAt) = CURDATE() THEN 1 ELSE 0 END) AS today
+      FROM intake_records
+      WHERE callbackAt IS NOT NULL
+        AND callbackHandlerName IS NOT NULL
+        AND callbackAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY callbackHandlerName
+      ORDER BY completed DESC
+    `);
+    byHandler = (leaderRows as any[]).map((row) => ({
+      handlerName: row.handlerName,
+      completed: Number(row.completed ?? 0),
+      reached: Number(row.reached ?? 0),
+      today: Number(row.today ?? 0),
+    }));
+  }
+
+  return { today, thisWeek, thisMonth, allTime, byDisposition, byHandler };
+}

@@ -345,3 +345,11 @@ Business routing logic to implement in resolveHandler():
 - [x] Add auth.markOnboardingSeen tRPC mutation (sets onboardingSeenAt = now())
 - [x] Build OnboardingModal component: 6-slide tour (Welcome, Dashboard, Intake Records, 4-hour SLA, How to close a record, Softphone)
 - [x] Wire modal into WhipLayout: shows when user.onboardingSeenAt is null, dismissed permanently on "Get started" or "Skip tour"
+
+---
+## Completed Callback Tracking (May 5 2026)
+- [x] Add getCallbackCompletionStats(handlerName?, period?) db helper — returns completed, reached, no_answer, left_voicemail, today, this_week, this_month per handler
+- [x] Add handlerMetrics.callbackStats tRPC procedure
+- [x] Add "Callbacks Completed" KPI card to HandlerDashboard (today / this week / this month)
+- [x] Add per-handler completed callback table to HandlerQueue page (open vs completed side-by-side)
+- [x] Add completed callback leaderboard to admin Dashboard page
