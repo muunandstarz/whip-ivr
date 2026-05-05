@@ -18,6 +18,7 @@ import Softphone from "./pages/Softphone";
 import HandlerDashboard from "./pages/HandlerDashboard";
 import UserManagement from "./pages/UserManagement";
 import Settings from "./pages/Settings";
+import CallbackLog from "./pages/CallbackLog";
 import { ImpersonationProvider } from "./contexts/ImpersonationContext";
 
 function Router() {
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/my-dashboard" component={HandlerDashboard} />
       <Route path="/users" component={UserManagement} />
       <Route path="/settings" component={Settings} />
+      <Route path="/callback-log" component={CallbackLog} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

@@ -1102,3 +1102,70 @@ export async function getCallbackCompletionStats(handlerName?: string) {
 
   return { today, thisWeek, thisMonth, allTime, byDisposition, byHandler };
 }
+
+/**
+ * Returns all callback_logs joined with intake_records for a global callback log view.
+ * Supports optional filtering by handlerName, disposition, and date range.
+ */
+export async function getCallbackLogAll(opts?: {
+  handlerName?: string;
+  disposition?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+
+  const limit = opts?.limit ?? 50;
+  const offset = opts?.offset ?? 0;
+
+  const conditions: ReturnType<typeof sql>[] = [sql`1=1`];
+  if (opts?.handlerName) conditions.push(sql`cl.handlerName LIKE ${`%${opts.handlerName}%`}`);
+  if (opts?.disposition) conditions.push(sql`cl.disposition = ${opts.disposition}`);
+
+  const where = conditions.reduce((acc, c) => sql`${acc} AND ${c}`);
+
+  const rows = await db.execute<{
+    id: number;
+    intakeId: number;
+    handlerName: string | null;
+    calledAt: Date | null;
+    disposition: string;
+    outcome: string | null;
+    notes: string | null;
+    callerName: string | null;
+    callerPhone: string | null;
+    callerOrg: string | null;
+    callerType: string | null;
+    status: string;
+  }>(sql`
+    SELECT
+      cl.id,
+      cl.intakeId,
+      cl.handlerName,
+      cl.calledAt,
+      cl.disposition,
+      cl.outcome,
+      cl.notes,
+      ir.callerName,
+      ir.callerPhone,
+      ir.callerOrg,
+      ir.callerType,
+      ir.status
+    FROM callback_logs cl
+    JOIN intake_records ir ON ir.id = cl.intakeId
+    WHERE ${where}
+    ORDER BY cl.calledAt DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+  const countRows = await db.execute<{ total: number }>(sql`
+    SELECT COUNT(*) AS total
+    FROM callback_logs cl
+    JOIN intake_records ir ON ir.id = cl.intakeId
+    WHERE ${where}
+  `);
+
+  const total = Number((countRows as any)[0]?.total ?? 0);
+  return { rows: rows as any[], total };
+}

@@ -741,6 +741,12 @@ export default function Dashboard() {
                     Call Tracking
                   </Button>
                 </Link>
+                <Link href="/callback-log">
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    Callback Log
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </div>

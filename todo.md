@@ -353,3 +353,10 @@ Business routing logic to implement in resolveHandler():
 - [x] Add "Callbacks Completed" KPI card to HandlerDashboard (today / this week / this month)
 - [x] Add per-handler completed callback table to HandlerQueue page (open vs completed side-by-side)
 - [x] Add completed callback leaderboard to admin Dashboard page
+
+---
+## Bug Fixes & Callback Log (May 5 2026)
+- [x] Fix missing React key prop warning in Dashboard leaderboard inner div
+- [x] Add getCallbackLogAll() db helper — returns all callback_logs joined with intake_records, filterable by handler/date/disposition
+- [x] Add callbacks.all tRPC procedure
+- [x] Add Callback Log standalone page (/callback-log) — table of all logged callbacks with handler, caller, disposition, date, link to record; added to admin nav and Quick Actions

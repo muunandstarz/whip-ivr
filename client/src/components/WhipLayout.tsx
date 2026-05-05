@@ -27,6 +27,7 @@ import {
   Sun,
   Moon,
   Contrast,
+  ListChecks,
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -40,6 +41,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/handler-queue", label: "Handler Queue", icon: Users },
+  { href: "/callback-log", label: "Callback Log", icon: ListChecks },
   { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/qa", label: "Weekly QA", icon: Star },

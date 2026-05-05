@@ -38,6 +38,7 @@ import {
   updateCallScript,
   getCallbackSLAMetrics,
   getCallbackCompletionStats,
+  getCallbackLogAll,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -397,6 +398,16 @@ export const appRouter = router({
       .input(z.object({ intakeId: z.number() }))
       .query(async ({ input }) => {
         return getCallbackLogs(input.intakeId);
+      }),
+    all: protectedProcedure
+      .input(z.object({
+        handlerName: z.string().optional(),
+        disposition: z.string().optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }))
+      .query(async ({ input }) => {
+        return getCallbackLogAll(input);
       }),
   }),
 
