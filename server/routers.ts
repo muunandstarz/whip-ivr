@@ -281,6 +281,33 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return getCallbackCompletionStats(input.handlerName);
       }),
+    intakeSummary: protectedProcedure.query(async () => {
+      // Returns open and closed intake counts per handler
+      const { getDb } = await import("./db");
+      const { intakeRecords } = await import("../drizzle/schema");
+      const { sql, count } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          handlerName: intakeRecords.handlerName,
+          status: intakeRecords.status,
+          cnt: count(),
+        })
+        .from(intakeRecords)
+        .groupBy(intakeRecords.handlerName, intakeRecords.status);
+
+      // Pivot: handlerName -> { open, closed, escalated }
+      const map: Record<string, { open: number; closed: number; escalated: number }> = {};
+      for (const row of rows) {
+        const name = row.handlerName ?? "Unassigned";
+        if (!map[name]) map[name] = { open: 0, closed: 0, escalated: 0 };
+        if (row.status === "open") map[name].open = Number(row.cnt);
+        else if (row.status === "closed") map[name].closed = Number(row.cnt);
+        else if (row.status === "escalated") map[name].escalated = Number(row.cnt);
+      }
+      return Object.entries(map).map(([handlerName, counts]) => ({ handlerName, ...counts }));
+    }),
   }),
 
   // ─── Batch Call Classification ────────────────────────────────────────

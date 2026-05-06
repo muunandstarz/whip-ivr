@@ -85,10 +85,16 @@ export default function HandlerQueue() {
 
   const { data: handlersData } = trpc.handlers.list.useQuery();
   const { data: teamCbStats } = trpc.handlerMetrics.callbackStats.useQuery({});
+  const { data: intakeSummaryData } = trpc.handlerMetrics.intakeSummary.useQuery();
   // Build a quick lookup: handlerName -> completed count (last 30 days)
   const completedByHandler: Record<string, { completed: number; today: number }> = {};
   for (const h of teamCbStats?.byHandler ?? []) {
     completedByHandler[h.handlerName] = { completed: h.completed, today: h.today };
+  }
+  // Build a quick lookup: handlerName -> { open, closed }
+  const intakeSummaryByHandler: Record<string, { open: number; closed: number }> = {};
+  for (const h of intakeSummaryData ?? []) {
+    intakeSummaryByHandler[h.handlerName] = { open: h.open, closed: h.closed };
   }
   const handlerIdMap = Object.fromEntries(
     (handlersData ?? []).map((h: { id: number; name: string }) => [h.name, h.id])
@@ -297,9 +303,12 @@ export default function HandlerQueue() {
                       <div className="flex-1">
                         <div className="font-semibold text-foreground">{handlerName}</div>
                         <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-                          <span>{records.length} open record{records.length !== 1 ? "s" : ""}</span>
+                          <span>{records.length} open</span>
+                          {intakeSummaryByHandler[handlerName]?.closed != null && (
+                            <span className="text-emerald-600 font-medium">• {intakeSummaryByHandler[handlerName].closed} closed</span>
+                          )}
                           {completedByHandler[handlerName]?.completed != null && (
-                            <span className="text-emerald-600 font-medium">• {completedByHandler[handlerName].completed} completed (30d)</span>
+                            <span className="text-blue-600 font-medium">• {completedByHandler[handlerName].completed} callbacks (30d)</span>
                           )}
                           {urgentInQueue > 0 && (
                             <span className="text-red-600 font-medium">• {urgentInQueue} urgent</span>

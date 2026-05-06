@@ -723,30 +723,19 @@ export default function Dashboard() {
                 <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Link href="/handler-queue">
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
-                    <Phone className="w-3.5 h-3.5" />
-                    Handler Queue
-                  </Button>
-                </Link>
-                <Link href="/analytics">
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    Full Analytics
-                  </Button>
-                </Link>
-                <Link href="/call-tracking">
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    Call Tracking
-                  </Button>
-                </Link>
-                <Link href="/callback-log">
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
-                    <CheckCheck className="w-3.5 h-3.5" />
-                    Callback Log
-                  </Button>
-                </Link>
+                {([
+                  { href: "/handler-queue", icon: Phone, label: "Handler Queue" },
+                  { href: "/analytics", icon: TrendingUp, label: "Full Analytics" },
+                  { href: "/call-tracking", icon: PhoneCall, label: "Call Tracking" },
+                  { href: "/callback-log", icon: CheckCheck, label: "Callback Log" },
+                ] as const).map(({ href, icon: Icon, label }) => (
+                  <Link key={href} href={href}>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
+                      <Icon className="w-3.5 h-3.5" />
+                      {label}
+                    </Button>
+                  </Link>
+                ))}
               </CardContent>
             </Card>
           </div>

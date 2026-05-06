@@ -70,6 +70,7 @@ export const intakeRecords = mysqlTable("intake_records", {
   repeatCallCount: int("repeatCallCount").default(0).notNull(),
   priority: mysqlEnum("priority", ["normal", "high", "urgent"]).default("normal").notNull(),
   source: mysqlEnum("source", ["voicemail", "manual", "live_call"]).default("voicemail").notNull(),
+  routingMethod: mysqlEnum("routingMethod", ["ivr", "extension", "manual"]).default("ivr"),
   aircallRecordingUrl: text("aircallRecordingUrl"),
   notes: text("notes"),
   // Claim number matching

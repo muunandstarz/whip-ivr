@@ -162,7 +162,8 @@ export default function CallbackLog() {
                   const DispIcon = dispCfg.icon;
                   const outcomeCfg = row.outcome ? OUTCOME_CONFIG[row.outcome] : null;
                   return (
-                    <Link key={row.id} href={`/intake/${row.intakeId}`}>
+                    <div key={row.id}>
+                    <Link href={`/intake/${row.intakeId}`}>
                       <div className="grid grid-cols-[1fr_1.5fr_1fr_1fr_1fr] gap-3 px-5 py-3 border-b last:border-b-0 hover:bg-muted/20 cursor-pointer transition-colors items-center">
                         {/* When */}
                         <div className="min-w-0">
@@ -205,6 +206,7 @@ export default function CallbackLog() {
                         </div>
                       </div>
                     </Link>
+                    </div>
                   );
                 })}
               </div>

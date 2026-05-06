@@ -377,3 +377,14 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix call volume metrics: expand Aircall sync to all claims-team numbers (not just Claims Line 1125090) — filter by fetching Aircall numbers list and matching to known handler Aircall user IDs; keep helpdesk/billing/HR numbers excluded
 - [x] Add extension-based voicemail routing: fetch Aircall /users at startup to build aircallUserId→handler map; when voicemail call.user matches a known handler, assign directly to that handler
 - [x] Update routing.test.ts to cover new rules (Tim Chan, Madeline law-office block, 1P vs 3P subro split)
+
+---
+## Handler Dashboard & Routing Fixes — May 6 2026 (round 2)
+- [x] Fix missing key prop in Dashboard.tsx (CardContent Quick Actions — converted to keyed array map)
+- [x] Fix missing key prop in CallbackLog.tsx (rows.map — added outer keyed div wrapper)
+- [x] Fix Callbacks Completed section not showing on handler dashboard (HandlerDashboard.tsx — removed conditional guard)
+- [x] Add open/closed intake count per handler to Handler Queue admin view (handlerMetrics.intakeSummary procedure)
+- [x] Add routingMethod column to intake_records schema (values: "extension" | "ivr" | "manual")
+- [x] Populate routingMethod in processVoicemail (extension if aircallAgentId matched, else ivr)
+- [ ] Show "Direct Extension" vs "IVR Routed" badge on intake record detail and list
+- [x] Sync unread assigned voicemails from Aircall per handler: query /v1/calls/search?user_id={id}, match call.user to handler map, create intake records tagged routingMethod="extension" if not already in DB

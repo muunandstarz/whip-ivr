@@ -308,6 +308,7 @@ export async function processVoicemail(params: {
   aircallNumberId?: number;
   aircallNumberName?: string;
   aircallAgentId?: number;  // Aircall user ID of the agent whose mailbox received the call
+  routingMethod?: "ivr" | "extension" | "manual"; // How this voicemail was routed to this handler
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -503,6 +504,7 @@ export async function processVoicemail(params: {
     repeatCallCount: callCount,
     priority,
     source: "voicemail",
+    routingMethod: params.routingMethod ?? (extensionHandler ? "extension" : "ivr"),
     aircallRecordingUrl: params.voicemailUrl,
     claimMatchType: claimMatchType ?? undefined,
     claimMatchConfidence: claimMatchConfidence ?? undefined,

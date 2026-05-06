@@ -216,6 +216,79 @@ function mapStatus(
   return "missed";
 }
 
+/**
+ * Pull unread voicemails from each handler's personal Aircall mailbox into intake records.
+ * Uses GET /v1/calls/search?user_id={id}&direction=inbound for each known handler.
+ * Any call with a voicemail URL that isn't already in intake_records gets processed.
+ */
+export async function syncAssignedVoicemails(): Promise<number> {
+  if (_aircallUserIdToHandler.size === 0) return 0;
+
+  const { processVoicemail } = await import("./aircall");
+  const mysql = await import("mysql2/promise");
+  const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+
+  // Fetch all aircallCallIds already in intake_records to avoid duplicates
+  const [existingRows] = await conn.query(
+    "SELECT aircallCallId FROM intake_records WHERE aircallCallId IS NOT NULL"
+  ) as any[];
+  const existingIds = new Set<string>((existingRows as any[]).map((r: any) => String(r.aircallCallId)));
+  await conn.end();
+
+  const sevenDaysAgo = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+  let imported = 0;
+
+  for (const [aircallUserId, handler] of Array.from(_aircallUserIdToHandler.entries())) {
+    try {
+      let page = 1;
+      while (true) {
+        const data = await aircallFetch(
+          `/calls/search?user_id=${aircallUserId}&direction=inbound&from=${sevenDaysAgo}&order=desc&per_page=50&page=${page}`
+        );
+        const calls: any[] = data.calls ?? [];
+        if (calls.length === 0) break;
+
+        for (const call of calls) {
+          const voicemailUrl: string | null = call.voicemail ?? null;
+          if (!voicemailUrl) continue; // no voicemail on this call
+
+          const callId = String(call.id);
+          if (existingIds.has(callId)) continue; // already imported
+
+          console.log(`[AircallSync] Importing assigned voicemail for ${handler.name}: call ${callId}`);
+          try {
+            await processVoicemail({
+              aircallCallId: callId,
+              callerPhone: call.raw_digits ?? "",
+              voicemailUrl,
+              startedAt: call.started_at ? new Date(call.started_at * 1000) : new Date(),
+              endedAt: call.ended_at ? new Date(call.ended_at * 1000) : undefined,
+              aircallNumberId: call.number?.id ? Number(call.number.id) : undefined,
+              aircallNumberName: call.number?.name ?? undefined,
+              aircallAgentId: aircallUserId,
+              routingMethod: "extension",
+            });
+            existingIds.add(callId); // prevent double-import in same cycle
+            imported++;
+          } catch (err: any) {
+            console.error(`[AircallSync] Failed to import assigned voicemail ${callId}:`, err.message ?? err);
+          }
+        }
+
+        if (calls.length < 50) break;
+        page++;
+      }
+    } catch (err: any) {
+      console.warn(`[AircallSync] Could not fetch assigned voicemails for handler ${handler.name}:`, err.message ?? err);
+    }
+  }
+
+  if (imported > 0) {
+    console.log(`[AircallSync] Imported ${imported} assigned voicemails from handler mailboxes`);
+  }
+  return imported;
+}
+
 let syncRunning = false;
 
 async function runSync() {
@@ -228,6 +301,8 @@ async function runSync() {
     if (count > 0) {
       console.log(`[AircallSync] Synced ${count} calls from claims-team numbers`);
     }
+    // Also pull any unread assigned voicemails from handler personal mailboxes
+    await syncAssignedVoicemails();
   } catch (err: any) {
     console.error("[AircallSync] Error:", err.message ?? err);
   } finally {

@@ -319,7 +319,7 @@ export default function HandlerDashboard() {
           </section>
         )}
         {/* Callbacks Completed */}
-        {cbStats && (cbStats.today > 0 || cbStats.thisWeek > 0 || cbStats.thisMonth > 0 || cbStats.allTime > 0) && (
+        {cbStats && (
           <section>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
               Callbacks Completed
