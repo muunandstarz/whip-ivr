@@ -6,6 +6,7 @@ import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { notifyOwner } from "./_core/notification";
 import { matchClaimNumber, resolveClaimFromSnapsheet, reformatRunOnClaimNumber, matchRunOnClaimNumber } from "./claimMatch";
+import { getHandlerByAircallUserId } from "./aircallSync";
 
 export const aircallRouter = express.Router();
 
@@ -26,6 +27,8 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   lorraine:   { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   raine:      { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   daniel:     { id: 10,    name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
+  tim:        { id: 30006, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
+  "tim chan":  { id: 30006, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
   jovel:      { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   jobs:       { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   daryl:      { id: 30002, name: "Daryl Ochate",        email: "daryl.ochate@drivewhip.com" },
@@ -45,6 +48,31 @@ function nextTriageHandler() {
   return h;
 }
 
+// Outbound subro team — 1P vehicle recovery (Madeline, Daniel, Tim Chan); round-robin
+const OUTBOUND_SUBRO_TEAM = [
+  { id: 30004, name: "Madeline Green", email: "madeline.green@drivewhip.com" },
+  { id: 10,    name: "Daniel Giono",  email: "daniel.giono@drivewhip.com" },
+  { id: 30006, name: "Tim Chan",       email: "tim.chan@drivewhip.com" },
+];
+let _outboundSubroIndex = 0;
+function nextOutboundSubroHandler() {
+  const h = OUTBOUND_SUBRO_TEAM[_outboundSubroIndex % OUTBOUND_SUBRO_TEAM.length];
+  _outboundSubroIndex++;
+  return h;
+}
+
+// Inbound subro team — 3P vehicle / property damage (Carlito, Catherine); round-robin
+const INBOUND_SUBRO_TEAM = [
+  { id: 4, name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
+  { id: 7, name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
+];
+let _inboundSubroIndex = 0;
+function nextInboundSubroHandler() {
+  const h = INBOUND_SUBRO_TEAM[_inboundSubroIndex % INBOUND_SUBRO_TEAM.length];
+  _inboundSubroIndex++;
+  return h;
+}
+
 // First-party team — for repairs/claim status/total loss; round-robin
 const FIRST_PARTY_TEAM = [
   { id: 1,     name: "Natashia Edulan", email: "natashiae@drivewhip.com" },
@@ -60,7 +88,12 @@ function nextFirstPartyHandler() {
 }
 
 // Keyword patterns for content-based routing (checked against message + transcript)
-const SUBRO_REGEX    = /\b(subro(gation)?|demand( letter| package)?|settlement|lien|reimbursement|recovery package)\b/i;
+// 1P subro: caller is seeking recovery FOR our vehicle / our insured (outbound subro team)
+const SUBRO_1P_REGEX = /\b(subro(gation)?|demand( letter| package)?|recovery package|reimbursement)\b/i;
+const SUBRO_1P_VEHICLE_REGEX = /\b(your (vehicle|insured|client|driver|member)|our vehicle|1p|first.?party|your claim|your insured'?s? vehicle|whip vehicle|whip driver)\b/i;
+// 3P subro: caller is asserting a claim AGAINST us for their vehicle (inbound subro / Carlito+Catherine)
+const SUBRO_3P_REGEX = /\b(subro(gation)?|demand( letter| package)?|settlement|lien|reimbursement|recovery package)\b/i;
+const SUBRO_3P_VEHICLE_REGEX = /\b(my (vehicle|car|truck)|our (vehicle|car)|their vehicle|third.?party|3rd.?party|property damage|pd claim)\b/i;
 const INJURY_REGEX   = /\b(pip|personal injury|bodily injury|bi claim|injury claim|medical treatment|pain and suffering|attorney|represented|lawsuit|litigation)\b/i;
 const PD_REGEX       = /\b(property damage|pd claim|third.?party|3rd party|vehicle damage|repair estimate|damage claim|collision damage)\b/i;
 const TOTAL_LOSS_REGEX = /\b(total loss|totaled|write.?off|salvage|ACV|actual cash value|total.?loss claim)\b/i;
@@ -93,12 +126,10 @@ function resolveHandler(
 
     const text = ((message ?? "") + " " + transcript).toLowerCase();
 
-  // Law offices always go to Jayla UNLESS the transcript explicitly mentions
-  // property damage (PD) — in that case Carlito handles it.
-  // This check runs before all other content-based routing to prevent
-  // subro/repairs keywords from accidentally rerouting law office calls.
+  // Law offices ALWAYS go to Jayla — no exceptions.
+  // Madeline/Daniel/Tim Chan handle outbound subro; they do NOT take attorney calls.
+  // PD law offices also go to Jayla (she coordinates with Carlito as needed).
   if (callerType === "law_office") {
-    if (PD_REGEX.test(text)) return HANDLER_ROUTING.carlito;
     return HANDLER_ROUTING.jayla;
   }
 
@@ -106,16 +137,21 @@ function resolveHandler(
   if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
 
   // 2. Content-based routing (topic takes priority over caller type)
-  // Subro / demand / payment → Madeline
-  if (SUBRO_REGEX.test(text)) return HANDLER_ROUTING.madeline;
+  // Subro routing — split by direction:
+  //   1P outbound subro (recovery for our vehicle) → Madeline / Daniel / Tim Chan
+  //   3P inbound subro (claim against us for their vehicle) → Carlito / Catherine
+  if (SUBRO_1P_REGEX.test(text) && SUBRO_1P_VEHICLE_REGEX.test(text)) return nextOutboundSubroHandler();
+  if (SUBRO_3P_REGEX.test(text) && SUBRO_3P_VEHICLE_REGEX.test(text)) return nextInboundSubroHandler();
+  // Generic subro keyword without clear direction → outbound subro team (safer default)
+  if (SUBRO_1P_REGEX.test(text)) return nextOutboundSubroHandler();
   // Injury (PIP / BI) → Jayla
   if (INJURY_REGEX.test(text)) return HANDLER_ROUTING.jayla;
   // Total loss → Demily
   if (TOTAL_LOSS_REGEX.test(text)) return HANDLER_ROUTING.demily;
   // Active repairs / claim status → First Party team (round-robin)
   if (REPAIRS_REGEX.test(text)) return nextFirstPartyHandler();
-  // PD / 3rd-party property damage → Carlito
-  if (PD_REGEX.test(text)) return HANDLER_ROUTING.carlito;
+  // PD / 3rd-party property damage → Carlito / Catherine (inbound subro team)
+  if (PD_REGEX.test(text)) return nextInboundSubroHandler();
   if (callerType === "carrier")          return nextFirstPartyHandler(); // carriers default to first-party team
   if (callerType === "member" || callerType === "claimant") return nextFirstPartyHandler();
 
@@ -271,6 +307,7 @@ export async function processVoicemail(params: {
   endedAt?: Date;
   aircallNumberId?: number;
   aircallNumberName?: string;
+  aircallAgentId?: number;  // Aircall user ID of the agent whose mailbox received the call
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -360,8 +397,15 @@ export async function processVoicemail(params: {
     extracted.whipClaimNumber
   );
 
-  // 4. Resolve handler assignment (uses message content + transcript for topic-based routing)
-  const handler = resolveHandler(extracted.handlerMentioned, extracted.callerType, extracted.message, transcript);
+  // 4. Resolve handler assignment
+  // Priority: (a) extension owner (Aircall user ID match) → (b) caller named someone → (c) content/type routing
+  const extensionHandler = getHandlerByAircallUserId(params.aircallAgentId ?? null);
+  const handler = extensionHandler
+    ? extensionHandler
+    : resolveHandler(extracted.handlerMentioned, extracted.callerType, extracted.message, transcript);
+  if (extensionHandler) {
+    console.log(`[Aircall] Extension routing: call ${params.aircallCallId} assigned to ${extensionHandler.name} (Aircall user ${params.aircallAgentId})`);
+  }
 
   // 5. Determine priority
   let priority: "normal" | "high" | "urgent" = "normal";
@@ -586,6 +630,7 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
         endedAt: call.ended_at ? new Date(call.ended_at * 1000) : undefined,
         aircallNumberId: call.number?.id,
         aircallNumberName: call.number?.name,
+        aircallAgentId: call.user?.id ? Number(call.user.id) : undefined,
       });
     }
   } catch (err) {

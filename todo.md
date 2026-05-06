@@ -360,3 +360,20 @@ Business routing logic to implement in resolveHandler():
 - [x] Add getCallbackLogAll() db helper — returns all callback_logs joined with intake_records, filterable by handler/date/disposition
 - [x] Add callbacks.all tRPC procedure
 - [x] Add Callback Log standalone page (/callback-log) — table of all logged callbacks with handler, caller, disposition, date, link to record; added to admin nav and Quick Actions
+
+---
+## Team Feedback — May 6 2026
+- [ ] Add audio playback player to intake detail page (voicemail recording URL from Aircall)
+- [ ] Fix inbound/outbound call direction: sync direction field from Aircall API correctly so call log mirrors Aircall
+- [ ] Route extension-specific voicemails to the handler whose extension received the call (use Aircall user/line data)
+- [ ] Routing rule: Madeline (subro) should NOT receive calls from attorneys/law offices — route those to general queue or correct handler
+- [ ] Routing rule: calls with no claim number or vehicle info should default to MJ and Daryl (processors), unless explicitly addressed to a specific person
+
+---
+## Routing & Sync Fixes — May 6 2026
+- [x] Add Tim Chan to HANDLER_ROUTING table (outbound subro team with Madeline and Daniel)
+- [x] Fix law_office routing: Madeline NEVER gets law office calls — law offices always go to Jayla (PD→Carlito exception stays)
+- [x] Fix subro routing: split into 1P outbound subro (Madeline/Daniel/Tim Chan round-robin) vs 3P inbound subro (Carlito/Catherine round-robin); require 1P vehicle keywords to route to outbound subro team
+- [x] Fix call volume metrics: expand Aircall sync to all claims-team numbers (not just Claims Line 1125090) — filter by fetching Aircall numbers list and matching to known handler Aircall user IDs; keep helpdesk/billing/HR numbers excluded
+- [x] Add extension-based voicemail routing: fetch Aircall /users at startup to build aircallUserId→handler map; when voicemail call.user matches a known handler, assign directly to that handler
+- [x] Update routing.test.ts to cover new rules (Tim Chan, Madeline law-office block, 1P vs 3P subro split)

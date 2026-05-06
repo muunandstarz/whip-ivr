@@ -1,19 +1,30 @@
 /**
  * Aircall Sync Service
  * Polls the Aircall API every 15 minutes to pull recent calls into call_history.
- * Only syncs calls from the Whip Claims Line — all other Aircall numbers are ignored.
+ *
+ * Syncs calls for ALL numbers that belong to the Whip Claims team.
+ * "Claims team" is determined by fetching the Aircall /users list and keeping
+ * only users whose email ends in @drivewhip.com.  Any number that has at least
+ * one drivewhip.com agent assigned to it is treated as a claims-team number.
+ * Helpdesk, billing, HR, and other non-claims numbers are automatically excluded.
+ *
+ * The Whip Claims Line (ID 1125090) is always included as a hard-coded fallback
+ * so voicemail intake continues even if the user-list fetch fails.
  */
 import cron from "node-cron";
 import { upsertCallHistory } from "./db";
 
 const AIRCALL_API_BASE = "https://api.aircall.io/v1";
 
-// Only sync calls from the Whip Claims Line (ID 1125090, name "Whip Claims Line")
-// This prevents calls from Whip Outbound, Collections, HelpDesk, HR, etc. from polluting analytics.
+// Hard-coded fallback — always include the main Claims Line
 const WHIP_CLAIMS_NUMBER_ID = 1125090;
 const WHIP_CLAIMS_NUMBER_NAME = "Whip Claims Line";
 
-// Credentials stored as env vars (set via webdev_request_secrets)
+// Cache of allowed number IDs (refreshed every sync cycle)
+let _allowedNumberIds: Set<number> = new Set([WHIP_CLAIMS_NUMBER_ID]);
+let _allowedNumberNames: Set<string> = new Set([WHIP_CLAIMS_NUMBER_NAME]);
+let _aircallUserIdToHandler: Map<number, { id: number; name: string }> = new Map();
+
 function getAircallAuth(): string {
   const id = process.env.AIRCALL_API_ID;
   const token = process.env.AIRCALL_API_TOKEN;
@@ -37,9 +48,107 @@ async function aircallFetch(path: string): Promise<any> {
 }
 
 /**
+ * Fetch all Aircall users and build:
+ *   1. A set of number IDs/names that belong to drivewhip.com agents
+ *   2. A map of aircallUserId → handler (for extension-based voicemail routing)
+ *
+ * Handler name matching uses the HANDLER_ROUTING table from aircall.ts by
+ * looking up the user's email against known drivewhip.com emails.
+ */
+export async function refreshClaimsTeamNumbers(): Promise<void> {
+  try {
+    // Known drivewhip.com handler emails → handler info
+    const EMAIL_TO_HANDLER: Record<string, { id: number; name: string }> = {
+      "natashiae@drivewhip.com":           { id: 1,     name: "Natashia Edulan" },
+      "jayla.bernard@drivewhip.com":       { id: 2,     name: "Jayla Bernard" },
+      "mj.badua@drivewhip.com":            { id: 3,     name: "Mary Joy Badua" },
+      "carlito.legarde@drivewhip.com":     { id: 4,     name: "Carlito Legarde Jr" },
+      "annie.ortiz@drivewhip.com":         { id: 5,     name: "Annie Ortiz" },
+      "anap@drivewhip.com":                { id: 6,     name: "Ana Padilla" },
+      "catherine.cestina@drivewhip.com":   { id: 7,     name: "Catherine Cestina" },
+      "lorraine.tria@drivewhip.com":       { id: 9,     name: "Lorraine Tria" },
+      "daniel.giono@drivewhip.com":        { id: 10,    name: "Daniel Giono" },
+      "jovel.villa@drivewhip.com":         { id: 30001, name: "Jovel Villa" },
+      "daryl.ochate@drivewhip.com":        { id: 30002, name: "Daryl Ochate" },
+      "madeline.green@drivewhip.com":      { id: 30004, name: "Madeline Green" },
+      "demily.flores@drivewhip.com":       { id: 30005, name: "Demily Flores" },
+      "tim.chan@drivewhip.com":            { id: 30006, name: "Tim Chan" },
+    };
+
+    const newAllowedIds = new Set<number>([WHIP_CLAIMS_NUMBER_ID]);
+    const newAllowedNames = new Set<string>([WHIP_CLAIMS_NUMBER_NAME]);
+    const newUserMap = new Map<number, { id: number; name: string }>();
+
+    // Fetch all Aircall users (paginated)
+    let page = 1;
+    while (true) {
+      const data = await aircallFetch(`/users?per_page=50&page=${page}`);
+      const users: any[] = data.users ?? [];
+      if (users.length === 0) break;
+
+      for (const user of users) {
+        const email: string = (user.email ?? "").toLowerCase();
+        const aircallUserId = user.id ? Number(user.id) : null;
+
+        // Only process drivewhip.com accounts
+        if (!email.endsWith("@drivewhip.com")) continue;
+
+        // Map aircall user ID → handler for extension routing
+        if (aircallUserId && EMAIL_TO_HANDLER[email]) {
+          newUserMap.set(aircallUserId, EMAIL_TO_HANDLER[email]);
+        }
+
+        // Collect all number IDs/names assigned to this user
+        const numbers: any[] = user.numbers ?? [];
+        for (const num of numbers) {
+          if (num.id) newAllowedIds.add(Number(num.id));
+          if (num.name) newAllowedNames.add(String(num.name));
+        }
+      }
+
+      if (users.length < 50) break;
+      page++;
+    }
+
+    _allowedNumberIds = newAllowedIds;
+    _allowedNumberNames = newAllowedNames;
+    _aircallUserIdToHandler = newUserMap;
+
+    console.log(
+      `[AircallSync] Claims-team numbers refreshed: ${newAllowedIds.size} number IDs, ` +
+      `${newUserMap.size} agent→handler mappings`
+    );
+  } catch (err: any) {
+    console.warn("[AircallSync] Could not refresh claims-team numbers:", err.message ?? err);
+    // Keep existing cache — don't wipe it on transient errors
+  }
+}
+
+/**
+ * Returns the handler assigned to an Aircall user ID, if known.
+ * Used by the voicemail intake pipeline for extension-based routing.
+ */
+export function getHandlerByAircallUserId(
+  aircallUserId: number | null | undefined
+): { id: number; name: string } | null {
+  if (!aircallUserId) return null;
+  return _aircallUserIdToHandler.get(aircallUserId) ?? null;
+}
+
+function isClaimsTeamCall(call: any): boolean {
+  const numberId = call?.number?.id ? Number(call.number.id) : null;
+  const numberName: string = call?.number?.name ?? "";
+  // Also check the agent — if the agent is a drivewhip.com handler, include the call
+  const agentId = call?.user?.id ? Number(call.user.id) : null;
+  if (agentId && _aircallUserIdToHandler.has(agentId)) return true;
+  if (numberId && _allowedNumberIds.has(numberId)) return true;
+  if (numberName && _allowedNumberNames.has(numberName)) return true;
+  return false;
+}
+
+/**
  * Sync calls from the last N minutes into call_history.
- * Uses the Aircall /calls endpoint filtered by from/to timestamps.
- * Only stores calls from the Whip Claims Line (number ID 1125090).
+ * Includes all calls handled by claims-team numbers or agents.
  */
 export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
   const from = Math.floor((Date.now() - lookbackMinutes * 60 * 1000) / 1000);
@@ -55,14 +164,7 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
     if (calls.length === 0) break;
 
     for (const call of calls) {
-      // Filter: only process calls on the Whip Claims Line
-      const numberId = call.number?.id ? Number(call.number.id) : null;
-      const numberName: string = call.number?.name ?? "";
-      const isClaimsLine =
-        numberId === WHIP_CLAIMS_NUMBER_ID ||
-        numberName === WHIP_CLAIMS_NUMBER_NAME;
-
-      if (!isClaimsLine) {
+      if (!isClaimsTeamCall(call)) {
         skipped++;
         continue;
       }
@@ -71,6 +173,7 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
       const agentName = agentUser
         ? `${agentUser.first_name ?? ""} ${agentUser.last_name ?? ""}`.trim()
         : null;
+      const numberId = call.number?.id ? Number(call.number.id) : null;
 
       await upsertCallHistory({
         aircallCallId: String(call.id),
@@ -90,13 +193,12 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
       synced++;
     }
 
-    // Aircall paginates; stop if we got fewer than 50
     if (calls.length < 50) break;
     page++;
   }
 
   if (skipped > 0) {
-    console.log(`[AircallSync] Skipped ${skipped} calls from non-Claims lines`);
+    console.log(`[AircallSync] Skipped ${skipped} non-claims-team calls`);
   }
   return synced;
 }
@@ -117,12 +219,14 @@ function mapStatus(
 let syncRunning = false;
 
 async function runSync() {
-  if (syncRunning) return; // prevent overlap
+  if (syncRunning) return;
   syncRunning = true;
   try {
+    // Refresh the claims-team number/user map first so it stays current
+    await refreshClaimsTeamNumbers();
     const count = await syncRecentCalls(20);
     if (count > 0) {
-      console.log(`[AircallSync] Synced ${count} calls from Whip Claims Line`);
+      console.log(`[AircallSync] Synced ${count} calls from claims-team numbers`);
     }
   } catch (err: any) {
     console.error("[AircallSync] Error:", err.message ?? err);
@@ -137,11 +241,13 @@ async function runSync() {
  */
 export function startAircallSyncJob() {
   if (!process.env.AIRCALL_API_ID || !process.env.AIRCALL_API_TOKEN) {
-    console.warn("[AircallSync] Credentials not set — sync job not started. Set AIRCALL_API_ID and AIRCALL_API_TOKEN.");
+    console.warn("[AircallSync] Credentials not set — sync job not started.");
     return;
   }
-  // Run immediately on startup, then every 15 minutes
-  runSync();
-  cron.schedule("*/15 * * * *", runSync);
-  console.log("[AircallSync] Scheduled sync every 15 minutes (Whip Claims Line only)");
+  // Warm up the number/user map immediately, then start sync
+  refreshClaimsTeamNumbers().then(() => {
+    runSync();
+    cron.schedule("*/15 * * * *", runSync);
+    console.log("[AircallSync] Scheduled sync every 15 minutes (all claims-team numbers)");
+  });
 }

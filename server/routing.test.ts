@@ -1,17 +1,17 @@
 /**
  * Unit tests for the resolveHandler routing logic in aircall.ts
- * Tests all routing rules defined on Apr 27 2026:
- * - Named handler → route to that person
- * - Subro/demand/payment → Madeline
+ * Updated May 6 2026:
+ * - Named handler → route to that person (including Tim Chan)
+ * - 1P outbound subro (our vehicle) → Madeline / Daniel / Tim Chan
+ * - 3P inbound subro (their vehicle / PD) → Carlito / Catherine
+ * - Law office → ALWAYS Jayla (no exceptions — Madeline never gets attorney calls)
  * - PIP/BI injury → Jayla
  * - Total loss → Demily
  * - Repairs/claim status → First Party team (round-robin)
- * - PD/3rd-party damage → Carlito
- * - Law office caller type → Jayla
  * - Medical provider → Jayla
  * - Unknown/no info → Triage (MJ / Daryl round-robin)
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 
 // ─── Inline the routing logic so tests are self-contained ─────────────────────
 const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string }> = {
@@ -24,8 +24,12 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   carlito:    { id: 4,     name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
   annie:      { id: 5,     name: "Annie Ortiz",        email: "annie.ortiz@drivewhip.com" },
   ana:        { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
+  catherine:  { id: 7,     name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
   lorraine:   { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   raine:      { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
+  daniel:     { id: 10,    name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
+  tim:        { id: 30006, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
+  "tim chan":  { id: 30006, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
   jovel:      { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   jobs:       { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   daryl:      { id: 30002, name: "Daryl Ochate",        email: "daryl.ochate@drivewhip.com" },
@@ -44,6 +48,29 @@ function nextTriageHandler() {
   return h;
 }
 
+const OUTBOUND_SUBRO_TEAM = [
+  { id: 30004, name: "Madeline Green", email: "madeline.green@drivewhip.com" },
+  { id: 10,    name: "Daniel Giono",   email: "daniel.giono@drivewhip.com" },
+  { id: 30006, name: "Tim Chan",        email: "tim.chan@drivewhip.com" },
+];
+let _outboundSubroIndex = 0;
+function nextOutboundSubroHandler() {
+  const h = OUTBOUND_SUBRO_TEAM[_outboundSubroIndex % OUTBOUND_SUBRO_TEAM.length];
+  _outboundSubroIndex++;
+  return h;
+}
+
+const INBOUND_SUBRO_TEAM = [
+  { id: 4, name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
+  { id: 7, name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
+];
+let _inboundSubroIndex = 0;
+function nextInboundSubroHandler() {
+  const h = INBOUND_SUBRO_TEAM[_inboundSubroIndex % INBOUND_SUBRO_TEAM.length];
+  _inboundSubroIndex++;
+  return h;
+}
+
 const FIRST_PARTY_TEAM = [
   { id: 1,     name: "Natashia Edulan", email: "natashiae@drivewhip.com" },
   { id: 9,     name: "Lorraine Tria",   email: "lorraine.tria@drivewhip.com" },
@@ -57,7 +84,10 @@ function nextFirstPartyHandler() {
   return h;
 }
 
-const SUBRO_REGEX    = /\b(subro(gation)?|demand( letter| package)?|payment|settlement|lien|reimbursement|recovery package)\b/i;
+const SUBRO_1P_REGEX = /\b(subro(gation)?|demand( letter| package)?|recovery package|reimbursement)\b/i;
+const SUBRO_1P_VEHICLE_REGEX = /\b(your (vehicle|insured|client|driver|member)|our vehicle|1p|first.?party|your claim|your insured'?s? vehicle|whip vehicle|whip driver)\b/i;
+const SUBRO_3P_REGEX = /\b(subro(gation)?|demand( letter| package)?|settlement|lien|reimbursement|recovery package)\b/i;
+const SUBRO_3P_VEHICLE_REGEX = /\b(my (vehicle|car|truck)|our (vehicle|car)|their vehicle|third.?party|3rd.?party|property damage|pd claim)\b/i;
 const INJURY_REGEX   = /\b(pip|personal injury|bodily injury|bi claim|injury claim|medical treatment|pain and suffering|attorney|represented|lawsuit|litigation)\b/i;
 const PD_REGEX       = /\b(property damage|pd claim|third.?party|3rd party|vehicle damage|repair estimate|damage claim|collision damage)\b/i;
 const TOTAL_LOSS_REGEX = /\b(total loss|totaled|write.?off|salvage|ACV|actual cash value|total.?loss claim)\b/i;
@@ -76,13 +106,21 @@ function resolveHandler(
     }
   }
   const text = ((message ?? "") + " " + transcript).toLowerCase();
-  if (SUBRO_REGEX.test(text))      return HANDLER_ROUTING.madeline;
+
+  // Law offices ALWAYS go to Jayla — no exceptions
+  if (callerType === "law_office") return HANDLER_ROUTING.jayla;
+  // Medical providers always go to Jayla
+  if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
+
+  // Subro routing — split by 1P vs 3P
+  if (SUBRO_1P_REGEX.test(text) && SUBRO_1P_VEHICLE_REGEX.test(text)) return nextOutboundSubroHandler();
+  if (SUBRO_3P_REGEX.test(text) && SUBRO_3P_VEHICLE_REGEX.test(text)) return nextInboundSubroHandler();
+  if (SUBRO_1P_REGEX.test(text)) return nextOutboundSubroHandler();
+
   if (INJURY_REGEX.test(text))     return HANDLER_ROUTING.jayla;
   if (TOTAL_LOSS_REGEX.test(text)) return HANDLER_ROUTING.demily;
   if (REPAIRS_REGEX.test(text))    return nextFirstPartyHandler();
-  if (PD_REGEX.test(text))         return HANDLER_ROUTING.carlito;
-  if (callerType === "law_office")       return HANDLER_ROUTING.jayla;
-  if (callerType === "medical_provider") return HANDLER_ROUTING.jayla;
+  if (PD_REGEX.test(text))         return nextInboundSubroHandler();
   if (callerType === "carrier")          return nextFirstPartyHandler();
   if (callerType === "member" || callerType === "claimant") return nextFirstPartyHandler();
   return nextTriageHandler();
@@ -90,57 +128,123 @@ function resolveHandler(
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
+beforeEach(() => {
+  // Reset all round-robin indices before each test suite for deterministic results
+  _triageIndex = 0;
+  _outboundSubroIndex = 0;
+  _inboundSubroIndex = 0;
+  _firstPartyIndex = 0;
+});
+
 describe("resolveHandler — named handler", () => {
   it("routes to Jayla when caller says 'Jayla'", () => {
-    const h = resolveHandler("Jayla", "carrier", null, "");
-    expect(h.name).toBe("Jayla Bernard");
+    expect(resolveHandler("Jayla", "carrier", null, "").name).toBe("Jayla Bernard");
   });
 
   it("routes to Jovel when caller says 'Jobs'", () => {
-    const h = resolveHandler("Jobs", "unknown", null, "");
-    expect(h.name).toBe("Jovel Villa");
+    expect(resolveHandler("Jobs", "unknown", null, "").name).toBe("Jovel Villa");
   });
 
   it("routes to Lorraine when caller says 'Raine'", () => {
-    const h = resolveHandler("Raine", "unknown", null, "");
-    expect(h.name).toBe("Lorraine Tria");
+    expect(resolveHandler("Raine", "unknown", null, "").name).toBe("Lorraine Tria");
   });
 
   it("routes to MJ when caller says 'Mary Joy'", () => {
-    const h = resolveHandler("Mary Joy", "unknown", null, "");
-    expect(h.name).toBe("Mary Joy Badua");
+    expect(resolveHandler("Mary Joy", "unknown", null, "").name).toBe("Mary Joy Badua");
+  });
+
+  it("routes to Tim Chan when caller says 'Tim'", () => {
+    expect(resolveHandler("Tim", "unknown", null, "").name).toBe("Tim Chan");
+  });
+
+  it("routes to Tim Chan when caller says 'Tim Chan'", () => {
+    expect(resolveHandler("Tim Chan", "unknown", null, "").name).toBe("Tim Chan");
+  });
+});
+
+describe("resolveHandler — law office routing (Madeline NEVER gets attorney calls)", () => {
+  it("routes law office with no keywords to Jayla", () => {
+    expect(resolveHandler(null, "law_office", "Need to speak with someone", "").name).toBe("Jayla Bernard");
+  });
+
+  it("routes law office with subro keywords to Jayla (not Madeline)", () => {
+    expect(resolveHandler(null, "law_office", "Calling about a subrogation demand letter", "").name).toBe("Jayla Bernard");
+  });
+
+  it("routes law office with PD keywords to Jayla (not Carlito)", () => {
+    expect(resolveHandler(null, "law_office", "This is about property damage to my client's vehicle", "").name).toBe("Jayla Bernard");
+  });
+
+  it("routes law office with injury keywords to Jayla", () => {
+    expect(resolveHandler(null, "law_office", null, "calling regarding bodily injury claim").name).toBe("Jayla Bernard");
+  });
+
+  it("routes law office with settlement keywords to Jayla (not Madeline)", () => {
+    expect(resolveHandler(null, "law_office", "We want to discuss settlement", "").name).toBe("Jayla Bernard");
+  });
+});
+
+describe("resolveHandler — subro routing (1P outbound vs 3P inbound)", () => {
+  it("routes 1P subro (our vehicle) to outbound subro team", () => {
+    const h = resolveHandler(null, "carrier", "Calling about subrogation for your vehicle", "");
+    expect(OUTBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
+  });
+
+  it("routes 1P subro with 'your insured' to outbound subro team", () => {
+    const h = resolveHandler(null, "carrier", "We have a subrogation demand for your insured", "");
+    expect(OUTBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
+  });
+
+  it("routes 3P subro (my vehicle) to inbound subro team", () => {
+    const h = resolveHandler(null, "carrier", "Calling about subrogation for my vehicle", "");
+    expect(INBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
+  });
+
+  it("routes 3P subro with 'third party' to inbound subro team", () => {
+    const h = resolveHandler(null, "claimant", "I have a third party property damage claim and want to discuss subrogation", "");
+    expect(INBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
+  });
+
+  it("routes generic subro (no vehicle context) to outbound subro team as default", () => {
+    const h = resolveHandler(null, "carrier", "Calling about a subrogation matter", "");
+    expect(OUTBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
+  });
+
+  it("outbound subro team round-robins across Madeline, Daniel, Tim Chan", () => {
+    _outboundSubroIndex = 0;
+    const names = [0, 1, 2].map(() =>
+      resolveHandler(null, "carrier", "subrogation demand for your vehicle", "").name
+    );
+    expect(names).toContain("Madeline Green");
+    expect(names).toContain("Daniel Giono");
+    expect(names).toContain("Tim Chan");
+  });
+
+  it("inbound subro team round-robins across Carlito and Catherine", () => {
+    _inboundSubroIndex = 0;
+    const names = [0, 1].map(() =>
+      resolveHandler(null, "claimant", "subrogation for my vehicle", "").name
+    );
+    expect(names).toContain("Carlito Legarde Jr");
+    expect(names).toContain("Catherine Cestina");
   });
 });
 
 describe("resolveHandler — content-based routing", () => {
-  it("routes subro demand to Madeline", () => {
-    const h = resolveHandler(null, "carrier", "Calling about a subrogation demand letter", "");
-    expect(h.name).toBe("Madeline Green");
-  });
-
-  it("routes settlement payment to Madeline", () => {
-    const h = resolveHandler(null, "carrier", null, "calling to discuss settlement and payment");
-    expect(h.name).toBe("Madeline Green");
-  });
-
   it("routes PIP claim to Jayla", () => {
-    const h = resolveHandler(null, "carrier", "This is about a PIP claim", "");
-    expect(h.name).toBe("Jayla Bernard");
+    expect(resolveHandler(null, "carrier", "This is about a PIP claim", "").name).toBe("Jayla Bernard");
   });
 
   it("routes bodily injury to Jayla", () => {
-    const h = resolveHandler(null, "law_office", null, "calling regarding bodily injury claim");
-    expect(h.name).toBe("Jayla Bernard");
+    expect(resolveHandler(null, "carrier", null, "calling regarding bodily injury claim").name).toBe("Jayla Bernard");
   });
 
   it("routes total loss to Demily", () => {
-    const h = resolveHandler(null, "carrier", "The vehicle is a total loss", "");
-    expect(h.name).toBe("Demily Flores");
+    expect(resolveHandler(null, "carrier", "The vehicle is a total loss", "").name).toBe("Demily Flores");
   });
 
   it("routes totaled vehicle to Demily", () => {
-    const h = resolveHandler(null, "carrier", null, "the car was totaled in the accident");
-    expect(h.name).toBe("Demily Flores");
+    expect(resolveHandler(null, "carrier", null, "the car was totaled in the accident").name).toBe("Demily Flores");
   });
 
   it("routes claim status to first party team", () => {
@@ -153,26 +257,20 @@ describe("resolveHandler — content-based routing", () => {
     expect(FIRST_PARTY_TEAM.map(x => x.name)).toContain(h.name);
   });
 
-  it("routes 3rd party property damage to Carlito", () => {
+  it("routes 3rd party property damage to inbound subro team (Carlito/Catherine)", () => {
     const h = resolveHandler(null, "claimant", "I have a property damage claim as a third party", "");
-    expect(h.name).toBe("Carlito Legarde Jr");
+    expect(INBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
   });
 
-  it("routes PD claim to Carlito", () => {
+  it("routes PD claim to inbound subro team", () => {
     const h = resolveHandler(null, "carrier", null, "calling about a PD claim for vehicle damage");
-    expect(h.name).toBe("Carlito Legarde Jr");
+    expect(INBOUND_SUBRO_TEAM.map(x => x.name)).toContain(h.name);
   });
 });
 
 describe("resolveHandler — caller type fallback", () => {
-  it("routes law office with no keywords to Jayla", () => {
-    const h = resolveHandler(null, "law_office", "Need to speak with someone", "");
-    expect(h.name).toBe("Jayla Bernard");
-  });
-
   it("routes medical provider to Jayla", () => {
-    const h = resolveHandler(null, "medical_provider", null, "calling from a clinic");
-    expect(h.name).toBe("Jayla Bernard");
+    expect(resolveHandler(null, "medical_provider", null, "calling from a clinic").name).toBe("Jayla Bernard");
   });
 
   it("routes carrier with no keywords to first party team", () => {
@@ -188,11 +286,15 @@ describe("resolveHandler — triage for unknowns", () => {
   });
 
   it("alternates triage between MJ and Daryl", () => {
-    // Reset index
     _triageIndex = 0;
     const h1 = resolveHandler(null, "unknown", null, "");
     const h2 = resolveHandler(null, "unknown", null, "");
     expect(h1.name).not.toBe(h2.name);
+  });
+
+  it("routes call with no claim number and no info to triage (MJ/Daryl)", () => {
+    const h = resolveHandler(null, "unknown", null, "hi please call me back");
+    expect(["Mary Joy Badua", "Daryl Ochate"]).toContain(h.name);
   });
 });
 
@@ -201,17 +303,14 @@ import { reformatRunOnClaimNumber } from "../server/claimMatch";
 
 describe("reformatRunOnClaimNumber — Whisper run-on transcription fix", () => {
   it("reformats standard 18-char run-on (MD + 16 digits)", () => {
-    // MD-9845-790898-153720 → MD9845790898153720 (18 chars)
     expect(reformatRunOnClaimNumber("MD9845790898153720")).toBe("MD-9845-790898-153720");
   });
 
   it("reformats GA run-on from the Shelly/Farmers voicemail", () => {
-    // GA-4899-430247-470636 → GA4899430247470636 (18 chars)
     expect(reformatRunOnClaimNumber("GA4899430247470636")).toBe("GA-4899-430247-470636");
   });
 
   it("returns null for ambiguous 17-char run-on (requires DB lookup to resolve)", () => {
-    // MD984579089815372 is 17 chars — ambiguous split, handled by matchRunOnClaimNumber instead
     expect(reformatRunOnClaimNumber("MD984579089815372")).toBeNull();
   });
 
