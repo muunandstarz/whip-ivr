@@ -404,3 +404,23 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix voicemail audio player in IntakeDetail — added /api/aircall-recording proxy route; audio now streams through server with Basic auth
 - [ ] Fix Dashboard key prop error — full audit of all unkeyed children in Dashboard.tsx (in progress)
 - [x] Refresh helpdesk spec doc with routing rule updates (Tim Chan, subro split, extension routing, multi-number sync, audio proxy)
+
+---
+## Error Reporting System (May 8 2026)
+- [ ] Add error_reports table to DB schema
+- [ ] Add tRPC procedures: errors.report (public) and errors.list / errors.resolve (admin-only)
+- [ ] Build global error collector (window.onerror + unhandledrejection + ErrorBoundary)
+- [ ] Build floating error bubble UI (admin-only) with count badge and error drawer
+- [ ] Error drawer: message, stack, route, user, time; mark-as-resolved button
+- [ ] Fix Dashboard.tsx React key prop warning
+
+---
+
+## Error Reporting System (May 8 2026)
+
+- [x] error_reports DB table + tRPC endpoints (report/list/resolve/unresolvedCount)
+- [x] Global window.onerror + unhandledrejection collector (useErrorReporter hook)
+- [x] ErrorBoundary updated to call reportCaughtError on componentDidCatch
+- [x] Floating ErrorBubble component (admin-only, count badge, slide-out drawer with stack traces)
+- [x] Wired into App.tsx (AppInner wrapper for proper hook context)
+- [x] Audio player fix: recording proxy now uses callId → Aircall API → fresh S3 URL (no auth header forwarding)

@@ -1,9 +1,11 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
+import { reportCaughtError } from "@/hooks/useErrorReporter";
 
 interface Props {
   children: ReactNode;
+  user?: { id?: number; name?: string | null; email?: string | null } | null;
 }
 
 interface State {
@@ -19,6 +21,10 @@ class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error) {
+    reportCaughtError(error, this.props.user);
   }
 
   render() {

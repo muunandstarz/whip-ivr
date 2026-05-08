@@ -239,3 +239,21 @@ export const callScripts = mysqlTable("call_scripts", {
 });
 export type CallScript = typeof callScripts.$inferSelect;
 export type InsertCallScript = typeof callScripts.$inferInsert;
+
+// ─── Error Reports ───────────────────────────────────────────────────────────────────────────────
+export const errorReports = mysqlTable("error_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  url: varchar("url", { length: 1024 }),
+  route: varchar("route", { length: 512 }),
+  userAgent: varchar("userAgent", { length: 512 }),
+  userId: int("userId"),
+  userName: varchar("userName", { length: 255 }),
+  userEmail: varchar("userEmail", { length: 320 }),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedBy: varchar("resolvedBy", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ErrorReport = typeof errorReports.$inferSelect;
+export type InsertErrorReport = typeof errorReports.$inferInsert;

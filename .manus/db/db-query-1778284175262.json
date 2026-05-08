@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `error_reports` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `message` text NOT NULL,\n  `stack` text,\n  `url` varchar(1024),\n  `route` varchar(512),\n  `userAgent` varchar(512),\n  `userId` int,\n  `userName` varchar(255),\n  `userEmail` varchar(320),\n  `resolvedAt` timestamp NULL,\n  `resolvedBy` varchar(255),\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute CREATE TABLE IF NOT EXISTS `error_reports` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `message` text NOT NULL,\n  `stack` text,\n  `url` varchar(1024),\n  `route` varchar(512),\n  `userAgent` varchar(512),\n  `userId` int,\n  `userName` varchar(255),\n  `userEmail` varchar(320),\n  `resolvedAt` timestamp NULL,\n  `resolvedBy` varchar(255),\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 331
+}

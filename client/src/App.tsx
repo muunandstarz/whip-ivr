@@ -20,6 +20,8 @@ import UserManagement from "./pages/UserManagement";
 import Settings from "./pages/Settings";
 import CallbackLog from "./pages/CallbackLog";
 import { ImpersonationProvider } from "./contexts/ImpersonationContext";
+import { ErrorBubble } from "./components/ErrorBubble";
+import { useErrorReporter } from "./hooks/useErrorReporter";
 
 function Router() {
   return (
@@ -45,6 +47,17 @@ function Router() {
   );
 }
 
+/** Inner component so hooks run inside tRPC + auth providers */
+function AppInner() {
+  useErrorReporter();
+  return (
+    <>
+      <Router />
+      <ErrorBubble />
+    </>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -52,7 +65,7 @@ function App() {
         <ImpersonationProvider>
           <TooltipProvider>
             <Toaster />
-            <Router />
+            <AppInner />
           </TooltipProvider>
         </ImpersonationProvider>
       </ThemeProvider>

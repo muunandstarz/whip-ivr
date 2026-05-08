@@ -445,6 +445,89 @@ export const appRouter = router({
   }),
 
   // ─── Settings (admin only) ────────────────────────────────────────────────
+
+  // ─── Error Reports ────────────────────────────────────────────────────────
+  errors: router({
+    report: publicProcedure
+      .input(z.object({
+        message: z.string().max(2000),
+        stack: z.string().max(10000).optional(),
+        url: z.string().max(1024).optional(),
+        route: z.string().max(512).optional(),
+        userAgent: z.string().max(512).optional(),
+        userId: z.number().optional(),
+        userName: z.string().max(255).optional(),
+        userEmail: z.string().max(320).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const db = await import("./db").then((m) => m.getDb());
+          if (!db) return { success: false };
+          const { errorReports } = await import("../drizzle/schema");
+          await db.insert(errorReports).values({
+            message: input.message,
+            stack: input.stack ?? null,
+            url: input.url ?? null,
+            route: input.route ?? null,
+            userAgent: input.userAgent ?? null,
+            userId: input.userId ?? null,
+            userName: input.userName ?? null,
+            userEmail: input.userEmail ?? null,
+          });
+          return { success: true };
+        } catch {
+          return { success: false };
+        }
+      }),
+    list: protectedProcedure
+      .input(z.object({
+        includeResolved: z.boolean().default(false),
+        limit: z.number().min(1).max(200).default(50),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) return { rows: [], total: 0 };
+        const { errorReports } = await import("../drizzle/schema");
+        const { isNull, desc, sql } = await import("drizzle-orm");
+        const where = input.includeResolved ? undefined : isNull(errorReports.resolvedAt);
+        const [rows, countResult] = await Promise.all([
+          db.select().from(errorReports)
+            .where(where)
+            .orderBy(desc(errorReports.createdAt))
+            .limit(input.limit)
+            .offset(input.offset),
+          db.select({ count: sql<number>`count(*)` }).from(errorReports).where(where),
+        ]);
+        return { rows, total: Number(countResult[0]?.count ?? 0) };
+      }),
+    resolve: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) return { success: false };
+        const { errorReports } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        await db.update(errorReports)
+          .set({ resolvedAt: new Date(), resolvedBy: ctx.user.name ?? ctx.user.email ?? "admin" })
+          .where(eq(errorReports.id, input.id));
+        return { success: true };
+      }),
+    unresolvedCount: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") return { count: 0 };
+      const db = await import("./db").then((m) => m.getDb());
+      if (!db) return { count: 0 };
+      const { errorReports } = await import("../drizzle/schema");
+      const { isNull, sql } = await import("drizzle-orm");
+      const result = await db.select({ count: sql<number>`count(*)` })
+        .from(errorReports)
+        .where(isNull(errorReports.resolvedAt));
+      return { count: Number(result[0]?.count ?? 0) };
+    }),
+  }),
+
   settings: router({
     getCallScripts: protectedProcedure.query(async () => {
       return getCallScripts();
