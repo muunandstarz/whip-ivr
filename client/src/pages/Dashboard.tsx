@@ -199,87 +199,78 @@ export default function Dashboard() {
             <InfoTooltip text="AI-processed voicemail intake records collected from the Whip Claims line. Each record represents a caller who left a voicemail with their claim information." />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-            ) : (
-              <>
-                <Link href="/intake">
-                  <Card className="cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all">
-                    <CardContent className="pt-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
-                          <PhoneIncoming className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-foreground">{totalRecords}</div>
-                            <InfoTooltip text="Total AI-processed intake records since the IVR went live. Click to view all records." />
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+              : [
+                  {
+                    key: "total",
+                    href: "/intake",
+                    hoverBorder: "hover:border-primary/40",
+                    iconBg: "bg-primary/15",
+                    Icon: PhoneIncoming,
+                    iconColor: "text-primary",
+                    value: totalRecords,
+                    valueColor: "text-foreground",
+                    tooltip: "Total AI-processed intake records since the IVR went live. Click to view all records.",
+                    label: "Total Intake Records",
+                  },
+                  {
+                    key: "open",
+                    href: "/intake?status=open",
+                    hoverBorder: "hover:border-amber-300",
+                    iconBg: "bg-amber-500/15",
+                    Icon: Clock,
+                    iconColor: "text-amber-500 dark:text-amber-400",
+                    value: openCount,
+                    valueColor: "text-amber-600 dark:text-amber-400",
+                    tooltip: "Open intake records that still need a callback. Handlers should call these back within the same business day. Click to view open records.",
+                    label: "Open / Pending Callback",
+                  },
+                  {
+                    key: "closed",
+                    href: "/intake?status=closed",
+                    hoverBorder: "hover:border-green-300",
+                    iconBg: "bg-green-500/15",
+                    Icon: CheckCircle2,
+                    iconColor: "text-green-600 dark:text-green-400",
+                    value: closedCount,
+                    valueColor: "text-green-600 dark:text-green-400",
+                    tooltip: "Intake records that have been resolved — the handler called back and the issue was addressed. Click to view closed records.",
+                    label: "Auto-closed / No message",
+                  },
+                  {
+                    key: "carrier",
+                    href: "/intake?callerType=carrier",
+                    hoverBorder: "hover:border-[#ff6221]/40",
+                    iconBg: "bg-[#ff6221]/10",
+                    Icon: AlertCircle,
+                    iconColor: "text-[#ff6221]",
+                    value: Number(carrierCount),
+                    valueColor: "text-[#ff6221]",
+                    tooltip: "Intake records from insurance carriers (GEICO, State Farm, Allstate, etc.). These are IVR-eligible — once the IVR is live, carriers can submit via Press 1 without a live agent. Click to view carrier intakes.",
+                    label: "Carrier Intakes",
+                  },
+                ].map(({ key, href, hoverBorder, iconBg, Icon, iconColor, value, valueColor, tooltip, label }) => (
+                  <Link key={key} href={href}>
+                    <Card className={`cursor-pointer hover:shadow-sm transition-all ${hoverBorder}`}>
+                      <CardContent className="pt-5">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBg}`}>
+                            <Icon className={`w-5 h-5 ${iconColor}`} />
                           </div>
-                          <div className="text-xs text-muted-foreground">Total Intake Records</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-
-                <Link href="/intake?status=open">
-                  <Card className="cursor-pointer hover:border-amber-300 hover:shadow-sm transition-all">
-                    <CardContent className="pt-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                          <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{openCount}</div>
-                            <InfoTooltip text="Open intake records that still need a callback. Handlers should call these back within the same business day. Click to view open records." />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <div className={`text-2xl font-bold ${valueColor}`}>{value}</div>
+                              <InfoTooltip text={tooltip} />
+                            </div>
+                            <div className="text-xs text-muted-foreground">{label}</div>
                           </div>
-                          <div className="text-xs text-muted-foreground">Open / Pending Callback</div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-
-                <Link href="/intake?status=closed">
-                  <Card className="cursor-pointer hover:border-green-300 hover:shadow-sm transition-all">
-                    <CardContent className="pt-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-green-500/15 flex items-center justify-center">
-                          <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{closedCount}</div>
-                            <InfoTooltip text="Intake records that have been resolved — the handler called back and the issue was addressed. Click to view closed records." />
-                          </div>
-                          <div className="text-xs text-muted-foreground">Auto-closed / No message</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-
-                <Link href="/intake?callerType=carrier">
-                  <Card className="cursor-pointer hover:border-[#ff6221]/40 hover:shadow-sm transition-all">
-                    <CardContent className="pt-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-[#ff6221]/10 flex items-center justify-center">
-                          <AlertCircle className="w-5 h-5 text-[#ff6221]" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <div className="text-2xl font-bold text-[#ff6221]">{Number(carrierCount)}</div>
-                            <InfoTooltip text="Intake records from insurance carriers (GEICO, State Farm, Allstate, etc.). These are IVR-eligible — once the IVR is live, carriers can submit via Press 1 without a live agent. Click to view carrier intakes." />
-                          </div>
-                          <div className="text-xs text-muted-foreground">Carrier Intakes</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </>
-            )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))
+            }
           </div>
         </div>
 
@@ -505,7 +496,8 @@ export default function Dashboard() {
                 {callerTypeBreakdown.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
                 ) : (
-                  callerTypeBreakdown.map((item) => {
+                  <div className="space-y-3">
+                  {callerTypeBreakdown.map((item) => {
                     const cfg = CALLER_TYPE_CONFIG[item.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                     const Icon = cfg.icon;
                     const pct = totalRecords > 0 ? Math.round((Number(item.count) / totalRecords) * 100) : 0;
@@ -534,7 +526,8 @@ export default function Dashboard() {
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -552,6 +545,7 @@ export default function Dashboard() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
+                  <div className="space-y-2">
                   {repeatCallers.slice(0, 5).map((caller, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
                       <div className="min-w-0">
@@ -565,6 +559,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                   ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -576,6 +571,7 @@ export default function Dashboard() {
                   <CardTitle className="text-base font-semibold">Priority Breakdown</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="space-y-3">
                   {["urgent", "high", "normal"].map((p) => {
                     const item = priorityBreakdown.find((x) => x.priority === p);
                     const count = Number(item?.count ?? 0);
@@ -599,6 +595,7 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -613,6 +610,7 @@ export default function Dashboard() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
+                  <div className="space-y-2">
                   {teamCbStats.byHandler.map((h, i) => (
                     <div key={h.handlerName} className="flex items-center gap-3">
                       <span className="text-xs text-muted-foreground w-4 text-right">{i + 1}</span>
@@ -637,6 +635,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -651,6 +650,7 @@ export default function Dashboard() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="space-y-3">
                   {["reached", "left_voicemail", "no_answer", "busy", "wrong_number"].map((d) => {
                     const item = dispositionBreakdown.find((x) => x.disposition === d);
                     const count = Number(item?.count ?? 0);
@@ -677,6 +677,7 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -723,19 +724,23 @@ export default function Dashboard() {
                 <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {([
-                  { href: "/handler-queue", icon: Phone, label: "Handler Queue" },
-                  { href: "/analytics", icon: TrendingUp, label: "Full Analytics" },
-                  { href: "/call-tracking", icon: PhoneCall, label: "Call Tracking" },
-                  { href: "/callback-log", icon: CheckCheck, label: "Callback Log" },
-                ] as const).map(({ href, icon: Icon, label }) => (
-                  <Link key={href} href={href}>
-                    <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
-                      <Icon className="w-3.5 h-3.5" />
-                      {label}
-                    </Button>
-                  </Link>
-                ))}
+                <div className="space-y-2">
+                  {([
+                    { href: "/handler-queue", icon: Phone, label: "Handler Queue" },
+                    { href: "/analytics", icon: TrendingUp, label: "Full Analytics" },
+                    { href: "/call-tracking", icon: PhoneCall, label: "Call Tracking" },
+                    { href: "/callback-log", icon: CheckCheck, label: "Callback Log" },
+                  ] as const).map(({ href, icon: Icon, label }) => (
+                    <div key={href}>
+                      <Link href={href}>
+                        <Button variant="outline" size="sm" className="w-full justify-start gap-2 text-xs">
+                          <Icon className="w-3.5 h-3.5" />
+                          {label}
+                        </Button>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>

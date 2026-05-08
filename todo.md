@@ -388,3 +388,19 @@ Business routing logic to implement in resolveHandler():
 - [x] Populate routingMethod in processVoicemail (extension if aircallAgentId matched, else ivr)
 - [ ] Show "Direct Extension" vs "IVR Routed" badge on intake record detail and list
 - [x] Sync unread assigned voicemails from Aircall per handler: query /v1/calls/search?user_id={id}, match call.user to handler map, create intake records tagged routingMethod="extension" if not already in DB
+
+---
+## Callback Speed KPI & Log Enhancements — May 6 2026
+
+- [ ] Fix CallbackLog key prop error (persistent — second map or conditional rendering issue)
+- [ ] Enhance Callback Log columns: Caller (name + org), Handler who called back, Voicemail received date, Callback date/time, Time-to-callback (e.g. "2h 14m"), Disposition, Outcome
+- [ ] Add getCallbackSpeedMetrics() db helper — returns avg time-to-callback (mins), % within 4h SLA, fastest/slowest, by handler breakdown
+- [ ] Add handlerMetrics.callbackSpeed tRPC procedure
+- [ ] Add Callback Speed KPI section to Analytics page: avg response time, % within SLA, per-handler leaderboard sorted by speed
+- [ ] Add Callback Speed card to handler personal dashboard: their avg time-to-callback, % within 4h SLA, comparison to team average
+
+---
+## Audio & Doc Fixes — May 7 2026
+- [x] Fix voicemail audio player in IntakeDetail — added /api/aircall-recording proxy route; audio now streams through server with Basic auth
+- [ ] Fix Dashboard key prop error — full audit of all unkeyed children in Dashboard.tsx (in progress)
+- [x] Refresh helpdesk spec doc with routing rule updates (Tim Chan, subro split, extension routing, multi-number sync, audio proxy)

@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import {
   Select,
   SelectContent,
@@ -20,8 +20,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ListChecks,
+  Clock,
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 const DISPOSITION_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   reached:        { label: "Reached",        icon: CheckCircle2, className: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" },
@@ -44,9 +45,25 @@ const CALLER_TYPE_LABELS: Record<string, string> = {
   wrong_department: "Wrong Dept", unknown: "Unknown",
 };
 
+function formatMinutes(mins: number | null): string {
+  if (mins === null || mins === undefined) return "—";
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function speedBadgeClass(mins: number | null): string {
+  if (mins === null) return "text-muted-foreground";
+  if (mins <= 60) return "text-green-600 dark:text-green-400 font-semibold";
+  if (mins <= 240) return "text-amber-600 dark:text-amber-400 font-semibold";
+  return "text-red-600 dark:text-red-400 font-semibold";
+}
+
 const PAGE_SIZE = 25;
 
 export default function CallbackLog() {
+  const [, navigate] = useLocation();
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [dispositionFilter, setDispositionFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
@@ -66,7 +83,7 @@ export default function CallbackLog() {
 
   return (
     <WhipLayout>
-      <div className="p-6 max-w-5xl mx-auto space-y-5">
+      <div className="p-6 max-w-6xl mx-auto space-y-5">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -90,7 +107,7 @@ export default function CallbackLog() {
             <SelectContent>
               <SelectItem value="all">All handlers</SelectItem>
               {(handlersData ?? []).map((h: { id: number; name: string }) => (
-                <SelectItem key={h.id} value={h.name}>{h.name}</SelectItem>
+                <SelectItem key={String(h.id)} value={h.name}>{h.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -128,88 +145,109 @@ export default function CallbackLog() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold">
-              {total > 0 ? `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total.toLocaleString()}` : "No results"}
+              {total > 0
+                ? `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total.toLocaleString()}`
+                : "No results"}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
+            {/* Column headers */}
+            <div className="grid grid-cols-[1.4fr_1.2fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-2 border-b bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <span>Caller</span>
+              <span>Handler</span>
+              <span>Voicemail Received</span>
+              <span>Called Back</span>
+              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Response Time</span>
+              <span>Disposition</span>
+            </div>
+
             {isLoading ? (
-              <div className="space-y-0">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 px-5 py-3 border-b last:border-b-0 animate-pulse">
-                    <div className="w-24 h-4 bg-muted rounded" />
-                    <div className="flex-1 h-4 bg-muted rounded" />
-                    <div className="w-20 h-4 bg-muted rounded" />
-                  </div>
-                ))}
-              </div>
+              Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-5 py-3 border-b last:border-b-0 animate-pulse">
+                  <div className="w-32 h-4 bg-muted rounded" />
+                  <div className="flex-1 h-4 bg-muted rounded" />
+                  <div className="w-20 h-4 bg-muted rounded" />
+                </div>
+              ))
             ) : rows.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-sm">
                 <CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 No callback logs found.
               </div>
             ) : (
-              <div>
-                {/* Column headers */}
-                <div className="grid grid-cols-[1fr_1.5fr_1fr_1fr_1fr] gap-3 px-5 py-2 border-b bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  <span>When</span>
-                  <span>Caller</span>
-                  <span>Handler</span>
-                  <span>Disposition</span>
-                  <span>Outcome</span>
-                </div>
-                {rows.map((row) => {
-                  const dispCfg = DISPOSITION_CONFIG[row.disposition] ?? DISPOSITION_CONFIG.no_answer;
-                  const DispIcon = dispCfg.icon;
-                  const outcomeCfg = row.outcome ? OUTCOME_CONFIG[row.outcome] : null;
-                  return (
-                    <div key={row.id}>
-                    <Link href={`/intake/${row.intakeId}`}>
-                      <div className="grid grid-cols-[1fr_1.5fr_1fr_1fr_1fr] gap-3 px-5 py-3 border-b last:border-b-0 hover:bg-muted/20 cursor-pointer transition-colors items-center">
-                        {/* When */}
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium text-foreground">
-                            {row.calledAt ? format(new Date(row.calledAt), "MMM d, h:mm a") : "—"}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground">
-                            {row.calledAt ? formatDistanceToNow(new Date(row.calledAt), { addSuffix: true }) : ""}
-                          </div>
-                        </div>
-                        {/* Caller */}
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate text-foreground">
-                            {row.callerName || row.callerPhone || "Unknown"}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground truncate">
-                            {row.callerOrg || CALLER_TYPE_LABELS[row.callerType ?? "unknown"] || ""}
-                          </div>
-                        </div>
-                        {/* Handler */}
-                        <div className="text-sm text-foreground truncate">
-                          {row.handlerName || "—"}
-                        </div>
-                        {/* Disposition */}
-                        <div>
-                          <Badge variant="outline" className={`text-xs gap-1 ${dispCfg.className}`}>
-                            <DispIcon className="w-3 h-3" />
-                            {dispCfg.label}
-                          </Badge>
-                        </div>
-                        {/* Outcome */}
-                        <div>
-                          {outcomeCfg ? (
-                            <Badge variant="outline" className={`text-xs ${outcomeCfg.className}`}>
-                              {outcomeCfg.label}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
+              rows.map((row, idx) => {
+                const rowKey = row.id != null ? String(row.id) : `row-${idx}`;
+                const dispCfg = DISPOSITION_CONFIG[row.disposition] ?? DISPOSITION_CONFIG.no_answer;
+                const DispIcon = dispCfg.icon;
+                const outcomeCfg = row.outcome ? OUTCOME_CONFIG[row.outcome] : null;
+                const mins = row.minutesToCallback != null ? Number(row.minutesToCallback) : null;
+                return (
+                  <div
+                    key={rowKey}
+                    className="grid grid-cols-[1.4fr_1.2fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-3 border-b last:border-b-0 hover:bg-muted/20 cursor-pointer transition-colors items-center"
+                    onClick={() => navigate(`/intake/${row.intakeId}`)}
+                  >
+                    {/* Caller */}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate text-foreground">
+                        {row.callerName || row.callerPhone || "Unknown"}
                       </div>
-                    </Link>
+                      <div className="text-[10px] text-muted-foreground truncate">
+                        {row.callerOrg || CALLER_TYPE_LABELS[row.callerType ?? "unknown"] || ""}
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Handler */}
+                    <div className="text-sm text-foreground truncate">
+                      {row.handlerName || "—"}
+                    </div>
+
+                    {/* Voicemail received */}
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-foreground">
+                        {row.intakeCreatedAt ? format(new Date(row.intakeCreatedAt), "MMM d, h:mm a") : "—"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {row.intakeCreatedAt ? formatDistanceToNow(new Date(row.intakeCreatedAt), { addSuffix: true }) : ""}
+                      </div>
+                    </div>
+
+                    {/* Called back */}
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-foreground">
+                        {row.calledAt ? format(new Date(row.calledAt), "MMM d, h:mm a") : "—"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {row.calledAt ? formatDistanceToNow(new Date(row.calledAt), { addSuffix: true }) : ""}
+                      </div>
+                    </div>
+
+                    {/* Response time */}
+                    <div className={`text-sm ${speedBadgeClass(mins)}`}>
+                      {formatMinutes(mins)}
+                      {mins !== null && mins <= 240 && (
+                        <div className="text-[10px] text-green-600 dark:text-green-400 font-normal">Within SLA</div>
+                      )}
+                      {mins !== null && mins > 240 && (
+                        <div className="text-[10px] text-red-500 font-normal">Over 4h SLA</div>
+                      )}
+                    </div>
+
+                    {/* Disposition + Outcome */}
+                    <div className="space-y-1">
+                      <Badge variant="outline" className={`text-xs gap-1 ${dispCfg.className}`}>
+                        <DispIcon className="w-3 h-3" />
+                        {dispCfg.label}
+                      </Badge>
+                      {outcomeCfg && (
+                        <Badge variant="outline" className={`text-xs block w-fit ${outcomeCfg.className}`}>
+                          {outcomeCfg.label}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </CardContent>
         </Card>

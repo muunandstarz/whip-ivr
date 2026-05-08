@@ -39,6 +39,7 @@ import {
   getCallbackSLAMetrics,
   getCallbackCompletionStats,
   getCallbackLogAll,
+  getCallbackSpeedMetrics,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -280,6 +281,11 @@ export const appRouter = router({
       .input(z.object({ handlerName: z.string().optional() }))
       .query(async ({ input }) => {
         return getCallbackCompletionStats(input.handlerName);
+      }),
+    callbackSpeed: protectedProcedure
+      .input(z.object({ handlerName: z.string().optional() }))
+      .query(async ({ input }) => {
+        return getCallbackSpeedMetrics(input.handlerName);
       }),
     intakeSummary: protectedProcedure.query(async () => {
       // Returns open and closed intake counts per handler

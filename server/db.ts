@@ -1138,6 +1138,8 @@ export async function getCallbackLogAll(opts?: {
     callerOrg: string | null;
     callerType: string | null;
     status: string;
+    intakeCreatedAt: Date | null;
+    minutesToCallback: number | null;
   }>(sql`
     SELECT
       cl.id,
@@ -1151,7 +1153,12 @@ export async function getCallbackLogAll(opts?: {
       ir.callerPhone,
       ir.callerOrg,
       ir.callerType,
-      ir.status
+      ir.status,
+      ir.createdAt AS intakeCreatedAt,
+      CASE WHEN cl.calledAt IS NOT NULL AND ir.createdAt IS NOT NULL
+        THEN ROUND(TIMESTAMPDIFF(SECOND, ir.createdAt, cl.calledAt) / 60)
+        ELSE NULL
+      END AS minutesToCallback
     FROM callback_logs cl
     JOIN intake_records ir ON ir.id = cl.intakeId
     WHERE ${where}
@@ -1168,4 +1175,64 @@ export async function getCallbackLogAll(opts?: {
 
   const total = Number((countRows as any)[0]?.total ?? 0);
   return { rows: rows as any[], total };
+}
+
+export async function getCallbackSpeedMetrics(handlerName?: string) {
+  const db = await getDb();
+  if (!db) return { avgMinutes: null, slaPercent: null, byHandler: [] };
+
+  const handlerCond = handlerName ? sql`AND cl.handlerName = ${handlerName}` : sql``;
+
+  // Overall avg and SLA %
+  const overall = await db.execute<{
+    avgMinutes: number | null;
+    totalCbs: number;
+    withinSla: number;
+  }>(sql`
+    SELECT
+      ROUND(AVG(TIMESTAMPDIFF(SECOND, ir.createdAt, cl.calledAt) / 60)) AS avgMinutes,
+      COUNT(*) AS totalCbs,
+      SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, ir.createdAt, cl.calledAt) <= 240 THEN 1 ELSE 0 END) AS withinSla
+    FROM callback_logs cl
+    JOIN intake_records ir ON ir.id = cl.intakeId
+    WHERE cl.calledAt IS NOT NULL AND ir.createdAt IS NOT NULL
+    ${handlerCond}
+  `);
+
+  // Per-handler breakdown (only if no specific handler filter)
+  const byHandlerRows = handlerName ? [] : await db.execute<{
+    handlerName: string;
+    avgMinutes: number | null;
+    totalCbs: number;
+    withinSla: number;
+  }>(sql`
+    SELECT
+      cl.handlerName,
+      ROUND(AVG(TIMESTAMPDIFF(SECOND, ir.createdAt, cl.calledAt) / 60)) AS avgMinutes,
+      COUNT(*) AS totalCbs,
+      SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, ir.createdAt, cl.calledAt) <= 240 THEN 1 ELSE 0 END) AS withinSla
+    FROM callback_logs cl
+    JOIN intake_records ir ON ir.id = cl.intakeId
+    WHERE cl.calledAt IS NOT NULL AND ir.createdAt IS NOT NULL
+      AND cl.handlerName IS NOT NULL
+    GROUP BY cl.handlerName
+    ORDER BY avgMinutes ASC
+  `);
+
+  const o = (overall as any)[0] ?? {};
+  const avgMinutes = o.avgMinutes != null ? Number(o.avgMinutes) : null;
+  const totalCbs = Number(o.totalCbs ?? 0);
+  const withinSla = Number(o.withinSla ?? 0);
+  const slaPercent = totalCbs > 0 ? Math.round((withinSla / totalCbs) * 100) : null;
+
+  const byHandler = (byHandlerRows as any[]).map((r) => ({
+    handlerName: r.handlerName as string,
+    avgMinutes: r.avgMinutes != null ? Number(r.avgMinutes) : null,
+    totalCbs: Number(r.totalCbs),
+    slaPercent: Number(r.totalCbs) > 0
+      ? Math.round((Number(r.withinSla) / Number(r.totalCbs)) * 100)
+      : null,
+  }));
+
+  return { avgMinutes, slaPercent, totalCbs, byHandler };
 }
