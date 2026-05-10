@@ -1236,3 +1236,81 @@ export async function getCallbackSpeedMetrics(handlerName?: string) {
 
   return { avgMinutes, slaPercent, totalCbs, byHandler };
 }
+
+// ─── Dashboard: Overdue Callback Details ──────────────────────────────────────
+export async function getOverdueCallbackDetails() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.execute<{
+    id: number; callerName: string | null; callerOrg: string | null;
+    callerPhone: string | null; handlerName: string | null;
+    callbackDueBy: string | null; priority: string | null; createdAt: string;
+  }>(sql`
+    SELECT id, callerName, callerOrg, callerPhone, handlerName, callbackDueBy, priority, createdAt
+    FROM intake_records
+    WHERE source = 'voicemail' AND status != 'closed'
+      AND callbackAt IS NULL AND callbackDueBy IS NOT NULL AND callbackDueBy < NOW()
+    ORDER BY callbackDueBy ASC LIMIT 20
+  `);
+  return (rows as any[]).map((r) => ({
+    id: Number(r.id), callerName: r.callerName as string | null,
+    callerOrg: r.callerOrg as string | null, callerPhone: r.callerPhone as string | null,
+    handlerName: r.handlerName as string | null, callbackDueBy: r.callbackDueBy as string | null,
+    priority: r.priority as string | null, createdAt: r.createdAt as string,
+  }));
+}
+
+// ─── Dashboard: 7-Day Intake Trend by Caller Type ─────────────────────────────
+export async function get7DayIntakeTrend() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.execute<{ day: string; callerType: string | null; count: number }>(sql`
+    SELECT DATE(createdAt) AS day, callerType, COUNT(*) AS count
+    FROM intake_records
+    WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+    GROUP BY DATE(createdAt), callerType
+    ORDER BY day ASC, count DESC
+  `);
+  return (rows as any[]).map((r) => ({
+    day: r.day as string, callerType: (r.callerType ?? 'unknown') as string, count: Number(r.count),
+  }));
+}
+
+// ─── Dashboard: Call Analytics by Month ───────────────────────────────────────
+export async function getCallAnalyticsByMonth(yearMonth: string) {
+  const db = await getDb();
+  if (!db) return null;
+  if (!/^\d{4}-\d{2}$/.test(yearMonth)) return null;
+  const [totals, byDirection, byDay, availableMonths] = await Promise.all([
+    db.execute<{ status: string; count: number }>(sql`
+      SELECT status, COUNT(*) AS count FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY status
+    `),
+    db.execute<{ direction: string; count: number }>(sql`
+      SELECT direction, COUNT(*) AS count FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY direction
+    `),
+    db.execute<{ day: string; total: number; answered: number; missed: number; voicemail: number }>(sql`
+      SELECT DATE(startedAt) AS day, COUNT(*) AS total,
+        SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS answered,
+        SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END) AS missed,
+        SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END) AS voicemail
+      FROM call_history WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+      GROUP BY DATE(startedAt) ORDER BY day ASC
+    `),
+    db.execute<{ month: string }>(sql`
+      SELECT DISTINCT DATE_FORMAT(startedAt, '%Y-%m') AS month FROM call_history
+      WHERE startedAt IS NOT NULL ORDER BY month DESC LIMIT 12
+    `),
+  ]);
+  return {
+    yearMonth,
+    totals: (totals as any[]).map((r) => ({ status: r.status as string, count: Number(r.count) })),
+    byDirection: (byDirection as any[]).map((r) => ({ direction: r.direction as string, count: Number(r.count) })),
+    byDay: (byDay as any[]).map((r) => ({
+      day: r.day as string, total: Number(r.total), answered: Number(r.answered),
+      missed: Number(r.missed), voicemail: Number(r.voicemail),
+    })),
+    availableMonths: (availableMonths as any[]).map((r) => r.month as string),
+  };
+}

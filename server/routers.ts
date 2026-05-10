@@ -40,6 +40,9 @@ import {
   getCallbackCompletionStats,
   getCallbackLogAll,
   getCallbackSpeedMetrics,
+  getOverdueCallbackDetails,
+  get7DayIntakeTrend,
+  getCallAnalyticsByMonth,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -287,6 +290,9 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return getCallbackSpeedMetrics(input.handlerName);
       }),
+    overdueDetails: protectedProcedure.query(async () => {
+      return getOverdueCallbackDetails();
+    }),
     intakeSummary: protectedProcedure.query(async () => {
       // Returns open and closed intake counts per handler
       const { getDb } = await import("./db");
@@ -314,6 +320,18 @@ export const appRouter = router({
       }
       return Object.entries(map).map(([handlerName, counts]) => ({ handlerName, ...counts }));
     }),
+  }),
+
+  // ─── Dashboard Extras ──────────────────────────────────────────────────────
+  dashboard: router({
+    intakeTrend7d: protectedProcedure.query(async () => {
+      return get7DayIntakeTrend();
+    }),
+    callsByMonth: protectedProcedure
+      .input(z.object({ yearMonth: z.string() }))
+      .query(async ({ input }) => {
+        return getCallAnalyticsByMonth(input.yearMonth);
+      }),
   }),
 
   // ─── Batch Call Classification ────────────────────────────────────────
