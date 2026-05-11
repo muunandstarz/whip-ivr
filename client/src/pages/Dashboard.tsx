@@ -146,7 +146,10 @@ export default function Dashboard() {
     }
     return Object.values(dayMap)
       .sort((a, b) => a.day.localeCompare(b.day))
-      .map((d) => ({ ...d, label: format(parseISO(d.day), "EEE") }));
+      .map((d) => {
+        try { return { ...d, label: format(parseISO(d.day), "EEE") }; }
+        catch { return { ...d, label: d.day.slice(5) }; }
+      });
   }, [trend7d]);
 
   const trendCallerTypes = useMemo(() => {
@@ -467,7 +470,11 @@ export default function Dashboard() {
                   <CardContent className="pt-4 pb-2">
                     <ResponsiveContainer width="100%" height={110}>
                       <BarChart
-                        data={monthCallData.byDay.map((d) => ({ ...d, label: format(parseISO(d.day), "d") }))}
+                        data={monthCallData.byDay.map((d) => {
+                          let label = d.day.slice(8) || d.day;
+                          try { label = format(parseISO(d.day), "d"); } catch { /* keep slice fallback */ }
+                          return { ...d, label };
+                        })}
                         margin={{ top: 0, right: 4, left: -28, bottom: 0 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />

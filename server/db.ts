@@ -286,11 +286,11 @@ export async function getIntakeAnalytics() {
       .from(intakeRecords)
       .groupBy(intakeRecords.status),
     db
-      .select({ day: sql<string>`DATE(createdAt)`, count: sql<number>`count(*)` })
+      .select({ day: sql<string>`DATE_FORMAT(createdAt, '%Y-%m-%d')`, count: sql<number>`count(*)` })
       .from(intakeRecords)
       .where(sql`createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)`)
-      .groupBy(sql`DATE(createdAt)`)
-      .orderBy(sql`DATE(createdAt)`),
+      .groupBy(sql`DATE_FORMAT(createdAt, '%Y-%m-%d')`)
+      .orderBy(sql`DATE_FORMAT(createdAt, '%Y-%m-%d')`),
     db
       .select({
         callerPhone: intakeRecords.callerPhone,
@@ -320,15 +320,7 @@ export async function getIntakeAnalytics() {
       .orderBy(desc(sql`count(*)`)),
   ]);
 
-  // DATE() in mysql2/TiDB returns a JS Date object, not a string — normalise byDay to YYYY-MM-DD strings
-  const byDayNorm = (byDay as any[]).map((r) => {
-    const rawDay = r.day;
-    const dayStr = rawDay instanceof Date
-      ? rawDay.toISOString().slice(0, 10)
-      : String(rawDay).slice(0, 10);
-    return { day: dayStr, count: Number(r.count) };
-  });
-  return { byCallerType, byStatus, byDay: byDayNorm, repeatCallers, byHandler, byPriority, byCallbackDisposition };
+  return { byCallerType, byStatus, byDay, repeatCallers, byHandler, byPriority, byCallbackDisposition };
 }
 
 // ─── Call History ──────────────────────────────────────────────────────────
@@ -1273,20 +1265,17 @@ export async function get7DayIntakeTrend() {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.execute<{ day: string; callerType: string | null; count: number }>(sql`
-    SELECT DATE(createdAt) AS day, callerType, COUNT(*) AS count
+    SELECT DATE_FORMAT(createdAt, '%Y-%m-%d') AS day, callerType, COUNT(*) AS count
     FROM intake_records
     WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-    GROUP BY DATE(createdAt), callerType
+    GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d'), callerType
     ORDER BY day ASC, count DESC
   `);
-  return (rows as any[]).map((r) => {
-    // DATE() in mysql2/TiDB returns a JS Date object, not a string — normalise to YYYY-MM-DD
-    const rawDay = r.day;
-    const dayStr = rawDay instanceof Date
-      ? rawDay.toISOString().slice(0, 10)
-      : String(rawDay).slice(0, 10);
-    return { day: dayStr, callerType: (r.callerType ?? 'unknown') as string, count: Number(r.count) };
-  });
+  return (rows as any[]).map((r) => ({
+    day: String(r.day ?? '').slice(0, 10),
+    callerType: (r.callerType ?? 'unknown') as string,
+    count: Number(r.count),
+  }));
 }
 
 // ─── Dashboard: Call Analytics by Month ───────────────────────────────────────
@@ -1304,12 +1293,12 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY direction
     `),
     db.execute<{ day: string; total: number; answered: number; missed: number; voicemail: number }>(sql`
-      SELECT DATE(startedAt) AS day, COUNT(*) AS total,
+      SELECT DATE_FORMAT(startedAt, '%Y-%m-%d') AS day, COUNT(*) AS total,
         SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS answered,
         SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END) AS missed,
         SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END) AS voicemail
       FROM call_history WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
-      GROUP BY DATE(startedAt) ORDER BY day ASC
+      GROUP BY DATE_FORMAT(startedAt, '%Y-%m-%d') ORDER BY day ASC
     `),
     db.execute<{ month: string }>(sql`
       SELECT DISTINCT DATE_FORMAT(startedAt, '%Y-%m') AS month FROM call_history
@@ -1320,14 +1309,11 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
     yearMonth,
     totals: (totals as any[]).map((r) => ({ status: r.status as string, count: Number(r.count) })),
     byDirection: (byDirection as any[]).map((r) => ({ direction: r.direction as string, count: Number(r.count) })),
-    byDay: (byDay as any[]).map((r) => {
-      // DATE() in mysql2/TiDB returns a JS Date object, not a string — normalise to YYYY-MM-DD
-      const rawDay = r.day;
-      const dayStr = rawDay instanceof Date
-        ? rawDay.toISOString().slice(0, 10)
-        : String(rawDay).slice(0, 10);
-      return { day: dayStr, total: Number(r.total), answered: Number(r.answered), missed: Number(r.missed), voicemail: Number(r.voicemail) };
-    }),
+    byDay: (byDay as any[]).map((r) => ({
+      day: String(r.day ?? '').slice(0, 10),
+      total: Number(r.total), answered: Number(r.answered),
+      missed: Number(r.missed), voicemail: Number(r.voicemail),
+    })),
     availableMonths: (availableMonths as any[]).map((r) => r.month as string),
   };
 }
