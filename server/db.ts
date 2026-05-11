@@ -320,7 +320,15 @@ export async function getIntakeAnalytics() {
       .orderBy(desc(sql`count(*)`)),
   ]);
 
-  return { byCallerType, byStatus, byDay, repeatCallers, byHandler, byPriority, byCallbackDisposition };
+  // DATE() in mysql2/TiDB returns a JS Date object, not a string — normalise byDay to YYYY-MM-DD strings
+  const byDayNorm = (byDay as any[]).map((r) => {
+    const rawDay = r.day;
+    const dayStr = rawDay instanceof Date
+      ? rawDay.toISOString().slice(0, 10)
+      : String(rawDay).slice(0, 10);
+    return { day: dayStr, count: Number(r.count) };
+  });
+  return { byCallerType, byStatus, byDay: byDayNorm, repeatCallers, byHandler, byPriority, byCallbackDisposition };
 }
 
 // ─── Call History ──────────────────────────────────────────────────────────
@@ -1271,9 +1279,14 @@ export async function get7DayIntakeTrend() {
     GROUP BY DATE(createdAt), callerType
     ORDER BY day ASC, count DESC
   `);
-  return (rows as any[]).map((r) => ({
-    day: r.day as string, callerType: (r.callerType ?? 'unknown') as string, count: Number(r.count),
-  }));
+  return (rows as any[]).map((r) => {
+    // DATE() in mysql2/TiDB returns a JS Date object, not a string — normalise to YYYY-MM-DD
+    const rawDay = r.day;
+    const dayStr = rawDay instanceof Date
+      ? rawDay.toISOString().slice(0, 10)
+      : String(rawDay).slice(0, 10);
+    return { day: dayStr, callerType: (r.callerType ?? 'unknown') as string, count: Number(r.count) };
+  });
 }
 
 // ─── Dashboard: Call Analytics by Month ───────────────────────────────────────
@@ -1307,10 +1320,14 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
     yearMonth,
     totals: (totals as any[]).map((r) => ({ status: r.status as string, count: Number(r.count) })),
     byDirection: (byDirection as any[]).map((r) => ({ direction: r.direction as string, count: Number(r.count) })),
-    byDay: (byDay as any[]).map((r) => ({
-      day: r.day as string, total: Number(r.total), answered: Number(r.answered),
-      missed: Number(r.missed), voicemail: Number(r.voicemail),
-    })),
+    byDay: (byDay as any[]).map((r) => {
+      // DATE() in mysql2/TiDB returns a JS Date object, not a string — normalise to YYYY-MM-DD
+      const rawDay = r.day;
+      const dayStr = rawDay instanceof Date
+        ? rawDay.toISOString().slice(0, 10)
+        : String(rawDay).slice(0, 10);
+      return { day: dayStr, total: Number(r.total), answered: Number(r.answered), missed: Number(r.missed), voicemail: Number(r.voicemail) };
+    }),
     availableMonths: (availableMonths as any[]).map((r) => r.month as string),
   };
 }
