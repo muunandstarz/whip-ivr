@@ -125,7 +125,7 @@ export function ErrorBubble() {
               )}
               {listData?.rows?.map((err) => (
                 <div
-                  key={err.id}
+                  key={String(err.id)}
                   className={`border-b border-border px-5 py-4 ${err.resolvedAt ? "opacity-50" : ""}`}
                 >
                   <div className="flex items-start justify-between gap-3">

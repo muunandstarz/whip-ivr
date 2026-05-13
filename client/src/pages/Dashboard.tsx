@@ -359,7 +359,7 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {overdueDetails.map((r) => (
-                        <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                        <tr key={String(r.id ?? r.callerPhone ?? r.createdAt)} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                           <td className="px-4 py-2.5">
                             <div className="font-medium text-foreground truncate max-w-[160px]">{r.callerName || r.callerPhone || "Unknown"}</div>
                             {r.callerOrg && <div className="text-xs text-muted-foreground truncate max-w-[160px]">{r.callerOrg}</div>}
@@ -532,7 +532,7 @@ export default function Dashboard() {
                       const isUrgent = record.priority === "urgent";
                       const isHigh   = record.priority === "high";
                       return (
-                        <Link key={record.id} href={`/intake/${record.id}`}>
+                        <Link key={String(record.id)} href={`/intake/${record.id}`}>
                           <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 cursor-pointer transition-colors group">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.color}`}>
                               <Icon className="w-4 h-4" />
