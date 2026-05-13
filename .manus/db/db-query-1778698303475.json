@@ -1,0 +1,22 @@
+{
+  "query": "\nSELECT DATE_FORMAT(startedAt, '%Y-%m') AS month, COUNT(*) AS total,\n  SUM(CASE WHEN HOUR(startedAt) < 8 OR HOUR(startedAt) >= 18 THEN 1 ELSE 0 END) AS after_hours,\n  SUM(CASE WHEN DAYOFWEEK(startedAt) IN (1,7) THEN 1 ELSE 0 END) AS weekend\nFROM call_history\nGROUP BY DATE_FORMAT(startedAt, '%Y-%m')\nORDER BY month DESC\nLIMIT 6;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute \nSELECT DATE_FORMAT(startedAt, '%Y-%m') AS month, COUNT(*) AS total,\n  SUM(CASE WHEN HOUR(startedAt) < 8 OR HOUR(startedAt) >= 18 THEN 1 ELSE 0 END) AS after_hours,\n  SUM(CASE WHEN DAYOFWEEK(startedAt) IN (1,7) THEN 1 ELSE 0 END) AS weekend\nFROM call_history\nGROUP BY DATE_FORMAT(startedAt, '%Y-%m')\nORDER BY month DESC\nLIMIT 6;\n",
+  "rows": [
+    {
+      "month": "2026-05",
+      "total": "1297",
+      "after_hours": "505",
+      "weekend": "9"
+    },
+    {
+      "month": "2026-04",
+      "total": "1939",
+      "after_hours": "341",
+      "weekend": "20"
+    }
+  ],
+  "messages": [],
+  "stdout": "month\ttotal\tafter_hours\tweekend\n2026-05\t1297\t505\t9\n2026-04\t1939\t341\t20\n",
+  "stderr": "",
+  "execution_time_ms": 285
+}

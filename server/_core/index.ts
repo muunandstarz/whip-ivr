@@ -44,61 +44,109 @@ async function startServer() {
   registerOAuthRoutes(app);
   app.use("/api/aircall", aircallRouter);
 
-  // Aircall recording proxy — calls Aircall API to get a fresh signed mp3 URL, then streams audio
+  // Aircall recording proxy — accepts ?url=<encoded S3 URL> and streams the audio
+  // The aircallRecordingUrl stored in the DB is already a signed S3 URL from the webhook payload.
+  // We proxy it server-side to avoid CORS issues. S3 pre-signed URLs must NOT have an extra
+  // Authorization header — auth is embedded in the query string.
   app.get("/api/aircall-recording", async (req, res) => {
+    const rawUrl = req.query.url as string;
+    // Legacy: also accept callId for very recent calls (fallback to Aircall API)
     const callId = req.query.callId as string;
-    if (!callId || !/^\d+$/.test(callId)) {
-      res.status(400).json({ error: "Invalid callId" });
-      return;
-    }
-    const apiId = process.env.AIRCALL_API_ID;
-    const apiToken = process.env.AIRCALL_API_TOKEN;
-    if (!apiId || !apiToken) {
-      res.status(500).json({ error: "Aircall credentials not configured" });
-      return;
-    }
-    try {
-      const auth = Buffer.from(`${apiId}:${apiToken}`).toString("base64");
-      // Step 1: fetch call details from Aircall API to get a fresh signed voicemail/recording URL
-      const apiRes = await fetch(`https://api.aircall.io/v1/calls/${callId}`, {
-        headers: { Authorization: `Basic ${auth}` },
-      });
-      if (!apiRes.ok) {
-        console.error(`[recording-proxy] Aircall API ${apiRes.status} for call ${callId}`);
-        res.status(apiRes.status).json({ error: "Aircall API error", status: apiRes.status });
+
+    let audioUrl: string | null = null;
+
+    if (rawUrl) {
+      // Primary path: use the stored URL
+      try {
+        audioUrl = decodeURIComponent(rawUrl);
+        new URL(audioUrl); // validate
+      } catch {
+        res.status(400).json({ error: "Invalid url parameter" });
         return;
       }
-      const callData = (await apiRes.json()) as { call?: { voicemail?: string; recording?: string } };
-      const audioUrl = callData?.call?.voicemail ?? callData?.call?.recording;
-      if (!audioUrl) {
-        res.status(404).json({ error: "No audio available for this call" });
+      // Detect Aircall asset page URLs (not direct audio) and resolve via API
+      // Pattern: https://assets.aircall.io/calls/{callId}/voicemail
+      const aircallAssetMatch = audioUrl.match(/assets\.aircall\.io\/calls\/(\d+)\/(voicemail|recording)/);
+      if (aircallAssetMatch) {
+        const resolvedCallId = aircallAssetMatch[1];
+        const apiId = process.env.AIRCALL_API_ID;
+        const apiToken = process.env.AIRCALL_API_TOKEN;
+        if (apiId && apiToken) {
+          try {
+            const auth = Buffer.from(`${apiId}:${apiToken}`).toString("base64");
+            const apiRes = await fetch(`https://api.aircall.io/v1/calls/${resolvedCallId}`, {
+              headers: { Authorization: `Basic ${auth}` },
+            });
+            if (apiRes.ok) {
+              const callData = (await apiRes.json()) as { call?: { voicemail?: string; recording?: string } };
+              const resolved = callData?.call?.voicemail ?? callData?.call?.recording ?? null;
+              if (resolved && !resolved.includes("assets.aircall.io")) {
+                audioUrl = resolved; // Use the fresh signed S3 URL
+              }
+            } else {
+              console.warn(`[recording-proxy] Aircall API ${apiRes.status} for call ${resolvedCallId} — will attempt direct stream`);
+            }
+          } catch (err) {
+            console.warn("[recording-proxy] Aircall API lookup failed:", err);
+          }
+        }
+      }
+    } else if (callId && /^\d+$/.test(callId)) {
+      // Fallback path: fetch from Aircall API by call ID (only works for recent calls)
+      const apiId = process.env.AIRCALL_API_ID;
+      const apiToken = process.env.AIRCALL_API_TOKEN;
+      if (!apiId || !apiToken) {
+        res.status(500).json({ error: "Aircall credentials not configured" });
         return;
       }
-      // Step 2: stream the audio file to the browser
-      // S3 pre-signed URLs embed auth in the query string — do NOT add an Authorization header
-      const parsed = new URL(audioUrl);
-      const proto = parsed.protocol === "https:" ? https : http;
-      const isS3 = parsed.hostname.includes("amazonaws.com") || parsed.hostname.includes("s3.");
-      const options = {
-        hostname: parsed.hostname,
-        path: parsed.pathname + parsed.search,
-        headers: isS3 ? {} : { Authorization: `Basic ${auth}` },
-      };
-      const proxyReq = proto.get(options, (proxyRes) => {
-        const ct = proxyRes.headers["content-type"] || "";
-        // Guard: if upstream returns HTML the URL is still an asset page
-        if (ct.includes("text/html")) {
-          if (!res.headersSent) res.status(502).json({ error: "Upstream returned HTML instead of audio" });
+      try {
+        const auth = Buffer.from(`${apiId}:${apiToken}`).toString("base64");
+        const apiRes = await fetch(`https://api.aircall.io/v1/calls/${callId}`, {
+          headers: { Authorization: `Basic ${auth}` },
+        });
+        if (!apiRes.ok) {
+          console.error(`[recording-proxy] Aircall API ${apiRes.status} for call ${callId}`);
+          res.status(apiRes.status).json({ error: "Aircall API error", status: apiRes.status });
           return;
         }
-        res.setHeader("Content-Type", ct || "audio/mpeg");
-        res.setHeader("Accept-Ranges", "bytes");
-        if (proxyRes.headers["content-length"]) {
-          res.setHeader("Content-Length", proxyRes.headers["content-length"]);
+        const callData = (await apiRes.json()) as { call?: { voicemail?: string; recording?: string } };
+        audioUrl = callData?.call?.voicemail ?? callData?.call?.recording ?? null;
+      } catch (err) {
+        console.error("[recording-proxy] Aircall API error:", err);
+        res.status(500).json({ error: "Internal error" });
+        return;
+      }
+    } else {
+      res.status(400).json({ error: "Provide ?url= or ?callId= parameter" });
+      return;
+    }
+
+    if (!audioUrl) {
+      res.status(404).json({ error: "No audio available" });
+      return;
+    }
+
+    try {
+      const parsed = new URL(audioUrl);
+      const proto = parsed.protocol === "https:" ? https : http;
+      // S3 pre-signed URLs embed auth in query string — never add Authorization header
+      const proxyReq = proto.get(
+        { hostname: parsed.hostname, path: parsed.pathname + parsed.search, headers: {} },
+        (proxyRes) => {
+          const ct = proxyRes.headers["content-type"] || "";
+          if (ct.includes("text/html")) {
+            if (!res.headersSent) res.status(502).json({ error: "Upstream returned HTML instead of audio" });
+            return;
+          }
+          res.setHeader("Content-Type", ct || "audio/mpeg");
+          res.setHeader("Accept-Ranges", "bytes");
+          if (proxyRes.headers["content-length"]) {
+            res.setHeader("Content-Length", proxyRes.headers["content-length"]);
+          }
+          res.status(proxyRes.statusCode || 200);
+          proxyRes.pipe(res);
         }
-        res.status(proxyRes.statusCode || 200);
-        proxyRes.pipe(res);
-      });
+      );
       proxyReq.on("error", (err) => {
         console.error("[recording-proxy] stream error:", err.message);
         if (!res.headersSent) res.status(502).json({ error: "Upstream error" });

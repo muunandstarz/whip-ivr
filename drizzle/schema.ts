@@ -44,7 +44,7 @@ export type InsertHandler = typeof handlers.$inferInsert;
 // AI-processed intake records from voicemails
 export const intakeRecords = mysqlTable("intake_records", {
   id: int("id").autoincrement().primaryKey(),
-  aircallCallId: varchar("aircallCallId", { length: 64 }),
+  aircallCallId: varchar("aircallCallId", { length: 64 }).unique(),
   callerPhone: varchar("callerPhone", { length: 32 }),
   callerName: varchar("callerName", { length: 256 }),
   callerOrg: varchar("callerOrg", { length: 256 }),

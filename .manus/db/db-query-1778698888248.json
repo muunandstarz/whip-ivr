@@ -1,0 +1,25 @@
+{
+  "query": "SELECT id, aircallCallId, aircallRecordingUrl FROM intake_records WHERE aircallRecordingUrl IS NOT NULL AND aircallRecordingUrl != '' LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute SELECT id, aircallCallId, aircallRecordingUrl FROM intake_records WHERE aircallRecordingUrl IS NOT NULL AND aircallRecordingUrl != '' LIMIT 3;",
+  "rows": [
+    {
+      "id": "1",
+      "aircallCallId": "3707778719",
+      "aircallRecordingUrl": "https://assets.aircall.io/calls/3707778719/voicemail"
+    },
+    {
+      "id": "2",
+      "aircallCallId": "3707598901",
+      "aircallRecordingUrl": "https://assets.aircall.io/calls/3707598901/voicemail"
+    },
+    {
+      "id": "3",
+      "aircallCallId": "3707408181",
+      "aircallRecordingUrl": "https://assets.aircall.io/calls/3707408181/voicemail"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\taircallCallId\taircallRecordingUrl\n1\t3707778719\thttps://assets.aircall.io/calls/3707778719/voicemail\n2\t3707598901\thttps://assets.aircall.io/calls/3707598901/voicemail\n3\t3707408181\thttps://assets.aircall.io/calls/3707408181/voicemail\n",
+  "stderr": "",
+  "execution_time_ms": 263
+}

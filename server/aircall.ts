@@ -312,9 +312,17 @@ export async function processVoicemail(params: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
+  // Guard: skip if an intake record already exists for this call ID (prevents duplicates from race conditions)
+  const existing = await db
+    .select({ id: intakeRecords.id, status: intakeRecords.status })
+    .from(intakeRecords)
+    .where(eq(intakeRecords.aircallCallId, params.aircallCallId))
+    .limit(1);
+  if (existing.length > 0) {
+    console.log(`[Aircall] Intake already exists for call ${params.aircallCallId} (id=${existing[0].id}, status=${existing[0].status}) — skipping`);
+    return { skipped: true, intakeId: existing[0].id };
+  }
   console.log(`[Aircall] Processing voicemail for call ${params.aircallCallId}`);
-
   // 1. Transcribe the voicemail
   let transcript = "";
   try {

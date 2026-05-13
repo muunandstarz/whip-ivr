@@ -1,0 +1,100 @@
+{
+  "query": "SELECT id, aircallCallId, status, createdAt, updatedAt, handlerName, callerName FROM intake_records WHERE status = 'open' AND updatedAt > createdAt ORDER BY updatedAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute SELECT id, aircallCallId, status, createdAt, updatedAt, handlerName, callerName FROM intake_records WHERE status = 'open' AND updatedAt > createdAt ORDER BY updatedAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "120023",
+      "aircallCallId": "3729164589",
+      "status": "open",
+      "createdAt": "2026-04-29 22:49:16",
+      "updatedAt": "2026-05-13 18:49:53",
+      "handlerName": "Annie Ortiz",
+      "callerName": "Robin"
+    },
+    {
+      "id": "30008",
+      "aircallCallId": "3689043802",
+      "status": "open",
+      "createdAt": "2026-04-25 00:05:52",
+      "updatedAt": "2026-05-13 17:56:56",
+      "handlerName": "Natashia Edulan",
+      "callerName": "Dawn"
+    },
+    {
+      "id": "3",
+      "aircallCallId": "3707408181",
+      "status": "open",
+      "createdAt": "2026-04-22 10:41:59",
+      "updatedAt": "2026-05-13 17:12:44",
+      "handlerName": "Natashia Edulan",
+      "callerName": "Cynthia Sims"
+    },
+    {
+      "id": "30005",
+      "aircallCallId": "3689675864",
+      "status": "open",
+      "createdAt": "2026-04-25 00:05:27",
+      "updatedAt": "2026-05-13 16:40:31",
+      "handlerName": "Natashia Edulan",
+      "callerName": "Michael"
+    },
+    {
+      "id": "30026",
+      "aircallCallId": "3684235162",
+      "status": "open",
+      "createdAt": "2026-04-25 00:08:19",
+      "updatedAt": "2026-05-13 16:13:54",
+      "handlerName": "Natashia Edulan",
+      "callerName": "Venetta"
+    },
+    {
+      "id": "30037",
+      "aircallCallId": "3681425939",
+      "status": "open",
+      "createdAt": "2026-04-25 00:09:47",
+      "updatedAt": "2026-05-13 16:00:12",
+      "handlerName": "Annie Ortiz",
+      "callerName": "Kion"
+    },
+    {
+      "id": "30050",
+      "aircallCallId": "3677633436",
+      "status": "open",
+      "createdAt": "2026-04-25 00:11:28",
+      "updatedAt": "2026-05-13 15:47:00",
+      "handlerName": "Carlito Legarde Jr",
+      "callerName": "Tom"
+    },
+    {
+      "id": "30055",
+      "aircallCallId": "3677073973",
+      "status": "open",
+      "createdAt": "2026-04-25 00:12:11",
+      "updatedAt": "2026-05-13 15:44:28",
+      "handlerName": "Natashia Edulan",
+      "callerName": "Tiffany"
+    },
+    {
+      "id": "30064",
+      "aircallCallId": "3675754246",
+      "status": "open",
+      "createdAt": "2026-04-25 00:13:22",
+      "updatedAt": "2026-05-13 15:43:29",
+      "handlerName": "Lorraine Tria",
+      "callerName": "Kristen"
+    },
+    {
+      "id": "30072",
+      "aircallCallId": "3671898307",
+      "status": "open",
+      "createdAt": "2026-04-25 00:14:30",
+      "updatedAt": "2026-05-13 15:42:13",
+      "handlerName": "Annie Ortiz",
+      "callerName": "Deja"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\taircallCallId\tstatus\tcreatedAt\tupdatedAt\thandlerName\tcallerName\n120023\t3729164589\topen\t2026-04-29 22:49:16\t2026-05-13 18:49:53\tAnnie Ortiz\tRobin\n30008\t3689043802\topen\t2026-04-25 00:05:52\t2026-05-13 17:56:56\tNatashia Edulan\tDawn\n3\t3707408181\topen\t2026-04-22 10:41:59\t2026-05-13 17:12:44\tNatashia Edulan\tCynthia Sims\n30005\t3689675864\topen\t2026-04-25 00:05:27\t2026-05-13 16:40:31\tNatashia Edulan\tMichael\n30026\t3684235162\topen\t2026-04-25 00:08:19\t2026-05-13 16:13:54\tNatashia Edulan\tVenetta\n30037\t3681425939\topen\t2026-04-25 00:09:47\t2026-05-13 16:00:12\tAnnie Ortiz\tKion\n30050\t3677633436\topen\t2026-04-25 00:11:28\t2026-05-13 15:47:00\tCarlito Legarde Jr\tTom\n30055\t3677073973\topen\t2026-04-25 00:12:11\t2026-05-13 15:44:28\tNatashia Edulan\tTiffany\n30064\t3675754246\topen\t2026-04-25 00:13:22\t2026-05-13 15:43:29\tLorraine Tria\tKristen\n30072\t3671898307\topen\t2026-04-25 00:14:30\t2026-05-13 15:42:13\tAnnie Ortiz\tDeja\n",
+  "stderr": "",
+  "execution_time_ms": 263
+}

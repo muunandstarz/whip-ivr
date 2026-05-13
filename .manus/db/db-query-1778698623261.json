@@ -1,0 +1,9 @@
+{
+  "query": "SELECT aircallCallId, COUNT(*) as cnt FROM intake_records WHERE aircallCallId IS NOT NULL GROUP BY aircallCallId HAVING cnt > 1 ORDER BY cnt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute SELECT aircallCallId, COUNT(*) as cnt FROM intake_records WHERE aircallCallId IS NOT NULL GROUP BY aircallCallId HAVING cnt > 1 ORDER BY cnt DESC LIMIT 10;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 261
+}

@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE intake_records ADD UNIQUE INDEX uq_intake_aircall_call_id (aircallCallId);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute ALTER TABLE intake_records ADD UNIQUE INDEX uq_intake_aircall_call_id (aircallCallId);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 558
+}

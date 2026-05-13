@@ -688,7 +688,7 @@ export default function IntakeDetail() {
         </Dialog>
 
         {/* Voicemail Recording Player */}
-        {record.aircallCallId && (
+        {(record.aircallRecordingUrl || record.aircallCallId) && (
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
@@ -700,7 +700,11 @@ export default function IntakeDetail() {
               <audio
                 controls
                 className="w-full h-10 rounded-lg"
-                src={`/api/aircall-recording?callId=${encodeURIComponent(record.aircallCallId)}`}
+                src={
+                  record.aircallRecordingUrl
+                    ? `/api/aircall-recording?url=${encodeURIComponent(record.aircallRecordingUrl)}`
+                    : `/api/aircall-recording?callId=${encodeURIComponent(record.aircallCallId!)}`
+                }
                 preload="none"
               >
                 Your browser does not support audio playback.
