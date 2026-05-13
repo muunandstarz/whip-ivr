@@ -537,7 +537,7 @@ export default function IntakeDetail() {
                 </div>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {(callbackHistory as any[]).map((log) => (
-                    <div key={log.id} className="flex items-start gap-2 text-xs bg-muted/20 rounded p-2">
+                    <div key={String(log.id)} className="flex items-start gap-2 text-xs bg-muted/20 rounded p-2">
                       <div className="flex-shrink-0 mt-0.5">
                         {log.disposition === "reached" ? (
                           <PhoneCall className="w-3.5 h-3.5 text-green-600" />

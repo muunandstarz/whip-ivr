@@ -161,7 +161,7 @@ export default function UserManagement() {
                       const isSelf = u.openId === currentUser?.openId;
                       const linkedHandler = activeHandlers.find((h) => h.id === u.handlerProfileId);
                       return (
-                        <tr key={u.id} className={`hover:bg-muted/20 ${isSelf ? "bg-blue-500/10/40" : ""}`}>
+                        <tr key={String(u.id)} className={`hover:bg-muted/20 ${isSelf ? "bg-blue-500/10/40" : ""}`}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <div className="w-7 h-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
@@ -224,7 +224,7 @@ export default function UserManagement() {
                                   <span className="text-muted-foreground italic">Not linked</span>
                                 </SelectItem>
                                 {activeHandlers.map((h) => (
-                                  <SelectItem key={h.id} value={h.id.toString()}>
+                                  <SelectItem key={String(h.id)} value={h.id.toString()}>
                                     <span className="flex items-center gap-1.5">
                                       <Link2 className="w-3 h-3 text-[#ff6221]" />
                                       {h.name}
@@ -383,7 +383,7 @@ export default function UserManagement() {
             ) : (
               <div className="divide-y rounded-md border">
                 {preAuths.map((pa) => (
-                  <div key={pa.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <div key={String(pa.id)} className="flex items-center justify-between px-3 py-2 text-sm">
                     <div className="flex items-center gap-2">
                       <Mail className="w-3.5 h-3.5 text-muted-foreground" />
                       <span className="font-medium text-foreground">{pa.email}</span>

@@ -183,7 +183,7 @@ export default function NewIntake() {
                 </SelectTrigger>
                 <SelectContent>
                   {handlers.map((h) => (
-                    <SelectItem key={h.id} value={h.name}>
+                    <SelectItem key={String(h.id)} value={h.name}>
                       {h.name}
                     </SelectItem>
                   ))}

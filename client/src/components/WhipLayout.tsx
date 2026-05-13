@@ -184,7 +184,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                   </span>
                 </SelectItem>
                 {handlersList?.map((handler) => (
-                  <SelectItem key={handler.id} value={String(handler.id)}>
+                  <SelectItem key={String(handler.id)} value={String(handler.id)}>
                     <span className="flex items-center gap-2">
                       <Users className="w-3.5 h-3.5" />
                       {handler.name}

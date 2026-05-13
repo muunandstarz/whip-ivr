@@ -366,7 +366,7 @@ export default function HandlerQueue() {
                           const priorityCfg = PRIORITY_CONFIG[record.priority ?? "normal"] ?? PRIORITY_CONFIG.normal;
                           return (
                             <div
-                              key={record.id}
+                              key={String(record.id)}
                               className={`flex items-center gap-4 px-5 py-3 hover:bg-muted/10 transition-colors ${
                                 idx < records.length - 1 ? "border-b" : ""
                               }`}

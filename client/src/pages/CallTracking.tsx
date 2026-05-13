@@ -277,7 +277,7 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
                     ];
                     const blocker = blockerKeywords.find(b => b.pattern.test(`${r.message ?? ""} ${r.notes ?? ""}`))?.label ?? null;
                     return (
-                      <IntakeCardCT key={r.id} r={r} blocker={blocker} hasTranscript={hasTranscript} hasRecording={hasRecording} />
+                      <IntakeCardCT key={String(r.id)} r={r} blocker={blocker} hasTranscript={hasTranscript} hasRecording={hasRecording} />
                     );
                   })}
                 </div>
@@ -302,7 +302,7 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
               </h3>
               <div className="space-y-1.5">
                 {calls.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between bg-muted/30 rounded px-3 py-2 text-xs">
+                  <div key={String(c.id)} className="flex items-center justify-between bg-muted/30 rounded px-3 py-2 text-xs">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                         c.status === "answered" ? "bg-green-500" : c.status === "missed" ? "bg-red-500" : "bg-orange-500"
@@ -568,7 +568,7 @@ export default function CallTracking() {
                         const hasPhone = !!(call.callerPhone);
                         return (
                           <tr
-                            key={call.id}
+                            key={String(call.id)}
                             className={`hover:bg-muted/20 transition-colors ${hasPhone ? "cursor-pointer" : ""}`}
                             onClick={() => hasPhone && setSelectedPhone(call.callerPhone!)}
                           >

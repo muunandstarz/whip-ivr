@@ -277,7 +277,7 @@ export default function IntakeRecords() {
               <SelectContent>
                 <SelectItem value="all">All Handlers</SelectItem>
                 {handlersData?.map((h) => (
-                  <SelectItem key={h.id} value={h.name}>{h.name}</SelectItem>
+                  <SelectItem key={String(h.id)} value={h.name}>{h.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -340,7 +340,7 @@ export default function IntakeRecords() {
                         const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                         const Icon = cfg.icon;
                         return (
-                          <tr key={record.id} className="hover:bg-muted/20 transition-colors">
+                          <tr key={String(record.id)} className="hover:bg-muted/20 transition-colors">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.color}`}>
@@ -491,7 +491,7 @@ export default function IntakeRecords() {
                     const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                     const Icon = cfg.icon;
                     return (
-                      <Link key={record.id} href={`/intake/${record.id}`}>
+                      <Link key={String(record.id)} href={`/intake/${record.id}`}>
                         <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 cursor-pointer">
                           <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.color}`}>
                             <Icon className="w-4 h-4" />

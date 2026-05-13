@@ -535,7 +535,7 @@ export default function HandlerDashboard() {
             <div className="space-y-2">
               {voicemailCallbacks.map((record) => (
                 <Card
-                  key={record.id}
+                  key={String(record.id)}
                   className={`transition-colors ${
                     record.callbackDueBy && new Date(record.callbackDueBy) < new Date()
                       ? "border-red-200 bg-red-500/10/30"
@@ -614,7 +614,7 @@ export default function HandlerDashboard() {
             </div>
             <div className="space-y-2">
               {otherOpen.map((record) => (
-                <Card key={record.id}>
+                <Card key={String(record.id)}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">

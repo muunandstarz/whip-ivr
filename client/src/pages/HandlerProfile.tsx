@@ -255,7 +255,7 @@ export default function HandlerProfile() {
                   submittedBy: string | null;
                   createdAt: string | Date;
                 }) => (
-                  <div key={sc.id} className="p-4 space-y-3">
+                  <div key={String(sc.id)} className="p-4 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold text-foreground">Week of {sc.weekOf}</span>
@@ -349,7 +349,7 @@ export default function HandlerProfile() {
                       priority: string | null;
                       createdAt: string | Date;
                     }) => (
-                      <tr key={r.id} className="hover:bg-muted/20">
+                      <tr key={String(r.id)} className="hover:bg-muted/20">
                         <td className="px-4 py-2.5 font-medium text-foreground">{r.callerName ?? "Unknown"}</td>
                         <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{r.whipClaimNumber ?? "—"}</td>
                         <td className="px-4 py-2.5">

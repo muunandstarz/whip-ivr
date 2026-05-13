@@ -665,7 +665,7 @@ export default function Softphone() {
                   {/* Thread list */}
                   <div className="border-b divide-y">
                     {SMS_THREADS.map((thread) => (
-                      <button key={thread.id} onClick={() => setSmsThread(thread.id)}
+                      <button key={String(thread.id)} onClick={() => setSmsThread(thread.id)}
                         className={`w-full text-left px-4 py-3 hover:bg-muted transition-colors ${smsThread === thread.id ? "bg-blue-500/10" : ""}`}>
                         <div className="flex items-center justify-between">
                           <span className={`text-sm font-medium ${thread.unread ? "text-foreground" : "text-gray-700"}`}>{thread.name}</span>
@@ -683,7 +683,7 @@ export default function Softphone() {
                   <ScrollArea className="flex-1 px-4 py-3">
                     <div className="space-y-3">
                       {smsMessages.map((msg) => (
-                        <div key={msg.id} className={`flex ${msg.from === "us" ? "justify-end" : "justify-start"}`}>
+                        <div key={String(msg.id)} className={`flex ${msg.from === "us" ? "justify-end" : "justify-start"}`}>
                           <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${
                             msg.from === "us" ? "bg-primary text-white rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
                           }`}>
@@ -842,7 +842,7 @@ export default function Softphone() {
                     {RECENT_CALLS.map((call) => {
                       const disp = dispositionLabel(call.disposition);
                       return (
-                        <div key={call.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors">
+                        <div key={String(call.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                             call.status === "missed" || call.status === "no_answer" ? "bg-red-500/15" : call.status === "voicemail" ? "bg-muted" : call.type === "inbound" ? "bg-green-500/15" : "bg-blue-500/15"
                           }`}>

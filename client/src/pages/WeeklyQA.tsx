@@ -370,7 +370,7 @@ function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose
               </SelectTrigger>
               <SelectContent>
                 {(handlers ?? []).map((h: { id: number; name: string }) => (
-                  <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>
+                  <SelectItem key={String(h.id)} value={String(h.id)}>{h.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -764,7 +764,7 @@ export default function WeeklyQA() {
                       callControlScore: number | null;
                       submittedBy: string | null;
                     }) => (
-                      <tr key={sc.id} className="hover:bg-muted/20">
+                      <tr key={String(sc.id)} className="hover:bg-muted/20">
                         <td className="px-4 py-2.5 font-medium">{sc.handlerName}</td>
                         <td className="px-4 py-2.5 text-muted-foreground text-xs">{sc.weekOf}</td>
                         <td className="px-4 py-2.5">{sc.overallScore ? <ScoreBadge score={Number(sc.overallScore)} /> : "—"}</td>
