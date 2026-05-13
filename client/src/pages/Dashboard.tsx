@@ -38,6 +38,7 @@ import {
   PhoneCall,
   PhoneMissed,
   TrendingUp,
+  TrendingDown,
   Flame,
   CalendarDays,
   CheckCheck,
@@ -45,6 +46,11 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  Moon,
+  Sun,
+  ArrowUp,
+  ArrowDown,
+  Minus,
 } from "lucide-react";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 
@@ -120,14 +126,49 @@ export default function Dashboard() {
   const todayStr      = format(new Date(), "yyyy-MM-dd");
   const todayCount    = analyticsData?.byDay?.find((d) => d.day === todayStr)?.count ?? 0;
 
-  // Month call KPIs
-  const totalCalls    = monthCallData?.totals.reduce((s, r) => s + Number(r.count), 0) ?? 0;
-  const answeredCalls = Number(monthCallData?.totals.find((r) => r.status === "answered")?.count ?? 0);
-  const missedCalls   = Number(monthCallData?.totals.find((r) => r.status === "missed")?.count ?? 0);
-  const voicemailCalls = Number(monthCallData?.totals.find((r) => r.status === "voicemail")?.count ?? 0);
+  // Month call KPIs — safe null-coalescing prevents NaN
+  const totalsArr     = monthCallData?.totals ?? [];
+  const totalCalls    = totalsArr.reduce((s, r) => s + Number(r.count ?? 0), 0);
+  const answeredCalls = Number(totalsArr.find((r) => r.status === "answered")?.count ?? 0);
+  const missedCalls   = Number(totalsArr.find((r) => r.status === "missed")?.count ?? 0);
+  const voicemailCalls = Number(totalsArr.find((r) => r.status === "voicemail")?.count ?? 0);
   const answerRate    = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
   const inboundCalls  = Number(monthCallData?.byDirection?.find((r) => r.direction === "inbound")?.count ?? 0);
   const outboundCalls = Number(monthCallData?.byDirection?.find((r) => r.direction === "outbound")?.count ?? 0);
+
+  // After-hours & business-hours breakdown
+  const afterHoursCount   = monthCallData?.afterHours ?? 0;
+  const weekendCount      = monthCallData?.weekend ?? 0;
+  const bhAnswered        = monthCallData?.businessHoursAnswered ?? 0;
+  const bhTotal           = monthCallData?.businessHoursTotal ?? 0;
+  const bhAnswerRate      = bhTotal > 0 ? Math.round((bhAnswered / bhTotal) * 100) : 0;
+  const afterHoursPct     = totalCalls > 0 ? Math.round((afterHoursCount / totalCalls) * 100) : 0;
+
+  // Month-over-month comparison
+  const prevMonth         = monthCallData?.prevMonth;
+  const prevTotal         = prevMonth?.total ?? 0;
+  const prevAnswerRate    = prevMonth?.answerRate ?? 0;
+  const momVolumeDelta    = prevTotal > 0 ? Math.round(((totalCalls - prevTotal) / prevTotal) * 100) : null;
+  const momAnswerDelta    = prevTotal > 0 ? answerRate - prevAnswerRate : null;
+
+  // Trend blurbs from byCallerType comparison
+  const callCallerTypes   = monthCallData?.byCallerType ?? [];
+  const trendBlurbs = useMemo(() => {
+    const blurbs: { text: string; direction: 'up' | 'down' | 'neutral'; color: string }[] = [];
+    if (momVolumeDelta !== null) {
+      if (momVolumeDelta >= 10) blurbs.push({ text: `Call volume is up ${momVolumeDelta}% vs last month`, direction: 'up', color: 'text-amber-600 dark:text-amber-400' });
+      else if (momVolumeDelta <= -10) blurbs.push({ text: `Call volume is down ${Math.abs(momVolumeDelta)}% vs last month`, direction: 'down', color: 'text-green-600 dark:text-green-400' });
+    }
+    if (momAnswerDelta !== null) {
+      if (momAnswerDelta >= 5) blurbs.push({ text: `Answer rate improved +${momAnswerDelta}pp vs last month`, direction: 'up', color: 'text-green-600 dark:text-green-400' });
+      else if (momAnswerDelta <= -5) blurbs.push({ text: `Answer rate dropped ${momAnswerDelta}pp vs last month`, direction: 'down', color: 'text-red-600 dark:text-red-400' });
+    }
+    const carrierCallCount = Number(callCallerTypes.find((c) => c.callerType === 'carrier')?.count ?? 0);
+    const attyCallCount    = Number(callCallerTypes.find((c) => c.callerType === 'law_office')?.count ?? 0);
+    if (carrierCallCount === 0 && totalCalls > 100) blurbs.push({ text: 'No carrier calls classified yet this month — check AI classification', direction: 'neutral', color: 'text-muted-foreground' });
+    if (attyCallCount > 50) blurbs.push({ text: `${attyCallCount} attorney calls this month — law office volume elevated`, direction: 'neutral', color: 'text-purple-600 dark:text-purple-400' });
+    return blurbs;
+  }, [momVolumeDelta, momAnswerDelta, callCallerTypes, totalCalls]);
 
   // Available months for selector (sorted newest-first)
   const availableMonths: string[] = useMemo(() => {
@@ -403,7 +444,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Call Volume — {monthLabel}</p>
-              <InfoTooltip text="Live call statistics from Aircall for the Whip Claims line. Use the arrows to browse previous months." />
+              <InfoTooltip text="Live call statistics from Aircall for the Whip Claims line. Includes ALL calls (business hours, after hours, and weekends). Use the arrows to browse previous months." />
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
@@ -422,17 +463,58 @@ export default function Dashboard() {
 
           {monthLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[0,1,2,3].map((i) => <StatCardSkeleton key={i} />)}</div>
-          ) : totalCalls === 0 ? (
+          ) : totalCalls === 0 && !monthLoading ? (
             <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No call data for {monthLabel}</CardContent></Card>
           ) : (
             <>
+              {/* KPI Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {([
-                  { key: "total",     Icon: Phone,         color: "blue",   value: totalCalls,     label: "Total Calls",  sub: inboundCalls > 0 ? `${inboundCalls} in${outboundCalls > 0 ? ` · ${outboundCalls} out` : ""}` : undefined, tooltip: "Total calls on the Whip Claims line this month." },
-                  { key: "answered",  Icon: PhoneCall,     color: "green",  value: answeredCalls,  label: "Answered",     sub: `${answerRate}% answer rate`, tooltip: "Calls answered by a live agent this month." },
-                  { key: "missed",    Icon: PhoneMissed,   color: "red",    value: missedCalls,    label: "Missed",       sub: undefined, tooltip: "Calls that rang but were not answered this month." },
-                  { key: "voicemail", Icon: PhoneIncoming, color: "amber",  value: voicemailCalls, label: "Voicemail",    sub: "generates intake records", tooltip: "Calls that went to voicemail this month — these generate intake records." },
-                ] as const).map(({ key, Icon, color, value, label, sub, tooltip }) => {
+                  {
+                    key: "total",
+                    Icon: Phone,
+                    color: "blue",
+                    value: totalCalls,
+                    label: "Total Calls",
+                    sub: inboundCalls > 0 ? `${inboundCalls} in${outboundCalls > 0 ? ` · ${outboundCalls} out` : ""}` : undefined,
+                    tooltip: `All calls on the Whip Claims line in ${monthLabel} — includes business hours, after hours, and weekends.`,
+                    mom: momVolumeDelta,
+                    momLabel: prevTotal > 0 ? `${prevTotal.toLocaleString()} last month` : undefined,
+                  },
+                  {
+                    key: "answered",
+                    Icon: PhoneCall,
+                    color: "green",
+                    value: answeredCalls,
+                    label: "Answered",
+                    sub: `${answerRate}% overall · ${bhAnswerRate}% biz hrs`,
+                    tooltip: `Calls answered by a live agent. Overall answer rate: ${answerRate}% (all hours). Business-hours answer rate (Mon–Fri 8am–6pm): ${bhAnswerRate}% (${bhAnswered} of ${bhTotal} calls).`,
+                    mom: momAnswerDelta !== null ? (momAnswerDelta >= 0 ? `+${momAnswerDelta}pp` : `${momAnswerDelta}pp`) : undefined,
+                    momLabel: prevTotal > 0 ? `${prevAnswerRate}% last month` : undefined,
+                  },
+                  {
+                    key: "missed",
+                    Icon: PhoneMissed,
+                    color: "red",
+                    value: missedCalls,
+                    label: "Missed",
+                    sub: undefined,
+                    tooltip: "Calls that rang but were not answered this month.",
+                    mom: undefined,
+                    momLabel: undefined,
+                  },
+                  {
+                    key: "voicemail",
+                    Icon: PhoneIncoming,
+                    color: "amber",
+                    value: voicemailCalls,
+                    label: "Voicemail",
+                    sub: "generates intake records",
+                    tooltip: "Calls that went to voicemail this month — these generate intake records.",
+                    mom: undefined,
+                    momLabel: undefined,
+                  },
+                ] as const).map(({ key, Icon, color, value, label, sub, tooltip, mom, momLabel }) => {
                   const colorMap: Record<string, { iconBg: string; iconColor: string; valueColor: string; hoverBorder: string; subColor: string }> = {
                     blue:  { iconBg: "bg-blue-500/15",  iconColor: "text-blue-600 dark:text-blue-400",  valueColor: "text-blue-600 dark:text-blue-400",  hoverBorder: "hover:border-blue-300",  subColor: "text-blue-600 dark:text-blue-400" },
                     green: { iconBg: "bg-green-500/15", iconColor: "text-green-600 dark:text-green-400", valueColor: "text-green-600 dark:text-green-400", hoverBorder: "hover:border-green-300", subColor: "text-green-600 dark:text-green-400" },
@@ -440,21 +522,40 @@ export default function Dashboard() {
                     amber: { iconBg: "bg-amber-500/15", iconColor: "text-amber-600 dark:text-amber-400", valueColor: "text-amber-600 dark:text-amber-400", hoverBorder: "hover:border-amber-300", subColor: "text-muted-foreground" },
                   };
                   const c = colorMap[color];
+                  const momNum = typeof mom === 'number' ? mom : null;
                   return (
                     <Link key={key} href="/analytics">
                       <Card className={`cursor-pointer hover:shadow-sm transition-all ${c.hoverBorder}`}>
                         <CardContent className="pt-5">
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${c.iconBg}`}>
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${c.iconBg}`}>
                               <Icon className={`w-5 h-5 ${c.iconColor}`} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <div className={`text-2xl font-bold ${c.valueColor}`}>{value.toLocaleString()}</div>
+                                <div className={`text-2xl font-bold ${c.valueColor}`}>{Number(value).toLocaleString()}</div>
                                 <InfoTooltip text={tooltip} />
                               </div>
                               <div className="text-xs text-muted-foreground">{label}</div>
                               {sub && <div className={`text-[10px] mt-0.5 font-medium ${c.subColor}`}>{sub}</div>}
+                              {momNum !== null && (
+                                <div className={`text-[10px] mt-0.5 flex items-center gap-0.5 font-medium ${
+                                  momNum > 0 ? (key === 'total' ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400')
+                                  : momNum < 0 ? (key === 'total' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')
+                                  : 'text-muted-foreground'
+                                }`}>
+                                  {momNum > 0 ? <ArrowUp className="w-2.5 h-2.5" /> : momNum < 0 ? <ArrowDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+                                  {momNum > 0 ? `+${momNum}%` : `${momNum}%`} vs last mo
+                                </div>
+                              )}
+                              {typeof mom === 'string' && (
+                                <div className={`text-[10px] mt-0.5 flex items-center gap-0.5 font-medium ${
+                                  mom.startsWith('+') ? 'text-green-600 dark:text-green-400' : mom.startsWith('-') ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'
+                                }`}>
+                                  {mom.startsWith('+') ? <ArrowUp className="w-2.5 h-2.5" /> : mom.startsWith('-') ? <ArrowDown className="w-2.5 h-2.5" /> : <Minus className="w-2.5 h-2.5" />}
+                                  {mom} vs last mo
+                                </div>
+                              )}
                             </div>
                           </div>
                         </CardContent>
@@ -464,9 +565,40 @@ export default function Dashboard() {
                 })}
               </div>
 
+              {/* After-hours + Trend Blurbs row */}
+              <div className="mt-3 flex flex-wrap gap-2 items-center">
+                {/* After-hours pill */}
+                {totalCalls > 0 && (
+                  <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
+                    <Moon className="w-3 h-3 text-indigo-500" />
+                    <span className="text-[11px] text-muted-foreground">
+                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> after-hours calls ({afterHoursPct}%)
+                    </span>
+                    <InfoTooltip text={`${afterHoursCount} calls arrived outside business hours (before 8am or after 6pm). ${weekendCount} calls arrived on weekends. These are included in all totals above.`} />
+                  </div>
+                )}
+                {/* Business-hours answer rate pill */}
+                {bhTotal > 0 && (
+                  <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
+                    <Sun className="w-3 h-3 text-yellow-500" />
+                    <span className="text-[11px] text-muted-foreground">
+                      <span className="font-semibold text-foreground">{bhAnswerRate}%</span> answer rate during biz hrs
+                    </span>
+                    <InfoTooltip text={`Business-hours answer rate (Mon–Fri, 8am–6pm): ${bhAnswered} answered out of ${bhTotal} calls. The overall rate of ${answerRate}% includes after-hours and weekend calls.`} />
+                  </div>
+                )}
+                {/* Trend blurbs */}
+                {trendBlurbs.map((blurb, i) => (
+                  <div key={`blurb-${i}`} className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
+                    {blurb.direction === 'up' ? <TrendingUp className="w-3 h-3 text-amber-500" /> : blurb.direction === 'down' ? <TrendingDown className="w-3 h-3 text-green-500" /> : <Info className="w-3 h-3 text-muted-foreground" />}
+                    <span className={`text-[11px] font-medium ${blurb.color}`}>{blurb.text}</span>
+                  </div>
+                ))}
+              </div>
+
               {/* Daily bar chart */}
               {monthCallData && monthCallData.byDay.length > 0 && (
-                <Card className="mt-4">
+                <Card className="mt-3">
                   <CardContent className="pt-4 pb-2">
                     <ResponsiveContainer width="100%" height={110}>
                       <BarChart
@@ -625,7 +757,7 @@ export default function Dashboard() {
                       const total = callerTypeBreakdown.reduce((s, c) => s + Number(c.count), 0);
                       const pct   = total > 0 ? Math.round((Number(item.count) / total) * 100) : 0;
                       return (
-                        <div key={item.callerType}>
+                        <div key={item.callerType ?? "unknown"}>
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-1.5">
                               <div className={`w-5 h-5 rounded flex items-center justify-center ${cfg.color}`}>

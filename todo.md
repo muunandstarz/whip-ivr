@@ -424,3 +424,26 @@ Business routing logic to implement in resolveHandler():
 - [x] Floating ErrorBubble component (admin-only, count badge, slide-out drawer with stack traces)
 - [x] Wired into App.tsx (AppInner wrapper for proper hook context)
 - [x] Audio player fix: recording proxy now uses callId → Aircall API → fresh S3 URL (no auth header forwarding)
+
+---
+## Dashboard Fixes & Enhancements (May 13 2026)
+- [ ] Fix NaN totalCalls / NaN key error — monthCallData?.totals reduce returning NaN when data is null
+- [ ] Fix 7-day sparkline showing blank
+- [ ] Add month-over-month comparison (vs previous month delta + arrow)
+- [ ] Add after-hours / weekend call breakdown with clear labeling
+- [ ] Add trend blurbs (call volume trending up/down, carrier/atty call trends)
+- [ ] Add business hours vs all-hours answer rate distinction
+- [ ] Extend getCallAnalyticsByMonth in db.ts to include afterHours, weekend, prevMonth comparison data
+
+---
+
+## Dashboard Fixes & Enhancements (May 13 2026)
+
+- [x] Fix NaN totalCalls — Drizzle execute() returns [[rows],[fields]], fixed with [0] indexing + CAST(COUNT(*) AS SIGNED)
+- [x] Fix NaN key error from null callerType in callerTypeBreakdown
+- [x] Add month-over-month comparison (vs previous month delta + arrow)
+- [x] Add after-hours / weekend call breakdown with clear labeling
+- [x] Add trend blurbs (call volume trending up/down, carrier/atty call trends)
+- [x] Add business hours vs all-hours answer rate distinction
+- [x] Extend getCallAnalyticsByMonth in db.ts to include afterHours, weekend, prevMonth comparison data
+- [x] Historical month browsing with left/right navigation arrows

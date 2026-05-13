@@ -1283,20 +1283,28 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   const db = await getDb();
   if (!db) return null;
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) return null;
-  const [totals, byDirection, byDay, availableMonths] = await Promise.all([
+
+  // Compute previous month string (e.g. 2026-05 → 2026-04)
+  const [yr, mo] = yearMonth.split('-').map(Number);
+  const prevMo = mo === 1 ? 12 : mo - 1;
+  const prevYr = mo === 1 ? yr - 1 : yr;
+  const prevYearMonth = `${prevYr}-${String(prevMo).padStart(2, '0')}`;
+
+  const [totals, byDirection, byDay, availableMonths, afterHoursRow, prevTotals, byCallerType] = await Promise.all([
     db.execute<{ status: string; count: number }>(sql`
-      SELECT status, COUNT(*) AS count FROM call_history
+      SELECT status, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY status
     `),
     db.execute<{ direction: string; count: number }>(sql`
-      SELECT direction, COUNT(*) AS count FROM call_history
+      SELECT direction, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY direction
     `),
     db.execute<{ day: string; total: number; answered: number; missed: number; voicemail: number }>(sql`
-      SELECT DATE_FORMAT(startedAt, '%Y-%m-%d') AS day, COUNT(*) AS total,
-        SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS answered,
-        SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END) AS missed,
-        SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END) AS voicemail
+      SELECT DATE_FORMAT(startedAt, '%Y-%m-%d') AS day,
+        CAST(COUNT(*) AS SIGNED) AS total,
+        CAST(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS answered,
+        CAST(SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END) AS SIGNED) AS missed,
+        CAST(SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END) AS SIGNED) AS voicemail
       FROM call_history WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
       GROUP BY DATE_FORMAT(startedAt, '%Y-%m-%d') ORDER BY day ASC
     `),
@@ -1304,16 +1312,62 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       SELECT DISTINCT DATE_FORMAT(startedAt, '%Y-%m') AS month FROM call_history
       WHERE startedAt IS NOT NULL ORDER BY month DESC LIMIT 12
     `),
+    // After-hours and weekend breakdown
+    db.execute<{ total: number; afterHours: number; weekend: number; businessHoursAnswered: number; businessHoursTotal: number }>(sql`
+      SELECT
+        CAST(COUNT(*) AS SIGNED) AS total,
+        CAST(SUM(CASE WHEN HOUR(startedAt) < 8 OR HOUR(startedAt) >= 18 THEN 1 ELSE 0 END) AS SIGNED) AS afterHours,
+        CAST(SUM(CASE WHEN DAYOFWEEK(startedAt) IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS weekend,
+        CAST(SUM(CASE WHEN status='answered' AND HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursAnswered,
+        CAST(SUM(CASE WHEN HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursTotal
+      FROM call_history WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+    `),
+    // Previous month totals for MoM comparison
+    db.execute<{ status: string; count: number }>(sql`
+      SELECT status, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${prevYearMonth} GROUP BY status
+    `),
+    // Caller type breakdown for this month
+    db.execute<{ callerType: string | null; count: number }>(sql`
+      SELECT COALESCE(callerType, 'unknown') AS callerType, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY callerType ORDER BY count DESC
+    `),
   ]);
+
+  // Drizzle execute() returns [[rows], [fieldPackets]] — use [0] to get just the rows
+  const totalsRows     = (totals as any[][])[0] ?? [];
+  const byDirectionRows = (byDirection as any[][])[0] ?? [];
+  const byDayRows      = (byDay as any[][])[0] ?? [];
+  const availMonthRows = (availableMonths as any[][])[0] ?? [];
+  const ahRow          = ((afterHoursRow as any[][])[0] ?? [])[0] ?? {};
+  const prevTotalsRows = (prevTotals as any[][])[0] ?? [];
+  const byCallerTypeRows = (byCallerType as any[][])[0] ?? [];
+
+  const prevTotalsArr = prevTotalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) }));
+  const prevTotal = prevTotalsArr.reduce((s: number, r: any) => s + r.count, 0);
+  const prevAnswered = prevTotalsArr.find((r: any) => r.status === 'answered')?.count ?? 0;
+
   return {
     yearMonth,
-    totals: (totals as any[]).map((r) => ({ status: r.status as string, count: Number(r.count) })),
-    byDirection: (byDirection as any[]).map((r) => ({ direction: r.direction as string, count: Number(r.count) })),
-    byDay: (byDay as any[]).map((r) => ({
+    prevYearMonth,
+    totals: totalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) })),
+    byDirection: byDirectionRows.map((r: any) => ({ direction: r.direction as string, count: Number(r.count) })),
+    byDay: byDayRows.map((r: any) => ({
       day: String(r.day ?? '').slice(0, 10),
       total: Number(r.total), answered: Number(r.answered),
       missed: Number(r.missed), voicemail: Number(r.voicemail),
     })),
-    availableMonths: (availableMonths as any[]).map((r) => r.month as string),
+    availableMonths: availMonthRows.map((r: any) => r.month as string),
+    afterHours: Number(ahRow.afterHours ?? 0),
+    weekend: Number(ahRow.weekend ?? 0),
+    businessHoursAnswered: Number(ahRow.businessHoursAnswered ?? 0),
+    businessHoursTotal: Number(ahRow.businessHoursTotal ?? 0),
+    prevMonth: {
+      yearMonth: prevYearMonth,
+      total: prevTotal,
+      answered: prevAnswered,
+      answerRate: prevTotal > 0 ? Math.round((prevAnswered / prevTotal) * 100) : 0,
+    },
+    byCallerType: byCallerTypeRows.map((r: any) => ({ callerType: String(r.callerType ?? 'unknown'), count: Number(r.count) })),
   };
 }
