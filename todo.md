@@ -447,3 +447,21 @@ Business routing logic to implement in resolveHandler():
 - [x] Add business hours vs all-hours answer rate distinction
 - [x] Extend getCallAnalyticsByMonth in db.ts to include afterHours, weekend, prevMonth comparison data
 - [x] Historical month browsing with left/right navigation arrows
+
+## Dashboard Round 2 Fixes (May 14 2026)
+
+- [ ] Fix remaining NaN key error (still firing — find remaining source)
+- [ ] Fix blank 7-day intake trend chart
+- [ ] Restructure answer rate: show overall answer rate AND business-hours answer rate as separate clear cards
+- [ ] Fix confusing "549 missed" display — make clear these are all-hours missed calls
+
+---
+
+## Dashboard Round 2 Fixes (May 14 2026)
+
+- [x] Fix NaN key error from null handlerName in Handler Workload section (key={h.handlerName ?? `handler-${hi}`})
+- [x] Fix NaN key error from null callerType in Caller Type Breakdown (key={item.callerType ?? `caller-${cti}`})
+- [x] Fix 7-day intake trend chart blank — get7DayIntakeTrend had same Drizzle [[rows],[fields]] bug, fixed with [0] indexing
+- [x] Fix all remaining db.execute calls with Drizzle [[rows],[fields]] bug (callback compliance, completion stats, callback logs, speed metrics, overdue callbacks)
+- [x] Clarify after-hours pill wording: "549 of 1,341 calls were after-hours (41%)" instead of "549 after-hours calls (41%)"
+- [x] After-hours calls are NOT missed calls — they are calls that arrived outside business hours but were still answered/voicemail

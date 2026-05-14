@@ -1013,7 +1013,7 @@ export async function getCallbackSLAMetrics(handlerName?: string) {
       AND ${handlerCondition}
   `);
 
-  const r = (rows as any)[0] ?? { total: 0, onTime: 0, overdue: 0, pending: 0 };
+  const r = ((rows as any[][])[0] ?? [])[0] ?? { total: 0, onTime: 0, overdue: 0, pending: 0 };
   const total = Number(r.total ?? 0);
   const onTime = Number(r.onTime ?? 0);
   const overdue = Number(r.overdue ?? 0);
@@ -1052,7 +1052,7 @@ export async function getCallbackCompletionStats(handlerName?: string) {
       AND ${handlerCondition}
   `);
 
-  const r = (rows as any)[0] ?? {};
+  const r = ((rows as any[][])[0] ?? [])[0] ?? {};
   const today = Number(r.today ?? 0);
   const thisWeek = Number(r.thisWeek ?? 0);
   const thisMonth = Number(r.thisMonth ?? 0);
@@ -1067,7 +1067,7 @@ export async function getCallbackCompletionStats(handlerName?: string) {
     GROUP BY disposition
   `);
   const byDisposition: Record<string, number> = {};
-  for (const row of dispositionRows as any[]) {
+  for (const row of ((dispositionRows as any[][])[0] ?? [])) {
     byDisposition[row.disposition] = Number(row.count ?? 0);
   }
 
@@ -1092,7 +1092,7 @@ export async function getCallbackCompletionStats(handlerName?: string) {
       GROUP BY callbackHandlerName
       ORDER BY completed DESC
     `);
-    byHandler = (leaderRows as any[]).map((row) => ({
+    byHandler = ((leaderRows as any[][])[0] ?? []).map((row: any) => ({
       handlerName: row.handlerName,
       completed: Number(row.completed ?? 0),
       reached: Number(row.reached ?? 0),
@@ -1173,8 +1173,8 @@ export async function getCallbackLogAll(opts?: {
     WHERE ${where}
   `);
 
-  const total = Number((countRows as any)[0]?.total ?? 0);
-  return { rows: rows as any[], total };
+  const total = Number(((countRows as any[][])[0] ?? [])[0]?.total ?? 0);
+  return { rows: (rows as any[][])[0] ?? [], total };
 }
 
 export async function getCallbackSpeedMetrics(handlerName?: string) {
@@ -1219,13 +1219,12 @@ export async function getCallbackSpeedMetrics(handlerName?: string) {
     ORDER BY avgMinutes ASC
   `);
 
-  const o = (overall as any)[0] ?? {};
+  const o = ((overall as any[][])[0] ?? [])[0] ?? {};
   const avgMinutes = o.avgMinutes != null ? Number(o.avgMinutes) : null;
   const totalCbs = Number(o.totalCbs ?? 0);
   const withinSla = Number(o.withinSla ?? 0);
   const slaPercent = totalCbs > 0 ? Math.round((withinSla / totalCbs) * 100) : null;
-
-  const byHandler = (byHandlerRows as any[]).map((r) => ({
+  const byHandler = ((byHandlerRows as any[][])[0] ?? []).map((r: any) => ({
     handlerName: r.handlerName as string,
     avgMinutes: r.avgMinutes != null ? Number(r.avgMinutes) : null,
     totalCbs: Number(r.totalCbs),
@@ -1252,7 +1251,7 @@ export async function getOverdueCallbackDetails() {
       AND callbackAt IS NULL AND callbackDueBy IS NOT NULL AND callbackDueBy < NOW()
     ORDER BY callbackDueBy ASC LIMIT 20
   `);
-  return (rows as any[]).map((r) => ({
+  return ((rows as any[][])[0] ?? []).map((r: any) => ({
     id: Number(r.id), callerName: r.callerName as string | null,
     callerOrg: r.callerOrg as string | null, callerPhone: r.callerPhone as string | null,
     handlerName: r.handlerName as string | null, callbackDueBy: r.callbackDueBy as string | null,
@@ -1271,7 +1270,9 @@ export async function get7DayIntakeTrend() {
     GROUP BY DATE_FORMAT(createdAt, '%Y-%m-%d'), callerType
     ORDER BY day ASC, count DESC
   `);
-  return (rows as any[]).map((r) => ({
+  // Drizzle execute() returns [[rows], [fieldPackets]] — use [0] to get just the rows
+  const rowsArr = (rows as any[][])[0] ?? [];
+  return rowsArr.map((r: any) => ({
     day: String(r.day ?? '').slice(0, 10),
     callerType: (r.callerType ?? 'unknown') as string,
     count: Number(r.count),

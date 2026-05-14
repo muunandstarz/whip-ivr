@@ -572,7 +572,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
                     <Moon className="w-3 h-3 text-indigo-500" />
                     <span className="text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> after-hours calls ({afterHoursPct}%)
+                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> of {totalCalls.toLocaleString()} calls were after-hours ({afterHoursPct}%)
                     </span>
                     <InfoTooltip text={`${afterHoursCount} calls arrived outside business hours (before 8am or after 6pm). ${weekendCount} calls arrived on weekends. These are included in all totals above.`} />
                   </div>
@@ -711,12 +711,12 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2.5">
-                    {handlerWorkload.map((h) => {
+                    {handlerWorkload.map((h, hi) => {
                       const maxOpen = Math.max(...handlerWorkload.map((x) => x.open), 1);
                       const pct  = Math.round((h.open / maxOpen) * 100);
                       const dot  = h.open === 0 ? "bg-green-500" : h.open <= 3 ? "bg-green-500" : h.open <= 7 ? "bg-amber-500" : "bg-red-500";
                       return (
-                        <div key={h.handlerName} className="flex items-center gap-3">
+                        <div key={h.handlerName ?? `handler-${hi}`} className="flex items-center gap-3">
                           <div className="flex items-center gap-2 w-36 flex-shrink-0">
                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
                             <span className="text-sm truncate">{h.handlerName}</span>
@@ -751,13 +751,13 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
                 ) : (
                   <div className="space-y-3">
-                    {callerTypeBreakdown.map((item) => {
+                    {callerTypeBreakdown.map((item, cti) => {
                       const cfg = CALLER_TYPE_CONFIG[item.callerType ?? "unknown"] ?? CALLER_TYPE_CONFIG.unknown;
                       const Icon = cfg.icon;
                       const total = callerTypeBreakdown.reduce((s, c) => s + Number(c.count), 0);
                       const pct   = total > 0 ? Math.round((Number(item.count) / total) * 100) : 0;
                       return (
-                        <div key={item.callerType ?? "unknown"}>
+                        <div key={item.callerType ?? `caller-${cti}`}>
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-1.5">
                               <div className={`w-5 h-5 rounded flex items-center justify-center ${cfg.color}`}>
