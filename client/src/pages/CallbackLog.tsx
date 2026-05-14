@@ -30,6 +30,7 @@ const DISPOSITION_CONFIG: Record<string, { label: string; icon: React.ElementTyp
   no_answer:      { label: "No Answer",      icon: PhoneOff,     className: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-500/30" },
   busy:           { label: "Busy",           icon: PhoneMissed,  className: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-500/30" },
   wrong_number:   { label: "Wrong Number",   icon: PhoneMissed,  className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30" },
+  emailed:        { label: "Emailed",        icon: PhoneMissed,  className: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-300 dark:border-purple-500/30" },
 };
 
 const OUTCOME_CONFIG: Record<string, { label: string; className: string }> = {
@@ -124,6 +125,7 @@ export default function CallbackLog() {
               <SelectItem value="reached">Reached</SelectItem>
               <SelectItem value="left_voicemail">Left Voicemail</SelectItem>
               <SelectItem value="no_answer">No Answer</SelectItem>
+              <SelectItem value="emailed">Emailed</SelectItem>
               <SelectItem value="busy">Busy</SelectItem>
               <SelectItem value="wrong_number">Wrong Number</SelectItem>
             </SelectContent>

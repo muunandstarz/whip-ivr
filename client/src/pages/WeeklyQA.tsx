@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,212 +32,37 @@ import {
   Send,
   Edit3,
   X,
+  ChevronDown,
+  Users,
 } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
 import { toast } from "sonner";
 
-// April 22 call analysis — pre-computed from Whip April Call Analysis
-const APRIL_QA_DATA = [
-  {
-    agentName: "Lorraine Tria",
-    callsScored: 18,
-    avgOverall: 8.1,
-    avgGreeting: 8.6,
-    avgHold: 7.8,
-    avgResolution: 8.2,
-    avgEmpathy: 8.4,
-    avgCallControl: 7.9,
-    trend: "up" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "Consistently uses the full Whip greeting script — callers immediately know they've reached the right place",
-      "Excellent hold management: checks in every 60–90 seconds and always thanks callers for their patience",
-      "Closes calls with a clear next-step summary — callers leave knowing what happens next and when",
-      "Handles frustrated repeat callers with exceptional empathy; acknowledges prior contact without being prompted",
-    ],
-    improvements: [
-      "Initial greeting runs slightly long (~25 sec) — trimming the intro by 5–8 seconds would reduce average handle time without sacrificing warmth",
-      "Occasionally confirms claim numbers verbally but doesn't read them back phonetically — recommend using the NATO alphabet for digits to reduce transcription errors",
-    ],
-    coachingNote: "Lorraine is the team's benchmark this week. Pair her with agents scoring below 7.0 for peer coaching sessions on hold management and resolution closing.",
-  },
-  {
-    agentName: "Jayla Bernard",
-    callsScored: 25,
-    avgOverall: 7.8,
-    avgGreeting: 8.4,
-    avgHold: 7.2,
-    avgResolution: 7.9,
-    avgEmpathy: 8.1,
-    avgCallControl: 7.4,
-    trend: "up" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "Strongest law office handler on the team — professionally navigates attorney requests and sets appropriate expectations",
-      "High empathy scores driven by genuine acknowledgment of caller frustration before jumping into intake",
-      "Resolution steps are clear and specific — callers receive a named handler and a realistic timeframe",
-      "Zero missed verification steps on demand letter calls — always confirms claim number, attorney name, and firm",
-    ],
-    improvements: [
-      "Rushes through claim number confirmation on high-volume periods — slow down and read back the full number digit-by-digit",
-      "Call control dips on complex multi-exposure calls — use the 'one exposure at a time' script to keep calls focused",
-      "Recommend adding the callback email confirmation step consistently — currently done on ~60% of calls",
-    ],
-    coachingNote: "Jayla is ready for a senior agent role. Focus coaching on claim number verification discipline and multi-exposure call structure.",
-  },
-  {
-    agentName: "Annie Ortiz",
-    callsScored: 22,
-    avgOverall: 7.5,
-    avgGreeting: 7.9,
-    avgHold: 7.0,
-    avgResolution: 7.4,
-    avgEmpathy: 7.8,
-    avgCallControl: 7.3,
-    trend: "stable" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "100% answer rate this week — no missed calls, exceptional availability",
-      "Consistent and professional tone across all call types — no variation in quality between easy and difficult callers",
-      "Strong callback information collection — phone and email confirmed on 95% of calls",
-      "Handles medical provider calls efficiently — collects provider name, NPI, and claim reference without prompting",
-    ],
-    improvements: [
-      "Resolution documentation is brief — encourage adding a one-sentence summary of the caller's issue to the intake note for handler context",
-      "Hold times average 2m 10s — slightly above team target of 90 seconds. Review hold reason before placing callers on hold",
-      "Recommend confirming email addresses by spelling them back — currently skipped on ~40% of calls",
-    ],
-    coachingNote: "Annie is a reliable performer. Focus next coaching cycle on documentation quality and hold time reduction.",
-  },
-  {
-    agentName: "MJ Badua",
-    callsScored: 20,
-    avgOverall: 7.4,
-    avgGreeting: 7.8,
-    avgHold: 6.9,
-    avgResolution: 7.3,
-    avgEmpathy: 7.6,
-    avgCallControl: 7.2,
-    trend: "up" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "Strong performance on live-agent routed calls (member/claimant) — callers feel heard and understood",
-      "Excellent at de-escalating upset members — uses name acknowledgment and active listening consistently",
-      "Claim number collection accuracy is high — reads back numbers and confirms spelling of caller names",
-      "Improving trend week-over-week — overall score up 0.4 points from prior week",
-    ],
-    improvements: [
-      "Hold management is the primary development area — callers are placed on hold without an estimated wait time. Add 'I'll have an answer for you in about [X] minutes' before placing on hold",
-      "Resolution closing needs a structured script — some calls end without confirming the next step or handler name",
-      "On voicemail-to-live-transfer calls, review the AI intake summary before picking up so the caller doesn't have to repeat information",
-    ],
-    coachingNote: "MJ is on an upward trajectory. The biggest unlock is hold management — one focused training session on the hold script should move the score from 6.9 to 7.5+.",
-  },
-  {
-    agentName: "Daryl Ochate",
-    callsScored: 24,
-    avgOverall: 7.6,
-    avgGreeting: 8.0,
-    avgHold: 7.4,
-    avgResolution: 7.7,
-    avgEmpathy: 7.5,
-    avgCallControl: 7.5,
-    trend: "stable" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "99% answer rate — highest on the team. Daryl is the most available agent for live-routed calls",
-      "Average call duration of 6m 42s reflects thorough intake — not rushing callers off the line",
-      "Handles carrier and law office calls with confidence — does not defer or transfer unnecessarily",
-      "Strong call control — keeps conversations on track without being abrupt",
-    ],
-    improvements: [
-      "Empathy scores are slightly lower than peers on escalated calls — when a caller is frustrated, pause and acknowledge before moving to intake questions",
-      "Recommend adding the 'repeat caller acknowledgment' script: 'I see you've reached out about this before — let me make sure we get this resolved today'",
-      "On long calls (8+ min), check in with the caller mid-call to confirm they still have time — reduces abrupt call endings",
-    ],
-    coachingNote: "Daryl's availability and thoroughness are standout qualities. The coaching opportunity is empathy on escalated calls — a small adjustment with significant impact on caller satisfaction.",
-  },
-  {
-    agentName: "Natashia Edulan",
-    callsScored: 30,
-    avgOverall: 7.2,
-    avgGreeting: 8.1,
-    avgHold: 6.4,
-    avgResolution: 7.0,
-    avgEmpathy: 7.8,
-    avgCallControl: 6.9,
-    trend: "up" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "Warmest greeting on the team — callers consistently rate the initial interaction positively",
-      "High empathy scores, especially with repeat callers and members reporting accidents",
-      "Strong claim number collection — always confirms the number before ending the call",
-      "Handles high call volume (207 calls in April) without quality degradation on greeting or empathy",
-    ],
-    improvements: [
-      "Hold management is the primary gap — callers are placed on hold for 3+ minutes without updates. Implement the 60-second check-in rule immediately",
-      "Resolution rate can improve by confirming next steps before ending the call: 'Before I let you go, here's what happens next...'",
-      "Call control score of 6.9 reflects some calls running long without clear direction — use the structured closing script to bring calls to a defined end",
-    ],
-    coachingNote: "Natashia's empathy and greeting are team strengths. The hold management gap is the highest-priority coaching item — it's affecting both her score and caller experience on high-volume days.",
-  },
-  {
-    agentName: "Jovel Villa",
-    callsScored: 25,
-    avgOverall: 6.9,
-    avgGreeting: 7.3,
-    avgHold: 6.5,
-    avgResolution: 6.8,
-    avgEmpathy: 7.1,
-    avgCallControl: 6.8,
-    trend: "stable" as const,
-    weekOf: "Apr 22, 2026",
-    strengths: [
-      "Accurate reference number collection on medical provider calls — rarely needs to ask twice",
-      "Good at routing wrong-department calls — provides the correct number and ends calls efficiently",
-      "Improving on greeting consistency — fewer missed script elements compared to prior weeks",
-    ],
-    improvements: [
-      "Hold management is the most critical gap — multiple callers reported 4+ minute holds with no check-in. This is the single highest-impact improvement available",
-      "Call control needs a structured closing script — some calls end without a clear resolution statement, leaving callers uncertain about next steps",
-      "Recommend reviewing the intake confirmation step: callers should hear their information read back before the call ends",
-      "Greeting score of 7.3 has room to grow — practice the full Whip greeting script until it sounds natural, not scripted",
-    ],
-    coachingNote: "Jovel needs focused attention on hold management and call closing. Recommend a 30-minute one-on-one coaching session with the hold management script and a mock call exercise.",
-  },
-];
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const seen = new Set<string>();
-const APRIL_QA_DEDUPED = APRIL_QA_DATA.filter(a => {
-  if (seen.has(a.agentName)) return false;
-  seen.add(a.agentName);
-  return true;
-});
+function getMondayOf(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().slice(0, 10);
+}
 
-const TEAM_REPORT = {
-  weekOf: "April 22, 2026",
-  totalCallsAnalyzed: 169,
-  teamAvgScore: 7.5,
-  answerRate: 73,
-  avgHandleTime: "5m 48s",
-  topIssues: [
-    "Hold time management — callers not updated during holds (affects 40% of calls). Team average hold check-in rate is below the 60-second target.",
-    "Claim number verification — partial numbers not confirmed phonetically against system (affects 25% of calls). Risk of intake errors.",
-    "Resolution confirmation — next steps not clearly stated before call end (affects 35% of calls). Callers leave uncertain about what happens next.",
-    "Repeat caller recognition — agents not acknowledging prior contact, causing callers to repeat full context (affects 20% of calls).",
-  ],
-  trainingRecommendations: [
-    "Hold Management Script: 'Thank you for holding — I'm still looking into this for you. I'll have an update in about [X] minutes.' Check in every 60 seconds. This single change is projected to improve team hold scores by 0.8–1.2 points.",
-    "Phonetic Claim Number Verification: Read back claim numbers digit-by-digit using NATO alphabet (e.g., 'MD as in Mike-Delta, 9-5-6-2...'). Reduces transcription errors and builds caller confidence.",
-    "Structured Resolution Closing: 'I've noted your message and [handler name] will follow up within [timeframe]. You'll receive a confirmation at [email]. Is there anything else I can help you with?' — use this on every call.",
-    "Repeat Caller Acknowledgment: 'I can see you've reached out about this before — let me make sure we get this resolved for you today.' This one line significantly improves empathy scores on repeat contacts.",
-    "Voicemail-to-Live Transfer Prep: Before picking up a transferred call, review the AI intake summary so the caller doesn't repeat their information. This reduces handle time and improves caller experience.",
-  ],
-  aiSummary: "The Whip Claims team handled 169 scored calls in the week of April 22, 2026 with a 73% answer rate. MJ Badua and Daryl Ochate are the primary live-agent processors for IVR-routed calls — Daryl leads with a 99% answer rate and MJ is on an upward trend. The team's strongest dimension is empathy (avg 7.7/10), while hold management (avg 7.0/10) is the most consistent opportunity across all agents. Lorraine Tria leads the team with an 8.1 overall score and is the recommended peer coach for hold management training. The AI IVR system, once fully deployed, is projected to handle 60–70% of carrier, law office, and medical provider calls automatically — reducing live-agent load and allowing MJ and Daryl to focus exclusively on member, claimant, and police calls.",
+const CALLER_TYPE_LABELS: Record<string, string> = {
+  carrier: "Carrier",
+  law_office: "Law Office",
+  medical_provider: "Medical",
+  member: "Member",
+  claimant: "Claimant",
+  police: "Police",
+  unknown: "Unknown",
 };
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ScoreBadge({ score }: { score: number }) {
   const color =
+    score >= 9 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30" :
     score >= 8 ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" :
     score >= 7 ? "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30" :
     score >= 6 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/30" :
@@ -274,6 +99,29 @@ function TrendIcon({ trend }: { trend: "up" | "down" | "stable" }) {
   return <Minus className="w-4 h-4 text-gray-400" />;
 }
 
+// ─── Scorecard shape from DB ──────────────────────────────────────────────────
+
+interface Scorecard {
+  id: number;
+  handlerId: number;
+  handlerName: string;
+  weekOf: string;
+  overallScore: number | null;
+  greetingScore: number | null;
+  holdManagementScore: number | null;
+  resolutionScore: number | null;
+  empathyScore: number | null;
+  callControlScore: number | null;
+  strengths: string | null;
+  improvements: string | null;
+  managerComments: string | null;
+  submittedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ─── PushScorecardPanel ───────────────────────────────────────────────────────
+
 interface PushFormState {
   handlerId: string;
   handlerName: string;
@@ -289,28 +137,47 @@ interface PushFormState {
   managerComments: string;
 }
 
-function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose: () => void }) {
+function PushScorecardPanel({
+  agentName,
+  weekOf,
+  prefill,
+  onClose,
+}: {
+  agentName: string;
+  weekOf: string;
+  prefill?: Scorecard | null;
+  onClose: () => void;
+}) {
   const { data: handlers } = trpc.handlers.list.useQuery();
   const saveScorecard = trpc.qa.saveScorecard.useMutation();
   const utils = trpc.useUtils();
 
-  // Pre-fill from static QA data
-  const staticData = APRIL_QA_DEDUPED.find(a => a.agentName === agentName);
-
   const [form, setForm] = useState<PushFormState>({
-    handlerId: "",
+    handlerId: prefill ? String(prefill.handlerId) : "",
     handlerName: agentName,
-    weekOf: format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd"),
-    greetingScore: staticData?.avgGreeting?.toFixed(1) ?? "",
-    holdManagementScore: staticData?.avgHold?.toFixed(1) ?? "",
-    resolutionScore: staticData?.avgResolution?.toFixed(1) ?? "",
-    empathyScore: staticData?.avgEmpathy?.toFixed(1) ?? "",
-    callControlScore: staticData?.avgCallControl?.toFixed(1) ?? "",
-    overallScore: staticData?.avgOverall?.toFixed(1) ?? "",
-    strengths: staticData?.strengths?.join("\n") ?? "",
-    improvements: staticData?.improvements?.join("\n") ?? "",
-    managerComments: staticData?.coachingNote ?? "",
+    weekOf: prefill?.weekOf ?? weekOf,
+    greetingScore: prefill?.greetingScore != null ? String(prefill.greetingScore) : "",
+    holdManagementScore: prefill?.holdManagementScore != null ? String(prefill.holdManagementScore) : "",
+    resolutionScore: prefill?.resolutionScore != null ? String(prefill.resolutionScore) : "",
+    empathyScore: prefill?.empathyScore != null ? String(prefill.empathyScore) : "",
+    callControlScore: prefill?.callControlScore != null ? String(prefill.callControlScore) : "",
+    overallScore: prefill?.overallScore != null ? String(prefill.overallScore) : "",
+    strengths: prefill?.strengths ?? "",
+    improvements: prefill?.improvements ?? "",
+    managerComments: prefill?.managerComments ?? "",
   });
+
+  // Auto-link handler by name when handlers load
+  useEffect(() => {
+    if (!form.handlerId && handlers && handlers.length > 0) {
+      const match = handlers.find((h: { id: number; name: string }) =>
+        h.name.toLowerCase() === agentName.toLowerCase()
+      );
+      if (match) {
+        setForm((f) => ({ ...f, handlerId: String(match.id), handlerName: match.name }));
+      }
+    }
+  }, [handlers, agentName, form.handlerId]);
 
   const set = (key: keyof PushFormState) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -335,9 +202,10 @@ function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose
         managerComments: form.managerComments || undefined,
       });
       await utils.qa.allScorecards.invalidate();
+      await utils.qa.scorecardsByWeek.invalidate();
       toast.success(`${agentName}'s scorecard has been saved to their handler profile.`);
       onClose();
-    } catch (err) {
+    } catch {
       toast.error("Failed to save scorecard. Please try again.");
     }
   };
@@ -453,92 +321,103 @@ function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose
   );
 }
 
-// Get the Monday of a given date
-function getMondayOf(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().slice(0, 10);
-}
-
-const CALLER_TYPE_LABELS: Record<string, string> = {
-  carrier: "Carrier",
-  law_office: "Law Office",
-  medical_provider: "Medical",
-  member: "Member",
-  claimant: "Claimant",
-  police: "Police",
-  unknown: "Unknown",
-};
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WeeklyQA() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [pushAgent, setPushAgent] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState(() => getMondayOf(new Date()));
 
-  const { data: dbScores } = trpc.qa.agentSummary.useQuery();
-  const { data: pushedScorecards } = trpc.qa.allScorecards.useQuery();
+  // Fetch available weeks that have scorecards
+  const { data: availableWeeks } = trpc.qa.qaWeeks.useQuery();
+
+  // Fetch scorecards for the selected week
+  const { data: scorecards, isLoading: scorecardsLoading } = trpc.qa.scorecardsByWeek.useQuery({ weekOf: weekStart });
+
+  // Handler weekly stats
   const { data: handlerStats, isLoading: statsLoading } = trpc.qa.handlerWeeklyStats.useQuery({ weekStart });
+
   const generateReport = trpc.qa.generateReport.useMutation();
+  const bulkPushWeek = trpc.qa.bulkPushWeek.useMutation();
   const utils = trpc.useUtils();
+
+  // When available weeks load and current weekStart has no data, default to the most recent week with data
+  useEffect(() => {
+    if (availableWeeks && availableWeeks.length > 0 && scorecards && scorecards.length === 0) {
+      // Only auto-switch if the current week has no data and there are weeks with data
+      const currentMondayHasData = availableWeeks.includes(weekStart);
+      if (!currentMondayHasData) {
+        setWeekStart(availableWeeks[0]); // Most recent week with data
+      }
+    }
+  }, [availableWeeks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRegenerate = async () => {
     try {
       const result = await generateReport.mutateAsync({ weekStart });
-      await utils.qa.allScorecards.invalidate();
-      await utils.qa.agentSummary.invalidate();
-      toast.success(`Generated QA reports for ${result.count} handler${result.count !== 1 ? 's' : ''}.`);
+      await utils.qa.scorecardsByWeek.invalidate();
+      await utils.qa.qaWeeks.invalidate();
+      toast.success(`Generated QA reports for ${result.count} handler${result.count !== 1 ? "s" : ""}.`);
     } catch {
-      toast.error('Failed to generate QA reports. Please try again.');
+      toast.error("Failed to generate QA reports. Please try again.");
     }
   };
 
-  const displayData = dbScores && dbScores.length > 0
-    ? dbScores.map((d: {
-        agentName: string | null;
-        callsScored: number;
-        avgOverall: number;
-        avgGreeting: number;
-        avgHold: number;
-        avgResolution: number;
-        avgEmpathy: number;
-        avgCallControl: number;
-      }) => {
-        const staticMatch = APRIL_QA_DEDUPED.find(a =>
-          a.agentName.toLowerCase().includes((d.agentName || "").toLowerCase().split(" ")[0].toLowerCase())
-        );
-        return {
-          agentName: d.agentName || "Unknown",
-          callsScored: Number(d.callsScored),
-          avgOverall: Number(d.avgOverall),
-          avgGreeting: Number(d.avgGreeting),
-          avgHold: Number(d.avgHold),
-          avgResolution: Number(d.avgResolution),
-          avgEmpathy: Number(d.avgEmpathy),
-          avgCallControl: Number(d.avgCallControl),
-          trend: "stable" as const,
-          weekOf: "Current",
-          strengths: staticMatch?.strengths ?? ["Data from live QA scoring"],
-          improvements: staticMatch?.improvements ?? ["Review upcoming scored calls for detailed feedback"],
-          coachingNote: staticMatch?.coachingNote ?? "",
-        };
-      })
-    : APRIL_QA_DEDUPED;
+  const handleBulkPush = async () => {
+    try {
+      const result = await bulkPushWeek.mutateAsync({ weekOf: weekStart });
+      await utils.qa.allScorecards.invalidate();
+      toast.success(`Pushed ${result.pushed} scorecard${result.pushed !== 1 ? "s" : ""} to handler profiles.`);
+    } catch {
+      toast.error("Failed to bulk push scorecards. Please try again.");
+    }
+  };
+
+  // Build display data from real scorecards
+  const displayData = (scorecards ?? []).map((sc: Scorecard) => ({
+    agentName: sc.handlerName,
+    avgOverall: Number(sc.overallScore ?? 0),
+    avgGreeting: Number(sc.greetingScore ?? 0),
+    avgHold: Number(sc.holdManagementScore ?? 0),
+    avgResolution: Number(sc.resolutionScore ?? 0),
+    avgEmpathy: Number(sc.empathyScore ?? 0),
+    avgCallControl: Number(sc.callControlScore ?? 0),
+    strengths: sc.strengths ?? "",
+    improvements: sc.improvements ?? "",
+    coachingNote: sc.managerComments ?? "",
+    submittedBy: sc.submittedBy ?? "",
+    trend: "stable" as const,
+    scorecard: sc,
+  }));
 
   const selected = selectedAgent
     ? displayData.find((d) => d.agentName === selectedAgent)
     : null;
 
-  // Check which agents have already had scorecards pushed this week
-  const pushedThisWeek = new Set(
-    (pushedScorecards ?? []).map((s: { handlerName: string }) => s.handlerName)
-  );
+  // Compute team averages from real data
+  const teamAvgScore = displayData.length > 0
+    ? (displayData.reduce((s, d) => s + d.avgOverall, 0) / displayData.length)
+    : 0;
+
+  const teamAnswerRate = handlerStats && handlerStats.length > 0
+    ? Math.round(handlerStats.reduce((s: number, h: { answerRate: number }) => s + h.answerRate, 0) / handlerStats.length)
+    : 0;
+
+  const teamAvgDuration = handlerStats && handlerStats.length > 0
+    ? Math.round(handlerStats.reduce((s: number, h: { avgCallDurationMin: number }) => s + h.avgCallDurationMin, 0) / handlerStats.length)
+    : 0;
+
+  const pushPrefill = pushAgent ? displayData.find((d) => d.agentName === pushAgent)?.scorecard ?? null : null;
 
   return (
     <WhipLayout>
       {pushAgent && (
-        <PushScorecardPanel agentName={pushAgent} onClose={() => setPushAgent(null)} />
+        <PushScorecardPanel
+          agentName={pushAgent}
+          weekOf={weekStart}
+          prefill={pushPrefill}
+          onClose={() => setPushAgent(null)}
+        />
       )}
       <div className="p-6 space-y-5">
         {/* Header */}
@@ -549,16 +428,48 @@ export default function WeeklyQA() {
               AI-powered quality analysis
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Week selector — shows available weeks with data */}
             <div className="flex items-center gap-1.5">
-              <label className="text-xs text-muted-foreground">Week of</label>
+              <label className="text-xs text-muted-foreground whitespace-nowrap">Week of</label>
+              <div className="relative">
+                <select
+                  value={weekStart}
+                  onChange={(e) => setWeekStart(e.target.value)}
+                  className="text-xs border rounded px-2 py-1.5 bg-background text-foreground pr-6 appearance-none cursor-pointer"
+                >
+                  {/* Always include current week */}
+                  {!availableWeeks?.includes(weekStart) && (
+                    <option value={weekStart}>{weekStart} (no data yet)</option>
+                  )}
+                  {(availableWeeks ?? []).map((w: string) => (
+                    <option key={w} value={w}>{w}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+              </div>
+              {/* Manual date fallback */}
               <input
                 type="date"
                 value={weekStart}
-                onChange={(e) => setWeekStart(getMondayOf(new Date(e.target.value + 'T12:00:00')))}
+                onChange={(e) => setWeekStart(getMondayOf(new Date(e.target.value + "T12:00:00")))}
                 className="text-xs border rounded px-2 py-1 bg-background text-foreground"
+                title="Pick any date — snaps to Monday"
               />
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkPush}
+              disabled={bulkPushWeek.isPending || displayData.length === 0}
+              className="text-xs gap-1.5"
+            >
+              {bulkPushWeek.isPending ? (
+                <><span className="animate-spin">⟳</span> Pushing…</>
+              ) : (
+                <><Users className="w-3 h-3" /> Bulk Push All</>
+              )}
+            </Button>
             <Button
               size="sm"
               onClick={handleRegenerate}
@@ -566,7 +477,7 @@ export default function WeeklyQA() {
               className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs gap-1.5"
             >
               {generateReport.isPending ? (
-                <><span className="animate-spin">⟳</span> Generating...</>
+                <><span className="animate-spin">⟳</span> Generating…</>
               ) : (
                 <><Star className="w-3 h-3" /> Regenerate QA</>
               )}
@@ -584,7 +495,7 @@ export default function WeeklyQA() {
           </CardHeader>
           <CardContent className="p-0">
             {statsLoading ? (
-              <div className="p-4 text-sm text-muted-foreground">Loading stats...</div>
+              <div className="p-4 text-sm text-muted-foreground">Loading stats…</div>
             ) : !handlerStats || handlerStats.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No call data for this week.</div>
             ) : (
@@ -602,14 +513,22 @@ export default function WeeklyQA() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {handlerStats.map((h, idx) => (
+                    {handlerStats.map((h: {
+                      handlerName: string;
+                      totalCalls: number;
+                      answerRate: number;
+                      avgCallDurationMin: number;
+                      callsByCallerType: Record<string, number>;
+                      overdueCallbacks: number;
+                      callbackRate: number;
+                    }, idx: number) => (
                       <tr key={`${h.handlerName}-${idx}`} className="hover:bg-muted/20">
                         <td className="px-4 py-3 font-medium text-foreground">{h.handlerName}</td>
                         <td className="px-4 py-3 text-right text-foreground">{h.totalCalls}</td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-medium ${
-                            h.answerRate >= 90 ? 'text-green-600' :
-                            h.answerRate >= 75 ? 'text-yellow-600' : 'text-red-600'
+                            h.answerRate >= 90 ? "text-green-600" :
+                            h.answerRate >= 75 ? "text-yellow-600" : "text-red-600"
                           }`}>{h.answerRate}%</span>
                         </td>
                         <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{h.avgCallDurationMin}m</td>
@@ -626,14 +545,14 @@ export default function WeeklyQA() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={h.overdueCallbacks > 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'}>
+                          <span className={h.overdueCallbacks > 0 ? "text-red-600 font-medium" : "text-muted-foreground"}>
                             {h.overdueCallbacks}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-medium ${
-                            h.callbackRate >= 90 ? 'text-green-600' :
-                            h.callbackRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                            h.callbackRate >= 90 ? "text-green-600" :
+                            h.callbackRate >= 70 ? "text-yellow-600" : "text-red-600"
                           }`}>{h.callbackRate}%</span>
                         </td>
                       </tr>
@@ -645,7 +564,7 @@ export default function WeeklyQA() {
           </CardContent>
         </Card>
 
-        {/* Team summary */}
+        {/* Team summary KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4">
@@ -654,7 +573,9 @@ export default function WeeklyQA() {
                   <Star className="w-4 h-4 text-[#ff6221]" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{TEAM_REPORT.teamAvgScore}</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {teamAvgScore > 0 ? teamAvgScore.toFixed(1) : "—"}
+                  </div>
                   <div className="text-xs text-muted-foreground">Team Avg Score</div>
                 </div>
               </div>
@@ -667,7 +588,9 @@ export default function WeeklyQA() {
                   <Phone className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{TEAM_REPORT.answerRate}%</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {teamAnswerRate > 0 ? `${teamAnswerRate}%` : "—"}
+                  </div>
                   <div className="text-xs text-muted-foreground">Answer Rate</div>
                 </div>
               </div>
@@ -680,7 +603,9 @@ export default function WeeklyQA() {
                   <Clock className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{TEAM_REPORT.avgHandleTime}</div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {teamAvgDuration > 0 ? `${teamAvgDuration}m` : "—"}
+                  </div>
                   <div className="text-xs text-muted-foreground">Avg Handle Time</div>
                 </div>
               </div>
@@ -705,74 +630,92 @@ export default function WeeklyQA() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">
-              Agent Scores — Click a row for detailed feedback · Use "Push to Profile" to send scorecard to handler
+              Agent Scores — Week of {weekStart}
+              {scorecardsLoading && <span className="text-muted-foreground font-normal ml-2 text-xs">Loading…</span>}
+              {!scorecardsLoading && displayData.length === 0 && (
+                <span className="text-muted-foreground font-normal ml-2 text-xs">
+                  No scorecards yet — click "Regenerate QA" to generate for this week
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Agent</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Calls</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Overall</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Greeting</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Hold Mgmt</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Resolution</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Empathy</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Call Control</th>
-                    <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Trend</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Push</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {displayData
-                    .sort((a, b) => b.avgOverall - a.avgOverall)
-                    .map((agent) => (
-                      <tr
-                        key={agent.agentName}
-                        className={`hover:bg-muted/20 transition-colors cursor-pointer ${
-                          selectedAgent === agent.agentName ? "bg-primary/5 border-l-2 border-l-[#ff6221]" : ""
-                        }`}
-                        onClick={() => setSelectedAgent(
-                          selectedAgent === agent.agentName ? null : agent.agentName
-                        )}
-                      >
-                        <td className="px-4 py-3 font-medium text-foreground">
-                          <div className="flex items-center gap-2">
-                            {agent.agentName}
-                            {pushedThisWeek.has(agent.agentName) && (
-                              <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
-                                ✓ Pushed
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-muted-foreground">{agent.callsScored}</td>
-                        <td className="px-4 py-3 text-right"><ScoreBadge score={agent.avgOverall} /></td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgGreeting} /></td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgHold} /></td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgResolution} /></td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgEmpathy} /></td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell"><ScoreBadge score={agent.avgCallControl} /></td>
-                        <td className="px-4 py-3 text-center"><TrendIcon trend={agent.trend} /></td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs h-7 gap-1 border-primary/30 hover:bg-primary hover:text-white"
-                            onClick={(e) => { e.stopPropagation(); setPushAgent(agent.agentName); }}
-                          >
-                            <Send className="h-3 w-3" />
-                            {pushedThisWeek.has(agent.agentName) ? "Re-push" : "Push"}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
+          {displayData.length > 0 && (
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Agent</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Overall</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Greeting</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Hold Mgmt</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Resolution</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Empathy</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Call Control</th>
+                      <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Trend</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Push</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {displayData
+                      .sort((a, b) => b.avgOverall - a.avgOverall)
+                      .map((agent) => (
+                        <tr
+                          key={agent.agentName}
+                          className={`hover:bg-muted/20 transition-colors cursor-pointer ${
+                            selectedAgent === agent.agentName ? "bg-primary/5 border-l-2 border-l-[#ff6221]" : ""
+                          }`}
+                          onClick={() => setSelectedAgent(
+                            selectedAgent === agent.agentName ? null : agent.agentName
+                          )}
+                        >
+                          <td className="px-4 py-3 font-medium text-foreground">
+                            <div className="flex items-center gap-2">
+                              {agent.agentName}
+                              {agent.submittedBy && (
+                                <span className="text-xs text-muted-foreground bg-muted border rounded px-1.5 py-0.5">
+                                  {agent.submittedBy === "AI QA System" || agent.submittedBy === "Auto-QA" ? "AI" : "Manager"}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {agent.avgOverall > 0 ? <ScoreBadge score={agent.avgOverall} /> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            {agent.avgGreeting > 0 ? <ScoreBadge score={agent.avgGreeting} /> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            {agent.avgHold > 0 ? <ScoreBadge score={agent.avgHold} /> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            {agent.avgResolution > 0 ? <ScoreBadge score={agent.avgResolution} /> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            {agent.avgEmpathy > 0 ? <ScoreBadge score={agent.avgEmpathy} /> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            {agent.avgCallControl > 0 ? <ScoreBadge score={agent.avgCallControl} /> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-center"><TrendIcon trend={agent.trend} /></td>
+                          <td className="px-4 py-3 text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 gap-1 border-primary/30 hover:bg-primary hover:text-white"
+                              onClick={(e) => { e.stopPropagation(); setPushAgent(agent.agentName); }}
+                            >
+                              <Send className="h-3 w-3" />
+                              Push
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
         </Card>
 
         {/* Agent detail panel */}
@@ -783,7 +726,7 @@ export default function WeeklyQA() {
                 <User className="w-4 h-4 text-[#ff6221]" />
                 <span className="text-foreground">{selected.agentName}</span>
                 <span className="text-muted-foreground font-normal">— Detailed Feedback</span>
-                <Badge variant="outline" className="text-xs ml-auto">{selected.weekOf}</Badge>
+                <Badge variant="outline" className="text-xs ml-auto">{weekStart}</Badge>
                 <Button
                   size="sm"
                   className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs h-7 gap-1"
@@ -805,43 +748,39 @@ export default function WeeklyQA() {
                 ].map(({ label, score, icon: Icon }) => (
                   <div key={label} className="bg-muted/30 rounded-lg p-3 text-center">
                     <Icon className="w-4 h-4 text-muted-foreground mx-auto mb-1" />
-                    <div className="text-lg font-bold text-foreground">{score.toFixed(1)}</div>
+                    <div className="text-lg font-bold text-foreground">
+                      {score > 0 ? score.toFixed(1) : "—"}
+                    </div>
                     <div className="text-xs text-muted-foreground">{label}</div>
                   </div>
                 ))}
               </div>
 
               {/* Strengths */}
-              <div className="bg-green-500/10 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Award className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-semibold text-green-800">What {selected.agentName.split(" ")[0]} Does Well</span>
+              {selected.strengths && (
+                <div className="bg-green-500/10 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Award className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-semibold text-green-800">What {selected.agentName.split(" ")[0]} Does Well</span>
+                  </div>
+                  <div className="text-sm text-green-700 whitespace-pre-wrap leading-relaxed">
+                    {selected.strengths}
+                  </div>
                 </div>
-                <ul className="space-y-2">
-                  {(Array.isArray(selected.strengths) ? selected.strengths : [selected.strengths]).map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-green-700">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0 mt-0.5" />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              )}
 
               {/* Improvements */}
-              <div className="bg-amber-50 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Lightbulb className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm font-semibold text-amber-800">Opportunities for {selected.agentName.split(" ")[0]}</span>
+              {selected.improvements && (
+                <div className="bg-amber-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lightbulb className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm font-semibold text-amber-800">Opportunities for {selected.agentName.split(" ")[0]}</span>
+                  </div>
+                  <div className="text-sm text-amber-700 whitespace-pre-wrap leading-relaxed">
+                    {selected.improvements}
+                  </div>
                 </div>
-                <ul className="space-y-2">
-                  {(Array.isArray(selected.improvements) ? selected.improvements : [selected.improvements]).map((imp, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-amber-700">
-                      <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-                      {imp}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              )}
 
               {/* Coaching note */}
               {selected.coachingNote && (
@@ -850,120 +789,44 @@ export default function WeeklyQA() {
                     <TrendingUp className="w-4 h-4 text-foreground" />
                     <span className="text-xs font-semibold text-foreground">Supervisor Coaching Note</span>
                   </div>
-                  <p className="text-sm text-foreground/70">{selected.coachingNote}</p>
+                  <p className="text-sm text-foreground/70 whitespace-pre-wrap">{selected.coachingNote}</p>
+                </div>
+              )}
+
+              {/* No feedback yet */}
+              {!selected.strengths && !selected.improvements && !selected.coachingNote && (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No detailed feedback yet. Click "Review &amp; Push to Profile" to add coaching notes.
                 </div>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* Pushed scorecards this week */}
-        {pushedScorecards && pushedScorecards.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Send className="w-4 h-4 text-emerald-600" />
-                Scorecards Pushed to Handler Profiles ({pushedScorecards.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      {["Handler", "Week Of", "Overall", "Greeting", "Hold Mgmt", "Resolution", "Empathy", "Call Control", "Pushed By"].map((h) => (
-                        <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {pushedScorecards.map((sc: {
-                      id: number;
-                      handlerName: string;
-                      weekOf: string;
-                      overallScore: number | null;
-                      greetingScore: number | null;
-                      holdManagementScore: number | null;
-                      resolutionScore: number | null;
-                      empathyScore: number | null;
-                      callControlScore: number | null;
-                      submittedBy: string | null;
-                    }) => (
-                      <tr key={String(sc.id)} className="hover:bg-muted/20">
-                        <td className="px-4 py-2.5 font-medium">{sc.handlerName}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{sc.weekOf}</td>
-                        <td className="px-4 py-2.5">{sc.overallScore ? <ScoreBadge score={Number(sc.overallScore)} /> : "—"}</td>
-                        <td className="px-4 py-2.5">{sc.greetingScore ? <ScoreBadge score={Number(sc.greetingScore)} /> : "—"}</td>
-                        <td className="px-4 py-2.5">{sc.holdManagementScore ? <ScoreBadge score={Number(sc.holdManagementScore)} /> : "—"}</td>
-                        <td className="px-4 py-2.5">{sc.resolutionScore ? <ScoreBadge score={Number(sc.resolutionScore)} /> : "—"}</td>
-                        <td className="px-4 py-2.5">{sc.empathyScore ? <ScoreBadge score={Number(sc.empathyScore)} /> : "—"}</td>
-                        <td className="px-4 py-2.5">{sc.callControlScore ? <ScoreBadge score={Number(sc.callControlScore)} /> : "—"}</td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{sc.submittedBy ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        {/* Empty state */}
+        {!scorecardsLoading && displayData.length === 0 && (
+          <Card className="border-dashed">
+            <CardContent className="p-8 text-center">
+              <Star className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">No QA scorecards for {weekStart}</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-4">
+                Click "Regenerate QA" to generate AI-powered scorecards for this week, or select a different week from the dropdown.
+              </p>
+              <Button
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={generateReport.isPending}
+                className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs gap-1.5"
+              >
+                {generateReport.isPending ? (
+                  <><span className="animate-spin">⟳</span> Generating…</>
+                ) : (
+                  <><Star className="w-3 h-3" /> Generate QA for {weekStart}</>
+                )}
+              </Button>
             </CardContent>
           </Card>
         )}
-
-        {/* Team issues */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingDown className="w-4 h-4 text-muted-foreground" />
-              Top Team Issues This Week
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {TEAM_REPORT.topIssues.map((issue, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className="w-5 h-5 rounded-full bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <span className="text-muted-foreground">{issue}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        {/* Training recommendations */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-              Training Recommendations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {TEAM_REPORT.trainingRecommendations.map((rec, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <span className="text-muted-foreground">{rec}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        {/* AI summary */}
-        <Card className="bg-primary text-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
-              <Star className="w-4 h-4 text-[#ff6221]" />
-              AI Weekly Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-white/80 leading-relaxed">{TEAM_REPORT.aiSummary}</p>
-          </CardContent>
-        </Card>
       </div>
     </WhipLayout>
   );

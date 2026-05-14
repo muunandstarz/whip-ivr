@@ -209,7 +209,7 @@ export const callbackLogs = mysqlTable("callback_logs", {
   intakeId: int("intakeId").notNull(),
   handlerName: varchar("handlerName", { length: 128 }),
   calledAt: timestamp("calledAt").defaultNow(),
-  disposition: mysqlEnum("disposition", ["reached", "no_answer", "left_voicemail", "wrong_number", "busy"]).notNull(),
+  disposition: mysqlEnum("disposition", ["reached", "no_answer", "left_voicemail", "wrong_number", "busy", "emailed"]).notNull(),
   notes: text("notes"),
   outcome: mysqlEnum("outcome", ["resolved", "escalated", "follow_up", "closed"]).default("follow_up"),
 });

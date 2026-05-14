@@ -45,6 +45,9 @@ import {
   getCallAnalyticsByMonth,
   getHandlerWeeklyStats,
   generateWeeklyQAReport,
+  getScorecardsByWeek,
+  deleteScorecardsByWeek,
+  getQaWeeks,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -214,6 +217,18 @@ export const appRouter = router({
       return getQaAgentSummary();
     }),
 
+    // ── Get scorecards for a specific week ──
+    scorecardsByWeek: protectedProcedure
+      .input(z.object({ weekOf: z.string() }))
+      .query(async ({ input }) => {
+        return getScorecardsByWeek(input.weekOf);
+      }),
+
+    // ── Get all weeks that have scorecards ──
+    qaWeeks: protectedProcedure.query(async () => {
+      return getQaWeeks();
+    }),
+
     // ── Scorecard push to handler profiles ──
     allScorecards: protectedProcedure.query(async () => {
       return getAllScorecards();
@@ -257,16 +272,16 @@ export const appRouter = router({
         return getHandlerWeeklyStats(input.weekStart);
       }),
 
-    // ── AI-generated QA report for a week ──
+    // ── AI-generated QA report for a week (deletes existing before regenerating) ──
     generateReport: protectedProcedure
       .input(z.object({ weekStart: z.string() })) // "YYYY-MM-DD" Monday
       .mutation(async ({ input }) => {
+        // Delete existing AI-generated scorecards for this week before regenerating
+        await deleteScorecardsByWeek(input.weekStart);
         const results = await generateWeeklyQAReport(input.weekStart);
         // Persist each result as a scorecard
+        const handlers = await getHandlers();
         for (const r of results) {
-          // Find handler ID from DB
-          const { getHandlers } = await import("./db");
-          const handlers = await getHandlers();
           const handler = handlers.find((h) =>
             h.name.toLowerCase().includes(r.handlerName.toLowerCase()) ||
             r.handlerName.toLowerCase().includes(h.name.toLowerCase())
@@ -289,6 +304,38 @@ export const appRouter = router({
           }
         }
         return { results, count: results.length };
+      }),
+
+    // ── Bulk push all scorecards for a week to handler profiles ──
+    bulkPushWeek: protectedProcedure
+      .input(z.object({ weekOf: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const scorecards = await getScorecardsByWeek(input.weekOf);
+        const handlers = await getHandlers();
+        let pushed = 0;
+        for (const sc of scorecards) {
+          const handler = handlers.find((h) =>
+            h.name.toLowerCase() === (sc.handlerName ?? "").toLowerCase()
+          );
+          if (handler) {
+            await saveHandlerScorecard({
+              handlerId: handler.id,
+              handlerName: sc.handlerName ?? "",
+              weekOf: sc.weekOf,
+              greetingScore: sc.greetingScore ?? undefined,
+              holdManagementScore: sc.holdManagementScore ?? undefined,
+              resolutionScore: sc.resolutionScore ?? undefined,
+              empathyScore: sc.empathyScore ?? undefined,
+              callControlScore: sc.callControlScore ?? undefined,
+              overallScore: sc.overallScore ?? undefined,
+              strengths: sc.strengths ?? undefined,
+              improvements: sc.improvements ?? undefined,
+              submittedBy: ctx.user?.name ?? "Manager",
+            });
+            pushed++;
+          }
+        }
+        return { pushed };
       }),
   }),
 
@@ -459,7 +506,7 @@ export const appRouter = router({
     log: protectedProcedure
       .input(z.object({
         intakeId: z.number(),
-        disposition: z.enum(["reached", "no_answer", "left_voicemail", "wrong_number", "busy"]),
+        disposition: z.enum(["reached", "no_answer", "left_voicemail", "wrong_number", "busy", "emailed"]),
         notes: z.string().optional(),
         outcome: z.enum(["resolved", "escalated", "follow_up", "closed"]).optional(),
         closeRecord: z.boolean().optional(),

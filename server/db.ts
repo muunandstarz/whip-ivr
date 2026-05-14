@@ -877,7 +877,7 @@ export async function getHandlerCallMetrics(handlerName: string) {
 export async function logCallback(data: {
   intakeId: number;
   handlerName?: string;
-  disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy";
+  disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy" | "emailed";
   notes?: string;
   outcome?: "resolved" | "escalated" | "follow_up" | "closed";
 }) {
@@ -1604,4 +1604,33 @@ Score this handler 1-10 on each dimension and provide coaching feedback. Be spec
   }
 
   return results;
+}
+
+// ─── QA: Get scorecards for a specific week ─────────────────────────────────
+export async function getScorecardsByWeek(weekOf: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(qaScorecards)
+    .where(eq(qaScorecards.weekOf, weekOf))
+    .orderBy(desc(qaScorecards.overallScore));
+}
+
+// ─── QA: Delete all scorecards for a specific week (before regenerating) ────
+export async function deleteScorecardsByWeek(weekOf: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(qaScorecards).where(eq(qaScorecards.weekOf, weekOf));
+}
+
+// ─── QA: Get all available weeks that have scorecards ───────────────────────
+export async function getQaWeeks(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ weekOf: qaScorecards.weekOf })
+    .from(qaScorecards)
+    .orderBy(desc(qaScorecards.weekOf));
+  return rows.map((r) => r.weekOf);
 }

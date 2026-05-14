@@ -481,3 +481,39 @@ Business routing logic to implement in resolveHandler():
 - [ ] Weekly QA: schedule weekly QA email/notification dispatch (every Monday morning)
 - [ ] Navigation: move IVR Setup into Settings page as a tab, remove from sidebar
 - [ ] Navigation: remove Analytics page from sidebar (redundant with dashboard)
+
+## Sprint: Emailed Disposition + Call Tracking MoM (May 14)
+- [ ] Add 'emailed' to callback_logs disposition enum in schema + DB migration
+- [ ] Add Emailed option to disposition select in IntakeDetail.tsx callback dialog
+- [ ] Add Emailed option to disposition filter in CallbackLog.tsx
+- [ ] Add Emailed to DISPOSITION_CONFIG in CallbackLog.tsx with Mail icon
+- [ ] Fix misleading 100% answer rate on dashboard when only answered calls exist in DB
+- [ ] Add month navigation + MoM change delta to Call Tracking page
+- [ ] Update Call Tracking server procedure to accept month/year params and return prev month comparison
+
+## Sprint: QA System Overhaul (May 14)
+- [ ] Fix generateReport to DELETE existing qa_scores for the selected week before inserting new ones
+- [ ] Fix generateReport to use actual call/intake data for the selected week (not hardcoded April data)
+- [ ] Add bulk push button to push all handler QA scores at once to their profiles
+- [ ] Include per-handler stats (calls by category, overdues, answer rate, callback rate) in weekly auto-send notification
+- [ ] Fix weekly cron to regenerate QA and send full report with handler stats each Monday 8am
+- [ ] Fix week selector to correctly scope QA data to the selected week
+
+## QA + Emailed Disposition Fixes (May 14 2026 — Round 2)
+
+- [x] WeeklyQA: replace agentSummary with scorecardsByWeek (real DB data per selected week)
+- [x] WeeklyQA: add week selector dropdown (populated from qaWeeks — weeks that have actual data)
+- [x] WeeklyQA: auto-default to most recent week with data when current week has no scorecards
+- [x] WeeklyQA: remove all hardcoded April fallback data
+- [x] WeeklyQA: generateReport now deletes existing scorecards for the week before regenerating
+- [x] WeeklyQA: add "Bulk Push All" button — pushes all scorecards for the week to handler profiles at once
+- [x] WeeklyQA: per-handler stats table (calls by caller type, answer rate, avg duration, overdues, callback rate)
+- [x] WeeklyQA: team KPI summary cards use real data (avg score, answer rate, avg handle time, agents scored)
+- [x] WeeklyQA: Push button on each row opens PushScorecardPanel pre-filled with that handler's scorecard
+- [x] Add 'emailed' to callback_logs disposition enum in DB (ALTER TABLE migration applied)
+- [x] Add 'emailed' to logCallback type in db.ts
+- [x] Add 'emailed' to callbacks.log zod enum in routers.ts
+- [x] Add 'emailed' disposition to IntakeDetail.tsx callback dialog
+- [x] Add 'emailed' to DISPOSITION_CONFIG and filter in CallbackLog.tsx
+- [ ] Add bulkPushWeek tRPC procedure (bulk push all scorecards for a week to handler profiles)
+- [ ] Fix weekly cron to regenerate QA and send full report with handler stats each Monday 8am
