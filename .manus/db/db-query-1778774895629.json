@@ -1,0 +1,40 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'intake_records' AND ORDINAL_POSITION > 20 ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'intake_records' AND ORDINAL_POSITION > 20 ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "notes"
+    },
+    {
+      "COLUMN_NAME": "claimMatchType"
+    },
+    {
+      "COLUMN_NAME": "claimMatchConfidence"
+    },
+    {
+      "COLUMN_NAME": "snapsheetClaimUrl"
+    },
+    {
+      "COLUMN_NAME": "handlerId"
+    },
+    {
+      "COLUMN_NAME": "aircallRecordingUrl"
+    },
+    {
+      "COLUMN_NAME": "callbackDueBy"
+    },
+    {
+      "COLUMN_NAME": "callbackAt"
+    },
+    {
+      "COLUMN_NAME": "callbackHandlerName"
+    },
+    {
+      "COLUMN_NAME": "routingMethod"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nnotes\nclaimMatchType\nclaimMatchConfidence\nsnapsheetClaimUrl\nhandlerId\naircallRecordingUrl\ncallbackDueBy\ncallbackAt\ncallbackHandlerName\nroutingMethod\n",
+  "stderr": "",
+  "execution_time_ms": 263
+}

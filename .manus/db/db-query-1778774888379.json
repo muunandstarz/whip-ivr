@@ -1,0 +1,100 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'intake_records' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'intake_records' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "aircallCallId"
+    },
+    {
+      "COLUMN_NAME": "callerPhone"
+    },
+    {
+      "COLUMN_NAME": "callerType"
+    },
+    {
+      "COLUMN_NAME": "callerName"
+    },
+    {
+      "COLUMN_NAME": "callerOrg"
+    },
+    {
+      "COLUMN_NAME": "whipClaimNumber"
+    },
+    {
+      "COLUMN_NAME": "callerRefNumber"
+    },
+    {
+      "COLUMN_NAME": "message"
+    },
+    {
+      "COLUMN_NAME": "callbackPhone"
+    },
+    {
+      "COLUMN_NAME": "callbackEmail"
+    },
+    {
+      "COLUMN_NAME": "status"
+    },
+    {
+      "COLUMN_NAME": "rawTranscript"
+    },
+    {
+      "COLUMN_NAME": "source"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "updatedAt"
+    },
+    {
+      "COLUMN_NAME": "priority"
+    },
+    {
+      "COLUMN_NAME": "isRepeatCaller"
+    },
+    {
+      "COLUMN_NAME": "repeatCallCount"
+    },
+    {
+      "COLUMN_NAME": "handlerName"
+    },
+    {
+      "COLUMN_NAME": "notes"
+    },
+    {
+      "COLUMN_NAME": "claimMatchType"
+    },
+    {
+      "COLUMN_NAME": "claimMatchConfidence"
+    },
+    {
+      "COLUMN_NAME": "snapsheetClaimUrl"
+    },
+    {
+      "COLUMN_NAME": "handlerId"
+    },
+    {
+      "COLUMN_NAME": "aircallRecordingUrl"
+    },
+    {
+      "COLUMN_NAME": "callbackDueBy"
+    },
+    {
+      "COLUMN_NAME": "callbackAt"
+    },
+    {
+      "COLUMN_NAME": "callbackHandlerName"
+    },
+    {
+      "COLUMN_NAME": "routingMethod"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\naircallCallId\ncallerPhone\ncallerType\ncallerName\ncallerOrg\nwhipClaimNumber\ncallerRefNumber\nmessage\ncallbackPhone\ncallbackEmail\nstatus\nrawTranscript\nsource\ncreatedAt\nupdatedAt\npriority\nisRepeatCaller\nrepeatCallCount\nhandlerName\nnotes\nclaimMatchType\nclaimMatchConfidence\nsnapsheetClaimUrl\nhandlerId\naircallRecordingUrl\ncallbackDueBy\ncallbackAt\ncallbackHandlerName\nroutingMethod\n",
+  "stderr": "",
+  "execution_time_ms": 262
+}

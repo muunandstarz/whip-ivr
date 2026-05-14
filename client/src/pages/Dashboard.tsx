@@ -21,6 +21,8 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  LineChart,
+  Line,
 } from "recharts";
 import {
   PhoneIncoming,
@@ -100,7 +102,6 @@ function ChartSkeleton({ height = 120 }: { height?: number }) {
 
 export default function Dashboard() {
   // ── Data queries ──────────────────────────────────────────────────────────
-  const { data: recentData, isLoading } = trpc.intake.list.useQuery({ limit: 8, offset: 0 });
   const { data: openData }   = trpc.intake.list.useQuery({ status: "open",   limit: 1, offset: 0 });
   const { data: urgentData } = trpc.intake.list.useQuery({ status: "open", priority: "urgent", limit: 1, offset: 0 });
   const { data: closedData } = trpc.intake.list.useQuery({ status: "closed", limit: 1, offset: 0 });
@@ -116,7 +117,7 @@ export default function Dashboard() {
   const { data: monthCallData, isLoading: monthLoading } = trpc.dashboard.callsByMonth.useQuery({ yearMonth: selectedMonth });
 
   // ── Derived KPIs ──────────────────────────────────────────────────────────
-  const totalRecords  = recentData?.total ?? 0;
+  const totalRecords  = openData?.total ?? 0; // total open intakes (recentData removed)
   const openCount     = openData?.total ?? 0;
   const closedCount   = closedData?.total ?? 0;
   const urgentCount   = urgentData?.total ?? 0;
@@ -314,23 +315,32 @@ export default function Dashboard() {
                   <div className="flex items-center justify-center h-[180px] text-sm text-muted-foreground">No data for the last 7 days</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={sparklineData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barCategoryGap="20%" barGap={2}>
+                    <LineChart data={sparklineData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" vertical={false} />
                       <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10 }} allowDecimals={false} axisLine={false} tickLine={false} width={28} />
                       <ReTooltip
                         contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(var(--border))", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                        cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
+                        cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                         formatter={(value, name) => [value, CALLER_TYPE_CONFIG[name as string]?.label ?? name]}
                         labelStyle={{ fontWeight: 600, marginBottom: 4 }}
                       />
                       {trendCallerTypes.map((t) => {
                         const cfg = CALLER_TYPE_CONFIG[t];
                         return cfg ? (
-                          <Bar key={t} dataKey={t} fill={cfg.chartColor} radius={[3, 3, 0, 0]} maxBarSize={18} />
+                          <Line
+                            key={t}
+                            type="monotone"
+                            dataKey={t}
+                            stroke={cfg.chartColor}
+                            strokeWidth={2}
+                            dot={{ r: 3, fill: cfg.chartColor, strokeWidth: 0 }}
+                            activeDot={{ r: 5, strokeWidth: 0 }}
+                            connectNulls
+                          />
                         ) : null;
                       })}
-                    </BarChart>
+                    </LineChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
@@ -345,9 +355,7 @@ export default function Dashboard() {
             <InfoTooltip text="AI-processed voicemail intake records from the Whip Claims line." />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {isLoading
-              ? [0,1,2,3].map((i) => <StatCardSkeleton key={i} />)
-              : ([
+            {([
                   { key: "total",   href: "/intake",                  hoverBorder: "hover:border-primary/40",    iconBg: "bg-primary/10",      Icon: PhoneIncoming, iconColor: "text-primary",                              value: totalRecords,      valueColor: "text-primary",                              tooltip: "Total AI-processed intake records since the IVR went live.",                                                                                                     label: "Total Intakes" },
                   { key: "open",    href: "/intake?status=open",       hoverBorder: "hover:border-amber-300",     iconBg: "bg-amber-500/15",    Icon: Clock,         iconColor: "text-amber-500 dark:text-amber-400",        value: openCount,         valueColor: "text-amber-600 dark:text-amber-400",        tooltip: "Open intake records that still need a callback. Handlers should call these back within the same business day.",                                                   label: "Open / Pending Callback" },
                   { key: "closed",  href: "/intake?status=closed",     hoverBorder: "hover:border-green-300",     iconBg: "bg-green-500/15",    Icon: CheckCircle2,  iconColor: "text-green-600 dark:text-green-400",        value: closedCount,       valueColor: "text-green-600 dark:text-green-400",        tooltip: "Intake records that have been resolved.",                                                                                                                         label: "Closed / Resolved" },
@@ -375,70 +383,6 @@ export default function Dashboard() {
             }
           </div>
         </div>
-
-        {/* ── Overdue Callbacks Table ── */}
-        {overdueDetails && overdueDetails.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-              <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">
-                Overdue Callbacks — {overdueDetails.length} record{overdueDetails.length !== 1 ? "s" : ""}
-              </p>
-              <InfoTooltip text="Voicemail intakes where the callback due time has passed and no callback has been logged. Requires immediate attention." />
-            </div>
-            <Card className="border-red-200 dark:border-red-500/30">
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-red-50/50 dark:bg-red-500/5">
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Caller</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground hidden sm:table-cell">Handler</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Due</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground hidden md:table-cell">Priority</th>
-                        <th className="px-4 py-2.5" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {overdueDetails.map((r) => (
-                        <tr key={String(r.id ?? r.callerPhone ?? r.createdAt)} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-2.5">
-                            <div className="font-medium text-foreground truncate max-w-[160px]">{r.callerName || r.callerPhone || "Unknown"}</div>
-                            {r.callerOrg && <div className="text-xs text-muted-foreground truncate max-w-[160px]">{r.callerOrg}</div>}
-                          </td>
-                          <td className="px-4 py-2.5 hidden sm:table-cell">
-                            <span className="text-sm text-muted-foreground">{r.handlerName || "Unassigned"}</span>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <span className="text-xs font-medium text-red-600 dark:text-red-400">
-                              {r.callbackDueBy ? formatDistanceToNow(new Date(r.callbackDueBy), { addSuffix: true }) : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 hidden md:table-cell">
-                            {r.priority === "urgent" ? (
-                              <span className="text-[10px] font-bold text-red-600 bg-red-500/10 px-1.5 py-0.5 rounded-full">URGENT</span>
-                            ) : r.priority === "high" ? (
-                              <span className="text-[10px] font-semibold text-orange-600 bg-orange-500/10 px-1.5 py-0.5 rounded-full">HIGH</span>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground">Normal</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <Link href={`/intake/${r.id}`}>
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                                View <ArrowRight className="w-3 h-3 ml-1" />
-                              </Button>
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
         {/* ── Call Volume with Month Selector ── */}
         <div>
@@ -628,79 +572,8 @@ export default function Dashboard() {
 
         {/* ── Main Content Grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Recent Intakes + Handler Workload */}
+          {/* Left: Handler Workload */}
           <div className="lg:col-span-2 space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base font-semibold">Recent Intakes</CardTitle>
-                    <InfoTooltip text="The 8 most recently created intake records." />
-                  </div>
-                  <Link href="/intake">
-                    <Button variant="ghost" size="sm" className="text-xs gap-1">View all <ArrowRight className="w-3 h-3" /></Button>
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {isLoading ? (
-                  <div className="p-4 space-y-3">
-                    {[0,1,2,3].map((i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
-                        <div className="flex-1 space-y-1.5">
-                          <div className="h-3.5 w-40 bg-muted rounded animate-pulse" />
-                          <div className="h-3 w-24 bg-muted rounded animate-pulse" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (recentData?.records ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">No intake records yet</p>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {(recentData?.records ?? []).map((record) => {
-                      const cfg = CALLER_TYPE_CONFIG[record.callerType ?? "unknown"] ?? CALLER_TYPE_CONFIG.unknown;
-                      const Icon = cfg.icon;
-                      const isUrgent = record.priority === "urgent";
-                      const isHigh   = record.priority === "high";
-                      return (
-                        <Link key={String(record.id)} href={`/intake/${record.id}`}>
-                          <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 cursor-pointer transition-colors group">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.color}`}>
-                              <Icon className="w-4 h-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium truncate">{record.callerName || record.callerPhone || "Unknown Caller"}</span>
-                                {record.callerOrg && <span className="text-xs text-muted-foreground truncate hidden sm:block">— {record.callerOrg}</span>}
-                                {isUrgent && <span className="flex-shrink-0 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 border border-red-200 dark:border-red-500/30 px-1.5 py-0.5 rounded-full">URGENT</span>}
-                                {isHigh && !isUrgent && <span className="flex-shrink-0 text-[10px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 px-1.5 py-0.5 rounded-full">HIGH</span>}
-                              </div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                {record.whipClaimNumber && <span className="text-xs text-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{record.whipClaimNumber}</span>}
-                                <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(record.createdAt), { addSuffix: true })}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {record.callbackAt && (
-                                <TooltipProvider><Tooltip><TooltipTrigger asChild><CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /></TooltipTrigger><TooltipContent side="top" className="text-xs">Returned</TooltipContent></Tooltip></TooltipProvider>
-                              )}
-                              <Badge variant="outline" className={`text-xs ${
-                                record.status === "open"      ? "border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15" :
-                                record.status === "escalated" ? "border-red-300 text-red-700 dark:text-red-400 bg-red-500/10" :
-                                                                "border-green-300 text-green-700 dark:text-green-400 bg-green-500/10"
-                              }`}>{record.status}</Badge>
-                            </div>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Handler Workload */}
             {handlerWorkload.length > 0 && (
               <Card>

@@ -1,0 +1,250 @@
+{
+  "query": "SHOW COLUMNS FROM intake_records;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute SHOW COLUMNS FROM intake_records;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "aircallCallId",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callerPhone",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callerType",
+      "Type": "enum('carrier','law_office','medical_provider','member','claimant','police','unknown')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "unknown",
+      "Extra": ""
+    },
+    {
+      "Field": "callerName",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callerOrg",
+      "Type": "varchar(256)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "whipClaimNumber",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callerRefNumber",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "message",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callbackPhone",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callbackEmail",
+      "Type": "varchar(320)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('open','closed','escalated')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "open",
+      "Extra": ""
+    },
+    {
+      "Field": "rawTranscript",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "source",
+      "Type": "enum('voicemail','manual','live_call')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "voicemail",
+      "Extra": ""
+    },
+    {
+      "Field": "createdAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    },
+    {
+      "Field": "priority",
+      "Type": "enum('normal','high','urgent')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "normal",
+      "Extra": ""
+    },
+    {
+      "Field": "isRepeatCaller",
+      "Type": "tinyint(1)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "repeatCallCount",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "handlerName",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "notes",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "claimMatchType",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "claimMatchConfidence",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "snapsheetClaimUrl",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "handlerId",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "aircallRecordingUrl",
+      "Type": "mediumtext",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callbackDueBy",
+      "Type": "datetime",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callbackAt",
+      "Type": "datetime",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "callbackHandlerName",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "routingMethod",
+      "Type": "enum('ivr','extension','manual')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "ivr",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\naircallCallId\tvarchar(64)\tYES\tUNI\tNULL\t\ncallerPhone\tvarchar(32)\tYES\t\tNULL\t\ncallerType\tenum('carrier','law_office','medical_provider','member','claimant','police','unknown')\tYES\t\tunknown\t\ncallerName\tvarchar(256)\tYES\t\tNULL\t\ncallerOrg\tvarchar(256)\tYES\t\tNULL\t\nwhipClaimNumber\tvarchar(128)\tYES\t\tNULL\t\ncallerRefNumber\tvarchar(128)\tYES\t\tNULL\t\nmessage\ttext\tYES\t\tNULL\t\ncallbackPhone\tvarchar(32)\tYES\t\tNULL\t\ncallbackEmail\tvarchar(320)\tYES\t\tNULL\t\nstatus\tenum('open','closed','escalated')\tNO\t\topen\t\nrawTranscript\ttext\tYES\t\tNULL\t\nsource\tenum('voicemail','manual','live_call')\tNO\t\tvoicemail\t\ncreatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\npriority\tenum('normal','high','urgent')\tNO\t\tnormal\t\nisRepeatCaller\ttinyint(1)\tNO\t\t0\t\nrepeatCallCount\tint\tNO\t\t0\t\nhandlerName\tvarchar(128)\tYES\t\tNULL\t\nnotes\ttext\tYES\t\tNULL\t\nclaimMatchType\tvarchar(32)\tYES\t\tNULL\t\nclaimMatchConfidence\tint\tYES\t\tNULL\t\nsnapsheetClaimUrl\ttext\tYES\t\tNULL\t\nhandlerId\tint\tYES\t\tNULL\t\naircallRecordingUrl\tmediumtext\tYES\t\tNULL\t\ncallbackDueBy\tdatetime\tYES\t\tNULL\t\ncallbackAt\tdatetime\tYES\t\tNULL\t\ncallbackHandlerName\tvarchar(128)\tYES\t\tNULL\t\nroutingMethod\tenum('ivr','extension','manual')\tYES\t\tivr\t\n",
+  "stderr": "",
+  "execution_time_ms": 304
+}

@@ -1372,3 +1372,236 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
     byCallerType: byCallerTypeRows.map((r: any) => ({ callerType: String(r.callerType ?? 'unknown'), count: Number(r.count) })),
   };
 }
+
+// ─── Handler Weekly Stats (for QA page) ──────────────────────────────────────
+export async function getHandlerWeeklyStats(weekStart: string): Promise<{
+  handlerName: string;
+  totalCalls: number;
+  answeredCalls: number;
+  answerRate: number;
+  callsByCallerType: Record<string, number>;
+  overdueCallbacks: number;
+  callbackRate: number; // % of voicemails that got a callback
+  avgCallDurationMin: number;
+}[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const client = (db as any).$client.promise();
+
+  // week window: weekStart (Monday) to weekStart + 7 days
+  const [callRows] = await client.query(
+    `SELECT
+       agentName,
+       COUNT(*) as total,
+       SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as answered,
+       ROUND(AVG(durationSeconds)/60, 1) as avgDurationMin
+     FROM call_history
+     WHERE agentName IS NOT NULL
+       AND startedAt >= ?
+       AND startedAt < DATE_ADD(?, INTERVAL 7 DAY)
+     GROUP BY agentName
+     ORDER BY total DESC`,
+    [weekStart, weekStart]
+  );
+
+  // caller type breakdown per handler from intake_records for the same week
+  const [callerTypeRows] = await client.query(
+    `SELECT handlerName, callerType, COUNT(*) as cnt
+     FROM intake_records
+     WHERE handlerName IS NOT NULL
+       AND createdAt >= ?
+       AND createdAt < DATE_ADD(?, INTERVAL 7 DAY)
+     GROUP BY handlerName, callerType`,
+    [weekStart, weekStart]
+  );
+
+  // overdue callbacks per handler
+  const [overdueRows] = await client.query(
+    `SELECT handlerName, COUNT(*) as overdue
+     FROM intake_records
+     WHERE callbackAt IS NULL
+       AND callbackDueBy IS NOT NULL
+       AND callbackDueBy < NOW()
+       AND status != 'closed'
+     GROUP BY handlerName`
+  );
+
+  // callback rate: voicemails assigned to handler that got a callbackAt
+  const [callbackRows] = await client.query(
+    `SELECT handlerName,
+       COUNT(*) as total_voicemails,
+       SUM(CASE WHEN callbackAt IS NOT NULL THEN 1 ELSE 0 END) as called_back
+     FROM intake_records
+     WHERE source = 'voicemail'
+       AND handlerName IS NOT NULL
+       AND createdAt >= ?
+       AND createdAt < DATE_ADD(?, INTERVAL 7 DAY)
+     GROUP BY handlerName`,
+    [weekStart, weekStart]
+  );
+
+  // Build lookup maps
+  const callerTypeMap: Record<string, Record<string, number>> = {};
+  for (const row of callerTypeRows as any[]) {
+    const hn = String(row.handlerName ?? "");
+    if (!callerTypeMap[hn]) callerTypeMap[hn] = {};
+    callerTypeMap[hn][String(row.callerType ?? "unknown")] = Number(row.cnt ?? 0);
+  }
+
+  const overdueMap: Record<string, number> = {};
+  for (const row of overdueRows as any[]) {
+    overdueMap[String(row.handlerName ?? "")] = Number(row.overdue ?? 0);
+  }
+
+  const callbackMap: Record<string, { total: number; calledBack: number }> = {};
+  for (const row of callbackRows as any[]) {
+    callbackMap[String(row.handlerName ?? "")] = {
+      total: Number(row.total_voicemails ?? 0),
+      calledBack: Number(row.called_back ?? 0),
+    };
+  }
+
+  return (callRows as any[]).map((row: any) => {
+    const hn = String(row.agentName ?? "");
+    const total = Number(row.total ?? 0);
+    const answered = Number(row.answered ?? 0);
+    const cb = callbackMap[hn] ?? { total: 0, calledBack: 0 };
+    return {
+      handlerName: hn,
+      totalCalls: total,
+      answeredCalls: answered,
+      answerRate: total > 0 ? Math.round((answered / total) * 100) : 0,
+      callsByCallerType: callerTypeMap[hn] ?? {},
+      overdueCallbacks: overdueMap[hn] ?? 0,
+      callbackRate: cb.total > 0 ? Math.round((cb.calledBack / cb.total) * 100) : 100,
+      avgCallDurationMin: Number(row.avgDurationMin ?? 0),
+    };
+  });
+}
+
+// ─── Generate Weekly QA Report via LLM ───────────────────────────────────────
+export async function generateWeeklyQAReport(weekStart: string): Promise<{
+  handlerName: string;
+  weekOf: string;
+  greetingScore: number;
+  holdManagementScore: number;
+  resolutionScore: number;
+  empathyScore: number;
+  callControlScore: number;
+  overallScore: number;
+  strengths: string[];
+  improvements: string[];
+  coachingNote: string;
+  callsAnalyzed: number;
+}[]> {
+  const { invokeLLM } = await import("./_core/llm");
+  const db = await getDb();
+  if (!db) return [];
+  const client = (db as any).$client.promise();
+
+  // Get handler stats for the week
+  const stats = await getHandlerWeeklyStats(weekStart);
+  if (stats.length === 0) return [];
+
+  // Get recent transcripts for each handler (last 7 days)
+  const [transcriptRows] = await client.query(
+    `SELECT ir.handlerName, ir.transcription, ir.callerType, ir.summary, ir.createdAt
+     FROM intake_records ir
+     WHERE ir.handlerName IS NOT NULL
+       AND ir.transcription IS NOT NULL
+       AND ir.createdAt >= ?
+       AND ir.createdAt < DATE_ADD(?, INTERVAL 7 DAY)
+     ORDER BY ir.createdAt DESC
+     LIMIT 100`,
+    [weekStart, weekStart]
+  );
+
+  // Group transcripts by handler
+  const transcriptsByHandler: Record<string, string[]> = {};
+  for (const row of transcriptRows as any[]) {
+    const hn = String(row.handlerName ?? "");
+    if (!transcriptsByHandler[hn]) transcriptsByHandler[hn] = [];
+    if (transcriptsByHandler[hn].length < 5) { // max 5 transcripts per handler
+      transcriptsByHandler[hn].push(
+        `[${row.callerType ?? "unknown"} caller] ${row.transcription?.slice(0, 400) ?? ""}`
+      );
+    }
+  }
+
+  const results = [];
+
+  for (const handler of stats) {
+    const transcripts = transcriptsByHandler[handler.handlerName] ?? [];
+    const callerTypeSummary = Object.entries(handler.callsByCallerType)
+      .map(([type, count]) => `${count} ${type}`)
+      .join(", ") || "no intake records this week";
+
+    const prompt = `You are a call center QA manager reviewing a claims handler's performance for the week of ${weekStart}.
+
+Handler: ${handler.handlerName}
+Total calls: ${handler.totalCalls} (${handler.answeredCalls} answered, ${handler.answerRate}% answer rate)
+Avg call duration: ${handler.avgCallDurationMin} min
+Caller types handled: ${callerTypeSummary}
+Overdue callbacks: ${handler.overdueCallbacks}
+Callback rate: ${handler.callbackRate}%
+
+${transcripts.length > 0 ? `Sample call transcripts (${transcripts.length} of ${handler.totalCalls} calls):\n${transcripts.map((t, i) => `--- Call ${i + 1} ---\n${t}`).join("\n\n")}` : "No transcripts available for this week — base scores on call volume and callback metrics only."}
+
+Score this handler 1-10 on each dimension and provide coaching feedback. Be specific and actionable. Base your assessment on the data provided.`;
+
+    try {
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are a professional call center QA manager. Output structured JSON only." },
+          { role: "user", content: prompt },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "qa_report",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                greetingScore: { type: "number" },
+                holdManagementScore: { type: "number" },
+                resolutionScore: { type: "number" },
+                empathyScore: { type: "number" },
+                callControlScore: { type: "number" },
+                overallScore: { type: "number" },
+                strengths: { type: "array", items: { type: "string" } },
+                improvements: { type: "array", items: { type: "string" } },
+                coachingNote: { type: "string" },
+              },
+              required: ["greetingScore","holdManagementScore","resolutionScore","empathyScore","callControlScore","overallScore","strengths","improvements","coachingNote"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const content = response?.choices?.[0]?.message?.content;
+      if (!content) continue;
+      const parsed = typeof content === "string" ? JSON.parse(content) : content;
+
+      results.push({
+        handlerName: handler.handlerName,
+        weekOf: weekStart,
+        greetingScore: Number(parsed.greetingScore ?? 7),
+        holdManagementScore: Number(parsed.holdManagementScore ?? 7),
+        resolutionScore: Number(parsed.resolutionScore ?? 7),
+        empathyScore: Number(parsed.empathyScore ?? 7),
+        callControlScore: Number(parsed.callControlScore ?? 7),
+        overallScore: Number(parsed.overallScore ?? 7),
+        strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+        improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
+        coachingNote: String(parsed.coachingNote ?? ""),
+        callsAnalyzed: handler.totalCalls,
+      });
+    } catch (err: any) {
+      console.warn(`[QA] Failed to generate report for ${handler.handlerName}:`, err.message);
+    }
+  }
+
+  return results;
+}

@@ -453,12 +453,46 @@ function PushScorecardPanel({ agentName, onClose }: { agentName: string; onClose
   );
 }
 
+// Get the Monday of a given date
+function getMondayOf(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().slice(0, 10);
+}
+
+const CALLER_TYPE_LABELS: Record<string, string> = {
+  carrier: "Carrier",
+  law_office: "Law Office",
+  medical_provider: "Medical",
+  member: "Member",
+  claimant: "Claimant",
+  police: "Police",
+  unknown: "Unknown",
+};
+
 export default function WeeklyQA() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [pushAgent, setPushAgent] = useState<string | null>(null);
+  const [weekStart, setWeekStart] = useState(() => getMondayOf(new Date()));
 
   const { data: dbScores } = trpc.qa.agentSummary.useQuery();
   const { data: pushedScorecards } = trpc.qa.allScorecards.useQuery();
+  const { data: handlerStats, isLoading: statsLoading } = trpc.qa.handlerWeeklyStats.useQuery({ weekStart });
+  const generateReport = trpc.qa.generateReport.useMutation();
+  const utils = trpc.useUtils();
+
+  const handleRegenerate = async () => {
+    try {
+      const result = await generateReport.mutateAsync({ weekStart });
+      await utils.qa.allScorecards.invalidate();
+      await utils.qa.agentSummary.invalidate();
+      toast.success(`Generated QA reports for ${result.count} handler${result.count !== 1 ? 's' : ''}.`);
+    } catch {
+      toast.error('Failed to generate QA reports. Please try again.');
+    }
+  };
 
   const displayData = dbScores && dbScores.length > 0
     ? dbScores.map((d: {
@@ -508,17 +542,108 @@ export default function WeeklyQA() {
       )}
       <div className="p-6 space-y-5">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Weekly QA Scoring</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              AI-powered quality analysis — Week of {TEAM_REPORT.weekOf}
+              AI-powered quality analysis
             </p>
           </div>
-          <Badge variant="outline" className="bg-primary text-white border-primary text-xs">
-            {TEAM_REPORT.totalCallsAnalyzed} calls analyzed
-          </Badge>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-muted-foreground">Week of</label>
+              <input
+                type="date"
+                value={weekStart}
+                onChange={(e) => setWeekStart(getMondayOf(new Date(e.target.value + 'T12:00:00')))}
+                className="text-xs border rounded px-2 py-1 bg-background text-foreground"
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={handleRegenerate}
+              disabled={generateReport.isPending}
+              className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs gap-1.5"
+            >
+              {generateReport.isPending ? (
+                <><span className="animate-spin">⟳</span> Generating...</>
+              ) : (
+                <><Star className="w-3 h-3" /> Regenerate QA</>
+              )}
+            </Button>
+          </div>
         </div>
+
+        {/* Per-handler weekly stats */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Phone className="w-4 h-4 text-[#ff6221]" />
+              Handler Stats — Week of {weekStart}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {statsLoading ? (
+              <div className="p-4 text-sm text-muted-foreground">Loading stats...</div>
+            ) : !handlerStats || handlerStats.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground">No call data for this week.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Handler</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Total Calls</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Answer Rate</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Avg Duration</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs hidden lg:table-cell">Caller Types</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Overdues</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Callback Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {handlerStats.map((h, idx) => (
+                      <tr key={`${h.handlerName}-${idx}`} className="hover:bg-muted/20">
+                        <td className="px-4 py-3 font-medium text-foreground">{h.handlerName}</td>
+                        <td className="px-4 py-3 text-right text-foreground">{h.totalCalls}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            h.answerRate >= 90 ? 'text-green-600' :
+                            h.answerRate >= 75 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>{h.answerRate}%</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{h.avgCallDurationMin}m</td>
+                        <td className="px-4 py-3 hidden lg:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(h.callsByCallerType)
+                              .sort((a, b) => b[1] - a[1])
+                              .slice(0, 4)
+                              .map(([type, count]) => (
+                                <span key={type} className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                                  {CALLER_TYPE_LABELS[type] ?? type} {count}
+                                </span>
+                              ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={h.overdueCallbacks > 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'}>
+                            {h.overdueCallbacks}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${
+                            h.callbackRate >= 90 ? 'text-green-600' :
+                            h.callbackRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>{h.callbackRate}%</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Team summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

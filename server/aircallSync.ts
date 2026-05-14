@@ -13,6 +13,7 @@
  */
 import cron from "node-cron";
 import { upsertCallHistory } from "./db";
+import { classifyCallBatch } from "./classifyCalls";
 
 const AIRCALL_API_BASE = "https://api.aircall.io/v1";
 
@@ -303,6 +304,15 @@ async function runSync() {
     }
     // Also pull any unread assigned voicemails from handler personal mailboxes
     await syncAssignedVoicemails();
+    // Auto-classify any calls that arrived without a callerType (runs silently after sync)
+    try {
+      const classified = await classifyCallBatch(20);
+      if (classified.processed > 0) {
+        console.log(`[AircallSync] Auto-classified ${classified.processed} calls (${classified.succeeded} succeeded, ${classified.failed} failed)`);
+      }
+    } catch (classifyErr: any) {
+      console.warn("[AircallSync] Auto-classify step failed:", classifyErr.message ?? classifyErr);
+    }
   } catch (err: any) {
     console.error("[AircallSync] Error:", err.message ?? err);
   } finally {
@@ -311,7 +321,7 @@ async function runSync() {
 }
 
 /**
- * Start the 15-minute cron job.
+ * Start the 15-minute cron job + weekly QA auto-generation.
  * Called once from server startup.
  */
 export function startAircallSyncJob() {
@@ -325,4 +335,58 @@ export function startAircallSyncJob() {
     cron.schedule("*/15 * * * *", runSync);
     console.log("[AircallSync] Scheduled sync every 15 minutes (all claims-team numbers)");
   });
+
+  // Weekly QA report: every Monday at 8:00 AM (server local time)
+  cron.schedule("0 8 * * 1", async () => {
+    console.log("[WeeklyQA] Starting auto-generation of weekly QA reports...");
+    try {
+      const { generateWeeklyQAReport, getHandlers, saveHandlerScorecard } = await import("./db");
+      const { notifyOwner } = await import("./_core/notification");
+      // Get Monday of current week
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(now);
+      monday.setDate(diff);
+      const weekStart = monday.toISOString().slice(0, 10);
+      const results = await generateWeeklyQAReport(weekStart);
+      const handlers = await getHandlers();
+      let saved = 0;
+      for (const r of results) {
+        const handler = handlers.find((h) =>
+          h.name.toLowerCase().includes(r.handlerName.toLowerCase()) ||
+          r.handlerName.toLowerCase().includes(h.name.toLowerCase())
+        );
+        if (handler) {
+          await saveHandlerScorecard({
+            handlerId: handler.id,
+            handlerName: r.handlerName,
+            weekOf: r.weekOf,
+            greetingScore: r.greetingScore,
+            holdManagementScore: r.holdManagementScore,
+            resolutionScore: r.resolutionScore,
+            empathyScore: r.empathyScore,
+            callControlScore: r.callControlScore,
+            overallScore: r.overallScore,
+            strengths: r.strengths.join("\n"),
+            improvements: r.improvements.join("\n"),
+            managerComments: r.coachingNote,
+            submittedBy: "Auto-QA",
+          });
+          saved++;
+        }
+      }
+      const avgScore = results.length > 0
+        ? (results.reduce((s, r) => s + r.overallScore, 0) / results.length).toFixed(1)
+        : "N/A";
+      await notifyOwner({
+        title: `✅ Weekly QA Report Generated — ${weekStart}`,
+        content: `Auto-generated QA scorecards for ${saved} handler${saved !== 1 ? 's' : ''} (week of ${weekStart}). Team avg score: ${avgScore}/10. View the full report in Weekly QA.`,
+      });
+      console.log(`[WeeklyQA] Generated ${saved} scorecards for week ${weekStart}, avg score ${avgScore}`);
+    } catch (err: any) {
+      console.error("[WeeklyQA] Auto-generation failed:", err.message ?? err);
+    }
+  });
+  console.log("[WeeklyQA] Scheduled weekly QA auto-generation every Monday at 8:00 AM");
 }

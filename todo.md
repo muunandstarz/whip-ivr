@@ -465,3 +465,19 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix all remaining db.execute calls with Drizzle [[rows],[fields]] bug (callback compliance, completion stats, callback logs, speed metrics, overdue callbacks)
 - [x] Clarify after-hours pill wording: "549 of 1,341 calls were after-hours (41%)" instead of "549 after-hours calls (41%)"
 - [x] After-hours calls are NOT missed calls — they are calls that arrived outside business hours but were still answered/voicemail
+
+## Voicemail Audio Fix (May 14 2026)
+
+- [ ] Diagnose why voicemail audio is not playing on intake detail records
+- [ ] Fix audio player — check voicemail URL format, proxy/CORS issues, and audio element rendering
+
+## Sprint: Dashboard Cleanup + Auto-Classification + QA Scheduling (May 14)
+
+- [ ] Dashboard: remove Overdue Callbacks section
+- [ ] Dashboard: remove Recent Intakes section
+- [ ] Auto-classify: trigger classification automatically on intake creation and on webhook receipt (not manual)
+- [ ] Weekly QA: add "Regenerate QA" button on Weekly QA page
+- [ ] Weekly QA: add per-handler stats block (calls by category, overdues, answer rate, callback rate)
+- [ ] Weekly QA: schedule weekly QA email/notification dispatch (every Monday morning)
+- [ ] Navigation: move IVR Setup into Settings page as a tab, remove from sidebar
+- [ ] Navigation: remove Analytics page from sidebar (redundant with dashboard)

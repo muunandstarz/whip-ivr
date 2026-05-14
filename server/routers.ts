@@ -43,6 +43,8 @@ import {
   getOverdueCallbackDetails,
   get7DayIntakeTrend,
   getCallAnalyticsByMonth,
+  getHandlerWeeklyStats,
+  generateWeeklyQAReport,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -246,6 +248,47 @@ export const appRouter = router({
           submittedBy: ctx.user?.name ?? "Manager",
         });
         return { id, success: true };
+      }),
+
+    // ── Per-handler weekly stats (calls by category, overdues, answer rate, callback rate) ──
+    handlerWeeklyStats: protectedProcedure
+      .input(z.object({ weekStart: z.string() })) // "YYYY-MM-DD" Monday
+      .query(async ({ input }) => {
+        return getHandlerWeeklyStats(input.weekStart);
+      }),
+
+    // ── AI-generated QA report for a week ──
+    generateReport: protectedProcedure
+      .input(z.object({ weekStart: z.string() })) // "YYYY-MM-DD" Monday
+      .mutation(async ({ input }) => {
+        const results = await generateWeeklyQAReport(input.weekStart);
+        // Persist each result as a scorecard
+        for (const r of results) {
+          // Find handler ID from DB
+          const { getHandlers } = await import("./db");
+          const handlers = await getHandlers();
+          const handler = handlers.find((h) =>
+            h.name.toLowerCase().includes(r.handlerName.toLowerCase()) ||
+            r.handlerName.toLowerCase().includes(h.name.toLowerCase())
+          );
+          if (handler) {
+            await saveHandlerScorecard({
+              handlerId: handler.id,
+              handlerName: r.handlerName,
+              weekOf: r.weekOf,
+              greetingScore: r.greetingScore,
+              holdManagementScore: r.holdManagementScore,
+              resolutionScore: r.resolutionScore,
+              empathyScore: r.empathyScore,
+              callControlScore: r.callControlScore,
+              overallScore: r.overallScore,
+              strengths: r.strengths.join("\n"),
+              improvements: r.improvements.join("\n"),
+              submittedBy: "AI QA System",
+            });
+          }
+        }
+        return { results, count: results.length };
       }),
   }),
 
