@@ -309,27 +309,28 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 {trendLoading ? (
-                  <ChartSkeleton height={130} />
+                  <ChartSkeleton height={180} />
                 ) : sparklineData.length === 0 ? (
-                  <div className="flex items-center justify-center h-[130px] text-sm text-muted-foreground">No data for the last 7 days</div>
+                  <div className="flex items-center justify-center h-[180px] text-sm text-muted-foreground">No data for the last 7 days</div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={130}>
-                    <AreaChart data={sparklineData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={sparklineData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barCategoryGap="20%" barGap={2}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} axisLine={false} tickLine={false} width={28} />
                       <ReTooltip
-                        contentStyle={{ fontSize: 11, borderRadius: 6 }}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(var(--border))", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                        cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
                         formatter={(value, name) => [value, CALLER_TYPE_CONFIG[name as string]?.label ?? name]}
+                        labelStyle={{ fontWeight: 600, marginBottom: 4 }}
                       />
                       {trendCallerTypes.map((t) => {
                         const cfg = CALLER_TYPE_CONFIG[t];
                         return cfg ? (
-                          <Area key={t} type="monotone" dataKey={t} stackId="1"
-                            stroke={cfg.chartColor} fill={cfg.chartColor} fillOpacity={0.5} strokeWidth={1.5} />
+                          <Bar key={t} dataKey={t} fill={cfg.chartColor} radius={[3, 3, 0, 0]} maxBarSize={18} />
                         ) : null;
                       })}
-                    </AreaChart>
+                    </BarChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
