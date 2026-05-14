@@ -1291,7 +1291,7 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   const prevYr = mo === 1 ? yr - 1 : yr;
   const prevYearMonth = `${prevYr}-${String(prevMo).padStart(2, '0')}`;
 
-  const [totals, byDirection, byDay, availableMonths, afterHoursRow, prevTotals, byCallerType] = await Promise.all([
+  const [totals, byDirection, byDay, availableMonths, afterHoursRow, prevTotals, byCallerType, intakeVoicemail] = await Promise.all([
     db.execute<{ status: string; count: number }>(sql`
       SELECT status, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY status
@@ -1333,6 +1333,14 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       SELECT COALESCE(callerType, 'unknown') AS callerType, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY callerType ORDER BY count DESC
     `),
+    // Voicemail count from intake_records (catches extension voicemails not in call_history)
+    db.execute<{ voicemailIntakes: number; missedInbound: number }>(sql`
+      SELECT
+        CAST(COUNT(*) AS SIGNED) AS voicemailIntakes,
+        0 AS missedInbound
+      FROM intake_records
+      WHERE DATE_FORMAT(createdAt, '%Y-%m') = ${yearMonth}
+    `),
   ]);
 
   // Drizzle execute() returns [[rows], [fieldPackets]] — use [0] to get just the rows
@@ -1343,6 +1351,8 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   const ahRow          = ((afterHoursRow as any[][])[0] ?? [])[0] ?? {};
   const prevTotalsRows = (prevTotals as any[][])[0] ?? [];
   const byCallerTypeRows = (byCallerType as any[][])[0] ?? [];
+  const intakeVoicemailRow = ((intakeVoicemail as any[][])[0] ?? [])[0] ?? {};
+  const intakeVoicemailCount = Number(intakeVoicemailRow.voicemailIntakes ?? 0);
 
   const prevTotalsArr = prevTotalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) }));
   const prevTotal = prevTotalsArr.reduce((s: number, r: any) => s + r.count, 0);
@@ -1351,7 +1361,27 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   return {
     yearMonth,
     prevYearMonth,
-    totals: totalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) })),
+    // Merge call_history totals with intake_records voicemail count.
+    // For months where Aircall sync didn't capture missed/voicemail (e.g. May 2026 live data),
+    // supplement missed = inbound calls that are NOT answered (inbound - answered_inbound),
+    // and voicemail = intake_records count (which includes extension voicemails).
+    totals: (() => {
+      const rows = totalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) }));
+      const hasVoicemail = rows.some(r => r.status === 'voicemail');
+      const hasMissed = rows.some(r => r.status === 'missed');
+      const inboundCount = byDirectionRows.find((r: any) => r.direction === 'inbound')?.count ?? 0;
+      const answeredCount = rows.find(r => r.status === 'answered')?.count ?? 0;
+      // If no voicemail in call_history, use intake_records count
+      if (!hasVoicemail && intakeVoicemailCount > 0) {
+        rows.push({ status: 'voicemail', count: intakeVoicemailCount });
+      }
+      // If no missed in call_history, estimate from inbound - answered (inbound calls that weren't answered)
+      if (!hasMissed) {
+        const estimatedMissed = Math.max(0, Number(inboundCount) - Number(answeredCount));
+        if (estimatedMissed > 0) rows.push({ status: 'missed', count: estimatedMissed });
+      }
+      return rows;
+    })(),
     byDirection: byDirectionRows.map((r: any) => ({ direction: r.direction as string, count: Number(r.count) })),
     byDay: byDayRows.map((r: any) => ({
       day: String(r.day ?? '').slice(0, 10),

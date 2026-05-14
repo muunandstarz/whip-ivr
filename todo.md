@@ -487,7 +487,7 @@ Business routing logic to implement in resolveHandler():
 - [ ] Add Emailed option to disposition select in IntakeDetail.tsx callback dialog
 - [ ] Add Emailed option to disposition filter in CallbackLog.tsx
 - [ ] Add Emailed to DISPOSITION_CONFIG in CallbackLog.tsx with Mail icon
-- [ ] Fix misleading 100% answer rate on dashboard when only answered calls exist in DB
+- [x] Fix misleading 100% answer rate on dashboard when only answered calls exist in DB
 - [ ] Add month navigation + MoM change delta to Call Tracking page
 - [ ] Update Call Tracking server procedure to accept month/year params and return prev month comparison
 
@@ -517,3 +517,14 @@ Business routing logic to implement in resolveHandler():
 - [x] Add 'emailed' to DISPOSITION_CONFIG and filter in CallbackLog.tsx
 - [ ] Add bulkPushWeek tRPC procedure (bulk push all scorecards for a week to handler profiles)
 - [ ] Fix weekly cron to regenerate QA and send full report with handler stats each Monday 8am
+
+## Dashboard KPI Fixes (May 14 2026 — Round 3)
+
+- [x] Fix Total Calls: now shows inbound + outbound (not answered + missed + voicemail sum)
+- [x] Fix Answered: answer rate now uses inbound-only denominator (outbound calls excluded from rate)
+- [x] Fix Missed: supplement from inbound - answered_inbound when call_history has no missed rows (May live data)
+- [x] Fix Voicemail: supplement from intake_records count when call_history has no voicemail rows (May live data)
+- [x] Fix after-hours pill wording: "arrived after-hours" not "were after-hours"
+- [x] Fix biz-hrs answer rate pill: clarify it's inbound-only rate
+- [x] Fix Answered sub-label: "% inbound · % biz hrs" instead of "% overall · % biz hrs"
+- [x] Voicemail tooltip: clarify includes extension voicemails

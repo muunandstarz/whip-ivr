@@ -128,14 +128,19 @@ export default function Dashboard() {
   const todayCount    = analyticsData?.byDay?.find((d) => d.day === todayStr)?.count ?? 0;
 
   // Month call KPIs — safe null-coalescing prevents NaN
-  const totalsArr     = monthCallData?.totals ?? [];
-  const totalCalls    = totalsArr.reduce((s, r) => s + Number(r.count ?? 0), 0);
-  const answeredCalls = Number(totalsArr.find((r) => r.status === "answered")?.count ?? 0);
-  const missedCalls   = Number(totalsArr.find((r) => r.status === "missed")?.count ?? 0);
+  const totalsArr      = monthCallData?.totals ?? [];
+  const answeredCalls  = Number(totalsArr.find((r) => r.status === "answered")?.count ?? 0);
+  const missedCalls    = Number(totalsArr.find((r) => r.status === "missed")?.count ?? 0);
   const voicemailCalls = Number(totalsArr.find((r) => r.status === "voicemail")?.count ?? 0);
-  const answerRate    = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
-  const inboundCalls  = Number(monthCallData?.byDirection?.find((r) => r.direction === "inbound")?.count ?? 0);
-  const outboundCalls = Number(monthCallData?.byDirection?.find((r) => r.direction === "outbound")?.count ?? 0);
+  const inboundCalls   = Number(monthCallData?.byDirection?.find((r) => r.direction === "inbound")?.count ?? 0);
+  const outboundCalls  = Number(monthCallData?.byDirection?.find((r) => r.direction === "outbound")?.count ?? 0);
+  // Total calls = all call_history rows (answered + missed + voicemail from call_history only, NOT intake-derived voicemail)
+  // We show inbound + outbound as the headline number
+  const totalCalls     = inboundCalls + outboundCalls;
+  // Answer rate = answered inbound / total inbound (outbound calls are always "answered" by definition)
+  // Use inbound as denominator so the rate reflects how many incoming calls we actually picked up
+  const inboundAnswered = Math.min(answeredCalls, inboundCalls); // answered calls that were inbound
+  const answerRate      = inboundCalls > 0 ? Math.round((inboundAnswered / inboundCalls) * 100) : 0;
 
   // After-hours & business-hours breakdown
   const afterHoursCount   = monthCallData?.afterHours ?? 0;
@@ -432,8 +437,8 @@ export default function Dashboard() {
                     color: "green",
                     value: answeredCalls,
                     label: "Answered",
-                    sub: `${answerRate}% overall · ${bhAnswerRate}% biz hrs`,
-                    tooltip: `Calls answered by a live agent. Overall answer rate: ${answerRate}% (all hours). Business-hours answer rate (Mon–Fri 8am–6pm): ${bhAnswerRate}% (${bhAnswered} of ${bhTotal} calls).`,
+                    sub: `${answerRate}% inbound · ${bhAnswerRate}% biz hrs`,
+                    tooltip: `Calls answered by a live agent. Inbound answer rate: ${answerRate}% (${inboundAnswered} of ${inboundCalls} inbound calls). Business-hours answer rate (Mon–Fri 8am–6pm): ${bhAnswerRate}% (${bhAnswered} of ${bhTotal} calls). Outbound calls (${outboundCalls}) are not included in answer rate.`,
                     mom: momAnswerDelta !== null ? (momAnswerDelta >= 0 ? `+${momAnswerDelta}pp` : `${momAnswerDelta}pp`) : undefined,
                     momLabel: prevTotal > 0 ? `${prevAnswerRate}% last month` : undefined,
                   },
@@ -443,8 +448,8 @@ export default function Dashboard() {
                     color: "red",
                     value: missedCalls,
                     label: "Missed",
-                    sub: undefined,
-                    tooltip: "Calls that rang but were not answered this month.",
+                    sub: missedCalls > 0 ? `inbound calls not answered` : undefined,
+                    tooltip: `Inbound calls that rang but were not answered this month. Includes calls during business hours and after-hours that went unanswered. Voicemail calls are counted separately.`,
                     mom: undefined,
                     momLabel: undefined,
                   },
@@ -454,8 +459,8 @@ export default function Dashboard() {
                     color: "amber",
                     value: voicemailCalls,
                     label: "Voicemail",
-                    sub: "generates intake records",
-                    tooltip: "Calls that went to voicemail this month — these generate intake records.",
+                    sub: `${voicemailCalls} intake records`,
+                    tooltip: `Voicemail messages received this month — each generates an intake record. Includes voicemails left on the main Claims line and on individual handler extensions.`,
                     mom: undefined,
                     momLabel: undefined,
                   },
@@ -517,9 +522,9 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
                     <Moon className="w-3 h-3 text-indigo-500" />
                     <span className="text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> of {totalCalls.toLocaleString()} calls were after-hours ({afterHoursPct}%)
+                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> of {totalCalls.toLocaleString()} calls arrived after-hours ({afterHoursPct}%)
                     </span>
-                    <InfoTooltip text={`${afterHoursCount} calls arrived outside business hours (before 8am or after 6pm). ${weekendCount} calls arrived on weekends. These are included in all totals above.`} />
+                    <InfoTooltip text={`${afterHoursCount} calls arrived outside business hours (before 8am or after 6pm Mon–Fri). ${weekendCount} of those were on weekends. After-hours calls that went unanswered are included in the Missed count.`} />
                   </div>
                 )}
                 {/* Business-hours answer rate pill */}
@@ -527,9 +532,9 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
                     <Sun className="w-3 h-3 text-yellow-500" />
                     <span className="text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">{bhAnswerRate}%</span> answer rate during biz hrs
+                      <span className="font-semibold text-foreground">{bhAnswerRate}%</span> inbound answer rate during biz hrs
                     </span>
-                    <InfoTooltip text={`Business-hours answer rate (Mon–Fri, 8am–6pm): ${bhAnswered} answered out of ${bhTotal} calls. The overall rate of ${answerRate}% includes after-hours and weekend calls.`} />
+                    <InfoTooltip text={`Business-hours inbound answer rate (Mon–Fri, 8am–6pm): ${bhAnswered} answered out of ${bhTotal} inbound calls. The overall inbound answer rate of ${answerRate}% includes after-hours and weekend calls.`} />
                   </div>
                 )}
                 {/* Trend blurbs */}
