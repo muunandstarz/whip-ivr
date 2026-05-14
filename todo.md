@@ -528,3 +528,11 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix biz-hrs answer rate pill: clarify it's inbound-only rate
 - [x] Fix Answered sub-label: "% inbound · % biz hrs" instead of "% overall · % biz hrs"
 - [x] Voicemail tooltip: clarify includes extension voicemails
+
+## P0 Bug: After-Hours Count Wrong (May 14 2026)
+
+- [x] Fix after-hours SQL: only count inbound calls (direction='inbound'), not all calls
+- [x] Fix businessHoursTotal/businessHoursAnswered: only count inbound calls
+- [x] Fix afterHoursPct denominator: use inboundCalls not totalCalls
+- [x] Fix after-hours pill text: show "of X inbound calls" not "of X calls"
+- [x] Verify missed count logic: inbound - inbound_answered (not all answered)

@@ -1313,7 +1313,9 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       SELECT DISTINCT DATE_FORMAT(startedAt, '%Y-%m') AS month FROM call_history
       WHERE startedAt IS NOT NULL ORDER BY month DESC LIMIT 12
     `),
-    // After-hours and weekend breakdown
+    // After-hours/weekend/biz-hours breakdown — INBOUND ONLY
+    // Outbound calls (handlers calling clients back) must NOT be counted here;
+    // after-hours only makes sense for inbound calls we received.
     db.execute<{ total: number; afterHours: number; weekend: number; businessHoursAnswered: number; businessHoursTotal: number }>(sql`
       SELECT
         CAST(COUNT(*) AS SIGNED) AS total,
@@ -1321,7 +1323,9 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
         CAST(SUM(CASE WHEN DAYOFWEEK(startedAt) IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS weekend,
         CAST(SUM(CASE WHEN status='answered' AND HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursAnswered,
         CAST(SUM(CASE WHEN HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursTotal
-      FROM call_history WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+      FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+        AND direction = 'inbound'
     `),
     // Previous month totals for MoM comparison
     db.execute<{ status: string; count: number }>(sql`

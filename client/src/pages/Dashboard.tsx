@@ -148,7 +148,8 @@ export default function Dashboard() {
   const bhAnswered        = monthCallData?.businessHoursAnswered ?? 0;
   const bhTotal           = monthCallData?.businessHoursTotal ?? 0;
   const bhAnswerRate      = bhTotal > 0 ? Math.round((bhAnswered / bhTotal) * 100) : 0;
-  const afterHoursPct     = totalCalls > 0 ? Math.round((afterHoursCount / totalCalls) * 100) : 0;
+  // afterHours comes from inbound-only SQL, so denominator must be inboundCalls
+  const afterHoursPct     = inboundCalls > 0 ? Math.round((afterHoursCount / inboundCalls) * 100) : 0;
 
   // Month-over-month comparison
   const prevMonth         = monthCallData?.prevMonth;
@@ -522,7 +523,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
                     <Moon className="w-3 h-3 text-indigo-500" />
                     <span className="text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> of {totalCalls.toLocaleString()} calls arrived after-hours ({afterHoursPct}%)
+                      <span className="font-semibold text-foreground">{afterHoursCount.toLocaleString()}</span> of {inboundCalls.toLocaleString()} inbound calls arrived after-hours ({afterHoursPct}%)
                     </span>
                     <InfoTooltip text={`${afterHoursCount} calls arrived outside business hours (before 8am or after 6pm Mon–Fri). ${weekendCount} of those were on weekends. After-hours calls that went unanswered are included in the Missed count.`} />
                   </div>
