@@ -548,3 +548,14 @@ Business routing logic to implement in resolveHandler():
 - [x] Show label badges in IntakeRecords list view
 - [x] Show label badges in IntakeDetail view
 - [ ] Add after_hours and direct_voicemail filter options to IntakeRecords filter panel
+
+## Missed KPI Fix (May 15 2026)
+- [ ] Fix Missed count: should be inbound - answered_inbound (all unanswered inbound, during AND outside biz hrs)
+- [ ] Remove the old logic that only counts status='missed' rows (May has none, giving wrong 0)
+
+## Handler Linking: Tim Chan & Geovanni Cabrera (May 15 2026)
+- [x] Find Tim Chan and Geovanni Cabrera in Aircall users API
+- [x] Add them to handlers table in DB if not present
+- [x] Add them to HANDLER_ROUTING map in aircall.ts
+- [x] Add their Aircall user IDs to the agent→handler mapping in aircallSync.ts
+- [x] Verify their call stats appear in dashboard and handler queue

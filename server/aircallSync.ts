@@ -73,7 +73,8 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
       "daryl.ochate@drivewhip.com":        { id: 30002, name: "Daryl Ochate" },
       "madeline.green@drivewhip.com":      { id: 30004, name: "Madeline Green" },
       "demily.flores@drivewhip.com":       { id: 30005, name: "Demily Flores" },
-      "tim.chan@drivewhip.com":            { id: 30006, name: "Tim Chan" },
+      "tim.chan@drivewhip.com":            { id: 90001, name: "Tim Chan" },
+      "geovanni.cabrera@drivewhip.com":    { id: 90002, name: "Geovanni Cabrera" },
     };
 
     const newAllowedIds = new Set<number>([WHIP_CLAIMS_NUMBER_ID]);
@@ -208,7 +209,21 @@ function mapStatus(
   status: string,
   missedReason?: string
 ): "answered" | "missed" | "voicemail" | "abandoned" {
-  if (status === "done" || status === "answered") return "answered";
+  // Aircall uses status='done' for ALL completed calls.
+  // The missed_call_reason field distinguishes answered from missed:
+  //   null                  → answered
+  //   'voicemail'           → voicemail
+  //   'short_abandoned'     → missed (caller hung up quickly)
+  //   'out_of_opening_hours'→ missed (called outside business hours)
+  //   'agents_did_not_answer'→ missed (rang, no pickup)
+  //   any other reason      → missed
+  if (status === "done") {
+    if (!missedReason) return "answered";
+    if (missedReason === "voicemail") return "voicemail";
+    return "missed";
+  }
+  // Legacy status values (older API responses)
+  if (status === "answered") return "answered";
   if (status === "voicemail") return "voicemail";
   if (status === "missed" || status === "abandoned") {
     if (missedReason === "voicemail") return "voicemail";

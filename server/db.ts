@@ -1362,13 +1362,13 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       SELECT COALESCE(callerType, 'unknown') AS callerType, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY callerType ORDER BY count DESC
     `),
-    // Voicemail count from intake_records (catches extension voicemails not in call_history)
-    db.execute<{ voicemailIntakes: number; missedInbound: number }>(sql`
+    // Voicemail count from intake_records + inbound-answered count for missed supplement
+    db.execute<{ voicemailIntakes: number; inboundAnswered: number }>(sql`
       SELECT
-        CAST(COUNT(*) AS SIGNED) AS voicemailIntakes,
-        0 AS missedInbound
-      FROM intake_records
-      WHERE DATE_FORMAT(createdAt, '%Y-%m') = ${yearMonth}
+        (SELECT CAST(COUNT(*) AS SIGNED) FROM intake_records WHERE DATE_FORMAT(createdAt, '%Y-%m') = ${yearMonth}) AS voicemailIntakes,
+        CAST(SUM(CASE WHEN direction='inbound' AND status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS inboundAnswered
+      FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
     `),
   ]);
 
@@ -1382,6 +1382,7 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   const byCallerTypeRows = (byCallerType as any[][])[0] ?? [];
   const intakeVoicemailRow = ((intakeVoicemail as any[][])[0] ?? [])[0] ?? {};
   const intakeVoicemailCount = Number(intakeVoicemailRow.voicemailIntakes ?? 0);
+  const inboundAnsweredCount = Number(intakeVoicemailRow.inboundAnswered ?? 0);
 
   const prevTotalsArr = prevTotalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) }));
   const prevTotal = prevTotalsArr.reduce((s: number, r: any) => s + r.count, 0);
@@ -1404,9 +1405,11 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       if (!hasVoicemail && intakeVoicemailCount > 0) {
         rows.push({ status: 'voicemail', count: intakeVoicemailCount });
       }
-      // If no missed in call_history, estimate from inbound - answered (inbound calls that weren't answered)
+      // If no missed in call_history, estimate from inbound - inbound_answered (all unanswered inbound calls)
+      // Use inboundAnsweredCount (direction='inbound' AND status='answered') not total answeredCount
+      // which includes outbound calls and would give a wrong negative result.
       if (!hasMissed) {
-        const estimatedMissed = Math.max(0, Number(inboundCount) - Number(answeredCount));
+        const estimatedMissed = Math.max(0, Number(inboundCount) - inboundAnsweredCount);
         if (estimatedMissed > 0) rows.push({ status: 'missed', count: estimatedMissed });
       }
       return rows;

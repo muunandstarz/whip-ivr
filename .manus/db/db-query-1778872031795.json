@@ -1,0 +1,22 @@
+{
+  "query": "\nINSERT INTO handlers (name, email, role, aircallUserId, active, createdAt)\nVALUES \n  ('Tim Chan', 'tim.chan@drivewhip.com', 'handler', 1940186, 1, NOW()),\n  ('Geovanni Cabrera', 'geovanni.cabrera@drivewhip.com', 'handler', 1947062, 1, NOW());\n\nSELECT id, name, email, aircallUserId FROM handlers WHERE email IN ('tim.chan@drivewhip.com', 'geovanni.cabrera@drivewhip.com');\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute \nINSERT INTO handlers (name, email, role, aircallUserId, active, createdAt)\nVALUES \n  ('Tim Chan', 'tim.chan@drivewhip.com', 'handler', 1940186, 1, NOW()),\n  ('Geovanni Cabrera', 'geovanni.cabrera@drivewhip.com', 'handler', 1947062, 1, NOW());\n\nSELECT id, name, email, aircallUserId FROM handlers WHERE email IN ('tim.chan@drivewhip.com', 'geovanni.cabrera@drivewhip.com');\n",
+  "rows": [
+    {
+      "id": "90001",
+      "name": "Tim Chan",
+      "email": "tim.chan@drivewhip.com",
+      "aircallUserId": "1940186"
+    },
+    {
+      "id": "90002",
+      "name": "Geovanni Cabrera",
+      "email": "geovanni.cabrera@drivewhip.com",
+      "aircallUserId": "1947062"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\temail\taircallUserId\n90001\tTim Chan\ttim.chan@drivewhip.com\t1940186\n90002\tGeovanni Cabrera\tgeovanni.cabrera@drivewhip.com\t1947062\n",
+  "stderr": "",
+  "execution_time_ms": 274
+}

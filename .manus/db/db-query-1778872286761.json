@@ -1,0 +1,28 @@
+{
+  "query": "\n-- Link Tim Chan's calls (Aircall user ID 1940186, DB handler ID 90001)\nUPDATE call_history \nSET handlerId = 90001, agentName = 'Tim Chan'\nWHERE agentId = 1940186 OR agentName = 'Tim Chan';\n\n-- Link Geovanni Cabrera's calls (Aircall user ID 1947062, DB handler ID 90002)\nUPDATE call_history \nSET handlerId = 90002, agentName = 'Geovanni Cabrera'\nWHERE agentId = 1947062 OR agentName = 'Geovanni Cabrera';\n\n-- Verify\nSELECT agentName, handlerId, COUNT(*) as calls, \n       SUM(direction='inbound') as inbound, \n       SUM(direction='outbound') as outbound,\n       SUM(status='answered') as answered,\n       SUM(status='missed') as missed\nFROM call_history \nWHERE agentName IN ('Tim Chan', 'Geovanni Cabrera')\nGROUP BY agentName, handlerId;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute \n-- Link Tim Chan's calls (Aircall user ID 1940186, DB handler ID 90001)\nUPDATE call_history \nSET handlerId = 90001, agentName = 'Tim Chan'\nWHERE agentId = 1940186 OR agentName = 'Tim Chan';\n\n-- Link Geovanni Cabrera's calls (Aircall user ID 1947062, DB handler ID 90002)\nUPDATE call_history \nSET handlerId = 90002, agentName = 'Geovanni Cabrera'\nWHERE agentId = 1947062 OR agentName = 'Geovanni Cabrera';\n\n-- Verify\nSELECT agentName, handlerId, COUNT(*) as calls, \n       SUM(direction='inbound') as inbound, \n       SUM(direction='outbound') as outbound,\n       SUM(status='answered') as answered,\n       SUM(status='missed') as missed\nFROM call_history \nWHERE agentName IN ('Tim Chan', 'Geovanni Cabrera')\nGROUP BY agentName, handlerId;\n",
+  "rows": [
+    {
+      "agentName": "Geovanni Cabrera",
+      "handlerId": "90002",
+      "calls": "2",
+      "inbound": "0",
+      "outbound": "2",
+      "answered": "2",
+      "missed": "0"
+    },
+    {
+      "agentName": "Tim Chan",
+      "handlerId": "90001",
+      "calls": "41",
+      "inbound": "1",
+      "outbound": "40",
+      "answered": "41",
+      "missed": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "agentName\thandlerId\tcalls\tinbound\toutbound\tanswered\tmissed\nGeovanni Cabrera\t90002\t2\t0\t2\t2\t0\nTim Chan\t90001\t41\t1\t40\t41\t0\n",
+  "stderr": "",
+  "execution_time_ms": 296
+}

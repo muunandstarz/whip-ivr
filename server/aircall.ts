@@ -27,8 +27,10 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   lorraine:   { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   raine:      { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   daniel:     { id: 10,    name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
-  tim:        { id: 30006, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
-  "tim chan":  { id: 30006, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
+  tim:        { id: 90001, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
+  "tim chan":  { id: 90001, name: "Tim Chan",             email: "tim.chan@drivewhip.com" },
+  geovanni:   { id: 90002, name: "Geovanni Cabrera",     email: "geovanni.cabrera@drivewhip.com" },
+  "geo":      { id: 90002, name: "Geovanni Cabrera",     email: "geovanni.cabrera@drivewhip.com" },
   jovel:      { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   jobs:       { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   daryl:      { id: 30002, name: "Daryl Ochate",        email: "daryl.ochate@drivewhip.com" },
@@ -52,7 +54,7 @@ function nextTriageHandler() {
 const OUTBOUND_SUBRO_TEAM = [
   { id: 30004, name: "Madeline Green", email: "madeline.green@drivewhip.com" },
   { id: 10,    name: "Daniel Giono",  email: "daniel.giono@drivewhip.com" },
-  { id: 30006, name: "Tim Chan",       email: "tim.chan@drivewhip.com" },
+  { id: 90001, name: "Tim Chan",       email: "tim.chan@drivewhip.com" },
 ];
 let _outboundSubroIndex = 0;
 function nextOutboundSubroHandler() {
