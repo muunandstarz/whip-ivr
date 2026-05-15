@@ -559,3 +559,7 @@ Business routing logic to implement in resolveHandler():
 - [x] Add them to HANDLER_ROUTING map in aircall.ts
 - [x] Add their Aircall user IDs to the agent→handler mapping in aircallSync.ts
 - [x] Verify their call stats appear in dashboard and handler queue
+
+## P0 Bugs (May 15 2026 - Round 2)
+- [x] Fix Missed KPI: answered_inbound is counting outbound-answered calls, giving wrong missed count
+- [x] Fix QA generation: diagnose and fix why regenerate QA is failing

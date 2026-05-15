@@ -138,8 +138,9 @@ export default function Dashboard() {
   // We show inbound + outbound as the headline number
   const totalCalls     = inboundCalls + outboundCalls;
   // Answer rate = answered inbound / total inbound (outbound calls are always "answered" by definition)
-  // Use inbound as denominator so the rate reflects how many incoming calls we actually picked up
-  const inboundAnswered = Math.min(answeredCalls, inboundCalls); // answered calls that were inbound
+  // Use inboundAnswered from the DB (direction='inbound' AND status='answered'), NOT Math.min(all-answered, inbound)
+  // because answeredCalls includes outbound-answered which inflates the count.
+  const inboundAnswered = monthCallData?.inboundAnswered ?? Math.min(answeredCalls, inboundCalls);
   const answerRate      = inboundCalls > 0 ? Math.round((inboundAnswered / inboundCalls) * 100) : 0;
 
   // After-hours & business-hours breakdown

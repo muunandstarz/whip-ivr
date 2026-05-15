@@ -1432,6 +1432,7 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       answerRate: prevTotal > 0 ? Math.round((prevAnswered / prevTotal) * 100) : 0,
     },
     byCallerType: byCallerTypeRows.map((r: any) => ({ callerType: String(r.callerType ?? 'unknown'), count: Number(r.count) })),
+    inboundAnswered: inboundAnsweredCount,
   };
 }
 
@@ -1567,10 +1568,10 @@ export async function generateWeeklyQAReport(weekStart: string): Promise<{
 
   // Get recent transcripts for each handler (last 7 days)
   const [transcriptRows] = await client.query(
-    `SELECT ir.handlerName, ir.transcription, ir.callerType, ir.summary, ir.createdAt
+    `SELECT ir.handlerName, ir.rawTranscript AS transcription, ir.callerType, ir.createdAt
      FROM intake_records ir
      WHERE ir.handlerName IS NOT NULL
-       AND ir.transcription IS NOT NULL
+       AND ir.rawTranscript IS NOT NULL
        AND ir.createdAt >= ?
        AND ir.createdAt < DATE_ADD(?, INTERVAL 7 DAY)
      ORDER BY ir.createdAt DESC
@@ -1585,7 +1586,7 @@ export async function generateWeeklyQAReport(weekStart: string): Promise<{
     if (!transcriptsByHandler[hn]) transcriptsByHandler[hn] = [];
     if (transcriptsByHandler[hn].length < 5) { // max 5 transcripts per handler
       transcriptsByHandler[hn].push(
-        `[${row.callerType ?? "unknown"} caller] ${row.transcription?.slice(0, 400) ?? ""}`
+        `[${row.callerType ?? "unknown"} caller] ${(row.transcription ?? "").slice(0, 400)}`
       );
     }
   }
