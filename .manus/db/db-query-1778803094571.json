@@ -1,0 +1,22 @@
+{
+  "query": "\nSELECT labels, COUNT(*) as cnt FROM intake_records GROUP BY labels ORDER BY cnt DESC LIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2nPMx5NWogbV6Xc.242f0d636479 --database TYswfkU7UbKDF3RGbvNwVE --execute \nSELECT labels, COUNT(*) as cnt FROM intake_records GROUP BY labels ORDER BY cnt DESC LIMIT 10;\n",
+  "rows": [
+    {
+      "labels": "[\"after_hours\", \"weekend\"]",
+      "cnt": "216"
+    },
+    {
+      "labels": "[]",
+      "cnt": "137"
+    },
+    {
+      "labels": "[\"after_hours\"]",
+      "cnt": "105"
+    }
+  ],
+  "messages": [],
+  "stdout": "labels\tcnt\n[\"after_hours\", \"weekend\"]\t216\n[]\t137\n[\"after_hours\"]\t105\n",
+  "stderr": "",
+  "execution_time_ms": 281
+}

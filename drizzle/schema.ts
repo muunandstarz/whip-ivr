@@ -81,6 +81,11 @@ export const intakeRecords = mysqlTable("intake_records", {
   callbackDueBy: timestamp("callbackDueBy"), // EOB of day voicemail received (5pm local)
   callbackAt: timestamp("callbackAt"),       // when handler actually called back
   callbackHandlerName: varchar("callbackHandlerName", { length: 128 }), // who made the callback
+  // Labels: JSON array of strings e.g. ['after_hours', 'direct_voicemail', 'weekend']
+  // after_hours: call arrived outside Mon-Fri 8am-6pm
+  // direct_voicemail: voicemail left on a handler's personal extension (not the AI IVR line)
+  // weekend: call arrived on Saturday or Sunday
+  labels: text("labels").default("[]"), // JSON string array
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

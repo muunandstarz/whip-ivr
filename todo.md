@@ -536,3 +536,15 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix afterHoursPct denominator: use inboundCalls not totalCalls
 - [x] Fix after-hours pill text: show "of X inbound calls" not "of X calls"
 - [x] Verify missed count logic: inbound - inbound_answered (not all answered)
+
+## Intake Labels Feature (May 14 2026)
+
+- [x] Add `labels` JSON column to intake_records schema (array of strings: 'after_hours', 'direct_voicemail', etc.)
+- [x] Run DB migration to add labels column
+- [x] Backfill existing records: after_hours where HOUR(createdAt) < 8 OR >= 18 or DAYOFWEEK IN (1,7)
+- [x] Backfill existing records: direct_voicemail where routingMethod = 'extension'
+- [x] Auto-set labels on new intake creation in createIntakeRecord (db.ts)
+- [x] Auto-set labels on Aircall sync intake creation (aircall.ts / aircallSync.ts)
+- [x] Show label badges in IntakeRecords list view
+- [x] Show label badges in IntakeDetail view
+- [ ] Add after_hours and direct_voicemail filter options to IntakeRecords filter panel

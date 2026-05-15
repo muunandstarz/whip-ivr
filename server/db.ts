@@ -177,10 +177,35 @@ export async function applyPreAuthorization(userId: number, email: string | null
 //
 // ─── Intake Records ─────────────────────────────────────────────────────────
 
+/** Compute intake labels based on creation time and routing method */
+export function computeIntakeLabels(opts: {
+  createdAt?: Date;
+  routingMethod?: string | null;
+}): string[] {
+  const labels: string[] = [];
+  const ts = opts.createdAt ?? new Date();
+  const hour = ts.getUTCHours(); // DB stores UTC
+  const dow = ts.getUTCDay();    // 0=Sun, 6=Sat
+  const isWeekend = dow === 0 || dow === 6;
+  const isAfterHours = hour < 8 || hour >= 18 || isWeekend;
+  if (isAfterHours) labels.push('after_hours');
+  if (isWeekend) labels.push('weekend');
+  if (opts.routingMethod === 'extension') labels.push('direct_voicemail');
+  return labels;
+}
+
 export async function createIntakeRecord(data: InsertIntakeRecord): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(intakeRecords).values(data);
+  // Auto-compute labels if not provided
+  const labels = computeIntakeLabels({
+    createdAt: data.createdAt instanceof Date ? data.createdAt : undefined,
+    routingMethod: data.routingMethod,
+  });
+  const result = await db.insert(intakeRecords).values({
+    ...data,
+    labels: (data as any).labels ?? JSON.stringify(labels),
+  });
   return (result[0] as any).insertId;
 }
 

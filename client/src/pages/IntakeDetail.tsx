@@ -16,9 +16,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History, Headphones } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History, Headphones, Moon, Voicemail } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+
+// Intake label badges
+const INTAKE_LABEL_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+  after_hours:      { label: "After Hours",  icon: Moon,      className: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30" },
+  direct_voicemail: { label: "Direct VM",    icon: Voicemail, className: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30" },
+  weekend:          { label: "Weekend",       icon: Moon,      className: "bg-violet-500/15 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-500/30" },
+};
+function IntakeLabels({ labels }: { labels: string | null | undefined }) {
+  if (!labels) return null;
+  let parsed: string[] = [];
+  try { parsed = JSON.parse(labels); } catch { return null; }
+  if (!parsed.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {parsed.map((lbl) => {
+        const cfg = INTAKE_LABEL_CONFIG[lbl];
+        if (!cfg) return null;
+        const LblIcon = cfg.icon;
+        return (
+          <span key={lbl} className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${cfg.className}`}>
+            <LblIcon className="w-2.5 h-2.5" />{cfg.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 // Handler list fetched dynamically — see trpc.handlers.list below
 
@@ -332,6 +359,7 @@ export default function IntakeDetail() {
               <div>
                 <Label className="text-xs text-muted-foreground">Source</Label>
                 <p className="text-sm mt-0.5 capitalize">{record.source}</p>
+                <IntakeLabels labels={(record as any).labels} />
               </div>
               {record.claimMatchType && (
                 <div>

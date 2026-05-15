@@ -1,5 +1,5 @@
 import express from "express";
-import { getDb, addBusinessHours } from "./db";
+import { getDb, addBusinessHours, computeIntakeLabels } from "./db";
 import { intakeRecords, callHistory, callerProfiles, handlers } from "../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
@@ -519,6 +519,11 @@ export async function processVoicemail(params: {
     snapsheetClaimUrl: snapsheetClaimUrl ?? undefined,
     // Callback SLA: due within 4 business hours of receipt
     callbackDueBy: addBusinessHours(new Date(), 4),
+    // Auto-compute labels: after_hours, weekend, direct_voicemail
+    labels: JSON.stringify(computeIntakeLabels({
+      createdAt: new Date(),
+      routingMethod: params.routingMethod ?? (extensionHandler ? 'extension' : 'ivr'),
+    })),
   });
 
   // 7. Update call_history record
