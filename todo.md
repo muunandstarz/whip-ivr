@@ -569,3 +569,16 @@ Business routing logic to implement in resolveHandler():
 - [x] Compute month-over-month change for both metrics
 - [x] Feature overall answer rate and biz-hours answer rate prominently on dashboard KPI section
 - [x] Show MoM delta for both answer rate metrics
+
+## P0 Bug: Biz-Hours Answer Rate Wrong (May 15 2026)
+- [ ] Query exact biz-hours inbound answered vs total from DB to find SQL bug
+- [ ] Fix biz-hours SQL query so rate reflects actual answered/total during Mon-Fri 8am-6pm
+- [ ] Verify corrected rate matches: ~341 biz-hrs inbound, ~63 missed = ~82% rate
+
+## Timezone Fix: Eastern Time 9am-6pm M-F (May 15 2026)
+- [x] Fix getCallAnalyticsByMonth: all HOUR/DAYOFWEEK checks use CONVERT_TZ(startedAt, '+00:00', '-04:00') and HOUR >= 9, HOUR < 18
+- [x] Fix after-hours count query to use EDT offset
+- [x] Fix biz-hours answered/total queries to use EDT offset
+- [x] Fix intake_records labels backfill: after_hours label should use EDT 9am-6pm M-F
+- [x] Re-backfill intake_records labels with corrected timezone
+- [x] Verify corrected numbers: 94 after-hours, 519 biz-hours inbound for May (EDT)

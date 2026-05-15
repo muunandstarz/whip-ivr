@@ -177,17 +177,22 @@ export async function applyPreAuthorization(userId: number, email: string | null
 //
 // ─── Intake Records ─────────────────────────────────────────────────────────
 
-/** Compute intake labels based on creation time and routing method */
+/** Compute intake labels based on creation time and routing method.
+ *  Business hours = Mon–Fri 9am–6pm Eastern (EDT = UTC-4 in summer).
+ */
 export function computeIntakeLabels(opts: {
   createdAt?: Date;
   routingMethod?: string | null;
 }): string[] {
   const labels: string[] = [];
   const ts = opts.createdAt ?? new Date();
-  const hour = ts.getUTCHours(); // DB stores UTC
-  const dow = ts.getUTCDay();    // 0=Sun, 6=Sat
+  // Convert UTC → Eastern (EDT = UTC-4). Using a fixed offset; adjust to -5 for EST if needed.
+  const EDT_OFFSET_MS = -4 * 60 * 60 * 1000;
+  const eastern = new Date(ts.getTime() + EDT_OFFSET_MS);
+  const hour = eastern.getUTCHours(); // hour in Eastern time
+  const dow = eastern.getUTCDay();    // 0=Sun, 6=Sat in Eastern time
   const isWeekend = dow === 0 || dow === 6;
-  const isAfterHours = hour < 8 || hour >= 18 || isWeekend;
+  const isAfterHours = hour < 9 || hour >= 18 || isWeekend;
   if (isAfterHours) labels.push('after_hours');
   if (isWeekend) labels.push('weekend');
   if (opts.routingMethod === 'extension') labels.push('direct_voicemail');
@@ -1341,15 +1346,30 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
     // After-hours/weekend/biz-hours breakdown — INBOUND ONLY
     // Outbound calls (handlers calling clients back) must NOT be counted here;
     // after-hours only makes sense for inbound calls we received.
+    // Business hours = Mon-Fri 9am-6pm Eastern (EDT = UTC-4 in summer, EST = UTC-5 in winter)
+    // We use a fixed -04:00 offset (EDT) since most of the data is in summer months.
+    // TODO: switch to CONVERT_TZ(startedAt, 'UTC', 'America/New_York') when the DB timezone table is loaded.
     db.execute<{ total: number; afterHours: number; weekend: number; businessHoursAnswered: number; businessHoursTotal: number }>(sql`
       SELECT
         CAST(COUNT(*) AS SIGNED) AS total,
-        CAST(SUM(CASE WHEN HOUR(startedAt) < 8 OR HOUR(startedAt) >= 18 THEN 1 ELSE 0 END) AS SIGNED) AS afterHours,
-        CAST(SUM(CASE WHEN DAYOFWEEK(startedAt) IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS weekend,
-        CAST(SUM(CASE WHEN status='answered' AND HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursAnswered,
-        CAST(SUM(CASE WHEN HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursTotal
+        CAST(SUM(CASE WHEN
+          DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) IN (1,7)
+          OR HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 9
+          OR HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 18
+        THEN 1 ELSE 0 END) AS SIGNED) AS afterHours,
+        CAST(SUM(CASE WHEN DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS weekend,
+        CAST(SUM(CASE WHEN status='answered'
+          AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 9
+          AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 18
+          AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
+        THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursAnswered,
+        CAST(SUM(CASE WHEN
+          HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 9
+          AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 18
+          AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
+        THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursTotal
       FROM call_history
-      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+      WHERE DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ${yearMonth}
         AND direction = 'inbound'
     `),
     // Previous month totals for MoM comparison
@@ -1381,10 +1401,18 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
     // Previous month biz-hours breakdown for MoM biz-hours answer rate comparison
     db.execute<{ prevBizAnswered: number; prevBizTotal: number }>(sql`
       SELECT
-        CAST(SUM(CASE WHEN status='answered' AND HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS prevBizAnswered,
-        CAST(SUM(CASE WHEN HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS prevBizTotal
+        CAST(SUM(CASE WHEN status='answered'
+          AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 9
+          AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 18
+          AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
+        THEN 1 ELSE 0 END) AS SIGNED) AS prevBizAnswered,
+        CAST(SUM(CASE WHEN
+          HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 9
+          AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 18
+          AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
+        THEN 1 ELSE 0 END) AS SIGNED) AS prevBizTotal
       FROM call_history
-      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${prevYearMonth}
+      WHERE DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ${prevYearMonth}
         AND direction = 'inbound'
     `),
   ]);
