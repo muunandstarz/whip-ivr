@@ -563,3 +563,9 @@ Business routing logic to implement in resolveHandler():
 ## P0 Bugs (May 15 2026 - Round 2)
 - [x] Fix Missed KPI: answered_inbound is counting outbound-answered calls, giving wrong missed count
 - [x] Fix QA generation: diagnose and fix why regenerate QA is failing
+
+## Answer Rate Stats Feature (May 15 2026)
+- [x] Query real April and May answer rates: overall and biz-hours-only
+- [x] Compute month-over-month change for both metrics
+- [x] Feature overall answer rate and biz-hours answer rate prominently on dashboard KPI section
+- [x] Show MoM delta for both answer rate metrics

@@ -1316,7 +1316,7 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   const prevYr = mo === 1 ? yr - 1 : yr;
   const prevYearMonth = `${prevYr}-${String(prevMo).padStart(2, '0')}`;
 
-  const [totals, byDirection, byDay, availableMonths, afterHoursRow, prevTotals, byCallerType, intakeVoicemail] = await Promise.all([
+  const [totals, byDirection, byDay, availableMonths, afterHoursRow, prevTotals, byCallerType, intakeVoicemail, prevInboundRow, prevBizHoursRow] = await Promise.all([
     db.execute<{ status: string; count: number }>(sql`
       SELECT status, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY status
@@ -1370,6 +1370,23 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       FROM call_history
       WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
     `),
+    // Previous month inbound answered count for MoM answer rate comparison
+    db.execute<{ prevInbound: number; prevInboundAnswered: number }>(sql`
+      SELECT
+        CAST(SUM(CASE WHEN direction='inbound' THEN 1 ELSE 0 END) AS SIGNED) AS prevInbound,
+        CAST(SUM(CASE WHEN direction='inbound' AND status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS prevInboundAnswered
+      FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${prevYearMonth}
+    `),
+    // Previous month biz-hours breakdown for MoM biz-hours answer rate comparison
+    db.execute<{ prevBizAnswered: number; prevBizTotal: number }>(sql`
+      SELECT
+        CAST(SUM(CASE WHEN status='answered' AND HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS prevBizAnswered,
+        CAST(SUM(CASE WHEN HOUR(startedAt) >= 8 AND HOUR(startedAt) < 18 AND DAYOFWEEK(startedAt) NOT IN (1,7) THEN 1 ELSE 0 END) AS SIGNED) AS prevBizTotal
+      FROM call_history
+      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${prevYearMonth}
+        AND direction = 'inbound'
+    `),
   ]);
 
   // Drizzle execute() returns [[rows], [fieldPackets]] — use [0] to get just the rows
@@ -1387,6 +1404,12 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
   const prevTotalsArr = prevTotalsRows.map((r: any) => ({ status: r.status as string, count: Number(r.count) }));
   const prevTotal = prevTotalsArr.reduce((s: number, r: any) => s + r.count, 0);
   const prevAnswered = prevTotalsArr.find((r: any) => r.status === 'answered')?.count ?? 0;
+  const prevInboundRowData = ((prevInboundRow as any[][])[0] ?? [])[0] ?? {};
+  const prevBizRowData = ((prevBizHoursRow as any[][])[0] ?? [])[0] ?? {};
+  const prevInboundTotal = Number(prevInboundRowData.prevInbound ?? 0);
+  const prevInboundAnswered = Number(prevInboundRowData.prevInboundAnswered ?? 0);
+  const prevBizAnswered = Number(prevBizRowData.prevBizAnswered ?? 0);
+  const prevBizTotal = Number(prevBizRowData.prevBizTotal ?? 0);
 
   return {
     yearMonth,
@@ -1430,6 +1453,12 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
       total: prevTotal,
       answered: prevAnswered,
       answerRate: prevTotal > 0 ? Math.round((prevAnswered / prevTotal) * 100) : 0,
+      inboundTotal: prevInboundTotal,
+      inboundAnswered: prevInboundAnswered,
+      inboundAnswerRate: prevInboundTotal > 0 ? Math.round((prevInboundAnswered / prevInboundTotal) * 100) : 0,
+      bizHoursAnswered: prevBizAnswered,
+      bizHoursTotal: prevBizTotal,
+      bizHoursAnswerRate: prevBizTotal > 0 ? Math.round((prevBizAnswered / prevBizTotal) * 100) : 0,
     },
     byCallerType: byCallerTypeRows.map((r: any) => ({ callerType: String(r.callerType ?? 'unknown'), count: Number(r.count) })),
     inboundAnswered: inboundAnsweredCount,

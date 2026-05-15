@@ -153,11 +153,15 @@ export default function Dashboard() {
   const afterHoursPct     = inboundCalls > 0 ? Math.round((afterHoursCount / inboundCalls) * 100) : 0;
 
   // Month-over-month comparison
-  const prevMonth         = monthCallData?.prevMonth;
-  const prevTotal         = prevMonth?.total ?? 0;
-  const prevAnswerRate    = prevMonth?.answerRate ?? 0;
-  const momVolumeDelta    = prevTotal > 0 ? Math.round(((totalCalls - prevTotal) / prevTotal) * 100) : null;
-  const momAnswerDelta    = prevTotal > 0 ? answerRate - prevAnswerRate : null;
+  const prevMonth              = monthCallData?.prevMonth;
+  const prevTotal              = prevMonth?.total ?? 0;
+  const prevAnswerRate         = prevMonth?.answerRate ?? 0;
+  const prevInboundAnswerRate  = prevMonth?.inboundAnswerRate ?? 0;
+  const prevBizHoursAnswerRate = prevMonth?.bizHoursAnswerRate ?? 0;
+  const momVolumeDelta         = prevTotal > 0 ? Math.round(((totalCalls - prevTotal) / prevTotal) * 100) : null;
+  const momAnswerDelta         = prevTotal > 0 ? answerRate - prevAnswerRate : null;
+  const momInboundAnswerDelta  = (prevMonth?.inboundTotal ?? 0) > 0 ? answerRate - prevInboundAnswerRate : null;
+  const momBizAnswerDelta      = (prevMonth?.bizHoursTotal ?? 0) > 0 ? bhAnswerRate - prevBizHoursAnswerRate : null;
 
   // Trend blurbs from byCallerType comparison
   const callCallerTypes   = monthCallData?.byCallerType ?? [];
@@ -437,12 +441,12 @@ export default function Dashboard() {
                     key: "answered",
                     Icon: PhoneCall,
                     color: "green",
-                    value: answeredCalls,
-                    label: "Answered",
-                    sub: `${answerRate}% inbound · ${bhAnswerRate}% biz hrs`,
-                    tooltip: `Calls answered by a live agent. Inbound answer rate: ${answerRate}% (${inboundAnswered} of ${inboundCalls} inbound calls). Business-hours answer rate (Mon–Fri 8am–6pm): ${bhAnswerRate}% (${bhAnswered} of ${bhTotal} calls). Outbound calls (${outboundCalls}) are not included in answer rate.`,
-                    mom: momAnswerDelta !== null ? (momAnswerDelta >= 0 ? `+${momAnswerDelta}pp` : `${momAnswerDelta}pp`) : undefined,
-                    momLabel: prevTotal > 0 ? `${prevAnswerRate}% last month` : undefined,
+                    value: `${answerRate}%`,
+                    label: "Answer Rate (Overall)",
+                    sub: bhTotal > 0 ? `${bhAnswerRate}% during biz hrs` : undefined,
+                    tooltip: `Overall inbound answer rate: ${answerRate}% — ${inboundAnswered} of ${inboundCalls} inbound calls answered by a live agent. Business-hours rate (Mon–Fri 8am–6pm): ${bhAnswerRate}% (${bhAnswered} of ${bhTotal}). After-hours and weekend calls are included in the overall rate.`,
+                    mom: momInboundAnswerDelta !== null ? (momInboundAnswerDelta >= 0 ? `+${momInboundAnswerDelta}pp` : `${momInboundAnswerDelta}pp`) : undefined,
+                    momLabel: (prevMonth?.inboundTotal ?? 0) > 0 ? `${prevInboundAnswerRate}% last month` : undefined,
                   },
                   {
                     key: "missed",
@@ -485,7 +489,7 @@ export default function Dashboard() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <div className={`text-2xl font-bold ${c.valueColor}`}>{Number(value).toLocaleString()}</div>
+                                <div className={`text-2xl font-bold ${c.valueColor}`}>{typeof value === 'string' ? value : Number(value).toLocaleString()}</div>
                                 <InfoTooltip text={tooltip} />
                               </div>
                               <div className="text-xs text-muted-foreground">{label}</div>
@@ -534,9 +538,14 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1">
                     <Sun className="w-3 h-3 text-yellow-500" />
                     <span className="text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">{bhAnswerRate}%</span> inbound answer rate during biz hrs
+                      <span className="font-semibold text-foreground">{bhAnswerRate}%</span> biz hrs answer rate
+                      {momBizAnswerDelta !== null && (
+                        <span className={`ml-1 font-semibold ${momBizAnswerDelta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                          ({momBizAnswerDelta >= 0 ? '+' : ''}{momBizAnswerDelta}pp vs last mo)
+                        </span>
+                      )}
                     </span>
-                    <InfoTooltip text={`Business-hours inbound answer rate (Mon–Fri, 8am–6pm): ${bhAnswered} answered out of ${bhTotal} inbound calls. The overall inbound answer rate of ${answerRate}% includes after-hours and weekend calls.`} />
+                    <InfoTooltip text={`Business-hours inbound answer rate (Mon–Fri, 8am–6pm): ${bhAnswered} answered out of ${bhTotal} inbound calls. Last month: ${prevBizHoursAnswerRate}% (${prevMonth?.bizHoursAnswered ?? 0} of ${prevMonth?.bizHoursTotal ?? 0}). The overall inbound answer rate of ${answerRate}% includes after-hours and weekend calls.`} />
                   </div>
                 )}
                 {/* Trend blurbs */}
