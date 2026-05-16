@@ -400,9 +400,14 @@ export default function Softphone() {
     // Already initialized into this exact node — skip
     if (aircallRef.current) return;
 
+    // The SDK requires a CSS selector string, not a DOM node.
+    // Assign a unique id to the container then pass the selector.
+    const containerId = "aircall-phone-container";
+    node.id = containerId;
+
     try {
       const phone = new AircallPhone({
-        domToLoadWorkspace: node,
+        domToLoadWorkspace: `#${containerId}`,
         size: "big",
         onLogin: () => {
           setSdkReady(true);
