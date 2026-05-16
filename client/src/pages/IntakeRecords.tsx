@@ -492,12 +492,12 @@ export default function IntakeRecords() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1">
                                 {record.status === "open" && record.callbackPhone && (
-                                  <Link href={`/intake/${record.id}?openCallback=1`}>
+                                  <Link href={`/softphone?intakeId=${record.id}&phone=${encodeURIComponent(record.callbackPhone)}&name=${encodeURIComponent(record.callerName || '')}&autoCall=1`}>
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       className="h-7 text-xs gap-1 text-teal-700 dark:text-teal-400 hover:bg-teal-500/15"
-                                      title="Log callback"
+                                      title="Open Softphone and call"
                                     >
                                       <PhoneCall className="w-3 h-3" />
                                       Call

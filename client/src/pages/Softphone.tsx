@@ -12,7 +12,8 @@ import {
   Clock, User, ChevronRight, ExternalLink, Info, CheckCircle2,
   ClipboardList, Lightbulb, ArrowRightLeft, Pause, MessageSquare,
   Send, Building2, Scale, Stethoscope, AlertTriangle, FileText,
-  PhoneCall, ArrowRight, Wifi, WifiOff,
+  PhoneCall, ArrowRight, Wifi, WifiOff, ChevronDown, ChevronUp,
+  Mail, Shield, AlertCircle,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -88,11 +89,12 @@ const ALL_DISPOSITIONS = DISPOSITION_GROUPS.flatMap((g) => g.items);
 
 // ─── Call scripts per caller type ─────────────────────────────────────────────
 
-const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; color: string; greeting: string; steps: string[]; closing: string }> = {
+const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; color: string; accentColor: string; greeting: string; steps: string[]; closing: string; tips: string[] }> = {
   carrier: {
     title: "Carrier Script",
     icon: Building2,
     color: "bg-blue-500/10 border-blue-200",
+    accentColor: "text-blue-700",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and the insurance company you're calling from?\"",
     steps: [
       "Ask for claim number and insured's name",
@@ -102,11 +104,18 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Confirm next steps and expected timeline",
     ],
     closing: "\"I'll make sure this is noted on the claim. Is there anything else I can help you with today? Thank you for calling Whip Claims.\"",
+    tips: [
+      "Carriers often call about PIP billing or liability — have the claim number ready before picking up.",
+      "Do NOT agree to any settlement figures verbally. Log the offer and escalate to the adjuster.",
+      "Warm transfer only — stay on the line to introduce the caller to the adjuster.",
+      "Carriers and law offices can submit updates via IVR Option 1 — let them know if they call back.",
+    ],
   },
   law_office: {
     title: "Law Office Script",
     icon: Scale,
     color: "bg-purple-500/10 border-purple-200",
+    accentColor: "text-purple-700",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name, the firm you're calling from, and the claim number you're referencing?\"",
     steps: [
       "Confirm attorney name, firm name, and bar number if needed",
@@ -116,11 +125,18 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Offer to have the adjuster return the call within 24 hours",
     ],
     closing: "\"I'll escalate this to our claims adjuster and they'll be in touch within one business day. Thank you for your patience.\"",
+    tips: [
+      "⚠️ Legal call — do NOT admit liability or make any payment commitments.",
+      "Ask if they've sent a representation letter. If not, request they send it in writing before further discussion.",
+      "Escalate to supervisor before discussing any demand amounts.",
+      "Log attorney name, firm, and nature of inquiry before ending the call.",
+    ],
   },
   medical_provider: {
     title: "Medical Provider Script",
     icon: Stethoscope,
     color: "bg-green-500/10 border-green-200",
+    accentColor: "text-green-700",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. Are you calling regarding a PIP billing inquiry or treatment authorization?\"",
     steps: [
       "Get provider name, NPI number, and billing contact",
@@ -130,11 +146,18 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Advise on PIP submission process if first contact",
     ],
     closing: "\"I've noted your inquiry. Our PIP team will follow up within 2 business days. You can also fax billing to the number on file.\"",
+    tips: [
+      "Medical providers often call about PIP billing status — have the claim number and PIP limits ready.",
+      "Remind them they can submit via IVR Option 1 for faster processing.",
+      "Check back every 30 seconds if you need to place them on hold.",
+      "Note the NPI number and billing contact for the PIP team.",
+    ],
   },
   member: {
     title: "Member / Insured Script",
     icon: User,
     color: "bg-orange-500/10 border-orange-200",
+    accentColor: "text-orange-700",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and policy number so I can pull up your account?\"",
     steps: [
       "Verify identity: full name, DOB, last 4 of SSN or policy number",
@@ -144,11 +167,18 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Set clear expectations on next steps and timeline",
     ],
     closing: "\"Is there anything else I can help you with today? We'll be in touch within [timeframe]. Thank you for being a Whip Claims member.\"",
+    tips: [
+      "Members may be anxious — lead with empathy and set clear expectations.",
+      "Verify identity before discussing any claim details.",
+      "If they're reporting a new incident, get date of loss, location, and a brief description.",
+      "Set a specific callback time rather than a vague 'we'll call you back.'",
+    ],
   },
   claimant: {
     title: "Claimant Script",
     icon: User,
     color: "bg-yellow-500/10 border-yellow-200",
+    accentColor: "text-yellow-700",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. Are you calling regarding an existing claim or a new incident?\"",
     steps: [
       "Get claimant's full name and callback number",
@@ -158,11 +188,58 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Offer to have the assigned handler call back within 2 hours",
     ],
     closing: "\"I've noted your information and a handler will call you back at [number] within 2 business hours. Thank you for your patience.\"",
+    tips: [
+      "⚠️ Do NOT admit liability or make any payment commitments.",
+      "Claimants may be upset — stay calm, empathetic, and professional.",
+      "Get their callback number early in case the call drops.",
+      "Offer a specific callback window (e.g., 'within 2 business hours') rather than vague timelines.",
+    ],
+  },
+  police: {
+    title: "Police / Government Script",
+    icon: Shield,
+    color: "bg-red-500/10 border-red-200",
+    accentColor: "text-red-700",
+    greeting: "\"Thank you for calling Whip Claims, this is [your name]. How can I assist you today?\"",
+    steps: [
+      "Get officer name, badge number, and department",
+      "Ask for the incident/report number they're referencing",
+      "Note the nature of the inquiry (records request, subpoena, verification)",
+      "Do NOT release any claim information without supervisor approval",
+      "Offer to have the supervisor return the call within 4 hours",
+    ],
+    closing: "\"I'll escalate this to our supervisor immediately. They'll be in touch within 4 business hours. Thank you.\"",
+    tips: [
+      "⚠️ Do NOT release any claim or personal information without supervisor approval.",
+      "Get badge number and department — log everything before ending the call.",
+      "Escalate to supervisor immediately for subpoenas or formal records requests.",
+      "Stay professional and cooperative — do not argue or delay.",
+    ],
+  },
+  wrong_department: {
+    title: "Wrong Department Script",
+    icon: AlertCircle,
+    color: "bg-gray-100 border-gray-200",
+    accentColor: "text-gray-600",
+    greeting: "\"Thank you for calling Whip Claims, this is [your name]. It looks like you may have reached the wrong department — let me help get you to the right place.\"",
+    steps: [
+      "Ask who they were trying to reach and what their inquiry is about",
+      "Identify the correct department or contact",
+      "Offer to transfer or provide the correct number",
+      "Log the call with 'wrong department' disposition",
+    ],
+    closing: "\"I'll transfer you now / Here's the number for [department]. Is there anything else I can help with?\"",
+    tips: [
+      "Don't just hang up — help them find the right contact.",
+      "Log the call with 'Wrong Number / Misrouted' disposition.",
+      "If they need a specific department, offer to transfer rather than just giving a number.",
+    ],
   },
   unknown: {
     title: "General Script",
     icon: Phone,
     color: "bg-muted border-gray-200",
+    accentColor: "text-gray-600",
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. How can I help you today?\"",
     steps: [
       "Listen to understand the nature of the call",
@@ -171,15 +248,14 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Get callback number and name before ending if unresolved",
     ],
     closing: "\"Thank you for calling Whip Claims. Is there anything else I can help you with?\"",
+    tips: [
+      "Check back every 30 seconds on hold: \"Thank you for holding, I'm still looking into this for you.\"",
+      "Warm transfer only — stay on the line to introduce the caller. Confirm the receiving handler is available first.",
+      "Log claim number and caller type before ending. This helps track repeat callers and IVR eligibility.",
+      "Carriers, law offices, and medical providers can submit via IVR Option 1 — no live agent needed. Let them know.",
+    ],
   },
 };
-
-const COACHING_TIPS = [
-  { icon: Pause, tip: "Check back every 30 seconds on hold: \"Thank you for holding, I'm still looking into this for you.\"" },
-  { icon: ArrowRightLeft, tip: "Warm transfer only — stay on the line to introduce the caller. Confirm the receiving handler is available first." },
-  { icon: ClipboardList, tip: "Log claim number and caller type before ending. This helps track repeat callers and IVR eligibility." },
-  { icon: Lightbulb, tip: "Carriers, law offices, and medical providers can submit via IVR Option 1 — no live agent needed. Let them know." },
-];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -188,6 +264,9 @@ export default function Softphone() {
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
   const intakeId = params.get("intakeId") ? parseInt(params.get("intakeId")!) : null;
+  const urlPhone = params.get("phone") || null;
+  const urlName = params.get("name") || null;
+  const autoCall = params.get("autoCall") === "1";
 
   // ── Linked intake record from URL param ──
   const { data: linkedRecord } = trpc.intake.get.useQuery(
@@ -195,10 +274,15 @@ export default function Softphone() {
     { enabled: intakeId != null && intakeId > 0 }
   );
 
+  // ── Expandable intake record panel ──
+  const [intakePanelOpen, setIntakePanelOpen] = useState(false);
+
   // ── Aircall SDK state ──
   const aircallRef = useRef<InstanceType<typeof AircallPhone> | null>(null);
+  const phoneContainerRef = useRef<HTMLDivElement | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
   const [sdkError, setSdkError] = useState<string | null>(null);
+  const autoDialFiredRef = useRef(false);
 
   // ── Call state ──
   const [callState, setCallState] = useState<CallState>("idle");
@@ -219,11 +303,17 @@ export default function Softphone() {
   const [dispositionNote, setDispositionNote] = useState("");
   const [savedDispositions, setSavedDispositions] = useState<Array<{ callId: number; disposition: string; note: string; name: string }>>([]);
 
-  // ── Script ──
+  // ── Script — auto-set from linked record's caller type ──
   const [scriptCallerType, setScriptCallerType] = useState<string>("unknown");
 
+  // When linked record loads, auto-set the script to match caller type
+  useEffect(() => {
+    if (linkedRecord?.callerType) {
+      setScriptCallerType(linkedRecord.callerType);
+    }
+  }, [linkedRecord?.callerType]);
+
   // ── SMS (placeholder — Textline integration TBD) ──
-  const [activeTab, setActiveTab] = useState<"phone" | "sms">("phone");
   const [smsInput, setSmsInput] = useState("");
 
   // ── Callback logging ──
@@ -297,13 +387,22 @@ export default function Softphone() {
   }, []);
 
   // ── Initialize Aircall Everywhere SDK ──
-  useEffect(() => {
-    // Only init once
+  // We use a callback ref so the SDK is (re-)initialized whenever the
+  // container node mounts. This survives React Strict Mode double-invoke
+  // and HMR hot-reloads that wipe the DOM but keep the component alive.
+  const initAircall = useCallback((node: HTMLDivElement | null) => {
+    phoneContainerRef.current = node;
+    if (!node) {
+      // Container unmounted — tear down
+      aircallRef.current = null;
+      return;
+    }
+    // Already initialized into this exact node — skip
     if (aircallRef.current) return;
 
     try {
       const phone = new AircallPhone({
-        domToLoadWorkspace: "#aircall-phone-container",
+        domToLoadWorkspace: node,
         size: "big",
         onLogin: () => {
           setSdkReady(true);
@@ -334,7 +433,7 @@ export default function Softphone() {
       });
 
       // ── Call answered (inbound) ──
-      phone.on("call_answered", (callData: { call_id: number; from: string }) => {
+      phone.on("call_answered", (_callData: { call_id: number; from: string }) => {
         setCallState("active");
         startTimer();
       });
@@ -343,9 +442,9 @@ export default function Softphone() {
       phone.on("outgoing_call", (callData: { call_id: number; to: string; from: string }) => {
         const rawPhone = callData.to || "";
         setActiveCallInfo({
-          name: rawPhone,
+          name: urlName || rawPhone,
           number: rawPhone,
-          callerType: "unknown",
+          callerType: linkedRecord?.callerType || "unknown",
           direction: "outbound",
           aircallCallId: callData.call_id,
         });
@@ -366,7 +465,6 @@ export default function Softphone() {
         setCallState("wrap_up");
         setSelectedDisposition(null);
         setDispositionNote("");
-        // Clear lookup so it re-fires on next call
         setLookupPhone(null);
       });
 
@@ -375,15 +473,27 @@ export default function Softphone() {
         toast.info(`Call note saved: "${data.comment.slice(0, 60)}${data.comment.length > 60 ? "…" : ""}"`);
       });
 
+      // ── SDK ready event — fire auto-dial if requested ──
+      phone.on("ready", () => {
+        if (autoCall && urlPhone && !autoDialFiredRef.current) {
+          autoDialFiredRef.current = true;
+          const digits = urlPhone.replace(/\D/g, "");
+          phone.send("dial_number", { phone_number: digits }, (success: boolean) => {
+            if (!success) toast.error("Auto-dial failed. Please dial manually.");
+          });
+        }
+      });
+
       aircallRef.current = phone;
     } catch (err) {
       setSdkError("Failed to initialize Aircall phone. Please refresh.");
     }
+  }, [autoCall, urlPhone, urlName, linkedRecord, startTimer, stopTimer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      stopTimer();
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { stopTimer(); };
+  }, [stopTimer]);
 
   // ── Auto-update caller name when lookup resolves ──
   useEffect(() => {
@@ -405,7 +515,7 @@ export default function Softphone() {
       return;
     }
     const digits = phone.replace(/\D/g, "");
-    aircallRef.current.send("dial_number", { phone_number: digits }, (success: boolean, data: unknown) => {
+    aircallRef.current.send("dial_number", { phone_number: digits }, (success: boolean) => {
       if (!success) toast.error("Could not dial number. Make sure you are logged in to Aircall.");
     });
   };
@@ -447,7 +557,22 @@ export default function Softphone() {
   };
 
   const dispositionLabel = (val: string | null) => val ? ALL_DISPOSITIONS.find((d) => d.value === val) : null;
+
+  // Determine active script: prefer linked record's caller type, fall back to manual selector
   const activeScript = CALL_SCRIPTS[scriptCallerType] ?? CALL_SCRIPTS.unknown;
+  const ScriptIcon = activeScript.icon;
+
+  // Caller type label for display
+  const callerTypeLabel: Record<string, string> = {
+    carrier: "Insurance Carrier",
+    law_office: "Law Office",
+    medical_provider: "Medical Provider",
+    member: "Member / Insured",
+    claimant: "Claimant",
+    police: "Police / Government",
+    wrong_department: "Wrong Department",
+    unknown: "Unknown",
+  };
 
   return (
     <WhipLayout>
@@ -477,52 +602,41 @@ export default function Softphone() {
           </div>
         )}
 
-        {/* Linked Intake Record Context */}
+        {/* ── Linked Intake Record — Collapsible Banner ── */}
         {linkedRecord && (
-          <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText className="w-4 h-4 text-[#ff6221] flex-shrink-0" />
-                  <span className="text-xs font-semibold text-[#ff6221] uppercase tracking-wide">Linked Intake Record #{linkedRecord.id}</span>
-                  <Badge variant="outline" className={linkedRecord.status === "open" ? "border-amber-300 text-amber-700 bg-amber-50 text-xs" : "border-green-300 text-green-700 bg-green-500/10 text-xs"}>
-                    {linkedRecord.status}
-                  </Badge>
-                </div>
-                <div className="text-base font-bold text-foreground">{linkedRecord.callerName || "Unknown caller"}</div>
-                {linkedRecord.callerOrg && <div className="text-sm text-muted-foreground">{linkedRecord.callerOrg}</div>}
-                <div className="flex flex-wrap gap-3 mt-2 text-xs">
-                  {linkedRecord.callbackPhone && (
-                    <button
-                      onClick={() => handleClickToCall(linkedRecord.callbackPhone!)}
-                      className="flex items-center gap-1 text-[#ff6221] hover:underline font-medium"
-                    >
-                      <Phone className="w-3 h-3" /> {linkedRecord.callbackPhone}
-                      {sdkReady && <span className="text-[10px] text-green-600 font-normal">(click to call)</span>}
-                    </button>
-                  )}
-                  {linkedRecord.whipClaimNumber && (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <ClipboardList className="w-3 h-3" /> Claim: <span className="font-mono font-medium text-foreground">{linkedRecord.whipClaimNumber}</span>
-                    </span>
-                  )}
-                  {linkedRecord.handlerName && (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <User className="w-3 h-3" /> {linkedRecord.handlerName}
-                    </span>
-                  )}
-                </div>
-                {linkedRecord.message && (
-                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2 italic">&#8220;{linkedRecord.message}&#8221;</p>
+          <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
+            {/* Summary row — always visible */}
+            <div className="px-5 py-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <FileText className="w-4 h-4 text-[#ff6221] flex-shrink-0" />
+                <span className="text-xs font-semibold text-[#ff6221] uppercase tracking-wide flex-shrink-0">
+                  Linked Record #{linkedRecord.id}
+                </span>
+                <Badge variant="outline" className={linkedRecord.status === "open"
+                  ? "border-amber-300 text-amber-700 bg-amber-50 text-xs flex-shrink-0"
+                  : "border-green-300 text-green-700 bg-green-500/10 text-xs flex-shrink-0"}>
+                  {linkedRecord.status}
+                </Badge>
+                <span className="font-semibold text-foreground truncate">{linkedRecord.callerName || "Unknown caller"}</span>
+                {linkedRecord.callerOrg && (
+                  <span className="text-muted-foreground text-xs truncate hidden sm:block">· {linkedRecord.callerOrg}</span>
+                )}
+                {linkedRecord.callbackPhone && (
+                  <button
+                    onClick={() => handleClickToCall(linkedRecord.callbackPhone!)}
+                    className="flex items-center gap-1 text-[#ff6221] hover:underline font-medium text-xs flex-shrink-0"
+                  >
+                    <Phone className="w-3 h-3" /> {linkedRecord.callbackPhone}
+                    {sdkReady && <span className="text-[10px] text-green-600">(click to call)</span>}
+                  </button>
+                )}
+                {linkedRecord.whipClaimNumber && (
+                  <span className="flex items-center gap-1 text-muted-foreground text-xs flex-shrink-0 hidden md:flex">
+                    <ClipboardList className="w-3 h-3" /> {linkedRecord.whipClaimNumber}
+                  </span>
                 )}
               </div>
-              <div className="flex-shrink-0 flex flex-col items-end gap-2">
-                <button
-                  onClick={() => navigate(`/intake/${linkedRecord.id}`)}
-                  className="flex items-center gap-1 text-xs text-foreground hover:text-[#ff6221] font-medium transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> View Record
-                </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Button
                   size="sm"
                   className="text-xs bg-[#ff6221] hover:bg-[#e5541a] text-white h-7 px-3"
@@ -530,17 +644,126 @@ export default function Softphone() {
                 >
                   <PhoneCall className="w-3 h-3 mr-1" /> Log Callback
                 </Button>
-                {nextRecord && (
-                  <button
-                    onClick={() => navigate(`/softphone?intakeId=${nextRecord.id}`)}
-                    className="flex items-center gap-1 text-xs text-foreground/60 hover:text-foreground font-medium transition-colors"
-                    title={`Next: #${nextRecord.id} — ${nextRecord.callerName || 'Unknown'}`}
-                  >
-                    Next record <ArrowRight className="w-3 h-3" />
-                  </button>
-                )}
+                <button
+                  onClick={() => navigate(`/intake/${linkedRecord.id}`)}
+                  className="flex items-center gap-1 text-xs text-foreground hover:text-[#ff6221] font-medium transition-colors"
+                  title="Open full record"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setIntakePanelOpen((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  title={intakePanelOpen ? "Collapse" : "Expand record details"}
+                >
+                  {intakePanelOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
               </div>
             </div>
+
+            {/* Expanded detail panel */}
+            {intakePanelOpen && (
+              <div className="border-t border-primary/10 px-5 py-4 bg-background/60">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* Caller info */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Caller Info</p>
+                    <div className="space-y-1 text-sm">
+                      {linkedRecord.callerName && (
+                        <div className="flex items-center gap-2">
+                          <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium">{linkedRecord.callerName}</span>
+                        </div>
+                      )}
+                      {linkedRecord.callerOrg && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>{linkedRecord.callerOrg}</span>
+                        </div>
+                      )}
+                      {linkedRecord.callerType && (
+                        <div className="flex items-center gap-2">
+                          <Badge className={`text-xs ${callerTypeColor(linkedRecord.callerType)}`}>
+                            {callerTypeLabel[linkedRecord.callerType] ?? linkedRecord.callerType}
+                          </Badge>
+                        </div>
+                      )}
+                      {linkedRecord.callbackPhone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <button onClick={() => handleClickToCall(linkedRecord.callbackPhone!)} className="text-[#ff6221] hover:underline font-medium">
+                            {linkedRecord.callbackPhone}
+                          </button>
+                        </div>
+                      )}
+                      {linkedRecord.callbackEmail && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{linkedRecord.callbackEmail}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Claim info */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Claim Details</p>
+                    <div className="space-y-1 text-sm">
+                      {linkedRecord.whipClaimNumber && (
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="font-mono font-medium">{linkedRecord.whipClaimNumber}</span>
+                        </div>
+                      )}
+                      {linkedRecord.callerRefNumber && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>Ref: {linkedRecord.callerRefNumber}</span>
+                        </div>
+                      )}
+                      {linkedRecord.handlerName && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <User className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>Handler: {linkedRecord.handlerName}</span>
+                        </div>
+                      )}
+                      {linkedRecord.priority && linkedRecord.priority !== "normal" && (
+                        <Badge className={`text-xs ${linkedRecord.priority === "urgent" ? "bg-red-500/15 text-red-700" : "bg-orange-100 text-orange-700"}`}>
+                          {linkedRecord.priority.toUpperCase()}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Message / notes */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Message</p>
+                    {linkedRecord.message ? (
+                      <p className="text-xs text-muted-foreground italic leading-relaxed bg-muted/40 rounded-md px-3 py-2">
+                        &#8220;{linkedRecord.message}&#8221;
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No message recorded.</p>
+                    )}
+                    {linkedRecord.notes && (
+                      <>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-2">Notes</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{linkedRecord.notes}</p>
+                      </>
+                    )}
+                    {nextRecord && (
+                      <button
+                        onClick={() => navigate(`/softphone?intakeId=${nextRecord.id}`)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-medium transition-colors mt-2"
+                        title={`Next: #${nextRecord.id} — ${nextRecord.callerName || 'Unknown'}`}
+                      >
+                        Next record <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -560,9 +783,9 @@ export default function Softphone() {
                   <span className="text-xs text-white/70">{sdkReady ? "Ready" : "Not connected"}</span>
                 </div>
               </div>
-              {/* The SDK injects the iframe into this div */}
+              {/* The SDK injects the iframe into this div via callback ref */}
               <div
-                id="aircall-phone-container"
+                ref={initAircall}
                 className="flex items-center justify-center bg-gray-50"
                 style={{ minHeight: 666 }}
               />
@@ -662,29 +885,9 @@ export default function Softphone() {
                 </CardContent>
               </Card>
             )}
-
-            {/* Coaching tips */}
-            <Card className="border border-blue-100 bg-blue-500/10/40">
-              <CardHeader className="pb-2 pt-4">
-                <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4 text-[#ff6221]" />
-                  Call Coaching Tips
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 pb-4">
-                {COACHING_TIPS.map(({ icon: Icon, tip }, i) => (
-                  <div key={i} className="flex items-start gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Icon className="w-3 h-3 text-foreground" />
-                    </div>
-                    <p className="text-xs text-gray-700 leading-relaxed">{tip}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
           </div>
 
-          {/* ── Right column: Stats + Scripts + Recent calls ── */}
+          {/* ── Right column: KPIs + Script + Tips + History ── */}
           <div className="lg:col-span-2 space-y-4">
             {/* KPI row */}
             <div className="grid grid-cols-3 gap-4">
@@ -697,7 +900,7 @@ export default function Softphone() {
                 },
                 {
                   label: "Avg Handle Time",
-                  value: handlerStats && (handlerStats as { stats?: { avgDurationMin?: number } }).stats?.avgDurationMin
+                  value: handlerStats && (handlerStats as { stats?: { avgDurationMin?: number } }).stats?.avgDurationMin != null
                     ? `${(handlerStats as { stats?: { avgDurationMin?: number } }).stats!.avgDurationMin!.toFixed(1)}m`
                     : "—",
                   sub: "Target: under 6 min",
@@ -725,16 +928,16 @@ export default function Softphone() {
               ))}
             </div>
 
-            {/* Call Script panel */}
-            <Card className={`border ${activeScript.color}`}>
-              <CardHeader className="pb-2 pt-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#ff6221]" />
-                    Call Script
-                  </CardTitle>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-500">Caller type:</span>
+            {/* ── Call Script + Coaching Tips — side by side, caller-type-aware ── */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {/* Call Script */}
+              <Card className={`border ${activeScript.color}`}>
+                <CardHeader className="pb-2 pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <ScriptIcon className={`w-4 h-4 ${activeScript.accentColor}`} />
+                      {activeScript.title}
+                    </CardTitle>
                     <select
                       value={scriptCallerType}
                       onChange={(e) => setScriptCallerType(e.target.value)}
@@ -745,36 +948,69 @@ export default function Softphone() {
                       <option value="medical_provider">Medical Provider</option>
                       <option value="member">Member / Insured</option>
                       <option value="claimant">Claimant</option>
+                      <option value="police">Police / Gov</option>
+                      <option value="wrong_department">Wrong Dept</option>
                     </select>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pb-4 space-y-3">
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Greeting</p>
-                  <p className="text-xs text-gray-700 italic leading-relaxed bg-background/70 rounded-md px-3 py-2 border border-white">
-                    {activeScript.greeting}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Key Steps</p>
-                  <ol className="space-y-1.5">
-                    {activeScript.steps.map((step, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
-                        <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">{i + 1}</span>
-                        {step}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Closing</p>
-                  <p className="text-xs text-gray-700 italic leading-relaxed bg-background/70 rounded-md px-3 py-2 border border-white">
-                    {activeScript.closing}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+                  {linkedRecord?.callerType && linkedRecord.callerType !== "unknown" && scriptCallerType === linkedRecord.callerType && (
+                    <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                      Auto-matched to linked record's caller type
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent className="pb-4 space-y-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Greeting</p>
+                    <p className="text-xs text-gray-700 italic leading-relaxed bg-background/70 rounded-md px-3 py-2 border border-white">
+                      {activeScript.greeting}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Key Steps</p>
+                    <ol className="space-y-1.5">
+                      {activeScript.steps.map((step, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
+                          <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">{i + 1}</span>
+                          {step}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Closing</p>
+                    <p className="text-xs text-gray-700 italic leading-relaxed bg-background/70 rounded-md px-3 py-2 border border-white">
+                      {activeScript.closing}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Coaching Tips — caller-type-aware */}
+              <Card className="border border-amber-100 bg-amber-50/30">
+                <CardHeader className="pb-2 pt-4">
+                  <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-[#ff6221]" />
+                    Call Coaching Tips
+                    {linkedRecord?.callerType && linkedRecord.callerType !== "unknown" && (
+                      <Badge className={`ml-auto text-[10px] ${callerTypeColor(linkedRecord.callerType)}`}>
+                        {callerTypeLabel[linkedRecord.callerType] ?? linkedRecord.callerType}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pb-4">
+                  {activeScript.tips.map((tip, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-5 h-5 rounded-full bg-[#ff6221]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[10px] font-bold text-[#ff6221]">{i + 1}</span>
+                      </div>
+                      <p className={`text-xs leading-relaxed ${tip.startsWith("⚠️") ? "text-red-700 font-medium" : "text-gray-700"}`}>{tip}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Logged dispositions this session */}
             {savedDispositions.length > 0 && (

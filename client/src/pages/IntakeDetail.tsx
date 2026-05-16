@@ -283,8 +283,8 @@ export default function IntakeDetail() {
                   variant="outline"
                   size="sm"
                   className="gap-1.5 border-foreground/20 text-foreground hover:bg-foreground hover:text-background"
-                  onClick={() => navigate(`/softphone?intakeId=${id}`)}
-                  title="Open in Softphone"
+                  onClick={() => navigate(`/softphone?intakeId=${id}&phone=${encodeURIComponent(record.callbackPhone || record.callerPhone || '')}&name=${encodeURIComponent(record.callerName || '')}&autoCall=1`)}
+                  title="Open Softphone and call"
                 >
                   <Headphones className="w-3.5 h-3.5" />
                   Softphone

@@ -613,3 +613,10 @@ Business routing logic to implement in resolveHandler():
 - [x] Remove "Under Construction" banner from Softphone page
 - [x] Add SDK connection status badge (Connected / Log in to Aircall phone)
 - [x] Fix handlerStats field access to use handlerStats.stats.* (total, answered, avgDurationMin, answerRate)
+
+## Intake Call Button → Softphone (May 15 2026)
+
+- [ ] Wire call button in IntakeRecords list: navigate to /softphone?intakeId=X&phone=Y&name=Z
+- [ ] Wire call button in IntakeDetail page: navigate to /softphone?intakeId=X&phone=Y&name=Z
+- [ ] Wire call button in HandlerDashboard callback queue: navigate to /softphone with intake context
+- [ ] Softphone: read URL params on mount, pre-load intake context panel, auto-dial the number via SDK
