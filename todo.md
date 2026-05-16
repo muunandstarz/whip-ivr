@@ -582,3 +582,34 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix intake_records labels backfill: after_hours label should use EDT 9am-6pm M-F
 - [x] Re-backfill intake_records labels with corrected timezone
 - [x] Verify corrected numbers: 94 after-hours, 519 biz-hours inbound for May (EDT)
+
+## Softphone Feature (Aircall Everywhere SDK) - May 16 2026
+- [ ] Install aircall-everywhere npm package
+- [ ] Create Softphone page component (client/src/pages/Softphone.tsx)
+- [ ] Embed AircallWorkspace iframe in a collapsible side panel
+- [ ] Handle onLogin/onLogout callbacks to show agent status
+- [ ] Listen to incoming_call event: show caller number, lookup matching intake record
+- [ ] Listen to outgoing_call event: show dialing state
+- [ ] Listen to call_ended event: show duration, prompt to link to intake/claim
+- [ ] Listen to comment_saved event: save comment to linked intake record
+- [ ] Add dial_number send command: click-to-call from intake records and claim records
+- [ ] Show active call context panel: caller info, linked intake, open claim if matched
+- [ ] After call_ended: fetch recording URL via Aircall API and append to linked intake record
+- [ ] Add Softphone nav item to DashboardLayout sidebar
+- [ ] Register /softphone route in App.tsx
+- [ ] Add call-claim link table to DB schema (call_claim_links: aircall_call_id, intake_id, claim_id)
+- [ ] Add tRPC procedures: linkCallToIntake, getCallContext, saveCallNote
+
+## Softphone — Aircall Everywhere SDK (May 15 2026)
+
+- [x] Install aircall-everywhere SDK (pnpm add aircall-everywhere)
+- [x] Embed real Aircall iframe in Softphone.tsx using AircallPhone class
+- [x] Wire incoming_call event: auto-lookup caller by phone number against intake records
+- [x] Wire call_answered / outgoing_answered events: start call timer
+- [x] Wire call_ended event: show wrap-up disposition panel
+- [x] Wire outgoing_call event: set ringing state
+- [x] Add click-to-call from linked intake record (send dial_number command to SDK)
+- [x] Show caller history panel when incoming call matches known phone number
+- [x] Remove "Under Construction" banner from Softphone page
+- [x] Add SDK connection status badge (Connected / Log in to Aircall phone)
+- [x] Fix handlerStats field access to use handlerStats.stats.* (total, answered, avgDurationMin, answerRate)

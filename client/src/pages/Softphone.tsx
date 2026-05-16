@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSearch, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
@@ -7,14 +7,12 @@ import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Phone, PhoneOff, PhoneIncoming, PhoneOutgoing, PhoneMissed,
-  Mic, MicOff, Volume2, VolumeX, Delete, Clock, User,
-  ChevronRight, ExternalLink, Info, CheckCircle2, ClipboardList,
-  Lightbulb, ArrowRightLeft, Pause, MessageSquare, Send, Building2,
-  Scale, Stethoscope, AlertTriangle, FileText, RefreshCw,
-  PhoneCall, ArrowRight, ChevronDown, ChevronUp,
+  Clock, User, ChevronRight, ExternalLink, Info, CheckCircle2,
+  ClipboardList, Lightbulb, ArrowRightLeft, Pause, MessageSquare,
+  Send, Building2, Scale, Stethoscope, AlertTriangle, FileText,
+  PhoneCall, ArrowRight, Wifi, WifiOff,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -26,42 +24,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+// @ts-ignore — no types shipped with aircall-everywhere
+import AircallPhone from "aircall-everywhere";
 
-// ─── Dummy data ──────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-const RECENT_CALLS = [
-  { id: 1, name: "State Farm – Claims", number: "+1 (800) 732-5246", type: "inbound", status: "answered", duration: "4:22", time: "2:14 PM", callerType: "carrier", disposition: "claim_update" },
-  { id: 2, name: "Unknown", number: "+1 (213) 555-0182", type: "inbound", status: "missed", duration: "—", time: "1:47 PM", callerType: "unknown", disposition: null },
-  { id: 3, name: "Allstate Insurance", number: "+1 (800) 255-7828", type: "inbound", status: "answered", duration: "6:08", time: "12:30 PM", callerType: "carrier", disposition: "coverage_question" },
-  { id: 4, name: "Marcus Johnson", number: "+1 (310) 555-0294", type: "outbound", status: "answered", duration: "3:15", time: "11:55 AM", callerType: "claimant", disposition: "callback_completed" },
-  { id: 5, name: "Law Office of Rivera", number: "+1 (323) 555-0471", type: "inbound", status: "voicemail", duration: "0:45", time: "10:20 AM", callerType: "law_office", disposition: null },
-  { id: 6, name: "Geico Claims", number: "+1 (800) 841-3000", type: "inbound", status: "answered", duration: "2:50", time: "9:44 AM", callerType: "carrier", disposition: "claim_update" },
-  { id: 7, name: "Dr. Patel – Sunrise Medical", number: "+1 (818) 555-0312", type: "inbound", status: "answered", duration: "5:10", time: "9:01 AM", callerType: "medical_provider", disposition: "pip_billing_inquiry" },
-  { id: 8, name: "Sandra Williams", number: "+1 (714) 555-0088", type: "outbound", status: "no_answer", duration: "—", time: "8:45 AM", callerType: "member", disposition: "no_answer" },
-];
+type CallState = "idle" | "ringing" | "active" | "incoming" | "wrap_up";
 
-const SMS_THREADS = [
-  { id: 1, name: "Marcus Johnson", number: "+1 (310) 555-0294", lastMsg: "Got it, I'll call back after 3pm", time: "1:30 PM", unread: false },
-  { id: 2, name: "Sandra Williams", number: "+1 (714) 555-0088", lastMsg: "Can someone call me about my claim?", time: "11:20 AM", unread: true },
-  { id: 3, name: "Unknown", number: "+1 (562) 555-0177", lastMsg: "This is GEICO claims re: NF374972", time: "9:15 AM", unread: false },
-];
+interface ActiveCallInfo {
+  name: string;
+  number: string;
+  callerType: string;
+  direction: "inbound" | "outbound";
+  aircallCallId?: number;
+}
 
-const SMS_MESSAGES = [
-  { id: 1, from: "them", text: "Hi, I left a voicemail about my claim NF374972. Can someone call me?", time: "11:18 AM" },
-  { id: 2, from: "us", text: "Hi Sandra! This is Whip Claims. We received your voicemail and a handler will call you within 2 business hours.", time: "11:20 AM" },
-  { id: 3, from: "them", text: "Thank you! My number is (714) 555-0088", time: "11:21 AM" },
-];
-
-const STATUS_OPTIONS = [
-  { value: "available", label: "Available", color: "bg-green-500" },
-  { value: "busy", label: "On a Call", color: "bg-yellow-500" },
-  { value: "away", label: "Away", color: "bg-gray-400" },
-  { value: "offline", label: "Offline", color: "bg-red-500" },
-];
-
-const DIAL_KEYS = [["1","2","3"],["4","5","6"],["7","8","9"],["*","0","#"]];
-
-// ─── 20+ Disposition codes ────────────────────────────────────────────────────
+// ─── Disposition codes ────────────────────────────────────────────────────────
 
 const DISPOSITION_GROUPS = [
   {
@@ -203,8 +181,6 @@ const COACHING_TIPS = [
   { icon: Lightbulb, tip: "Carriers, law offices, and medical providers can submit via IVR Option 1 — no live agent needed. Let them know." },
 ];
 
-type CallState = "idle" | "ringing" | "active" | "incoming" | "wrap_up";
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Softphone() {
@@ -212,34 +188,79 @@ export default function Softphone() {
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
   const intakeId = params.get("intakeId") ? parseInt(params.get("intakeId")!) : null;
+
+  // ── Linked intake record from URL param ──
   const { data: linkedRecord } = trpc.intake.get.useQuery(
     { id: intakeId! },
     { enabled: intakeId != null && intakeId > 0 }
   );
-  const [activeTab, setActiveTab] = useState<"phone" | "sms">("phone");
-  const [dialValue, setDialValue] = useState("");
+
+  // ── Aircall SDK state ──
+  const aircallRef = useRef<InstanceType<typeof AircallPhone> | null>(null);
+  const [sdkReady, setSdkReady] = useState(false);
+  const [sdkError, setSdkError] = useState<string | null>(null);
+
+  // ── Call state ──
   const [callState, setCallState] = useState<CallState>("idle");
-  const [muted, setMuted] = useState(false);
-  const [speakerOff, setSpeakerOff] = useState(false);
-  const [status, setStatus] = useState("available");
+  const [activeCallInfo, setActiveCallInfo] = useState<ActiveCallInfo | null>(null);
+  const [wrapUpCallInfo, setWrapUpCallInfo] = useState<ActiveCallInfo | null>(null);
   const [callDuration, setCallDuration] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Caller lookup (fires when a call comes in) ──
+  const [lookupPhone, setLookupPhone] = useState<string | null>(null);
+  const { data: callerHistory } = trpc.callers.history.useQuery(
+    { phone: lookupPhone! },
+    { enabled: !!lookupPhone }
+  );
+
+  // ── Disposition / wrap-up ──
   const [selectedDisposition, setSelectedDisposition] = useState<string | null>(null);
   const [dispositionNote, setDispositionNote] = useState("");
   const [savedDispositions, setSavedDispositions] = useState<Array<{ callId: number; disposition: string; note: string; name: string }>>([]);
-  const [wrapUpCallInfo, setWrapUpCallInfo] = useState<{ name: string; number: string; direction: "inbound" | "outbound" } | null>(null);
-  const [activeCallInfo, setActiveCallInfo] = useState<{ name: string; number: string; callerType: string; direction: "inbound" | "outbound" } | null>(null);
+
+  // ── Script ──
   const [scriptCallerType, setScriptCallerType] = useState<string>("unknown");
-  const [smsThread, setSmsThread] = useState<number | null>(1);
+
+  // ── SMS (placeholder — Textline integration TBD) ──
+  const [activeTab, setActiveTab] = useState<"phone" | "sms">("phone");
   const [smsInput, setSmsInput] = useState("");
-  const [smsMessages, setSmsMessages] = useState(SMS_MESSAGES);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [incomingCaller] = useState({ name: "State Farm – Claims", number: "+1 (800) 732-5246", callerType: "carrier" });
-  // Callback logging state
+
+  // ── Callback logging ──
   const [showCallbackDialog, setShowCallbackDialog] = useState(false);
   const [cbDisposition, setCbDisposition] = useState("");
   const [cbOutcome, setCbOutcome] = useState("");
   const [cbNotes, setCbNotes] = useState("");
   const [cbUpdateNotes, setCbUpdateNotes] = useState(false);
+
+  // ── Auth / handler identity ──
+  const { user: authUser } = useAuth();
+  const { impersonating, isImpersonating } = useImpersonation();
+  const { data: handlersList } = trpc.handlers.list.useQuery();
+  const linkedHandler = authUser?.handlerProfileId
+    ? handlersList?.find((h: { id: number; name: string }) => h.id === authUser.handlerProfileId)
+    : null;
+  const effectiveName = isImpersonating
+    ? impersonating!.name
+    : linkedHandler?.name ?? authUser?.name ?? "";
+  const isAdmin = authUser?.role === "admin";
+
+  // ── Next open record ──
+  const { data: openRecords } = trpc.intake.list.useQuery(
+    isAdmin
+      ? { limit: 50, status: "open" }
+      : { limit: 50, status: "open", handlerName: effectiveName || undefined },
+    { enabled: intakeId != null && (isAdmin || !!effectiveName) }
+  );
+  const nextRecord = openRecords?.records?.find(
+    (r: { id: number }) => r.id !== intakeId
+  ) ?? null;
+
+  // ── Handler stats for today ──
+  const { data: handlerStats } = trpc.handlerMetrics.byName.useQuery(
+    { handlerName: effectiveName },
+    { enabled: !!effectiveName }
+  );
 
   const logCallbackMutation = trpc.callbacks.log.useMutation({
     onSuccess: () => {
@@ -261,66 +282,136 @@ export default function Softphone() {
     });
   };
 
-  // Resolve current handler identity (same pattern as HandlerDashboard)
-  const { user: authUser } = useAuth();
-  const { impersonating, isImpersonating } = useImpersonation();
-  const { data: handlersList } = trpc.handlers.list.useQuery();
-  const linkedHandler = authUser?.handlerProfileId
-    ? handlersList?.find((h: { id: number; name: string }) => h.id === authUser.handlerProfileId)
-    : null;
-  const effectiveName = isImpersonating
-    ? impersonating!.name
-    : linkedHandler?.name ?? authUser?.name ?? "";
-  const isAdmin = authUser?.role === "admin";
-  // Next open record — scoped to handler's own records for non-admins
-  const { data: openRecords } = trpc.intake.list.useQuery(
-    isAdmin
-      ? { limit: 50, status: "open" }
-      : { limit: 50, status: "open", handlerName: effectiveName || undefined },
-    { enabled: intakeId != null && (isAdmin || !!effectiveName) }
-  );
-  const nextRecord = openRecords?.records?.find(
-    (r: { id: number }) => r.id !== intakeId
-  ) ?? null;
-
-  const handleDial = (key: string) => setDialValue((v) => (v.length < 14 ? v + key : v));
-  const handleDelete = () => setDialValue((v) => v.slice(0, -1));
-
-  const handleCall = () => {
-    if (!dialValue) return;
-    const displayNumber = dialValue.length === 10
-      ? `+1 (${dialValue.slice(0,3)}) ${dialValue.slice(3,6)}-${dialValue.slice(6)}`
-      : dialValue;
-    setActiveCallInfo({ name: displayNumber, number: displayNumber, callerType: "unknown", direction: "outbound" });
-    setCallState("ringing");
-    setTimeout(() => {
-      setCallState("active");
-      timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
-    }, 2500);
-  };
-
-  const handleHangUp = () => {
+  // ── Start call timer ──
+  const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    setWrapUpCallInfo({
-      name: activeCallInfo?.name || incomingCaller.name,
-      number: activeCallInfo?.number || incomingCaller.number,
-      direction: activeCallInfo?.direction || "inbound",
-    });
-    setCallState("wrap_up");
-    setSelectedDisposition(null);
-    setDispositionNote("");
-  };
-
-  const handleAnswer = () => {
-    setActiveCallInfo({ name: incomingCaller.name, number: incomingCaller.number, callerType: incomingCaller.callerType, direction: "inbound" });
-    setScriptCallerType(incomingCaller.callerType);
-    setCallState("active");
+    setCallDuration(0);
     timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // ── Initialize Aircall Everywhere SDK ──
+  useEffect(() => {
+    // Only init once
+    if (aircallRef.current) return;
+
+    try {
+      const phone = new AircallPhone({
+        domToLoadWorkspace: "#aircall-phone-container",
+        size: "big",
+        onLogin: () => {
+          setSdkReady(true);
+          setSdkError(null);
+          toast.success("Aircall connected", { duration: 2000 });
+        },
+        onLogout: () => {
+          setSdkReady(false);
+          setCallState("idle");
+          setActiveCallInfo(null);
+          stopTimer();
+        },
+      });
+
+      // ── Incoming call ──
+      phone.on("incoming_call", (callData: { call_id: number; from: string; to: string }) => {
+        const rawPhone = callData.from || "";
+        const digits = rawPhone.replace(/\D/g, "");
+        setLookupPhone(digits.length >= 10 ? `+${digits}` : rawPhone);
+        setActiveCallInfo({
+          name: rawPhone,
+          number: rawPhone,
+          callerType: "unknown",
+          direction: "inbound",
+          aircallCallId: callData.call_id,
+        });
+        setCallState("incoming");
+      });
+
+      // ── Call answered (inbound) ──
+      phone.on("call_answered", (callData: { call_id: number; from: string }) => {
+        setCallState("active");
+        startTimer();
+      });
+
+      // ── Outbound call initiated ──
+      phone.on("outgoing_call", (callData: { call_id: number; to: string; from: string }) => {
+        const rawPhone = callData.to || "";
+        setActiveCallInfo({
+          name: rawPhone,
+          number: rawPhone,
+          callerType: "unknown",
+          direction: "outbound",
+          aircallCallId: callData.call_id,
+        });
+        setCallState("ringing");
+      });
+
+      // ── Outbound answered ──
+      phone.on("outgoing_answered", () => {
+        setCallState("active");
+        startTimer();
+      });
+
+      // ── Call ended ──
+      phone.on("call_ended", (callData: { call_id: number; duration: number }) => {
+        stopTimer();
+        setCallDuration(callData.duration ?? 0);
+        setWrapUpCallInfo(activeCallInfo);
+        setCallState("wrap_up");
+        setSelectedDisposition(null);
+        setDispositionNote("");
+        // Clear lookup so it re-fires on next call
+        setLookupPhone(null);
+      });
+
+      // ── Comment saved from Aircall UI ──
+      phone.on("comment_saved", (data: { comment: string; call_id: number }) => {
+        toast.info(`Call note saved: "${data.comment.slice(0, 60)}${data.comment.length > 60 ? "…" : ""}"`);
+      });
+
+      aircallRef.current = phone;
+    } catch (err) {
+      setSdkError("Failed to initialize Aircall phone. Please refresh.");
+    }
+
+    return () => {
+      stopTimer();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-update caller name when lookup resolves ──
+  useEffect(() => {
+    if (!callerHistory) return;
+    const latestIntake = callerHistory.intakeRecords?.[0];
+    if (latestIntake?.callerName) {
+      setActiveCallInfo((prev) => prev ? { ...prev, name: latestIntake.callerName! } : prev);
+    }
+    if (latestIntake?.callerType) {
+      setScriptCallerType(latestIntake.callerType);
+      setActiveCallInfo((prev) => prev ? { ...prev, callerType: latestIntake.callerType! } : prev);
+    }
+  }, [callerHistory]);
+
+  // ── Click-to-call from linked intake ──
+  const handleClickToCall = (phone: string) => {
+    if (!aircallRef.current || !sdkReady) {
+      toast.error("Aircall phone not ready. Please log in to the phone first.");
+      return;
+    }
+    const digits = phone.replace(/\D/g, "");
+    aircallRef.current.send("dial_number", { phone_number: digits }, (success: boolean, data: unknown) => {
+      if (!success) toast.error("Could not dial number. Make sure you are logged in to Aircall.");
+    });
   };
 
   const handleSaveDisposition = () => {
     if (!selectedDisposition) return;
-    const disp = ALL_DISPOSITIONS.find((d) => d.value === selectedDisposition);
     setSavedDispositions((prev) => [{
       callId: Date.now(),
       disposition: selectedDisposition,
@@ -329,29 +420,21 @@ export default function Softphone() {
     }, ...prev]);
     setCallState("idle");
     setCallDuration(0);
-    setMuted(false);
-    setDialValue("");
     setWrapUpCallInfo(null);
     setActiveCallInfo(null);
+    setLookupPhone(null);
   };
 
   const handleSkipDisposition = () => {
     setCallState("idle");
     setCallDuration(0);
-    setMuted(false);
-    setDialValue("");
     setWrapUpCallInfo(null);
     setActiveCallInfo(null);
-  };
-
-  const handleSendSms = () => {
-    if (!smsInput.trim()) return;
-    setSmsMessages((prev) => [...prev, { id: Date.now(), from: "us", text: smsInput.trim(), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
-    setSmsInput("");
+    setLookupPhone(null);
   };
 
   const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
-  const currentStatus = STATUS_OPTIONS.find((s) => s.value === status)!;
+
   const callerTypeColor = (t: string) => {
     switch (t) {
       case "carrier": return "bg-blue-500/15 text-blue-700";
@@ -362,35 +445,37 @@ export default function Softphone() {
       default: return "bg-muted text-muted-foreground";
     }
   };
+
   const dispositionLabel = (val: string | null) => val ? ALL_DISPOSITIONS.find((d) => d.value === val) : null;
   const activeScript = CALL_SCRIPTS[scriptCallerType] ?? CALL_SCRIPTS.unknown;
 
   return (
     <WhipLayout>
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold text-foreground">Softphone</h1>
-          <p className="text-sm text-gray-500 mt-1">Make calls, send texts, and log dispositions from one place</p>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Softphone</h1>
+            <p className="text-sm text-gray-500 mt-1">Make and receive calls directly in the browser via Aircall</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {sdkReady ? (
+              <Badge className="bg-green-500/15 text-green-700 border-green-200 border flex items-center gap-1.5">
+                <Wifi className="w-3 h-3" /> Connected
+              </Badge>
+            ) : (
+              <Badge className="bg-amber-100 text-amber-700 border-amber-200 border flex items-center gap-1.5">
+                <WifiOff className="w-3 h-3" /> Log in to Aircall phone
+              </Badge>
+            )}
+          </div>
         </div>
 
-        {/* Under Construction Banner */}
-        <div className="mb-5 flex items-center gap-4 rounded-xl border-2 border-amber-400 bg-amber-50 px-5 py-4">
-          <span className="text-3xl flex-shrink-0">🚧</span>
-          <div className="flex-1">
-            <p className="font-bold text-amber-900 text-base">Softphone — Under Construction</p>
-            <p className="text-sm text-amber-800 mt-0.5">
-              The in-app softphone is not yet connected to Aircall. All calls, texts, and data shown below are <strong>simulated previews</strong> of the planned interface.
-              In the meantime, use the{" "}
-              <a href="https://dashboard.aircall.io" target="_blank" rel="noopener noreferrer" className="underline font-semibold inline-flex items-center gap-0.5">
-                Aircall desktop or mobile app <ExternalLink className="w-3 h-3" />
-              </a>{" "}
-              to make and receive calls.
-            </p>
+        {sdkError && (
+          <div className="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            {sdkError}
           </div>
-          <Badge className="flex-shrink-0 bg-amber-200 text-amber-900 border-amber-400 border text-xs font-semibold px-3 py-1">
-            Coming Soon
-          </Badge>
-        </div>
+        )}
 
         {/* Linked Intake Record Context */}
         {linkedRecord && (
@@ -408,9 +493,13 @@ export default function Softphone() {
                 {linkedRecord.callerOrg && <div className="text-sm text-muted-foreground">{linkedRecord.callerOrg}</div>}
                 <div className="flex flex-wrap gap-3 mt-2 text-xs">
                   {linkedRecord.callbackPhone && (
-                    <a href={`tel:${linkedRecord.callbackPhone}`} className="flex items-center gap-1 text-[#ff6221] hover:underline font-medium">
+                    <button
+                      onClick={() => handleClickToCall(linkedRecord.callbackPhone!)}
+                      className="flex items-center gap-1 text-[#ff6221] hover:underline font-medium"
+                    >
                       <Phone className="w-3 h-3" /> {linkedRecord.callbackPhone}
-                    </a>
+                      {sdkReady && <span className="text-[10px] text-green-600 font-normal">(click to call)</span>}
+                    </button>
                   )}
                   {linkedRecord.whipClaimNumber && (
                     <span className="flex items-center gap-1 text-muted-foreground">
@@ -456,262 +545,123 @@ export default function Softphone() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── Left column: Phone + SMS tabs ── */}
+          {/* ── Left column: Aircall Phone + call context ── */}
           <div className="lg:col-span-1 space-y-4">
+
+            {/* Aircall Workspace iframe */}
             <Card className="border border-gray-200 shadow-sm overflow-hidden">
               <div className="bg-primary px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setActiveTab("phone")}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded transition-colors ${activeTab === "phone" ? "bg-background/20 text-white" : "text-white/60 hover:text-white"}`}>
-                    <Phone className="w-3.5 h-3.5" /> Phone
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("sms")}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded transition-colors ${activeTab === "sms" ? "bg-background/20 text-white" : "text-white/60 hover:text-white"}`}>
-                    <MessageSquare className="w-3.5 h-3.5" /> SMS
-                    {SMS_THREADS.some((t) => t.unread) && <span className="w-1.5 h-1.5 rounded-full bg-[#ff6221]" />}
-                  </button>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-white" />
+                  <span className="text-sm font-semibold text-white">Aircall Phone</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${currentStatus.color}`} />
-                  <select value={status} onChange={(e) => setStatus(e.target.value)}
-                    className="text-xs text-white bg-transparent border-none outline-none cursor-pointer">
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s.value} value={s.value} className="text-black bg-background">{s.label}</option>
-                    ))}
-                  </select>
+                  <div className={`w-2 h-2 rounded-full ${sdkReady ? "bg-green-400" : "bg-gray-400"}`} />
+                  <span className="text-xs text-white/70">{sdkReady ? "Ready" : "Not connected"}</span>
                 </div>
               </div>
+              {/* The SDK injects the iframe into this div */}
+              <div
+                id="aircall-phone-container"
+                className="flex items-center justify-center bg-gray-50"
+                style={{ minHeight: 666 }}
+              />
+            </Card>
 
-              {/* ── Phone tab ── */}
-              {activeTab === "phone" && (
-                <CardContent className="p-4 space-y-4">
-                  {/* Incoming */}
-                  {callState === "incoming" && (
-                    <div className="bg-green-500/10 border border-green-200 rounded-lg p-3 text-center space-y-2">
-                      <div className="flex items-center justify-center gap-2 animate-pulse">
-                        <PhoneIncoming className="w-5 h-5 text-green-600" />
-                        <span className="text-sm font-semibold text-green-800">Incoming Call</span>
-                      </div>
-                      <p className="text-sm font-medium text-gray-800">{incomingCaller.name}</p>
-                      <p className="text-xs text-gray-500">{incomingCaller.number}</p>
-                      <Badge className={`text-xs ${callerTypeColor(incomingCaller.callerType)}`}>
-                        {incomingCaller.callerType.replace("_", " ")}
-                      </Badge>
-                      <div className="flex gap-2 justify-center pt-1">
-                        <button className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-xs font-medium transition-colors" onClick={handleAnswer}>
-                          <Phone className="w-3 h-3" /> Answer
-                        </button>
-                        <button className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-red-300 text-red-600 hover:bg-red-500/10 text-xs font-medium transition-colors" onClick={handleSkipDisposition}>
-                          <PhoneOff className="w-3 h-3" /> Decline
-                        </button>
-                      </div>
-                    </div>
+            {/* Active call context — shown while call is live */}
+            {(callState === "incoming" || callState === "active" || callState === "ringing") && activeCallInfo && (
+              <Card className={`border ${callState === "incoming" ? "border-green-300 bg-green-500/10" : callState === "ringing" ? "border-blue-200 bg-blue-500/10" : "border-green-200 bg-green-500/10"}`}>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    {callState === "incoming" && <PhoneIncoming className="w-4 h-4 text-green-600 animate-pulse" />}
+                    {callState === "ringing" && <PhoneOutgoing className="w-4 h-4 text-blue-600 animate-pulse" />}
+                    {callState === "active" && <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      {callState === "incoming" ? "Incoming Call" : callState === "ringing" ? "Calling…" : "Live Call"}
+                    </span>
+                    {callState === "active" && (
+                      <span className="ml-auto text-lg font-mono font-bold text-green-700">{formatDuration(callDuration)}</span>
+                    )}
+                  </div>
+                  <div className="text-sm font-bold text-foreground">{activeCallInfo.name}</div>
+                  <div className="text-xs text-gray-500">{activeCallInfo.number}</div>
+                  {activeCallInfo.callerType !== "unknown" && (
+                    <Badge className={`text-xs ${callerTypeColor(activeCallInfo.callerType)}`}>
+                      {activeCallInfo.callerType.replace(/_/g, " ")}
+                    </Badge>
                   )}
-
-                  {/* Active call */}
-                  {callState === "active" && (
-                    <div className="bg-green-500/10 border border-green-200 rounded-lg p-3 text-center space-y-1">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">
-                          {activeCallInfo?.direction === "outbound" ? "Outbound Call" : "Live Call"}
-                        </span>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800">{activeCallInfo?.name || incomingCaller.name}</p>
-                      <p className="text-xs text-gray-500">{activeCallInfo?.number || incomingCaller.number}</p>
-                      {activeCallInfo?.callerType && activeCallInfo.callerType !== "unknown" && (
-                        <Badge className={`text-xs ${callerTypeColor(activeCallInfo.callerType)}`}>
-                          {activeCallInfo.callerType.replace("_", " ")}
-                        </Badge>
-                      )}
-                      <p className="text-2xl font-mono font-bold text-green-700 pt-1">{formatDuration(callDuration)}</p>
-                    </div>
-                  )}
-
-                  {/* Ringing / outbound */}
-                  {callState === "ringing" && (
-                    <div className="bg-blue-500/10 border border-blue-200 rounded-lg p-3 text-center space-y-1">
-                      <div className="flex items-center justify-center gap-1.5 animate-pulse">
-                        <PhoneOutgoing className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Calling…</span>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800">{activeCallInfo?.name || dialValue}</p>
-                      <p className="text-xs text-gray-500">{activeCallInfo?.number || dialValue}</p>
-                    </div>
-                  )}
-
-                  {/* Wrap-up */}
-                  {callState === "wrap_up" && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-amber-700" />
-                        <span className="text-sm font-semibold text-amber-800">Call Wrap-Up</span>
-                      </div>
-                      {wrapUpCallInfo && (
-                        <div className="text-xs text-gray-600 space-y-0.5">
-                          <p><span className="font-medium">{wrapUpCallInfo.name}</span> · {wrapUpCallInfo.number}</p>
-                          <p className="text-gray-400">{wrapUpCallInfo.direction === "outbound" ? "Outbound" : "Inbound"} · {formatDuration(callDuration)}</p>
-                        </div>
-                      )}
-                      <p className="text-xs text-amber-700 font-medium">Select a disposition:</p>
-                      <ScrollArea className="h-52">
-                        <div className="space-y-3 pr-1">
-                          {DISPOSITION_GROUPS.map((group) => (
-                            <div key={group.group}>
-                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{group.group}</p>
-                              <div className="space-y-1">
-                                {group.items.map((d) => (
-                                  <button key={d.value} onClick={() => setSelectedDisposition(d.value)}
-                                    className={`w-full text-left text-xs px-2.5 py-1.5 rounded-md border transition-all ${
-                                      selectedDisposition === d.value ? d.color + " ring-1 ring-offset-1 ring-current" : "bg-background border-gray-200 text-gray-700 hover:bg-muted"
-                                    }`}>
-                                    {d.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                      <textarea value={dispositionNote} onChange={(e) => setDispositionNote(e.target.value)}
-                        placeholder="Optional note (claim #, action taken…)"
-                        className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-[#171b31] bg-background"
-                        rows={2} />
-                      <div className="flex gap-2">
-                        <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-[#2a3050] text-white"
-                          onClick={handleSaveDisposition} disabled={!selectedDisposition}>
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Save &amp; Close
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-xs text-gray-500" onClick={handleSkipDisposition}>
-                          Skip
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Idle dial display */}
-                  {callState === "idle" && (
-                    <div className="bg-muted rounded-lg px-3 py-2 flex items-center justify-between min-h-[44px]">
-                      <span className="text-xl font-mono tracking-widest text-gray-800">
-                        {dialValue || <span className="text-gray-400 text-sm font-sans">Enter number…</span>}
-                      </span>
-                      {dialValue && (
-                        <button onClick={handleDelete} className="text-gray-400 hover:text-gray-600 ml-2">
-                          <Delete className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Dial pad */}
-                  {(callState === "idle" || callState === "active") && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {DIAL_KEYS.flat().map((key) => (
-                        <button key={key} onClick={() => handleDial(key)}
-                          className="h-11 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-semibold text-base transition-colors active:scale-95">
-                          {key}
+                  {/* Caller history from DB */}
+                  {callerHistory && callerHistory.intakeRecords.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Previous records</p>
+                      {callerHistory.intakeRecords.slice(0, 3).map((ir: { id: number; callerName?: string | null; status: string; createdAt: Date }) => (
+                        <button
+                          key={ir.id}
+                          onClick={() => navigate(`/intake/${ir.id}`)}
+                          className="w-full text-left flex items-center justify-between text-xs text-gray-600 hover:text-[#ff6221] transition-colors"
+                        >
+                          <span>#{ir.id} — {ir.callerName || "Unknown"}</span>
+                          <Badge variant="outline" className={`text-[10px] ${ir.status === "open" ? "border-amber-300 text-amber-700" : "border-green-300 text-green-700"}`}>
+                            {ir.status}
+                          </Badge>
                         </button>
                       ))}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            )}
 
-                  {/* Call controls */}
-                  {callState !== "wrap_up" && (
-                    <div className="flex items-center justify-center gap-3 pt-1">
-                      {callState === "active" ? (
-                        <>
-                          <button onClick={() => setMuted(!muted)}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${muted ? "bg-red-500/15 text-red-600" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                            {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                          </button>
-                          <button onClick={handleHangUp}
-                            className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-md transition-colors">
-                            <PhoneOff className="w-6 h-6" />
-                          </button>
-                          <button onClick={() => setSpeakerOff(!speakerOff)}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${speakerOff ? "bg-red-500/15 text-red-600" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                            {speakerOff ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                          </button>
-                        </>
-                      ) : callState === "ringing" ? (
-                        <button onClick={handleHangUp}
-                          className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-md">
-                          <PhoneOff className="w-6 h-6" />
-                        </button>
-                      ) : callState === "idle" ? (
-                        <>
-                          <button onClick={() => setCallState("incoming")}
-                            className="w-10 h-10 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center"
-                            title="Simulate incoming call (demo only)">
-                            <PhoneIncoming className="w-4 h-4" />
-                          </button>
-                          <button onClick={handleCall} disabled={!dialValue}
-                            className="w-14 h-14 rounded-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white flex items-center justify-center shadow-md transition-colors">
-                            <Phone className="w-6 h-6" />
-                          </button>
-                          <div className="w-10 h-10" />
-                        </>
-                      ) : null}
+            {/* Wrap-up card */}
+            {callState === "wrap_up" && (
+              <Card className="border border-amber-200 bg-amber-50/30">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-amber-700" />
+                    <span className="text-sm font-semibold text-amber-800">Call Wrap-Up</span>
+                  </div>
+                  {wrapUpCallInfo && (
+                    <div className="text-xs text-gray-600 space-y-0.5">
+                      <p><span className="font-medium">{wrapUpCallInfo.name}</span> · {wrapUpCallInfo.number}</p>
+                      <p className="text-gray-400">{wrapUpCallInfo.direction === "outbound" ? "Outbound" : "Inbound"} · {formatDuration(callDuration)}</p>
                     </div>
                   )}
-                </CardContent>
-              )}
-
-              {/* ── SMS tab ── */}
-              {activeTab === "sms" && (
-                <div className="flex flex-col h-[520px]">
-                  {/* Thread list */}
-                  <div className="border-b divide-y">
-                    {SMS_THREADS.map((thread) => (
-                      <button key={String(thread.id)} onClick={() => setSmsThread(thread.id)}
-                        className={`w-full text-left px-4 py-3 hover:bg-muted transition-colors ${smsThread === thread.id ? "bg-blue-500/10" : ""}`}>
-                        <div className="flex items-center justify-between">
-                          <span className={`text-sm font-medium ${thread.unread ? "text-foreground" : "text-gray-700"}`}>{thread.name}</span>
-                          <span className="text-[10px] text-gray-400">{thread.time}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {thread.unread && <span className="w-1.5 h-1.5 rounded-full bg-[#ff6221] flex-shrink-0" />}
-                          <span className="text-xs text-gray-500 truncate">{thread.lastMsg}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Message thread */}
-                  <ScrollArea className="flex-1 px-4 py-3">
-                    <div className="space-y-3">
-                      {smsMessages.map((msg) => (
-                        <div key={String(msg.id)} className={`flex ${msg.from === "us" ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${
-                            msg.from === "us" ? "bg-primary text-white rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"
-                          }`}>
-                            <p>{msg.text}</p>
-                            <p className={`text-[10px] mt-1 ${msg.from === "us" ? "text-white/60" : "text-gray-400"}`}>{msg.time}</p>
+                  <p className="text-xs text-amber-700 font-medium">Select a disposition:</p>
+                  <ScrollArea className="h-52">
+                    <div className="space-y-3 pr-1">
+                      {DISPOSITION_GROUPS.map((group) => (
+                        <div key={group.group}>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{group.group}</p>
+                          <div className="space-y-1">
+                            {group.items.map((d) => (
+                              <button key={d.value} onClick={() => setSelectedDisposition(d.value)}
+                                className={`w-full text-left text-xs px-2.5 py-1.5 rounded-md border transition-all ${
+                                  selectedDisposition === d.value ? d.color + " ring-1 ring-offset-1 ring-current" : "bg-background border-gray-200 text-gray-700 hover:bg-muted"
+                                }`}>
+                                {d.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       ))}
                     </div>
                   </ScrollArea>
-
-                  {/* SMS input */}
-                  <div className="border-t p-3 flex gap-2">
-                    <input
-                      value={smsInput}
-                      onChange={(e) => setSmsInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSendSms()}
-                      placeholder="Type a message…"
-                      className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#171b31]"
-                    />
-                    <button onClick={handleSendSms} disabled={!smsInput.trim()}
-                      className="w-9 h-9 rounded-lg bg-[#ff6221] hover:bg-[#e5541a] disabled:bg-gray-200 text-white flex items-center justify-center transition-colors">
-                      <Send className="w-4 h-4" />
-                    </button>
+                  <textarea value={dispositionNote} onChange={(e) => setDispositionNote(e.target.value)}
+                    placeholder="Optional note (claim #, action taken…)"
+                    className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-[#171b31] bg-background"
+                    rows={2} />
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-[#2a3050] text-white"
+                      onClick={handleSaveDisposition} disabled={!selectedDisposition}>
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Save &amp; Close
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-xs text-gray-500" onClick={handleSkipDisposition}>
+                      Skip
+                    </Button>
                   </div>
-                </div>
-              )}
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Coaching tips */}
             <Card className="border border-blue-100 bg-blue-500/10/40">
@@ -739,9 +689,28 @@ export default function Softphone() {
             {/* KPI row */}
             <div className="grid grid-cols-3 gap-4">
               {[
-                { label: "Calls Today", value: "12", sub: "6 answered · 3 missed · 3 voicemail", icon: Phone },
-                { label: "Avg Handle Time", value: "4m 22s", sub: "Target: under 6 min", icon: Clock },
-                { label: "Answer Rate", value: "83%", sub: "Team avg: 78%", icon: User },
+                {
+                  label: "Calls Today",
+                  value: handlerStats ? String((handlerStats as { stats?: { total?: number } }).stats?.total ?? "—") : "—",
+                  sub: handlerStats ? `${(handlerStats as { stats?: { answered?: number } }).stats?.answered ?? 0} answered` : "Loading…",
+                  icon: Phone,
+                },
+                {
+                  label: "Avg Handle Time",
+                  value: handlerStats && (handlerStats as { stats?: { avgDurationMin?: number } }).stats?.avgDurationMin
+                    ? `${(handlerStats as { stats?: { avgDurationMin?: number } }).stats!.avgDurationMin!.toFixed(1)}m`
+                    : "—",
+                  sub: "Target: under 6 min",
+                  icon: Clock,
+                },
+                {
+                  label: "Answer Rate",
+                  value: handlerStats && (handlerStats as { stats?: { answerRate?: number } }).stats?.answerRate != null
+                    ? `${(handlerStats as { stats?: { answerRate?: number } }).stats!.answerRate}%`
+                    : "—",
+                  sub: "This month",
+                  icon: User,
+                },
               ].map(({ label, value, sub, icon: Icon }) => (
                 <Card key={label} className="border border-gray-200 shadow-sm">
                   <CardContent className="p-4">
@@ -831,68 +800,42 @@ export default function Softphone() {
               </Card>
             )}
 
-            {/* Recent calls */}
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold text-foreground">Recent Calls</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[340px]">
-                  <div className="divide-y divide-gray-100">
-                    {RECENT_CALLS.map((call) => {
-                      const disp = dispositionLabel(call.disposition);
-                      return (
-                        <div key={String(call.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            call.status === "missed" || call.status === "no_answer" ? "bg-red-500/15" : call.status === "voicemail" ? "bg-muted" : call.type === "inbound" ? "bg-green-500/15" : "bg-blue-500/15"
-                          }`}>
-                            {call.status === "missed" || call.status === "no_answer" ? <PhoneMissed className="w-3.5 h-3.5 text-red-500" /> :
-                             call.type === "inbound" ? <PhoneIncoming className="w-3.5 h-3.5 text-green-600" /> :
-                             <PhoneOutgoing className="w-3.5 h-3.5 text-blue-600" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-medium text-gray-900 truncate">{call.name}</span>
-                              <Badge className={`text-[10px] px-1.5 py-0 border-0 ${callerTypeColor(call.callerType)}`}>
-                                {call.callerType.replace("_", " ")}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <span className="text-xs text-gray-400">{call.number}</span>
-                              {disp && <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${disp.color}`}>{disp.label}</span>}
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className="text-xs text-gray-500">{call.time}</div>
-                            <div className="text-xs text-gray-400">{call.duration}</div>
-                          </div>
-                          <button
-                            onClick={() => {
-                              const digits = call.number.replace(/\D/g, "").slice(-10);
-                              setDialValue(digits);
-                              setActiveTab("phone");
-                              setCallState("idle");
-                            }}
-                            className="ml-1 w-7 h-7 rounded-full bg-muted hover:bg-green-500/15 hover:text-green-700 text-gray-400 flex items-center justify-center transition-colors"
-                            title="Call back">
-                            <Phone className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setActiveTab("sms");
-                              setSmsThread(1);
-                            }}
-                            className="w-7 h-7 rounded-full bg-muted hover:bg-blue-500/15 hover:text-blue-700 text-gray-400 flex items-center justify-center transition-colors"
-                            title="Send SMS">
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+            {/* Caller history panel — shows when a call is active and we have history */}
+            {callerHistory && (callerHistory.intakeRecords.length > 0 || callerHistory.calls.length > 0) && (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Info className="w-4 h-4 text-[#ff6221]" />
+                    Caller History
+                    {callerHistory.profile && (
+                      <Badge variant="outline" className="ml-auto text-xs">
+                        {callerHistory.profile.callerType?.replace(/_/g, " ") ?? "Known caller"}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4 space-y-2">
+                  {callerHistory.intakeRecords.slice(0, 5).map((ir: { id: number; callerName?: string | null; status: string; createdAt: Date; message?: string | null }) => (
+                    <button
+                      key={ir.id}
+                      onClick={() => navigate(`/intake/${ir.id}`)}
+                      className="w-full text-left flex items-center justify-between gap-2 text-xs px-3 py-2 rounded-lg hover:bg-muted transition-colors border border-gray-100"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-gray-800">#{ir.id} — {ir.callerName || "Unknown"}</span>
+                        {ir.message && <p className="text-gray-400 truncate mt-0.5 italic">{ir.message}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge variant="outline" className={`text-[10px] ${ir.status === "open" ? "border-amber-300 text-amber-700" : "border-green-300 text-green-700"}`}>
+                          {ir.status}
+                        </Badge>
+                        <ChevronRight className="w-3 h-3 text-gray-400" />
+                      </div>
+                    </button>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
@@ -923,6 +866,7 @@ export default function Softphone() {
                   <SelectItem value="left_voicemail">Left Voicemail</SelectItem>
                   <SelectItem value="busy">Busy</SelectItem>
                   <SelectItem value="wrong_number">Wrong Number</SelectItem>
+                  <SelectItem value="emailed">Emailed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
