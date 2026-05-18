@@ -25,6 +25,8 @@ const WHIP_CLAIMS_NUMBER_NAME = "Whip Claims Line";
 let _allowedNumberIds: Set<number> = new Set([WHIP_CLAIMS_NUMBER_ID]);
 let _allowedNumberNames: Set<string> = new Set([WHIP_CLAIMS_NUMBER_NAME]);
 let _aircallUserIdToHandler: Map<number, { id: number; name: string }> = new Map();
+// Full aircallUserId → display name map for ALL users (used to populate agentName on every call)
+let _aircallUserIdToName: Map<number, string> = new Map();
 
 function getAircallAuth(): string {
   const id = process.env.AIRCALL_API_ID;
@@ -80,6 +82,7 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
     const newAllowedIds = new Set<number>([WHIP_CLAIMS_NUMBER_ID]);
     const newAllowedNames = new Set<string>([WHIP_CLAIMS_NUMBER_NAME]);
     const newUserMap = new Map<number, { id: number; name: string }>();
+    const newUserIdToName = new Map<number, string>();
 
     // Fetch all Aircall users (paginated)
     let page = 1;
@@ -92,7 +95,13 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
         const email: string = (user.email ?? "").toLowerCase();
         const aircallUserId = user.id ? Number(user.id) : null;
 
-        // Only process drivewhip.com accounts
+        // Build full name map for ALL users (used for agentName on every call)
+        if (aircallUserId) {
+          const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+          if (fullName) newUserIdToName.set(aircallUserId, fullName);
+        }
+
+        // Only process drivewhip.com accounts for handler routing
         if (!email.endsWith("@drivewhip.com")) continue;
 
         // Map aircall user ID → handler for extension routing
@@ -115,6 +124,7 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
     _allowedNumberIds = newAllowedIds;
     _allowedNumberNames = newAllowedNames;
     _aircallUserIdToHandler = newUserMap;
+    _aircallUserIdToName = newUserIdToName;
 
     console.log(
       `[AircallSync] Claims-team numbers refreshed: ${newAllowedIds.size} number IDs, ` +
@@ -172,9 +182,12 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
       }
 
       const agentUser = call.user ?? null;
+      // Resolve name: prefer call.user fields, fall back to the cached full-user map
+      const agentIdForName = agentUser ? Number(agentUser.id) : null;
       const agentName = agentUser
-        ? `${agentUser.first_name ?? ""} ${agentUser.last_name ?? ""}`.trim()
-        : null;
+        ? (`${agentUser.first_name ?? ""} ${agentUser.last_name ?? ""}`.trim() ||
+           (agentIdForName ? _aircallUserIdToName.get(agentIdForName) ?? null : null))
+        : (agentIdForName ? _aircallUserIdToName.get(agentIdForName) ?? null : null);
       const numberId = call.number?.id ? Number(call.number.id) : null;
 
       await upsertCallHistory({
