@@ -46,7 +46,12 @@ async function startServer() {
   // Resolves the Aircall asset URL to a fresh signed S3 URL via the Aircall API, then
   // streams the audio back to the browser using fetch() (which follows redirects automatically).
   // CORS headers are added so the <audio> element can play cross-origin.
-  app.get("/api/aircall-recording", async (req, res) => {
+  // Handles both GET (streaming) and HEAD (pre-flight check from VoicemailPlayer).
+  app.all("/api/aircall-recording", async (req, res) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
     const rawUrl = req.query.url as string;
     const callId = req.query.callId as string;
 
@@ -133,7 +138,8 @@ async function startServer() {
       res.setHeader("Cache-Control", "private, max-age=300");
       res.status(upstream.status);
 
-      if (!upstream.body) {
+      // HEAD requests only need headers, not the body
+      if (req.method === "HEAD" || !upstream.body) {
         res.end();
         return;
       }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useParams, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
@@ -19,6 +19,103 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History, Headphones, Moon, Voicemail } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+// ─── VoicemailPlayer ─────────────────────────────────────────────────────────
+// Always fetches a fresh signed URL from the proxy at play-time using callId.
+// Falls back to the stored URL only if no callId is available.
+function VoicemailPlayer({ callId, fallbackUrl }: { callId: string | null; fallbackUrl: string | null }) {
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  async function loadAndPlay() {
+    if (audioSrc) {
+      // Already loaded — just play
+      audioRef.current?.play();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // Always prefer callId for a fresh signed URL
+      const proxyUrl = callId
+        ? `/api/aircall-recording?callId=${encodeURIComponent(callId)}`
+        : fallbackUrl
+        ? `/api/aircall-recording?url=${encodeURIComponent(fallbackUrl)}`
+        : null;
+
+      if (!proxyUrl) {
+        setError("No recording available for this call.");
+        setLoading(false);
+        return;
+      }
+
+      // HEAD check to confirm the proxy can serve audio before setting src
+      const check = await fetch(proxyUrl, { method: "HEAD" });
+      if (!check.ok) {
+        const ct = check.headers.get("content-type") ?? "";
+        if (check.status === 404) setError("Recording not found — it may have been deleted.");
+        else if (check.status === 502 || ct.includes("xml")) setError("Recording URL has expired. Try refreshing the page.");
+        else setError(`Could not load recording (HTTP ${check.status}).`);
+        setLoading(false);
+        return;
+      }
+
+      setAudioSrc(proxyUrl);
+    } catch (e) {
+      setError("Network error loading recording.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Headphones className="w-4 h-4 text-[#ff6221]" />
+          <CardTitle className="text-sm font-semibold">Voicemail Recording</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {!audioSrc ? (
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadAndPlay}
+              disabled={loading}
+              className="w-full gap-2"
+            >
+              <Headphones className="w-4 h-4" />
+              {loading ? "Loading recording\u2026" : "Load & Play Recording"}
+            </Button>
+            {error && (
+              <p className="text-xs text-destructive">{error}</p>
+            )}
+          </div>
+        ) : (
+          <audio
+            ref={audioRef}
+            controls
+            autoPlay
+            className="w-full h-10 rounded-lg"
+            src={audioSrc}
+            onError={() => setError("Playback error — the recording may have expired. Click Load to retry.")}
+          >
+            Your browser does not support audio playback.
+          </audio>
+        )}
+        {error && audioSrc && (
+          <p className="text-xs text-destructive mt-1">{error}</p>
+        )}
+        <p className="text-[10px] text-muted-foreground mt-2">
+          Recording provided by Aircall. Click \"Load & Play\" to fetch a fresh signed URL.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 // Intake label badges
 const INTAKE_LABEL_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
@@ -718,31 +815,10 @@ export default function IntakeDetail() {
 
         {/* Voicemail Recording Player */}
         {(record.aircallRecordingUrl || record.aircallCallId) && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Headphones className="w-4 h-4 text-[#ff6221]" />
-                <CardTitle className="text-sm font-semibold">Voicemail Recording</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <audio
-                controls
-                className="w-full h-10 rounded-lg"
-                src={
-                  record.aircallRecordingUrl
-                    ? `/api/aircall-recording?url=${encodeURIComponent(record.aircallRecordingUrl)}`
-                    : `/api/aircall-recording?callId=${encodeURIComponent(record.aircallCallId!)}`
-                }
-                preload="none"
-              >
-                Your browser does not support audio playback.
-              </audio>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                Recording provided by Aircall. Audio is fetched on demand — press play to load.
-              </p>
-            </CardContent>
-          </Card>
+          <VoicemailPlayer
+            callId={record.aircallCallId ?? null}
+            fallbackUrl={record.aircallRecordingUrl ?? null}
+          />
         )}
 
         {/* Voicemail Transcript */}
