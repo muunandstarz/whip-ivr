@@ -223,15 +223,17 @@ function useAircallContainer(isOnSoftphonePage: boolean, widgetVisible: boolean)
         ro?.disconnect();
       };
     } else {
-      // WIDGET MODE: fixed bottom-right, visible only when widgetVisible
+      // WIDGET MODE: Aircall container stacks directly ABOVE the widget header bar.
+      // Widget header is at bottom:16px, height ~44px.
+      // Container sits at bottom: 16+44=60px so it appears above the header.
       Object.assign(container.style, {
         top: "auto",
-        bottom: "80px",
+        bottom: "60px",
         right: "16px",
         left: "auto",
-        width: "340px",
+        width: "356px",
         height: "500px",
-        borderRadius: "12px",
+        borderRadius: "12px 12px 0 0",
         opacity: widgetVisible ? "1" : "0",
         pointerEvents: widgetVisible ? "auto" : "none",
         zIndex: "9995",
@@ -406,8 +408,7 @@ export default function FloatingSoftphone() {
         </div>
       </div>
 
-      {/* Spacer — the Aircall iframe is positioned behind this widget */}
-      <div style={{ height: "420px" }} />
+      {/* The Aircall iframe sits ABOVE the header bar (bottom:60px), so no spacer needed */}
     </div>
   );
 
@@ -430,11 +431,12 @@ export default function FloatingSoftphone() {
       {/* ── Dock bar + expanded panel (when widget is open) ── */}
       {showDockBar && (
         <div
-          className="fixed z-[9999] bg-[#171b31] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+          className="fixed z-[9999] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
           style={{
             bottom: "16px",
             right: "16px",
             width: "356px",
+            background: "transparent",
           }}
         >
           {/* Header dock bar */}
