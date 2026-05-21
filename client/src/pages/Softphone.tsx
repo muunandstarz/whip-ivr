@@ -1,18 +1,27 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+/**
+ * Softphone page — full-page view of the persistent softphone.
+ *
+ * The Aircall SDK lives in SoftphoneContext (initialized once in App.tsx via
+ * FloatingSoftphone). This page reads all call state from that context and
+ * moves the persistent phone container into the left column by repositioning
+ * the hidden div while this page is mounted.
+ */
+import { useEffect, useState, useCallback } from "react";
 import { useSearch, useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
+import { useSoftphone } from "@/contexts/SoftphoneContext";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Phone, PhoneOff, PhoneIncoming, PhoneOutgoing, PhoneMissed,
+  Phone, PhoneIncoming, PhoneOutgoing,
   Clock, User, ChevronRight, ExternalLink, Info, CheckCircle2,
-  ClipboardList, Lightbulb, ArrowRightLeft, Pause, MessageSquare,
-  Send, Building2, Scale, Stethoscope, AlertTriangle, FileText,
-  PhoneCall, ArrowRight, Wifi, WifiOff, ChevronDown, ChevronUp,
+  ClipboardList, Lightbulb, ArrowRight,
+  Building2, Scale, Stethoscope, AlertTriangle, FileText,
+  PhoneCall, Wifi, WifiOff, ChevronDown, ChevronUp,
   Mail, Shield, AlertCircle,
 } from "lucide-react";
 import {
@@ -25,20 +34,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-// @ts-ignore — no types shipped with aircall-everywhere
-import AircallPhone from "aircall-everywhere";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type CallState = "idle" | "ringing" | "active" | "incoming" | "wrap_up";
-
-interface ActiveCallInfo {
-  name: string;
-  number: string;
-  callerType: string;
-  direction: "inbound" | "outbound";
-  aircallCallId?: number;
-}
 
 // ─── Disposition codes ────────────────────────────────────────────────────────
 
@@ -98,17 +93,17 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
     greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and the insurance company you're calling from?\"",
     steps: [
       "Ask for claim number and insured's name",
-      "Confirm coverage type (PIP, liability, collision)",
-      "Note the adjuster's name and direct callback number",
-      "Log any payment amounts or settlement offers discussed",
-      "Confirm next steps and expected timeline",
+      "Verify coverage and policy limits",
+      "Note the nature of the inquiry (liability, PIP, subrogation)",
+      "Do NOT admit liability or make settlement commitments",
+      "Offer to have the adjuster return the call within 24 hours",
     ],
-    closing: "\"I'll make sure this is noted on the claim. Is there anything else I can help you with today? Thank you for calling Whip Claims.\"",
+    closing: "\"Thank you for calling. Our adjuster will follow up within 24 hours. Is there anything else I can help with?\"",
     tips: [
-      "Carriers often call about PIP billing or liability — have the claim number ready before picking up.",
-      "Do NOT agree to any settlement figures verbally. Log the offer and escalate to the adjuster.",
-      "Warm transfer only — stay on the line to introduce the caller to the adjuster.",
-      "Carriers and law offices can submit updates via IVR Option 1 — let them know if they call back.",
+      "Never admit liability — even informally.",
+      "Get the claim number and adjuster name before anything else.",
+      "If they push for a settlement number, escalate to the supervisor.",
+      "Log the carrier name and claim number before ending the call.",
     ],
   },
   law_office: {
@@ -116,20 +111,20 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
     icon: Scale,
     color: "bg-purple-500/10 border-purple-200",
     accentColor: "text-purple-700",
-    greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name, the firm you're calling from, and the claim number you're referencing?\"",
+    greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I ask who I'm speaking with and which firm you're calling from?\"",
     steps: [
-      "Confirm attorney name, firm name, and bar number if needed",
-      "Ask for the client's full name and claim/policy number",
-      "Note the nature of the inquiry (demand, lien, representation letter)",
-      "Do NOT discuss liability or settlement without supervisor approval",
-      "Offer to have the adjuster return the call within 24 hours",
+      "Get attorney name, firm name, and bar number if possible",
+      "Ask for the claim number they're referencing",
+      "Note the nature of the inquiry (demand letter, subpoena, representation notice)",
+      "Do NOT discuss liability, coverage, or settlement without supervisor approval",
+      "Offer to have the adjuster or supervisor return the call",
     ],
-    closing: "\"I'll escalate this to our claims adjuster and they'll be in touch within one business day. Thank you for your patience.\"",
+    closing: "\"I'll escalate this to our claims team. They'll be in touch within 24 hours. Thank you.\"",
     tips: [
-      "⚠️ Legal call — do NOT admit liability or make any payment commitments.",
-      "Ask if they've sent a representation letter. If not, request they send it in writing before further discussion.",
-      "Escalate to supervisor before discussing any demand amounts.",
-      "Log attorney name, firm, and nature of inquiry before ending the call.",
+      "⚠️ Do NOT discuss liability or settlement with attorneys without supervisor approval.",
+      "If they mention a demand letter, note the demand amount and deadline.",
+      "Subpoenas must be escalated to the supervisor immediately.",
+      "Log the firm name and attorney name before ending.",
     ],
   },
   medical_provider: {
@@ -145,7 +140,7 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
       "Verify claim number and PIP policy limits",
       "Advise on PIP submission process if first contact",
     ],
-    closing: "\"I've noted your inquiry. Our PIP team will follow up within 2 business days. You can also fax billing to the number on file.\"",
+    closing: "\"I've noted your inquiry. Our PIP team will follow up within 2 business days. Thank you.\"",
     tips: [
       "Medical providers often call about PIP billing status — have the claim number and PIP limits ready.",
       "Remind them they can submit via IVR Option 1 for faster processing.",
@@ -155,44 +150,44 @@ const CALL_SCRIPTS: Record<string, { title: string; icon: React.ElementType; col
   },
   member: {
     title: "Member / Insured Script",
-    icon: User,
-    color: "bg-orange-500/10 border-orange-200",
-    accentColor: "text-orange-700",
-    greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and policy number so I can pull up your account?\"",
+    icon: Shield,
+    color: "bg-yellow-500/10 border-yellow-200",
+    accentColor: "text-yellow-700",
+    greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and policy number?\"",
     steps: [
-      "Verify identity: full name, DOB, last 4 of SSN or policy number",
-      "Ask what the call is regarding (new claim, status update, question)",
-      "For new claims: get date of loss, location, description of incident",
-      "For status updates: check claim notes and provide current status",
-      "Set clear expectations on next steps and timeline",
+      "Verify identity: name, policy number, date of birth",
+      "Ask for the nature of the inquiry",
+      "Pull up the claim record if a claim number is provided",
+      "Provide status update if available",
+      "Offer to schedule a callback if adjuster is unavailable",
     ],
-    closing: "\"Is there anything else I can help you with today? We'll be in touch within [timeframe]. Thank you for being a Whip Claims member.\"",
+    closing: "\"Thank you for calling. Is there anything else I can help you with today?\"",
     tips: [
-      "Members may be anxious — lead with empathy and set clear expectations.",
-      "Verify identity before discussing any claim details.",
-      "If they're reporting a new incident, get date of loss, location, and a brief description.",
-      "Set a specific callback time rather than a vague 'we'll call you back.'",
+      "Always verify identity before discussing claim details.",
+      "Be empathetic — members are often stressed after an accident.",
+      "If they ask about coverage, refer to the policy — do not interpret.",
+      "Log the call with the claim number before ending.",
     ],
   },
   claimant: {
     title: "Claimant Script",
     icon: User,
-    color: "bg-yellow-500/10 border-yellow-200",
-    accentColor: "text-yellow-700",
-    greeting: "\"Thank you for calling Whip Claims, this is [your name]. Are you calling regarding an existing claim or a new incident?\"",
+    color: "bg-orange-500/10 border-orange-200",
+    accentColor: "text-orange-700",
+    greeting: "\"Thank you for calling Whip Claims, this is [your name]. May I have your name and the claim number you're calling about?\"",
     steps: [
-      "Get claimant's full name and callback number",
-      "Ask for the claim number or insured's name if they have it",
-      "Note the nature of their inquiry (injury, property damage, payment)",
-      "Do NOT admit liability or make any payment commitments",
-      "Offer to have the assigned handler call back within 2 hours",
+      "Get claimant name and claim number",
+      "Note the nature of the inquiry (status, payment, dispute)",
+      "Do NOT admit liability or make payment commitments",
+      "Offer to have the adjuster return the call",
+      "Log the call with the claim number and nature of inquiry",
     ],
-    closing: "\"I've noted your information and a handler will call you back at [number] within 2 business hours. Thank you for your patience.\"",
+    closing: "\"Thank you for calling. Our adjuster will follow up within 24 hours.\"",
     tips: [
-      "⚠️ Do NOT admit liability or make any payment commitments.",
-      "Claimants may be upset — stay calm, empathetic, and professional.",
-      "Get their callback number early in case the call drops.",
-      "Offer a specific callback window (e.g., 'within 2 business hours') rather than vague timelines.",
+      "⚠️ Do NOT admit liability — even informally.",
+      "If they mention an attorney, note the firm name and escalate.",
+      "Callback window: 24 hours for standard, 4 hours for urgent.",
+      "Log the claim number and nature of inquiry before ending.",
     ],
   },
   police: {
@@ -268,7 +263,35 @@ export default function Softphone() {
   const urlName = params.get("name") || null;
   const autoCall = params.get("autoCall") === "1";
 
-  // ── Linked intake record from URL param ──
+  // ── Pull everything from the global softphone context ──
+  const {
+    sdkReady, sdkError, aircallRef,
+    callState, activeCallInfo, wrapUpCallInfo, callDuration, lookupPhone,
+    selectedDisposition, setSelectedDisposition, dispositionNote, setDispositionNote,
+    savedDispositions, handleSaveDisposition, handleSkipDisposition,
+    scriptCallerType, setScriptCallerType,
+    handleClickToCall,
+    setWidgetOpen,
+    setLinkedIntakeId, setLinkedIntakeName, setLinkedIntakePhone, setAutoDialPending,
+  } = useSoftphone();
+
+  // ── Sync URL params into the global context ──
+  useEffect(() => {
+    setLinkedIntakeId(intakeId);
+    setLinkedIntakeName(urlName);
+    setLinkedIntakePhone(urlPhone);
+    if (autoCall && urlPhone) {
+      setAutoDialPending(urlPhone);
+    }
+    // Hide the floating widget while we're on the full page
+    setWidgetOpen(false);
+    return () => {
+      // When leaving the page, show the floating widget again
+      setWidgetOpen(true);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Linked intake record ──
   const { data: linkedRecord } = trpc.intake.get.useQuery(
     { id: intakeId! },
     { enabled: intakeId != null && intakeId > 0 }
@@ -277,43 +300,29 @@ export default function Softphone() {
   // ── Expandable intake record panel ──
   const [intakePanelOpen, setIntakePanelOpen] = useState(false);
 
-  // ── Aircall SDK state ──
-  const aircallRef = useRef<InstanceType<typeof AircallPhone> | null>(null);
-  const phoneContainerRef = useRef<HTMLDivElement | null>(null);
-  const [sdkReady, setSdkReady] = useState(false);
-  const [sdkError, setSdkError] = useState<string | null>(null);
-  const autoDialFiredRef = useRef(false);
-
-  // ── Call state ──
-  const [callState, setCallState] = useState<CallState>("idle");
-  const [activeCallInfo, setActiveCallInfo] = useState<ActiveCallInfo | null>(null);
-  const [wrapUpCallInfo, setWrapUpCallInfo] = useState<ActiveCallInfo | null>(null);
-  const [callDuration, setCallDuration] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Caller lookup (fires when a call comes in) ──
-  const [lookupPhone, setLookupPhone] = useState<string | null>(null);
+  // ── Caller lookup ──
   const { data: callerHistory } = trpc.callers.history.useQuery(
     { phone: lookupPhone! },
     { enabled: !!lookupPhone }
   );
 
-  // ── Disposition / wrap-up ──
-  const [selectedDisposition, setSelectedDisposition] = useState<string | null>(null);
-  const [dispositionNote, setDispositionNote] = useState("");
-  const [savedDispositions, setSavedDispositions] = useState<Array<{ callId: number; disposition: string; note: string; name: string }>>([]);
-
-  // ── Script — auto-set from linked record's caller type ──
-  const [scriptCallerType, setScriptCallerType] = useState<string>("unknown");
-
-  // When linked record loads, auto-set the script to match caller type
+  // ── Auto-set script from linked record ──
   useEffect(() => {
     if (linkedRecord?.callerType) {
       setScriptCallerType(linkedRecord.callerType);
     }
-  }, [linkedRecord?.callerType]);
+  }, [linkedRecord?.callerType, setScriptCallerType]);
 
-  // ── SMS (placeholder — Textline integration TBD) ──
+  // ── Auto-update caller name when lookup resolves ──
+  useEffect(() => {
+    if (!callerHistory) return;
+    const latestIntake = callerHistory.intakeRecords?.[0];
+    if (latestIntake?.callerType) {
+      setScriptCallerType(latestIntake.callerType);
+    }
+  }, [callerHistory, setScriptCallerType]);
+
+  // ── SMS placeholder ──
   const [smsInput, setSmsInput] = useState("");
 
   // ── Callback logging ──
@@ -372,182 +381,7 @@ export default function Softphone() {
     });
   };
 
-  // ── Start call timer ──
-  const startTimer = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setCallDuration(0);
-    timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
-  }, []);
-
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  // ── Initialize Aircall Everywhere SDK ──
-  // We use a callback ref so the SDK is (re-)initialized whenever the
-  // container node mounts. This survives React Strict Mode double-invoke
-  // and HMR hot-reloads that wipe the DOM but keep the component alive.
-  const initAircall = useCallback((node: HTMLDivElement | null) => {
-    phoneContainerRef.current = node;
-    if (!node) {
-      // Container unmounted — tear down
-      aircallRef.current = null;
-      return;
-    }
-    // Already initialized into this exact node — skip
-    if (aircallRef.current) return;
-
-    // The SDK requires a CSS selector string, not a DOM node.
-    // Assign a unique id to the container then pass the selector.
-    const containerId = "aircall-phone-container";
-    node.id = containerId;
-
-    try {
-      const phone = new AircallPhone({
-        domToLoadWorkspace: `#${containerId}`,
-        size: "big",
-        onLogin: () => {
-          setSdkReady(true);
-          setSdkError(null);
-          toast.success("Aircall connected", { duration: 2000 });
-        },
-        onLogout: () => {
-          setSdkReady(false);
-          setCallState("idle");
-          setActiveCallInfo(null);
-          stopTimer();
-        },
-      });
-
-      // ── Incoming call ──
-      phone.on("incoming_call", (callData: { call_id: number; from: string; to: string }) => {
-        const rawPhone = callData.from || "";
-        const digits = rawPhone.replace(/\D/g, "");
-        setLookupPhone(digits.length >= 10 ? `+${digits}` : rawPhone);
-        setActiveCallInfo({
-          name: rawPhone,
-          number: rawPhone,
-          callerType: "unknown",
-          direction: "inbound",
-          aircallCallId: callData.call_id,
-        });
-        setCallState("incoming");
-      });
-
-      // ── Call answered (inbound) ──
-      phone.on("call_answered", (_callData: { call_id: number; from: string }) => {
-        setCallState("active");
-        startTimer();
-      });
-
-      // ── Outbound call initiated ──
-      phone.on("outgoing_call", (callData: { call_id: number; to: string; from: string }) => {
-        const rawPhone = callData.to || "";
-        setActiveCallInfo({
-          name: urlName || rawPhone,
-          number: rawPhone,
-          callerType: linkedRecord?.callerType || "unknown",
-          direction: "outbound",
-          aircallCallId: callData.call_id,
-        });
-        setCallState("ringing");
-      });
-
-      // ── Outbound answered ──
-      phone.on("outgoing_answered", () => {
-        setCallState("active");
-        startTimer();
-      });
-
-      // ── Call ended ──
-      phone.on("call_ended", (callData: { call_id: number; duration: number }) => {
-        stopTimer();
-        setCallDuration(callData.duration ?? 0);
-        setWrapUpCallInfo(activeCallInfo);
-        setCallState("wrap_up");
-        setSelectedDisposition(null);
-        setDispositionNote("");
-        setLookupPhone(null);
-      });
-
-      // ── Comment saved from Aircall UI ──
-      phone.on("comment_saved", (data: { comment: string; call_id: number }) => {
-        toast.info(`Call note saved: "${data.comment.slice(0, 60)}${data.comment.length > 60 ? "…" : ""}"`);
-      });
-
-      // ── SDK ready event — fire auto-dial if requested ──
-      phone.on("ready", () => {
-        if (autoCall && urlPhone && !autoDialFiredRef.current) {
-          autoDialFiredRef.current = true;
-          const digits = urlPhone.replace(/\D/g, "");
-          phone.send("dial_number", { phone_number: digits }, (success: boolean) => {
-            if (!success) toast.error("Auto-dial failed. Please dial manually.");
-          });
-        }
-      });
-
-      aircallRef.current = phone;
-    } catch (err) {
-      setSdkError("Failed to initialize Aircall phone. Please refresh.");
-    }
-  }, [autoCall, urlPhone, urlName, linkedRecord, startTimer, stopTimer]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => { stopTimer(); };
-  }, [stopTimer]);
-
-  // ── Auto-update caller name when lookup resolves ──
-  useEffect(() => {
-    if (!callerHistory) return;
-    const latestIntake = callerHistory.intakeRecords?.[0];
-    if (latestIntake?.callerName) {
-      setActiveCallInfo((prev) => prev ? { ...prev, name: latestIntake.callerName! } : prev);
-    }
-    if (latestIntake?.callerType) {
-      setScriptCallerType(latestIntake.callerType);
-      setActiveCallInfo((prev) => prev ? { ...prev, callerType: latestIntake.callerType! } : prev);
-    }
-  }, [callerHistory]);
-
-  // ── Click-to-call from linked intake ──
-  const handleClickToCall = (phone: string) => {
-    if (!aircallRef.current || !sdkReady) {
-      toast.error("Aircall phone not ready. Please log in to the phone first.");
-      return;
-    }
-    const digits = phone.replace(/\D/g, "");
-    aircallRef.current.send("dial_number", { phone_number: digits }, (success: boolean) => {
-      if (!success) toast.error("Could not dial number. Make sure you are logged in to Aircall.");
-    });
-  };
-
-  const handleSaveDisposition = () => {
-    if (!selectedDisposition) return;
-    setSavedDispositions((prev) => [{
-      callId: Date.now(),
-      disposition: selectedDisposition,
-      note: dispositionNote,
-      name: wrapUpCallInfo?.name || "Unknown",
-    }, ...prev]);
-    setCallState("idle");
-    setCallDuration(0);
-    setWrapUpCallInfo(null);
-    setActiveCallInfo(null);
-    setLookupPhone(null);
-  };
-
-  const handleSkipDisposition = () => {
-    setCallState("idle");
-    setCallDuration(0);
-    setWrapUpCallInfo(null);
-    setActiveCallInfo(null);
-    setLookupPhone(null);
-  };
-
+  // ── Helpers ──
   const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 
   const callerTypeColor = (t: string) => {
@@ -563,11 +397,9 @@ export default function Softphone() {
 
   const dispositionLabel = (val: string | null) => val ? ALL_DISPOSITIONS.find((d) => d.value === val) : null;
 
-  // Determine active script: prefer linked record's caller type, fall back to manual selector
   const activeScript = CALL_SCRIPTS[scriptCallerType] ?? CALL_SCRIPTS.unknown;
   const ScriptIcon = activeScript.icon;
 
-  // Caller type label for display
   const callerTypeLabel: Record<string, string> = {
     carrier: "Insurance Carrier",
     law_office: "Law Office",
@@ -578,6 +410,12 @@ export default function Softphone() {
     wrong_department: "Wrong Department",
     unknown: "Unknown",
   };
+
+  // The Aircall iframe lives in a globally-persistent fixed div managed by
+  // FloatingSoftphone. When we're on /softphone, FloatingSoftphone detects the
+  // route and switches the container to static positioning so it flows into the
+  // page layout. We just need to render a portal target div with the same id.
+  // No DOM manipulation needed — the container is already in the right place.
 
   return (
     <WhipLayout>
@@ -776,7 +614,7 @@ export default function Softphone() {
           {/* ── Left column: Aircall Phone + call context ── */}
           <div className="lg:col-span-1 space-y-4">
 
-            {/* Aircall Workspace iframe */}
+            {/* Aircall Workspace iframe — the persistent container is moved here */}
             <Card className="border border-gray-200 shadow-sm overflow-hidden">
               <div className="bg-primary px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -788,15 +626,17 @@ export default function Softphone() {
                   <span className="text-xs text-white/70">{sdkReady ? "Ready" : "Not connected"}</span>
                 </div>
               </div>
-              {/* The SDK injects the iframe into this div via callback ref */}
+              {/* The globally-persistent Aircall container is rendered here by
+                  FloatingSoftphone when on the /softphone route. It switches
+                  from fixed/hidden to static/full-size automatically. */}
               <div
-                ref={initAircall}
+                id="aircall-phone-page-slot"
                 className="flex items-center justify-center bg-gray-50"
                 style={{ minHeight: 666 }}
               />
             </Card>
 
-            {/* Active call context — shown while call is live */}
+            {/* Active call context */}
             {(callState === "incoming" || callState === "active" || callState === "ringing") && activeCallInfo && (
               <Card className={`border ${callState === "incoming" ? "border-green-300 bg-green-500/10" : callState === "ringing" ? "border-blue-200 bg-blue-500/10" : "border-green-200 bg-green-500/10"}`}>
                 <CardContent className="p-4 space-y-2">
@@ -818,7 +658,6 @@ export default function Softphone() {
                       {activeCallInfo.callerType.replace(/_/g, " ")}
                     </Badge>
                   )}
-                  {/* Caller history from DB */}
                   {callerHistory && callerHistory.intakeRecords.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Previous records</p>
@@ -933,7 +772,7 @@ export default function Softphone() {
               ))}
             </div>
 
-            {/* ── Call Script + Coaching Tips — side by side, caller-type-aware ── */}
+            {/* ── Call Script + Coaching Tips ── */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {/* Call Script */}
               <Card className={`border ${activeScript.color}`}>
@@ -991,7 +830,7 @@ export default function Softphone() {
                 </CardContent>
               </Card>
 
-              {/* Coaching Tips — caller-type-aware */}
+              {/* Coaching Tips */}
               <Card className="border border-amber-100 bg-amber-50/30">
                 <CardHeader className="pb-2 pt-4">
                   <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -1041,7 +880,7 @@ export default function Softphone() {
               </Card>
             )}
 
-            {/* Caller history panel — shows when a call is active and we have history */}
+            {/* Caller history panel */}
             {callerHistory && (callerHistory.intakeRecords.length > 0 || callerHistory.calls.length > 0) && (
               <Card className="border border-gray-200 shadow-sm">
                 <CardHeader className="pb-2">

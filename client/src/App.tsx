@@ -4,6 +4,9 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { ImpersonationProvider } from "./contexts/ImpersonationContext";
+import { SoftphoneProvider } from "./contexts/SoftphoneContext";
+import FloatingSoftphone from "./components/FloatingSoftphone";
 import Dashboard from "./pages/Dashboard";
 import IntakeRecords from "./pages/IntakeRecords";
 import IntakeDetail from "./pages/IntakeDetail";
@@ -19,7 +22,6 @@ import HandlerDashboard from "./pages/HandlerDashboard";
 import UserManagement from "./pages/UserManagement";
 import Settings from "./pages/Settings";
 import CallbackLog from "./pages/CallbackLog";
-import { ImpersonationProvider } from "./contexts/ImpersonationContext";
 import { ErrorBubble } from "./components/ErrorBubble";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 
@@ -53,6 +55,10 @@ function AppInner() {
   return (
     <>
       <Router />
+      {/* Persistent floating softphone — lives outside the router so it
+          survives all page navigations. The Aircall SDK iframe is mounted
+          once here and never destroyed. */}
+      <FloatingSoftphone />
       <ErrorBubble />
     </>
   );
@@ -63,10 +69,12 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <ImpersonationProvider>
-          <TooltipProvider>
-            <Toaster />
-            <AppInner />
-          </TooltipProvider>
+          <SoftphoneProvider>
+            <TooltipProvider>
+              <Toaster />
+              <AppInner />
+            </TooltipProvider>
+          </SoftphoneProvider>
         </ImpersonationProvider>
       </ThemeProvider>
     </ErrorBoundary>

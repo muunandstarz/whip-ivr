@@ -620,3 +620,18 @@ Business routing logic to implement in resolveHandler():
 - [ ] Wire call button in IntakeDetail page: navigate to /softphone?intakeId=X&phone=Y&name=Z
 - [ ] Wire call button in HandlerDashboard callback queue: navigate to /softphone with intake context
 - [ ] Softphone: read URL params on mount, pre-load intake context panel, auto-dial the number via SDK
+
+## Sprint: IVR/Softphone Usability & Portability (May 21, 2026)
+
+- [x] Fix voicemail audio playback — investigate recording URL path, proxy/signed URL, and audio player in IVR dashboard
+- [x] Convert softphone to persistent global floating widget that survives page navigation
+- [x] Global softphone widget: dock to bottom-right corner, collapsible, shows active call status
+- [x] Global softphone widget: maintain Aircall SDK instance in React context so it is never destroyed on navigate
+- [x] Global softphone widget: show caller name, call timer, mute/hold/end controls in collapsed state
+- [x] Global softphone widget: expand to full softphone UI on click
+- [x] Global softphone widget: linked intake record panel accessible from floating widget
+- [x] Improve outbound call audio quality: request mic with echoCancellation, noiseSuppression, autoGainControl
+- [ ] Improve outbound call audio quality: add user-facing mic test / permission check before call
+- [x] Export package: clean ZIP of full source (no node_modules/build artifacts)
+- [x] Export package: comprehensive integration guide (schema, API, env vars, embed, webhook)
+- [x] Export package: portability checklist for dev team merging into Claims Hub
