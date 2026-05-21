@@ -160,46 +160,43 @@ export default function FloatingSoftphone() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Reposition the container based on route ───────────────────────────────
-  const repositionContainer = useCallback(() => {
+  // ── Move the Aircall container into/out of the page slot via DOM reparenting ─
+  // When on /softphone: move the container node into #aircall-phone-page-slot.
+  // When elsewhere: move it back to <body> and hide it.
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     if (isOnSoftphonePage) {
-      const slot = document.getElementById("aircall-phone-page-slot");
-      if (slot) {
-        const rect = slot.getBoundingClientRect();
-        Object.assign(container.style, {
-          position: "fixed",
-          top: `${rect.top + window.scrollY}px`,
-          left: `${rect.left}px`,
-          width: `${rect.width}px`,
-          height: `${rect.height}px`,
-          bottom: "auto",
-          right: "auto",
-          zIndex: "10",
-          borderRadius: "0",
-          boxShadow: "none",
-          overflow: "hidden",
-          transition: "none",
-        });
-      }
-    } else if (widgetOpen && widgetExpanded && callState === "idle") {
-      Object.assign(container.style, {
-        position: "fixed",
-        bottom: "56px",
-        right: "16px",
-        top: "auto",
-        left: "auto",
-        width: "376px",
-        height: "666px",
-        zIndex: "9998",
-        borderRadius: "12px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-        overflow: "hidden",
-        transition: "all 0.2s ease",
-      });
+      // Poll for the slot (it may not be in the DOM yet on first render)
+      let attempts = 0;
+      const tryMove = () => {
+        const slot = document.getElementById("aircall-phone-page-slot");
+        if (slot) {
+          // Move the container into the slot
+          slot.appendChild(container);
+          Object.assign(container.style, {
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minHeight: "666px",
+            top: "", left: "", bottom: "", right: "",
+            zIndex: "1",
+            borderRadius: "0",
+            boxShadow: "none",
+            overflow: "hidden",
+          });
+        } else if (attempts < 20) {
+          attempts++;
+          setTimeout(tryMove, 50);
+        }
+      };
+      requestAnimationFrame(tryMove);
     } else {
+      // Move back to body and hide
+      if (container.parentNode !== document.body) {
+        document.body.appendChild(container);
+      }
       Object.assign(container.style, {
         position: "fixed",
         bottom: "-9999px",
@@ -210,31 +207,9 @@ export default function FloatingSoftphone() {
         height: "1px",
         zIndex: "9998",
         overflow: "hidden",
-        transition: "none",
       });
     }
-  }, [isOnSoftphonePage, widgetOpen, widgetExpanded, callState]);
-
-  useEffect(() => {
-    // Use rAF to wait for the page slot div to be in the DOM after route change
-    const raf = requestAnimationFrame(() => repositionContainer());
-    return () => cancelAnimationFrame(raf);
-  }, [repositionContainer, location]);
-
-  // Re-position when the page slot resizes (e.g. sidebar toggle, window resize)
-  useEffect(() => {
-    if (!isOnSoftphonePage) return;
-    const observer = new ResizeObserver(() => repositionContainer());
-    const slot = document.getElementById("aircall-phone-page-slot");
-    if (slot) observer.observe(slot);
-    window.addEventListener("resize", repositionContainer);
-    window.addEventListener("scroll", repositionContainer);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", repositionContainer);
-      window.removeEventListener("scroll", repositionContainer);
-    };
-  }, [isOnSoftphonePage, repositionContainer]);
+  }, [isOnSoftphonePage, location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show disposition panel when wrap_up starts
   useEffect(() => {
