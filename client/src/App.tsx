@@ -22,7 +22,6 @@ import HandlerDashboard from "./pages/HandlerDashboard";
 import UserManagement from "./pages/UserManagement";
 import Settings from "./pages/Settings";
 import CallbackLog from "./pages/CallbackLog";
-import { ErrorBubble } from "./components/ErrorBubble";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 
 function Router() {
@@ -59,7 +58,6 @@ function AppInner() {
           survives all page navigations. The Aircall SDK iframe is mounted
           once here and never destroyed. */}
       <FloatingSoftphone />
-      <ErrorBubble />
     </>
   );
 }
