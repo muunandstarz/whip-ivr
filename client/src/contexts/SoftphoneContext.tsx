@@ -151,7 +151,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
     try {
       const phone = new AircallPhone({
         domToLoadWorkspace: `#${containerId}`,
-        size: "big",
+        size: "auto",
         onLogin: () => {
           setSdkReady(true);
           setSdkError(null);

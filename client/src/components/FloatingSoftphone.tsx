@@ -178,14 +178,21 @@ export default function FloatingSoftphone() {
           Object.assign(container.style, {
             position: "relative",
             width: "100%",
-            height: "100%",
+            height: "666px",
             minHeight: "666px",
             top: "", left: "", bottom: "", right: "",
             zIndex: "1",
             borderRadius: "0",
             boxShadow: "none",
             overflow: "hidden",
+            display: "block",
           });
+          // Ensure the iframe inside fills the container
+          const iframe = container.querySelector("iframe");
+          if (iframe) {
+            iframe.style.width = "100%";
+            iframe.style.height = "100%";
+          }
         } else if (attempts < 20) {
           attempts++;
           setTimeout(tryMove, 50);

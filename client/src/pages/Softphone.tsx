@@ -285,10 +285,9 @@ export default function Softphone() {
     }
     // Hide the floating widget while we're on the full page
     setWidgetOpen(false);
-    return () => {
-      // When leaving the page, show the floating widget again
-      setWidgetOpen(true);
-    };
+    // When leaving the page, always show the floating widget so the user
+    // can see call status and controls from any other page
+    return () => { setWidgetOpen(true); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Linked intake record ──
@@ -411,11 +410,27 @@ export default function Softphone() {
     unknown: "Unknown",
   };
 
-  // The Aircall iframe lives in a globally-persistent fixed div managed by
-  // FloatingSoftphone. When we're on /softphone, FloatingSoftphone detects the
-  // route and switches the container to static positioning so it flows into the
-  // page layout. We just need to render a portal target div with the same id.
-  // No DOM manipulation needed — the container is already in the right place.
+  // Mobile detection
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    return (
+      <WhipLayout>
+        <div className="p-6 max-w-lg mx-auto mt-12 text-center">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 space-y-4">
+            <Phone className="w-12 h-12 text-amber-500 mx-auto" />
+            <h2 className="text-xl font-bold text-amber-900">Desktop Required</h2>
+            <p className="text-sm text-amber-800 leading-relaxed">
+              The Aircall softphone requires a desktop browser. Mobile browsers are redirected to the Aircall app by Aircall's own servers.
+            </p>
+            <p className="text-sm text-amber-700">
+              Please open this page on a desktop or laptop computer to use the softphone.
+            </p>
+          </div>
+        </div>
+      </WhipLayout>
+    );
+  }
 
   return (
     <WhipLayout>
@@ -631,8 +646,7 @@ export default function Softphone() {
                   from fixed/hidden to static/full-size automatically. */}
               <div
                 id="aircall-phone-page-slot"
-                className="flex items-center justify-center bg-gray-50"
-                style={{ minHeight: 666 }}
+                style={{ width: "100%", height: "666px", minHeight: "666px", display: "block" }}
               />
             </Card>
 
