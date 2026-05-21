@@ -635,3 +635,5 @@ Business routing logic to implement in resolveHandler():
 - [x] Export package: clean ZIP of full source (no node_modules/build artifacts)
 - [x] Export package: comprehensive integration guide (schema, API, env vars, embed, webhook)
 - [x] Export package: portability checklist for dev team merging into Claims Hub
+- [x] Fix scroll-drift: Aircall container now re-snaps to page slot on scroll/resize (window + main scroll container + ResizeObserver)
+- [x] Fix initAircall double-init guard: aircallRef.current check prevents re-initialization on navigation back to /softphone

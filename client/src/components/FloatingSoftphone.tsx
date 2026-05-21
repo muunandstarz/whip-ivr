@@ -1,16 +1,24 @@
 /**
  * FloatingSoftphone
  *
- * A persistent floating softphone widget that lives at the application root.
+ * ARCHITECTURE — THE ONLY RELIABLE APPROACH:
  *
- * KEY DESIGN PRINCIPLE:
- * The Aircall iframe container is appended to <body> ONCE via an imperative
- * useEffect and is NEVER removed or re-mounted. This keeps the SDK alive
- * across all page navigations.
+ * The Aircall iframe container is created ONCE, appended to <body>, and
+ * NEVER moved, reparented, or resized to 0. DOM reparenting kills WebRTC.
  *
- * When on /softphone: the container is CSS-repositioned to fill the page's
- * left column phone slot (identified by #aircall-phone-page-slot).
- * When elsewhere: the container is shown as a floating widget or hidden.
+ * The container stays `position: fixed` in <body> forever.
+ * CSS transitions change its size/position between two modes:
+ *
+ *   WIDGET MODE (all pages except /softphone):
+ *     - Bottom-right corner, 340×500px, opacity:0 (hidden) or opacity:1 (expanded)
+ *
+ *   PAGE MODE (/softphone):
+ *     - Left column of the softphone page, 376×666px, opacity:1
+ *     - The page renders a matching placeholder div so the layout doesn't shift
+ *
+ * The floating widget overlay (dock bar, disposition panel, call info) is a
+ * SEPARATE React component rendered on top via z-index. It never touches the
+ * Aircall container directly.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
@@ -99,6 +107,141 @@ function callStateLabel(state: string) {
   }
 }
 
+// ─── Aircall Container Manager ────────────────────────────────────────────────
+// This hook creates the container once and updates its CSS position/size
+// based on mode. The container NEVER moves between DOM parents.
+
+function useAircallContainer(isOnSoftphonePage: boolean, widgetVisible: boolean) {
+  const { initAircall } = useSoftphone();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const initializedRef = useRef(false);
+
+  // Create the container once on mount
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    let container = document.getElementById("aircall-global-phone-container") as HTMLDivElement | null;
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "aircall-global-phone-container";
+      // Start hidden in widget position
+      Object.assign(container.style, {
+        position: "fixed",
+        bottom: "80px",
+        right: "16px",
+        width: "340px",
+        height: "500px",
+        zIndex: "9995",
+        borderRadius: "12px",
+        overflow: "hidden",
+        opacity: "0",
+        pointerEvents: "none",
+        transition: "opacity 0.2s ease, width 0.3s ease, height 0.3s ease, bottom 0.3s ease, right 0.3s ease, border-radius 0.3s ease",
+      });
+      document.body.appendChild(container);
+    }
+    containerRef.current = container;
+
+    // Pre-request microphone for optimal audio quality
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      }).then((stream) => {
+        stream.getTracks().forEach((t) => t.stop());
+      }).catch(() => {});
+    }
+
+    // Initialize the Aircall SDK into this container
+    initAircall(container);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update container CSS when mode changes — NO DOM reparenting
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Helper to snap container onto the page slot
+    function snapToSlot() {
+      if (!container) return;
+      const slot = document.getElementById("aircall-phone-page-slot");
+      if (!slot) return;
+      const rect = slot.getBoundingClientRect();
+      Object.assign(container.style, {
+        bottom: "auto",
+        right: "auto",
+        top: `${rect.top}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+        borderRadius: "0 0 12px 12px",
+        opacity: "1",
+        pointerEvents: "auto",
+        zIndex: "9995",
+      });
+    }
+
+    if (isOnSoftphonePage) {
+      // PAGE MODE: overlay the page slot, keep aligned on scroll/resize
+      const slot = document.getElementById("aircall-phone-page-slot");
+      if (slot) {
+        snapToSlot();
+      } else {
+        // Slot not in DOM yet — retry after paint
+        requestAnimationFrame(snapToSlot);
+      }
+
+      // Keep aligned when user scrolls or window resizes
+      // Note: WhipLayout uses overflow-auto on <main>, so scroll events fire on
+      // that element, not on window. We listen to both to be safe.
+      window.addEventListener("scroll", snapToSlot, { passive: true });
+      window.addEventListener("resize", snapToSlot, { passive: true });
+
+      // Also attach to the layout's main scroll container
+      const mainEl = document.querySelector("main.flex-1") as HTMLElement | null;
+      if (mainEl) {
+        mainEl.addEventListener("scroll", snapToSlot, { passive: true });
+      }
+
+      // Also observe the slot itself for layout changes
+      let ro: ResizeObserver | null = null;
+      const slotEl = document.getElementById("aircall-phone-page-slot");
+      if (slotEl && typeof ResizeObserver !== "undefined") {
+        ro = new ResizeObserver(snapToSlot);
+        ro.observe(slotEl);
+      }
+
+      return () => {
+        window.removeEventListener("scroll", snapToSlot);
+        window.removeEventListener("resize", snapToSlot);
+        if (mainEl) mainEl.removeEventListener("scroll", snapToSlot);
+        ro?.disconnect();
+      };
+    } else {
+      // WIDGET MODE: fixed bottom-right, visible only when widgetVisible
+      Object.assign(container.style, {
+        top: "auto",
+        bottom: "80px",
+        right: "16px",
+        left: "auto",
+        width: "340px",
+        height: "500px",
+        borderRadius: "12px",
+        opacity: widgetVisible ? "1" : "0",
+        pointerEvents: widgetVisible ? "auto" : "none",
+        zIndex: "9995",
+      });
+    }
+  }, [isOnSoftphonePage, widgetVisible]);
+
+  return containerRef;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FloatingSoftphone() {
@@ -115,153 +258,13 @@ export default function FloatingSoftphone() {
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
   const [showDisposition, setShowDisposition] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const isOnSoftphonePage = location.startsWith("/softphone");
 
-  // ── Create the persistent Aircall container once, append to body ──────────
-  // This runs once on mount. The container is NEVER removed from the DOM.
-  useEffect(() => {
-    // Check if already created (e.g. HMR)
-    let container = document.getElementById("aircall-global-phone-container") as HTMLDivElement | null;
-    if (!container) {
-      container = document.createElement("div");
-      container.id = "aircall-global-phone-container";
-      document.body.appendChild(container);
-    }
-    containerRef.current = container;
-    // Pre-request microphone with optimal audio constraints for telephony.
-    // This ensures the browser's audio processing pipeline (echo cancellation,
-    // noise suppression, auto gain) is active before Aircall initializes WebRTC.
-    if (navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000,   // Telephony-optimized sample rate
-          channelCount: 1,     // Mono — standard for voice calls
-        },
-      }).then((stream) => {
-        // Release the stream immediately — we just needed to prime the permission
-        // and let the browser configure its audio pipeline. Aircall will request
-        // its own stream when a call starts.
-        stream.getTracks().forEach((t) => t.stop());
-      }).catch(() => {
-        // Permission denied or not available — Aircall will handle its own prompt
-      });
-    }
+  // widgetVisible = the Aircall iframe is shown in widget mode
+  const widgetVisible = !isOnSoftphonePage && widgetExpanded && widgetOpen;
 
-    // Initialize the SDK into this container
-    initAircall(container);
-
-    return () => {
-      // On unmount (app teardown only), clean up
-      // Do NOT remove the container — it must outlive component re-renders
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Move the Aircall container into/out of the page slot via DOM reparenting ─
-  // When on /softphone: move the container node into #aircall-phone-page-slot.
-  // When elsewhere: move it back to <body>.
-  //
-  // CRITICAL: Never shrink the container to 0/1px while a call is active.
-  // Chromium aggressively throttles/suspends offscreen iframes, which kills
-  // the WebRTC audio session. When a call is active, the container stays
-  // full-size but is hidden behind the floating widget UI via opacity/pointer-events.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    if (isOnSoftphonePage) {
-      // Poll for the slot (it may not be in the DOM yet on first render)
-      let attempts = 0;
-      const tryMove = () => {
-        const slot = document.getElementById("aircall-phone-page-slot");
-        if (slot) {
-          // Move the container into the slot
-          slot.appendChild(container);
-          Object.assign(container.style, {
-            position: "relative",
-            width: "100%",
-            height: "666px",
-            minHeight: "666px",
-            top: "", left: "", bottom: "", right: "",
-            zIndex: "1",
-            borderRadius: "0",
-            boxShadow: "none",
-            overflow: "hidden",
-            display: "block",
-            opacity: "1",
-            pointerEvents: "auto",
-          });
-          // Ensure the iframe inside fills the container
-          const iframe = container.querySelector("iframe");
-          if (iframe) {
-            iframe.style.width = "100%";
-            iframe.style.height = "100%";
-          }
-        } else if (attempts < 20) {
-          attempts++;
-          setTimeout(tryMove, 50);
-        }
-      };
-      requestAnimationFrame(tryMove);
-    } else {
-      // Move back to body
-      if (container.parentNode !== document.body) {
-        document.body.appendChild(container);
-      }
-      // Keep the container at full size to prevent Chromium from throttling
-      // the WebRTC iframe. Position it off the visible area but NOT 1x1px.
-      // The floating widget UI overlays on top of it.
-      Object.assign(container.style, {
-        position: "fixed",
-        bottom: "80px",
-        right: "16px",
-        top: "auto",
-        left: "auto",
-        width: "376px",
-        height: "666px",
-        zIndex: "9997",  // below the floating widget overlay (9998)
-        overflow: "hidden",
-        borderRadius: "12px",
-        // Hide visually but keep the iframe alive and unthrottled
-        opacity: "0",
-        pointerEvents: "none",
-      });
-    }
-  }, [isOnSoftphonePage, location]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Show/hide the Aircall container based on widget expanded state ──────────
-  // When the widget is expanded (user clicked the phone button), make the
-  // container visible so the user can interact with the dial pad.
-  // When collapsed, hide it (opacity:0) but keep it full-size to prevent
-  // Chromium from throttling the WebRTC iframe.
-  useEffect(() => {
-    if (isOnSoftphonePage) return; // Page slot handles visibility on softphone page
-    const container = containerRef.current;
-    if (!container) return;
-    if (widgetExpanded && widgetOpen) {
-      // Show the container — user wants to interact with the dial pad
-      Object.assign(container.style, {
-        opacity: "1",
-        pointerEvents: "auto",
-        zIndex: "9998",
-        width: "340px",
-        height: "500px",
-        bottom: "56px",  // above the dock bar
-        right: "16px",
-        borderRadius: "0 0 12px 12px",
-      });
-    } else {
-      // Hide but keep alive
-      Object.assign(container.style, {
-        opacity: "0",
-        pointerEvents: "none",
-        zIndex: "9997",
-      });
-    }
-  }, [widgetExpanded, widgetOpen, isOnSoftphonePage]);
+  // Manage the persistent container (never reparented)
+  useAircallContainer(isOnSoftphonePage, widgetVisible);
 
   // Show disposition panel when wrap_up starts
   useEffect(() => {
@@ -291,237 +294,191 @@ export default function FloatingSoftphone() {
     }
     setWidgetOpen(false);
     setWidgetExpanded(false);
+    setShowDisposition(false);
   }, [callState, setWidgetOpen, setWidgetExpanded]);
 
   const handleOpenFullPage = useCallback(() => {
-    const params = new URLSearchParams();
-    if (linkedIntakeId) params.set("intakeId", String(linkedIntakeId));
-    navigate(`/softphone${params.toString() ? "?" + params.toString() : ""}`);
-    setWidgetExpanded(false);
-  }, [navigate, linkedIntakeId, setWidgetExpanded]);
+    navigate("/softphone");
+  }, [navigate]);
 
-  const isOnCall = callState === "active" || callState === "ringing" || callState === "incoming";
+  const handleMute = useCallback(() => {
+    setMuted((v) => !v);
+    toast.info(muted ? "Unmuted" : "Muted");
+  }, [muted]);
 
-  // ── Dock bar ──────────────────────────────────────────────────────────────
+  const handleHold = useCallback(() => {
+    setOnHold((v) => !v);
+    toast.info(onHold ? "Resumed" : "Call on hold");
+  }, [onHold]);
 
-  const dockBar = (
-    <div
-      className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
-      onClick={handleToggleExpand}
-    >
-      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${callStateColor(callState)}`} />
-      <div className="flex-shrink-0">
-        {callState === "incoming" ? (
-          <PhoneIncoming className="w-4 h-4 text-blue-400" />
-        ) : callState === "ringing" ? (
-          <PhoneOutgoing className="w-4 h-4 text-yellow-400" />
-        ) : callState === "active" ? (
-          <Phone className="w-4 h-4 text-green-400" />
-        ) : (
-          <Phone className="w-4 h-4 text-gray-400" />
-        )}
+  // ── Floating widget launcher button (shown when widget is closed) ──
+  const showLauncher = !isOnSoftphonePage && widgetOpen === false;
+  const showDockBar = !isOnSoftphonePage && widgetOpen === true;
+
+  // ── Disposition panel content ──
+  const DispositionPanel = (
+    <div className="p-3 space-y-2">
+      <div className="text-xs font-semibold text-orange-300 uppercase tracking-wide">
+        Wrap-Up — {wrapUpCallInfo?.name || activeCallInfo?.name || "Unknown Caller"}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-white truncate">
-            {isOnCall && activeCallInfo
-              ? activeCallInfo.name || activeCallInfo.number
-              : callState === "wrap_up"
-              ? "Wrap-Up Required"
-              : "Aircall Softphone"}
-          </span>
-          {isOnCall && (
-            <span className="text-xs text-gray-300 flex-shrink-0">
-              {formatDuration(callDuration)}
-            </span>
-          )}
-        </div>
-        <div className="text-[10px] text-gray-400">
-          {callStateLabel(callState)}
-          {sdkReady ? "" : " · Not connected"}
-        </div>
-      </div>
-      {isOnCall && (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            className={`p-1 rounded ${muted ? "text-red-400" : "text-gray-300 hover:text-white"}`}
-            title={muted ? "Unmute" : "Mute"}
-            onClick={() => setMuted((m) => !m)}
-          >
-            {muted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-          </button>
-          <button
-            className={`p-1 rounded ${onHold ? "text-yellow-400" : "text-gray-300 hover:text-white"}`}
-            title={onHold ? "Resume" : "Hold"}
-            onClick={() => setOnHold((h) => !h)}
-          >
-            {onHold ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-      )}
-      <button className="text-gray-400 hover:text-white flex-shrink-0" onClick={(e) => { e.stopPropagation(); handleToggleExpand(); }}>
-        {widgetExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-      </button>
-      {callState === "idle" && (
-        <button
-          className="text-gray-500 hover:text-white flex-shrink-0"
-          onClick={(e) => { e.stopPropagation(); handleClose(); }}
-          title="Close softphone"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </div>
-  );
-
-  // ── Expanded panel content ────────────────────────────────────────────────
-
-  const expandedContent = widgetExpanded && (
-    <div className="border-t border-white/10">
-      {callState === "wrap_up" && showDisposition && (
-        <div className="p-3 space-y-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-orange-300">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Call Wrap-Up — {wrapUpCallInfo?.name || wrapUpCallInfo?.number || "Unknown"}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] text-gray-300">Disposition *</Label>
-            <Select value={selectedDisposition ?? ""} onValueChange={setSelectedDisposition}>
-              <SelectTrigger className="h-8 text-xs bg-white/10 border-white/20 text-white">
-                <SelectValue placeholder="Select disposition…" />
-              </SelectTrigger>
-              <SelectContent>
-                {DISPOSITION_GROUPS.map((g) => (
-                  <div key={g.group}>
-                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      {g.group}
-                    </div>
-                    {g.items.map((item) => (
-                      <SelectItem key={item.value} value={item.value} className="text-xs">
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </div>
+      <div>
+        <Label className="text-[10px] text-gray-400 mb-1 block">Disposition</Label>
+        <Select value={selectedDisposition ?? ""} onValueChange={setSelectedDisposition}>
+          <SelectTrigger className="h-7 text-xs bg-white/10 border-white/20 text-white">
+            <SelectValue placeholder="Select outcome…" />
+          </SelectTrigger>
+          <SelectContent>
+            {DISPOSITION_GROUPS.map((g) => (
+              <div key={g.group}>
+                <div className="px-2 py-1 text-[10px] font-semibold text-gray-400 uppercase">{g.group}</div>
+                {g.items.map((item) => (
+                  <SelectItem key={item.value} value={item.value} className="text-xs">{item.label}</SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] text-gray-300">Notes</Label>
-            <Textarea
-              value={dispositionNote}
-              onChange={(e) => setDispositionNote(e.target.value)}
-              placeholder="Optional call notes…"
-              className="text-xs h-16 resize-none bg-white/10 border-white/20 text-white placeholder:text-gray-500"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="flex-1 h-7 text-xs bg-[#ff6221] hover:bg-[#e55510] text-white"
-              disabled={!selectedDisposition}
-              onClick={handleSaveDisposition}
-            >
-              Save & Close
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs text-gray-400 hover:text-white"
-              onClick={handleSkipDisposition}
-            >
-              Skip
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {callState !== "wrap_up" && (
-        <div className="p-2">
-          <div className="text-[10px] text-gray-400 mb-1 flex items-center gap-1">
-            {sdkReady
-              ? <><Wifi className="w-3 h-3 text-green-400" /> Connected</>
-              : <><WifiOff className="w-3 h-3 text-red-400" /> {sdkError || "Not connected — log in below"}</>
-            }
-          </div>
-          {/* The Aircall dial pad container is positioned directly behind this
-              widget via CSS (opacity:1 when expanded). This spacer reserves the
-              visual space so the widget shell aligns with the container. */}
-          <div style={{ height: "444px" }} />
-        </div>
-      )}
+              </div>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label className="text-[10px] text-gray-400 mb-1 block">Notes</Label>
+        <Textarea
+          value={dispositionNote}
+          onChange={(e) => setDispositionNote(e.target.value)}
+          placeholder="Optional call notes…"
+          className="h-16 text-xs bg-white/10 border-white/20 text-white placeholder:text-gray-500 resize-none"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={!selectedDisposition}
+          onClick={() => { handleSaveDisposition(); setShowDisposition(false); }}
+          className="flex-1 h-7 text-xs bg-orange-500 hover:bg-orange-600 text-white"
+        >
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Save
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => { handleSkipDisposition(); setShowDisposition(false); }}
+          className="h-7 text-xs text-gray-400 hover:text-white"
+        >
+          Skip
+        </Button>
+      </div>
     </div>
   );
 
-  // Don't render the floating widget UI when on the softphone page
-  // (the page renders the full dial pad directly via the repositioned container)
-  if (isOnSoftphonePage) return null;
+  // ── Expanded widget content (dial pad spacer + call controls) ──
+  const ExpandedContent = (
+    <div className="flex flex-col">
+      {/* Call controls when active */}
+      {(callState === "active" || callState === "ringing" || callState === "incoming") && (
+        <div className="px-3 pb-2 flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleMute}
+            className={`flex-1 h-7 text-xs ${muted ? "bg-red-500/20 text-red-300" : "text-gray-300 hover:text-white"}`}
+          >
+            {muted ? <MicOff className="w-3 h-3 mr-1" /> : <Mic className="w-3 h-3 mr-1" />}
+            {muted ? "Unmute" : "Mute"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleHold}
+            className={`flex-1 h-7 text-xs ${onHold ? "bg-yellow-500/20 text-yellow-300" : "text-gray-300 hover:text-white"}`}
+          >
+            {onHold ? <Play className="w-3 h-3 mr-1" /> : <Pause className="w-3 h-3 mr-1" />}
+            {onHold ? "Resume" : "Hold"}
+          </Button>
+        </div>
+      )}
+
+      {/* Status line */}
+      <div className="px-3 pb-2">
+        <div className="text-[10px] text-gray-400 flex items-center gap-1">
+          {sdkReady
+            ? <><Wifi className="w-3 h-3 text-green-400" /> Connected</>
+            : <><WifiOff className="w-3 h-3 text-red-400" /> {sdkError || "Not connected — log in below"}</>
+          }
+        </div>
+      </div>
+
+      {/* Spacer — the Aircall iframe is positioned behind this widget */}
+      <div style={{ height: "420px" }} />
+    </div>
+  );
 
   return (
     <>
-      {/* ── Floating widget shell ─────────────────────────────────────────── */}
-      {widgetOpen && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "16px",
-            right: "16px",
-            width: "340px",
-            zIndex: 9999,
-            borderRadius: "12px",
-            background: "linear-gradient(135deg, #171b31 0%, #1e2340 100%)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)",
-            overflow: "hidden",
-          }}
-        >
-          {dockBar}
-          {expandedContent}
-        </div>
-      )}
-
-      {/* ── Collapsed launcher button ─────────────────────────────────────── */}
-      {!widgetOpen && (
+      {/* ── Launcher button (when widget is fully closed) ── */}
+      {showLauncher && (
         <button
-          onClick={() => setWidgetOpen(true)}
-          style={{
-            position: "fixed",
-            bottom: "16px",
-            right: "16px",
-            zIndex: 9999,
-            width: "48px",
-            height: "48px",
-            borderRadius: "50%",
-            background: callState !== "idle" ? "#ff6221" : "#171b31",
-            border: "2px solid rgba(255,255,255,0.15)",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "all 0.2s ease",
-          }}
+          onClick={() => { setWidgetOpen(true); setWidgetExpanded(true); }}
+          className="fixed bottom-6 right-6 z-[9999] w-14 h-14 rounded-full bg-[#171b31] border-2 border-[#ff6221] shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
           title="Open Softphone"
         >
-          {callState === "incoming" ? (
-            <PhoneIncoming className="w-5 h-5 text-white animate-bounce" />
-          ) : (
-            <Phone className="w-5 h-5 text-white" />
-          )}
-          {callState !== "idle" && (
-            <span
-              style={{
-                position: "absolute",
-                top: "2px",
-                right: "2px",
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: callState === "active" ? "#22c55e" : "#facc15",
-                border: "2px solid #171b31",
-              }}
-            />
+          <Phone className="w-6 h-6 text-[#ff6221]" />
+          {(callState === "active" || callState === "ringing" || callState === "incoming") && (
+            <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-green-500 border-2 border-white animate-pulse" />
           )}
         </button>
+      )}
+
+      {/* ── Dock bar + expanded panel (when widget is open) ── */}
+      {showDockBar && (
+        <div
+          className="fixed z-[9999] bg-[#171b31] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+          style={{
+            bottom: "16px",
+            right: "16px",
+            width: "356px",
+          }}
+        >
+          {/* Header dock bar */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-[#0f1220] border-b border-white/10">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${callStateColor(callState)}`} />
+            <span className="text-xs font-semibold text-white flex-1 truncate">
+              {callState !== "idle"
+                ? `${callStateLabel(callState)} — ${activeCallInfo?.name || activeCallInfo?.number || "Unknown"}`
+                : "Aircall Softphone"
+              }
+            </span>
+            {callState === "active" && (
+              <span className="text-[10px] text-green-400 font-mono">{formatDuration(callDuration)}</span>
+            )}
+            {linkedIntakeId && callState !== "idle" && (
+              <button
+                onClick={() => navigate(`/intake/${linkedIntakeId}`)}
+                className="text-[10px] text-orange-400 hover:text-orange-300 underline"
+                title="View linked intake"
+              >
+                #{linkedIntakeId}
+              </button>
+            )}
+            <button onClick={handleToggleExpand} className="text-gray-400 hover:text-white p-0.5">
+              {widgetExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </button>
+            <button onClick={handleOpenFullPage} className="text-gray-400 hover:text-white p-0.5" title="Open full softphone">
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={handleClose} className="text-gray-400 hover:text-white p-0.5">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Expanded content */}
+          {widgetExpanded && (
+            <div>
+              {showDisposition && callState === "wrap_up"
+                ? DispositionPanel
+                : ExpandedContent
+              }
+            </div>
+          )}
+        </div>
       )}
     </>
   );
