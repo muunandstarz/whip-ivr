@@ -162,7 +162,12 @@ export default function FloatingSoftphone() {
 
   // ── Move the Aircall container into/out of the page slot via DOM reparenting ─
   // When on /softphone: move the container node into #aircall-phone-page-slot.
-  // When elsewhere: move it back to <body> and hide it.
+  // When elsewhere: move it back to <body>.
+  //
+  // CRITICAL: Never shrink the container to 0/1px while a call is active.
+  // Chromium aggressively throttles/suspends offscreen iframes, which kills
+  // the WebRTC audio session. When a call is active, the container stays
+  // full-size but is hidden behind the floating widget UI via opacity/pointer-events.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -186,6 +191,8 @@ export default function FloatingSoftphone() {
             boxShadow: "none",
             overflow: "hidden",
             display: "block",
+            opacity: "1",
+            pointerEvents: "auto",
           });
           // Ensure the iframe inside fills the container
           const iframe = container.querySelector("iframe");
@@ -200,23 +207,61 @@ export default function FloatingSoftphone() {
       };
       requestAnimationFrame(tryMove);
     } else {
-      // Move back to body and hide
+      // Move back to body
       if (container.parentNode !== document.body) {
         document.body.appendChild(container);
       }
+      // Keep the container at full size to prevent Chromium from throttling
+      // the WebRTC iframe. Position it off the visible area but NOT 1x1px.
+      // The floating widget UI overlays on top of it.
       Object.assign(container.style, {
         position: "fixed",
-        bottom: "-9999px",
-        right: "-9999px",
+        bottom: "80px",
+        right: "16px",
         top: "auto",
         left: "auto",
-        width: "1px",
-        height: "1px",
-        zIndex: "9998",
+        width: "376px",
+        height: "666px",
+        zIndex: "9997",  // below the floating widget overlay (9998)
         overflow: "hidden",
+        borderRadius: "12px",
+        // Hide visually but keep the iframe alive and unthrottled
+        opacity: "0",
+        pointerEvents: "none",
       });
     }
   }, [isOnSoftphonePage, location]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Show/hide the Aircall container based on widget expanded state ──────────
+  // When the widget is expanded (user clicked the phone button), make the
+  // container visible so the user can interact with the dial pad.
+  // When collapsed, hide it (opacity:0) but keep it full-size to prevent
+  // Chromium from throttling the WebRTC iframe.
+  useEffect(() => {
+    if (isOnSoftphonePage) return; // Page slot handles visibility on softphone page
+    const container = containerRef.current;
+    if (!container) return;
+    if (widgetExpanded && widgetOpen) {
+      // Show the container — user wants to interact with the dial pad
+      Object.assign(container.style, {
+        opacity: "1",
+        pointerEvents: "auto",
+        zIndex: "9998",
+        width: "340px",
+        height: "500px",
+        bottom: "56px",  // above the dock bar
+        right: "16px",
+        borderRadius: "0 0 12px 12px",
+      });
+    } else {
+      // Hide but keep alive
+      Object.assign(container.style, {
+        opacity: "0",
+        pointerEvents: "none",
+        zIndex: "9997",
+      });
+    }
+  }, [widgetExpanded, widgetOpen, isOnSoftphonePage]);
 
   // Show disposition panel when wrap_up starts
   useEffect(() => {
@@ -399,16 +444,10 @@ export default function FloatingSoftphone() {
               : <><WifiOff className="w-3 h-3 text-red-400" /> {sdkError || "Not connected — log in below"}</>
             }
           </div>
-          <div className="text-[11px] text-gray-300 text-center py-2">
-            The Aircall phone is active in the background.
-          </div>
-          <Button
-            size="sm"
-            className="w-full h-7 text-xs bg-white/10 hover:bg-white/20 text-white border border-white/20"
-            onClick={handleOpenFullPage}
-          >
-            <ExternalLink className="w-3 h-3 mr-1" /> Open Full Softphone
-          </Button>
+          {/* The Aircall dial pad container is positioned directly behind this
+              widget via CSS (opacity:1 when expanded). This spacer reserves the
+              visual space so the widget shell aligns with the container. */}
+          <div style={{ height: "444px" }} />
         </div>
       )}
     </div>
