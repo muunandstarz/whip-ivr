@@ -637,3 +637,5 @@ Business routing logic to implement in resolveHandler():
 - [x] Export package: portability checklist for dev team merging into Claims Hub
 - [x] Fix scroll-drift: Aircall container now re-snaps to page slot on scroll/resize (window + main scroll container + ResizeObserver)
 - [x] Fix initAircall double-init guard: aircallRef.current check prevents re-initialization on navigation back to /softphone
+- [x] Fix dispo panel covering Aircall iframe: disposition panel now renders as separate fixed overlay (z-10001) above the iframe, not inside the widget shell
+- [x] Fix minimize hanging up call: Aircall iframe stays visible (widgetVisible=true) during active/ringing/incoming calls regardless of widgetExpanded state — callIsLive guard prevents iframe from being hidden while WebRTC session is live

@@ -262,8 +262,12 @@ export default function FloatingSoftphone() {
   const [showDisposition, setShowDisposition] = useState(false);
   const isOnSoftphonePage = location.startsWith("/softphone");
 
-  // widgetVisible = the Aircall iframe is shown in widget mode
-  const widgetVisible = !isOnSoftphonePage && widgetExpanded && widgetOpen;
+  // widgetVisible = the Aircall iframe is shown in widget mode.
+  // CRITICAL: during an active/ringing/incoming call, ALWAYS keep the iframe
+  // visible even if the user minimizes the widget. Hiding the iframe while a
+  // WebRTC call is active causes Aircall SDK to drop the call.
+  const callIsLive = callState === "active" || callState === "ringing" || callState === "incoming";
+  const widgetVisible = !isOnSoftphonePage && widgetOpen && (widgetExpanded || callIsLive);
 
   // Manage the persistent container (never reparented)
   useAircallContainer(isOnSoftphonePage, widgetVisible);
@@ -286,6 +290,8 @@ export default function FloatingSoftphone() {
   }, [callState, setWidgetOpen, setWidgetExpanded]);
 
   const handleToggleExpand = useCallback(() => {
+    // During an active call, collapsing would hide the iframe and drop the call.
+    // Instead, just collapse the overlay UI — the iframe stays visible.
     setWidgetExpanded((v: boolean) => !v);
   }, [setWidgetExpanded]);
 
@@ -430,57 +436,73 @@ export default function FloatingSoftphone() {
 
       {/* ── Dock bar + expanded panel (when widget is open) ── */}
       {showDockBar && (
-        <div
-          className="fixed z-[9999] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
-          style={{
-            bottom: "16px",
-            right: "16px",
-            width: "356px",
-            background: "transparent",
-          }}
-        >
-          {/* Header dock bar */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-[#0f1220] border-b border-white/10">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${callStateColor(callState)}`} />
-            <span className="text-xs font-semibold text-white flex-1 truncate">
-              {callState !== "idle"
-                ? `${callStateLabel(callState)} — ${activeCallInfo?.name || activeCallInfo?.number || "Unknown"}`
-                : "Aircall Softphone"
-              }
-            </span>
-            {callState === "active" && (
-              <span className="text-[10px] text-green-400 font-mono">{formatDuration(callDuration)}</span>
-            )}
-            {linkedIntakeId && callState !== "idle" && (
-              <button
-                onClick={() => navigate(`/intake/${linkedIntakeId}`)}
-                className="text-[10px] text-orange-400 hover:text-orange-300 underline"
-                title="View linked intake"
-              >
-                #{linkedIntakeId}
-              </button>
-            )}
-            <button onClick={handleToggleExpand} className="text-gray-400 hover:text-white p-0.5">
-              {widgetExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-            </button>
-            <button onClick={handleOpenFullPage} className="text-gray-400 hover:text-white p-0.5" title="Open full softphone">
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={handleClose} className="text-gray-400 hover:text-white p-0.5">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Expanded content */}
-          {widgetExpanded && (
-            <div>
-              {showDisposition && callState === "wrap_up"
-                ? DispositionPanel
-                : ExpandedContent
-              }
+        <>
+          {/* Disposition panel — rendered as a SEPARATE fixed overlay above the iframe.
+              z-[10001] so it sits above the Aircall container (z-9995) AND the header (z-[10000]).
+              Only shown during wrap_up. Does NOT collapse the iframe. */}
+          {showDisposition && callState === "wrap_up" && (
+            <div
+              className="fixed z-[10001] border border-white/10 rounded-2xl shadow-2xl overflow-hidden bg-[#171b31]"
+              style={{
+                bottom: "60px",
+                right: "16px",
+                width: "356px",
+              }}
+            >
+              {DispositionPanel}
             </div>
           )}
-        </div>
+
+          {/* Header dock bar — always visible when widget is open */}
+          <div
+            className="fixed z-[10000] border border-white/10 rounded-2xl shadow-2xl bg-[#0f1220]"
+            style={{
+              bottom: "16px",
+              right: "16px",
+              width: "356px",
+            }}
+          >
+            <div className="flex items-center gap-2 px-3 py-2">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${callStateColor(callState)}`} />
+              <span className="text-xs font-semibold text-white flex-1 truncate">
+                {callState !== "idle"
+                  ? `${callStateLabel(callState)} — ${activeCallInfo?.name || activeCallInfo?.number || "Unknown"}`
+                  : "Aircall Softphone"
+                }
+              </span>
+              {callState === "active" && (
+                <span className="text-[10px] text-green-400 font-mono">{formatDuration(callDuration)}</span>
+              )}
+              {linkedIntakeId && callState !== "idle" && (
+                <button
+                  onClick={() => navigate(`/intake/${linkedIntakeId}`)}
+                  className="text-[10px] text-orange-400 hover:text-orange-300 underline"
+                  title="View linked intake"
+                >
+                  #{linkedIntakeId}
+                </button>
+              )}
+              {/* During an active call, minimize hides the iframe overlay but keeps audio alive.
+                  The iframe stays visible (widgetVisible stays true via callIsLive guard). */}
+              <button
+                onClick={handleToggleExpand}
+                className="text-gray-400 hover:text-white p-0.5"
+                title={widgetExpanded ? "Minimize" : "Expand"}
+              >
+                {widgetExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+              <button onClick={handleOpenFullPage} className="text-gray-400 hover:text-white p-0.5" title="Open full softphone">
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={handleClose} className="text-gray-400 hover:text-white p-0.5" title="Close softphone">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Expanded call controls (mute/hold) — only shown when expanded and on a live call */}
+            {widgetExpanded && !showDisposition && ExpandedContent}
+          </div>
+        </>
       )}
     </>
   );
