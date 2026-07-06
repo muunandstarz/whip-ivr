@@ -82,9 +82,6 @@ export const intakeRecords = mysqlTable("intake_records", {
   callbackAt: timestamp("callbackAt"),       // when handler actually called back
   callbackHandlerName: varchar("callbackHandlerName", { length: 128 }), // who made the callback
   // Labels: JSON array of strings e.g. ['after_hours', 'direct_voicemail', 'weekend']
-  // after_hours: call arrived outside Mon-Fri 8am-6pm
-  // direct_voicemail: voicemail left on a handler's personal extension (not the AI IVR line)
-  // weekend: call arrived on Saturday or Sunday
   labels: text("labels").default("[]"), // JSON string array
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -245,7 +242,7 @@ export const callScripts = mysqlTable("call_scripts", {
 export type CallScript = typeof callScripts.$inferSelect;
 export type InsertCallScript = typeof callScripts.$inferInsert;
 
-// ─── Error Reports ───────────────────────────────────────────────────────────────────────────────
+// ─── Error Reports ────────────────────────────────────────────────────────────
 export const errorReports = mysqlTable("error_reports", {
   id: int("id").autoincrement().primaryKey(),
   message: text("message").notNull(),
@@ -262,3 +259,16 @@ export const errorReports = mysqlTable("error_reports", {
 });
 export type ErrorReport = typeof errorReports.$inferSelect;
 export type InsertErrorReport = typeof errorReports.$inferInsert;
+
+// ─── Saved Report Presets ─────────────────────────────────────────────────────
+export const savedReports = mysqlTable("saved_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: varchar("description", { length: 512 }),
+  config: json("config").notNull(), // ReportConfig JSON
+  createdBy: varchar("createdBy", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SavedReport = typeof savedReports.$inferSelect;
+export type InsertSavedReport = typeof savedReports.$inferInsert;

@@ -5,6 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { classifyCallBatch, getUnclassifiedCount } from "./classifyCalls";
 import { TRPCError } from "@trpc/server";
+import { reportsRouter } from "./routers/reports";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -635,6 +636,8 @@ export const appRouter = router({
       return { count: Number(result[0]?.count ?? 0) };
     }),
   }),
+
+  reports: reportsRouter,
 
   settings: router({
     getCallScripts: protectedProcedure.query(async () => {
