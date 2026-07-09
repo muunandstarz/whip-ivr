@@ -625,12 +625,12 @@ export default function Softphone() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* ── Left column: Aircall Phone + call context ── */}
-          <div className="lg:col-span-1 space-y-4">
+          <div className="lg:col-span-2 space-y-4">
 
             {/* Aircall Workspace iframe — the persistent container is moved here */}
-            <Card className="border border-gray-200 shadow-sm overflow-hidden">
+            <Card className="border border-gray-200 shadow-sm">
               <div className="bg-primary px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-white" />
@@ -646,7 +646,7 @@ export default function Softphone() {
                   from fixed/hidden to static/full-size automatically. */}
               <div
                 id="aircall-phone-page-slot"
-                style={{ width: "100%", height: "666px", minHeight: "666px", display: "block" }}
+                style={{ width: "100%", minWidth: "0", height: "666px", minHeight: "666px", display: "block", overflowX: "auto" }}
               />
             </Card>
 
@@ -746,7 +746,7 @@ export default function Softphone() {
           </div>
 
           {/* ── Right column: KPIs + Script + Tips + History ── */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-3 space-y-4">
             {/* KPI row */}
             <div className="grid grid-cols-3 gap-4">
               {[
