@@ -649,3 +649,15 @@ Business routing logic to implement in resolveHandler():
 - [x] Export to CSV button on results
 - [x] Save report config as named preset (DB-backed)
 - [x] Load saved report presets from dropdown
+
+## QA Fix + Handler Performance Digest (Jul 14 2026)
+- [x] Audit QA page and qa_scorecards/qa_scores tables to find root cause of broken QA
+- [x] Fix QA scoring pipeline: retroactively score all weeks since launch (Apr 2026)
+- [x] QA: ensure every week with calls has at least a sample scored
+- [x] Build handler performance digest: daily + weekly per-handler stats card
+- [x] Digest content: calls received today/week/month, callbacks completed, answer rate, avg handle time
+- [x] Digest content: AI coaching paragraph comparing to team average and suggesting improvements
+- [x] In-app: show digest on each handler's My Dashboard page
+- [x] Admin: show all-handler digest summary on admin dashboard (via qa.allHandlerDigests)
+- [x] Scheduled: /api/scheduled/dailyDigest endpoint ready — deploy then create cron via manus-heartbeat
+- [x] QA: manual push button per scorecard (push to handler profile with ability to add notes before pushing)

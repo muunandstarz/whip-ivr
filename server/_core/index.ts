@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { aircallRouter } from "../aircall";
 import { startAircallSyncJob } from "../aircallSync";
+import { dailyDigestHandler } from "../scheduled/dailyDigest";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +42,9 @@ async function startServer() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   app.use("/api/aircall", aircallRouter);
+
+  // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
+  app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
 
   // Aircall recording proxy — accepts ?url=<encoded assets.aircall.io URL> or ?callId=<id>
   // Resolves the Aircall asset URL to a fresh signed S3 URL via the Aircall API, then

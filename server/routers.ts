@@ -49,6 +49,9 @@ import {
   getScorecardsByWeek,
   deleteScorecardsByWeek,
   getQaWeeks,
+  batchGenerateAllWeeks,
+  getHandlerPerformanceDigest,
+  getAllHandlerDigests,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -230,6 +233,10 @@ export const appRouter = router({
       return getQaWeeks();
     }),
 
+    batchGenerateAllWeeks: protectedProcedure.mutation(async () => {
+      return batchGenerateAllWeeks();
+    }),
+
     // ── Scorecard push to handler profiles ──
     allScorecards: protectedProcedure.query(async () => {
       return getAllScorecards();
@@ -308,6 +315,17 @@ export const appRouter = router({
       }),
 
     // ── Bulk push all scorecards for a week to handler profiles ──
+    // ── Handler performance digest (per-handler daily stats + AI coaching) ──
+    handlerDigest: protectedProcedure
+      .input(z.object({ handlerName: z.string() }))
+      .query(async ({ input }) => {
+        return getHandlerPerformanceDigest(input.handlerName);
+      }),
+
+    allHandlerDigests: protectedProcedure.query(async () => {
+      return getAllHandlerDigests();
+    }),
+
     bulkPushWeek: protectedProcedure
       .input(z.object({ weekOf: z.string() }))
       .mutation(async ({ input, ctx }) => {
