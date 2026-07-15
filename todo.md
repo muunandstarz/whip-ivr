@@ -661,3 +661,9 @@ Business routing logic to implement in resolveHandler():
 - [x] Admin: show all-handler digest summary on admin dashboard (via qa.allHandlerDigests)
 - [x] Scheduled: /api/scheduled/dailyDigest endpoint ready — deploy then create cron via manus-heartbeat
 - [x] QA: manual push button per scorecard (push to handler profile with ability to add notes before pushing)
+
+## QA June Generation (Jul 14 2026 — Urgent)
+- [ ] Generate real AI QA scores for all 5 June 2026 weeks (Jun 2, 9, 16, 23, 30)
+- [ ] Persist scores to qa_scorecards table for all active handlers
+- [ ] Fix WeeklyQA UI Generate button so it works going forward
+- [ ] Verify scores appear on each handler's My Dashboard page
