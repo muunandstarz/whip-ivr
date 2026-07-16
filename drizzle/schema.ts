@@ -303,7 +303,7 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   noAnswerAttempts: int("noAnswerAttempts").default(0).notNull(),
   teslaFootageRequested: boolean("teslaFootageRequested"),
   qualityScore: float("qualityScore"),
-  missingElements: text("missingElements").default("[]"),
+  missingElements: text("missingElements"),
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

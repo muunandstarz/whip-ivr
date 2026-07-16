@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS `loss_intake_claims` (
   `noAnswerAttempts` int NOT NULL DEFAULT 0,
   `teslaFootageRequested` boolean,
   `qualityScore` float,
-  `missingElements` text DEFAULT ('[]'),
+  `missingElements` text DEFAULT NULL,
   `lastSyncedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

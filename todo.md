@@ -692,7 +692,7 @@ Business routing logic to implement in resolveHandler():
 - [ ] Review this checklist and mark every completed Loss Intake item before saving the release checkpoint.
 - [x] Define six Loss Intake Drizzle tables for claims, Slack events, quality criteria, daily QA delivery, settings, and sync-run health.
 - [x] Generate and populate the idempotent `drizzle/0002_add_loss_intake_monitoring.sql` migration.
-- [ ] Apply the Loss Intake migration and default settings seed to the Whip IVR managed database; the current managed database connection is unavailable and identifies the superseded standalone project.
+- [x] Apply the Loss Intake migration and default settings seed to the Whip IVR managed database.
 - [x] Implement deterministic FNOL recognition, labeled-field extraction, configured-rep milestone detection, SLA timing, authoritative completion, cycle time, and criterion-level quality scoring.
 - [x] Add passing unit coverage for unrelated-post rejection, member/customer ID variants, configured-rep timing, SLA boundaries, authoritative completion, and conditional Tesla scoring.
 - [x] Add idempotent Loss Intake claim/event/quality persistence, overview metrics, searchable claim queries, claim timelines, QA workflow helpers, settings, and sync-run health helpers.
@@ -728,8 +728,8 @@ Business routing logic to implement in resolveHandler():
 - [x] Carry Slack `event_id` into Loss Intake event keys so retries remain idempotent without relying on timestamp-only keys.
 - [x] Rehydrate stored parent threads for real-time replies and reuse the approved FNOL, assignment, SLA, completion, and quality analysis pipeline without outbound Slack API calls.
 - [x] Add passing Slack receiver tests for valid signatures, invalid signatures, stale timestamps, missing signing-secret fail-closed behavior, and signed URL verification.
-- [ ] Apply `drizzle/0002_add_loss_intake_monitoring.sql` to the native Whip IVR managed database.
-- [ ] Store `SLACK_SIGNING_SECRET` and the installed read-only `SLACK_BOT_TOKEN` in the native Whip IVR project secrets; never commit either credential.
+- [x] Apply `drizzle/0002_add_loss_intake_monitoring.sql` to the native Whip IVR managed database.
+- [x] Store `SLACK_SIGNING_SECRET` and the installed read-only `SLACK_BOT_TOKEN` in the native Whip IVR project secrets; never commit either credential.
 - [ ] Save a native Whip IVR checkpoint and publish it before configuring Slack’s production Request URL.
 - [ ] Verify the published unsigned receiver returns JSON `401` or `503` rather than the SPA fallback before enabling Slack Event Subscriptions.
 - [ ] Enable Slack Event Subscriptions at `https://whipivr-tyswfku7.manus.space/api/slack/loss-intake-events`, subscribe to `message.channels` and `message.groups`, and save only after explicit confirmation.
