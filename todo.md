@@ -785,3 +785,32 @@ Business routing logic to implement in resolveHandler():
 - [ ] Add collapse/expand toggle to daily digest section on handler dashboard
 - [ ] Fix inaccurate callback notes: "0 callbacks done" is likely a data/matching issue — diagnose why callbacks show 0 when team is actively making callbacks
 - [ ] Fix callback count query: ensure callbackAt timestamp is being set correctly when handlers log callbacks
+
+## Loss Intake Claims Table Enhancements — Jul 16 2026 (Batch 2)
+
+- [ ] Add `dateOfLoss` column to `loss_intake_claims` (extracted from Slack thread text)
+- [ ] Add `vinLast6` column to `loss_intake_claims` (extracted from Slack thread text)
+- [ ] Add `reportedAt` column to `loss_intake_claims` (= parent Slack message timestamp, i.e. when workflow was posted)
+- [ ] Add `templatePostedAt` column (timestamp of handler FOL/rideshare/prelim liability template post in thread)
+- [ ] Add `templatePostMinutesFromContact` column (minutes from firstContactAt to templatePostedAt)
+- [ ] Add `templatePostMinutesFromReport` column (minutes from reportedAt to templatePostedAt)
+- [ ] Add `contactAttempts` column (count of contact attempt messages in thread)
+- [ ] Update domain parser to extract dateOfLoss from thread text (regex: "date of loss", "DOL", "loss date")
+- [ ] Update domain parser to extract vinLast6 from thread text (regex: VIN patterns, last 6 chars)
+- [ ] Update domain parser: set reportedAt = parent message ts (already available as threadTs)
+- [ ] Update domain parser to detect handler template post (FOL/rideshare/prelim liability/facts of loss keywords)
+- [ ] Update domain parser to count contact attempts (messages containing "calling", "attempted", "no answer", "left voicemail", "tried")
+- [ ] Apply DB migration for new columns
+- [ ] Update Loss Intake claims table UI: show dateOfLoss, vinLast6, reportedAt columns
+- [ ] Update Loss Intake claims table UI: show templatePostedAt, templatePostMinutesFromContact, templatePostMinutesFromReport, contactAttempts
+- [ ] Fix "complete" status logic on overview: if templatePostedAt is set → stage = complete
+
+## Quality Rubric Update — Jul 16 2026
+
+- [ ] Update quality rubric: FOL documented → 10 pts (was 20)
+- [ ] Add new criterion: FOL quality (AI-assessed) → 10 pts
+- [ ] Add new criterion: store team tagged (@atlteam, @chiteam, etc.) → 10 pts
+- [ ] Update domain parser to detect store team tag in thread messages
+- [ ] Add storeTeamTagged boolean to ThreadAnalysis and loss_intake_claims schema
+- [ ] Rescore all 75 existing claims with new rubric
+- [ ] Show rubric breakdown on overview and claims detail pages

@@ -67,16 +67,24 @@ const EVENT_LABELS: Record<string, string> = {
   posted: "FNOL posted",
   acknowledgment: "Acknowledged",
   contact_attempt: "Outreach attempt",
-  completion: "Good to go",
+  completion: "Template posted / complete",
   other: "Thread update",
 };
 
 const CRITERION_LABELS: Record<string, string> = {
+  first_contact_sla: "First contact SLA (10 min)",
+  facts_of_loss: "Facts of loss documented",
+  fol_quality: "Quality of facts of loss",
+  preliminary_liability: "Preliminary liability",
+  rideshare_status: "Rideshare status notated",
+  photo_evidence: "Photo / video evidence",
+  attempt_documentation: "Contact attempt documented",
+  store_team_tagged: "Store team tagged",
+  tesla_footage_request: "Tesla footage requested",
+  // legacy
   acknowledgment: "Acknowledgment",
   first_contact: "First contact",
-  facts_of_loss: "Facts of loss",
   liability: "Preliminary liability",
-  rideshare_status: "Rideshare status",
   tesla_footage: "Tesla footage",
   completion: "Completion",
 };
@@ -189,12 +197,25 @@ function ClaimDetailSheet({ claimId, onClose }: { claimId: number | null; onClos
               </SheetDescription>
             </SheetHeader>
 
-            <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-4 text-sm">
+              <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-4 text-sm">
               <div><p className="text-xs text-muted-foreground">Assigned representative</p><p className="mt-1 font-medium">{data.claim.assignedAgent ?? "Unassigned"}</p></div>
               <div><p className="text-xs text-muted-foreground">Vehicle</p><p className="mt-1 font-medium">{data.claim.vehicleType === "ev_tesla" ? "Tesla / EV" : data.claim.vehicleType === "gas" ? "Gas" : "Unknown"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Date of loss</p><p className="mt-1 font-medium">{(data.claim as Record<string, unknown>).dateOfLoss as string ?? "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Date reported</p><p className="mt-1 font-medium">{formatDateTime(data.claim.postedAt)}</p></div>
+              <div><p className="text-xs text-muted-foreground">VIN (last 6)</p><p className="mt-1 font-medium">{data.claim.vinLastSix ?? "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Market</p><p className="mt-1 font-medium">{data.claim.market ?? "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">First contact</p><p className="mt-1 font-medium">{formatMinutes(data.claim.firstContactMinutes)}</p></div>
               <div><p className="text-xs text-muted-foreground">Intake cycle</p><p className="mt-1 font-medium">{formatMinutes(data.claim.intakeCycleMinutes)}</p></div>
+              {Boolean((data.claim as Record<string, unknown>).templatePostedAt) && (
+                <>
+                  <div><p className="text-xs text-muted-foreground">Template posted</p><p className="mt-1 font-medium">{formatDateTime(String((data.claim as Record<string, unknown>).templatePostedAt ?? ""))}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Template → from first contact</p><p className="mt-1 font-medium">{formatMinutes((data.claim as Record<string, unknown>).templatePostMinutesFromContact as number)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Template → from report</p><p className="mt-1 font-medium">{formatMinutes((data.claim as Record<string, unknown>).templatePostMinutesFromReport as number)}</p></div>
+                </>
+              )}
+              <div><p className="text-xs text-muted-foreground">Contact attempts</p><p className="mt-1 font-medium">{(data.claim as Record<string, unknown>).contactAttempts as number ?? 0}</p></div>
               <div><p className="text-xs text-muted-foreground">No-answer attempts</p><p className="mt-1 font-medium">{data.claim.noAnswerAttempts}</p></div>
+              <div><p className="text-xs text-muted-foreground">Store team tagged</p><p className="mt-1 font-medium">{(data.claim as Record<string, unknown>).storeTeamTagged ? "Yes" : "No"}</p></div>
               <div><p className="text-xs text-muted-foreground">Quality score</p><p className="mt-1 font-medium">{data.claim.qualityScore == null ? "Not scored" : `${data.claim.qualityScore}/100`}</p></div>
             </div>
 
@@ -445,18 +466,36 @@ export default function LossIntake() {
                 <CardContent>
                   {!claims.data?.claims.length ? <EmptyState title="No matching claims" description="Try clearing a filter or broadening the selected date range." /> : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[960px] text-sm">
-                        <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="pb-3 font-medium">FNOL</th><th className="pb-3 font-medium">Representative</th><th className="pb-3 font-medium">Stage</th><th className="pb-3 font-medium">First contact</th><th className="pb-3 font-medium">Cycle</th><th className="pb-3 font-medium">Quality</th><th className="pb-3 font-medium">SLA</th><th /></tr></thead>
-                        <tbody>{claims.data.claims.map(claim => <tr key={claim.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-3"><p className="font-semibold">{claim.memberName ?? "Unidentified member"}</p><p className="text-xs text-muted-foreground">{claim.customerId ?? "No customer ID"} · {claim.market ?? "Unknown market"}</p></td>
-                          <td className="py-3">{claim.assignedAgent ?? "Unassigned"}</td>
+                        <table className="w-full min-w-[1100px] text-sm">
+                        <thead><tr className="border-b text-left text-xs text-muted-foreground">
+                          <th className="pb-3 font-medium">Member</th>
+                          <th className="pb-3 font-medium">DOL</th>
+                          <th className="pb-3 font-medium">Reported</th>
+                          <th className="pb-3 font-medium">VIN (last 6)</th>
+                          <th className="pb-3 font-medium">Rep</th>
+                          <th className="pb-3 font-medium">Stage</th>
+                          <th className="pb-3 font-medium">Template posted</th>
+                          <th className="pb-3 font-medium">Attempts</th>
+                          <th className="pb-3 font-medium">Quality</th>
+                          <th className="pb-3 font-medium">SLA</th>
+                          <th />
+                        </tr></thead>
+                        <tbody>{claims.data.claims.map(claim => {
+                          const c = claim as typeof claim & { dateOfLoss?: string; templatePostedAt?: string | Date | null; contactAttempts?: number; storeTeamTagged?: boolean };
+                          return <tr key={claim.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-3"><p className="font-semibold">{claim.memberName ?? "Unidentified member"}</p><p className="text-xs text-muted-foreground">{claim.customerId ?? "—"} · {claim.market ?? "—"}</p></td>
+                          <td className="py-3 text-xs">{c.dateOfLoss ?? "—"}</td>
+                          <td className="py-3 text-xs">{formatDateTime(claim.postedAt)}</td>
+                          <td className="py-3 font-mono text-xs">{claim.vinLastSix ?? "—"}</td>
+                          <td className="py-3">{claim.assignedAgent ?? "—"}</td>
                           <td className="py-3"><Badge variant="outline" className={stageBadge(claim.stage)}>{STAGE_LABELS[claim.stage]}</Badge></td>
-                          <td className="py-3">{formatMinutes(claim.firstContactMinutes)}</td>
-                          <td className="py-3">{formatMinutes(claim.intakeCycleMinutes)}</td>
+                          <td className="py-3 text-xs">{c.templatePostedAt ? formatDateTime(c.templatePostedAt) : "—"}</td>
+                          <td className="py-3 text-center">{c.contactAttempts ?? 0}</td>
                           <td className="py-3 font-semibold">{claim.qualityScore == null ? "—" : `${claim.qualityScore}/100`}</td>
                           <td className="py-3"><Badge variant="outline" className={slaBadge(claim.slaState)}>{SLA_LABELS[claim.slaState]}</Badge></td>
-                          <td className="py-3 text-right"><Button size="sm" variant="ghost" onClick={() => setSelectedClaimId(claim.id)}>Evidence <ChevronRight className="ml-1 h-3.5 w-3.5" /></Button></td>
-                        </tr>)}</tbody>
+                          <td className="py-3 text-right"><Button size="sm" variant="ghost" onClick={() => setSelectedClaimId(claim.id)}>Detail <ChevronRight className="ml-1 h-3.5 w-3.5" /></Button></td>
+                        </tr>;
+                        })}</tbody>
                       </table>
                     </div>
                   )}

@@ -115,11 +115,11 @@ describe("Loss Intake thread analysis", () => {
         },
         {
           ts: String(Number(parent.slackMessageTs) + 360),
-          text: `Facts of Loss: Member was stopped and struck from behind.
+          text: `Facts of Loss: Member was stopped and struck from behind. The member was stationary at a red light when a third-party vehicle rear-ended them at moderate speed. Police were called and a report was filed.
 TNC Status: Uber - P3
 Preliminary Liability: Member not at fault
 Please check if we have Tesla footage.
-Good to go`,
+<!subteam^S01234567> Good to go`,
           userId: assignment.slackUserId,
           userName: assignment.handlerName,
         },
@@ -134,7 +134,7 @@ Good to go`,
     expect(analysis.intakeCycleMinutes).toBeCloseTo(6, 4);
     expect(analysis.stage).toBe("complete");
     expect(analysis.slaState).toBe("within_sla");
-    expect(analysis.factsOfLoss).toBe("Member was stopped and struck from behind.");
+    expect(analysis.factsOfLoss).toBe("Member was stopped and struck from behind. The member was stationary at a red light when a third-party vehicle rear-ended them at moderate speed. Police were called and a report was filed.");
     expect(analysis.preliminaryLiability).toBe("Member not at fault");
     expect(analysis.rideshareStatus).toBe("Uber - P3");
     expect(analysis.teslaFootageRequested).toBe(true);

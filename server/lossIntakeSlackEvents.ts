@@ -187,6 +187,7 @@ function rehydrateParent(
     hasPhotos: claim.hasPhotos,
     attachmentCount: claim.attachmentCount,
     rideshareStatus: claim.rideshareStatus,
+    dateOfLoss: claim.dateOfLoss ?? null,
   };
 }
 

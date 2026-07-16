@@ -55,6 +55,7 @@ export interface ParsedLossParent {
   hasPhotos: boolean;
   attachmentCount: number;
   rideshareStatus: string | null;
+  dateOfLoss: string | null;
 }
 
 export interface ParsedLossEvent {
@@ -72,10 +73,12 @@ export interface QualityCriterionResult {
   criterion:
     | "first_contact_sla"
     | "facts_of_loss"
+    | "fol_quality"
     | "preliminary_liability"
     | "rideshare_status"
     | "photo_evidence"
     | "attempt_documentation"
+    | "store_team_tagged"
     | "tesla_footage_request";
   result: "pass" | "fail" | "not_applicable";
   points: number;
@@ -94,9 +97,15 @@ export interface ThreadAnalysis {
   completedAt: Date | null;
   intakeCycleMinutes: number | null;
   factsOfLoss: string | null;
+  folQualityScore: number | null;
   preliminaryLiability: string | null;
   rideshareStatus: string | null;
   noAnswerAttempts: number;
+  contactAttempts: number;
+  storeTeamTagged: boolean;
+  templatePostedAt: Date | null;
+  templatePostMinutesFromContact: number | null;
+  templatePostMinutesFromReport: number | null;
   teslaFootageRequested: boolean | null;
   qualityScore: number;
   missingElements: string[];
@@ -188,6 +197,73 @@ function normalizeVehicleType(raw: string | null): LossVehicleType {
   return "unknown";
 }
 
+/**
+ * Extract date of loss from the FNOL parent text.
+ * Looks for the "Date and Time of Loss" labeled field first,
+ * then falls back to common date patterns in the text.
+ */
+function extractDateOfLoss(values: Map<string, string>, fullText: string): string | null {
+  // Try labeled field first
+  const labeled = getLabel(values, "Date and Time of Loss (if known)");
+  if (labeled && labeled.length > 2) return labeled;
+
+  // Fallback: look for "DOL:" or "date of loss:" patterns in text
+  const dolMatch = fullText.match(/\b(?:DOL|date of loss)\s*[:\-–]\s*([^\n,]{3,30})/i);
+  if (dolMatch) return dolMatch[1].trim();
+
+  return null;
+}
+
+/**
+ * Assess the quality of the Facts of Loss text.
+ * Returns a score 0-10 based on length, specificity, and key elements.
+ */
+export function assessFolQuality(fol: string | null): number {
+  if (!fol || fol.trim().length < 10) return 0;
+  const text = fol.trim();
+  let score = 0;
+
+  // Length-based scoring (up to 4 pts)
+  if (text.length >= 20) score += 1;
+  if (text.length >= 50) score += 1;
+  if (text.length >= 100) score += 1;
+  if (text.length >= 150) score += 1;
+
+  // Key elements (up to 6 pts)
+  if (/\b(hit|struck|collid|impact|accident|crash|rear.end|side.swipe|t.bone)\b/i.test(text)) score += 1;
+  if (/\b(vehicle|car|truck|van|suv|whip)\b/i.test(text)) score += 1;
+  if (/\b(driver|member|claimant|third.party|other.party)\b/i.test(text)) score += 1;
+  if (/\b(street|road|highway|intersection|parking|lot|location|at|on)\b/i.test(text)) score += 1;
+  if (/\b(damage|injury|injuries|hurt|pain|airbag|totaled|driveable)\b/i.test(text)) score += 1;
+  if (/\b(police|report|filed|cited|fault|liable|liability)\b/i.test(text)) score += 1;
+
+  return Math.min(10, score);
+}
+
+/**
+ * Detect whether a message is the handler's completion template post.
+ * Looks for FOL / rideshare / prelim liability template keywords together.
+ */
+function isHandlerTemplate(text: string): boolean {
+  const hasFol = /\b(?:facts? of loss|FOL)\s*[:\-–]/i.test(text);
+  const hasPrelim = /\b(?:preliminary liability|prelim\s*liability|liability)\s*[:\-–]/i.test(text);
+  const hasRideshare = /\b(?:rideshare|TNC)\s*(?:status)?\s*[:\-–]/i.test(text);
+  // Require at least 2 of the 3 template sections to be present
+  return [hasFol, hasPrelim, hasRideshare].filter(Boolean).length >= 2;
+}
+
+/**
+ * Detect whether any message in the thread tags a store team.
+ * Store team handles use patterns like @atlteam, @chiteam, @dcteam, etc.
+ */
+function detectStoreTeamTag(messages: SlackLossMessage[]): boolean {
+  const storeTeamPattern = /<@[A-Z0-9]+>|@(?:atl|chi|dc|md|va|bos|mia|orl|dal|philly|rockville|glenburnie|richmond)team\b/i;
+  const userGroupPattern = /<!subteam\^[A-Z0-9]+/i;
+  return messages.some(m =>
+    storeTeamPattern.test(m.text) || userGroupPattern.test(m.text)
+  );
+}
+
 export function isFnolParent(text: string): boolean {
   const values = extractLabeledValues(text);
   return ["Market", "Vehicle Type", "Member Name/Customer ID"].every(label =>
@@ -219,6 +295,7 @@ export function parseFnolParent(parent: SlackLossParent): ParsedLossParent | nul
     hasPhotos: files.length > 0,
     attachmentCount: files.length,
     rideshareStatus: getLabel(values, "Rideshare Status at the Time of Loss (if known):"),
+    dateOfLoss: extractDateOfLoss(values, parent.text),
   };
 }
 
@@ -244,13 +321,9 @@ function isAcknowledgment(text: string): boolean {
 }
 
 function isContactAttempt(text: string): boolean {
-  return /\b(no answer|did(?: not|n't) answer|unanswered|left (?:a )?(?:voicemail|message)|attempt(?:ed|ing)?|called (?:the )?(?:member|customer|driver|cx))\b/i.test(
+  return /\b(no answer|did(?: not|n't) answer|unanswered|left (?:a )?(?:voicemail|message)|attempt(?:ed|ing)?|called (?:the )?(?:member|customer|driver|cx)|tried|trying to reach|reaching out again|follow.?up)\b/i.test(
     text,
   );
-}
-
-function isCompletion(text: string): boolean {
-  return /\b(?:good to go|g2g)\b/i.test(text);
 }
 
 function isTeslaFootageRequest(text: string): boolean {
@@ -280,10 +353,13 @@ function buildQualityItems(input: {
   firstContactMinutes: number | null;
   slaMinutes: number;
   factsOfLoss: string | null;
+  folQualityScore: number | null;
   preliminaryLiability: string | null;
   rideshareStatus: string | null;
   hasPhotos: boolean;
   noAnswerAttempts: number;
+  contactAttempts: number;
+  storeTeamTagged: boolean;
   teslaFootageRequested: boolean | null;
 }): QualityCriterionResult[] {
   const item = (
@@ -314,10 +390,32 @@ function buildQualityItems(input: {
     item(
       "facts_of_loss",
       Boolean(input.factsOfLoss),
-      20,
+      10,
       input.factsOfLoss ?? "Facts of Loss not documented.",
       "Document concise facts of loss in the Slack thread.",
     ),
+    // FOL quality — only scored if FOL is present
+    input.factsOfLoss
+      ? {
+          criterion: "fol_quality",
+          result: (input.folQualityScore ?? 0) >= 6 ? "pass" : "fail",
+          points: (input.folQualityScore ?? 0) >= 6 ? 10 : (input.folQualityScore ?? 0),
+          maxPoints: 10,
+          evidence: input.folQualityScore !== null
+            ? `FOL quality score: ${input.folQualityScore}/10`
+            : "FOL quality not assessed.",
+          coachingNote: (input.folQualityScore ?? 0) < 6
+            ? "Include who, what, where, and damage/injury details in the Facts of Loss."
+            : null,
+        }
+      : {
+          criterion: "fol_quality",
+          result: "not_applicable",
+          points: 0,
+          maxPoints: 10,
+          evidence: "Facts of Loss not documented — quality cannot be assessed.",
+          coachingNote: null,
+        },
     item(
       "preliminary_liability",
       Boolean(input.preliminaryLiability),
@@ -341,14 +439,23 @@ function buildQualityItems(input: {
     ),
     item(
       "attempt_documentation",
-      input.firstContactMinutes !== null || input.noAnswerAttempts > 0,
+      input.contactAttempts > 0 || input.firstContactMinutes !== null,
       5,
-      input.noAnswerAttempts > 0
-        ? `${input.noAnswerAttempts} no-answer attempt(s) documented.`
+      input.contactAttempts > 0
+        ? `${input.contactAttempts} contact attempt(s) documented.`
         : input.firstContactMinutes !== null
           ? "Outreach acknowledgment documented."
           : "No outreach attempt documented.",
       "Document each contact attempt, including no-answer outcomes.",
+    ),
+    item(
+      "store_team_tagged",
+      input.storeTeamTagged,
+      10,
+      input.storeTeamTagged
+        ? "Store team (@atlteam, @chiteam, etc.) was tagged in the thread."
+        : "Store team was not tagged in the thread.",
+      "Tag the relevant store team (e.g. @atlteam) in the FNOL thread.",
     ),
   ];
 
@@ -399,20 +506,42 @@ export function analyzeFnolThread(input: {
   const assigned = firstAck
     ? configuredAgent(firstAck, input.assignments)
     : replies.map(reply => configuredAgent(reply, input.assignments)).find(Boolean) ?? null;
-  const completion = replies.find(
-    reply => configuredAgent(reply, input.assignments) && isCompletion(reply.text),
+
+  // Template post = handler posts the FOL/rideshare/prelim liability template
+  const templatePost = replies.find(
+    reply => configuredAgent(reply, input.assignments) && isHandlerTemplate(reply.text),
   );
+
+  // Contact attempts = all agent messages that indicate an attempt (ack + no-answer + follow-ups)
   const attemptReplies = replies.filter(
     reply => configuredAgent(reply, input.assignments) && isContactAttempt(reply.text),
   );
+  const allAgentReplies = replies.filter(
+    reply => configuredAgent(reply, input.assignments),
+  );
+
   const firstContactAt = firstAck ? eventDate(firstAck) : null;
   const firstContactMinutes = firstContactAt
     ? minutesBetween(input.parent.postedAt, firstContactAt)
     : null;
-  const completedAt = completion ? eventDate(completion) : null;
+
+  const templatePostedAt = templatePost ? eventDate(templatePost) : null;
+  const templatePostMinutesFromContact = templatePostedAt && firstContactAt
+    ? minutesBetween(firstContactAt, templatePostedAt)
+    : null;
+  const templatePostMinutesFromReport = templatePostedAt
+    ? minutesBetween(input.parent.postedAt, templatePostedAt)
+    : null;
+
+  // completedAt = when template was posted (primary signal) OR legacy "g2g" signal
+  const legacyCompletion = replies.find(
+    reply => configuredAgent(reply, input.assignments) && /\b(?:good to go|g2g)\b/i.test(reply.text),
+  );
+  const completedAt = templatePostedAt ?? (legacyCompletion ? eventDate(legacyCompletion) : null);
   const intakeCycleMinutes = completedAt
     ? minutesBetween(input.parent.postedAt, completedAt)
     : null;
+
   const elapsedMinutes = minutesBetween(input.parent.postedAt, now);
   const slaClock = firstContactMinutes ?? elapsedMinutes;
   const slaState: LossSlaState =
@@ -422,22 +551,27 @@ export function analyzeFnolThread(input: {
         ? "at_risk"
         : "within_sla";
 
-  const factsOfLoss = latestReplyField(
-    replies,
-    /Facts of Loss\s*:\s*([^\n]+)/i,
-  );
-  const preliminaryLiability = latestReplyField(
-    replies,
-    /Preliminary Liability\s*:\s*([^\n]+)/i,
-  );
+  // Extract template fields — prefer template post, fall back to any reply
+  const allMessages = [...replies];
+  const factsOfLoss = latestReplyField(allMessages, /Facts of Loss\s*[:\-–]\s*([^\n]+(?:\n(?![A-Z][a-z].*:)[^\n]+)*)/i)
+    ?? latestReplyField(allMessages, /FOL\s*[:\-–]\s*([^\n]+)/i);
+  const preliminaryLiability = latestReplyField(allMessages, /Preliminary Liability\s*[:\-–]\s*([^\n]+)/i)
+    ?? latestReplyField(allMessages, /Prelim(?:inary)?\s*Liability\s*[:\-–]\s*([^\n]+)/i);
   const rideshareStatus =
-    latestReplyField(replies, /(?:TNC|Rideshare) Status\s*:\s*([^\n]+)/i) ??
+    latestReplyField(allMessages, /(?:TNC|Rideshare)\s*(?:Status)?\s*[:\-–]\s*([^\n]+)/i) ??
     input.parent.rideshareStatus;
+
   const noAnswerAttempts = attemptReplies.filter(reply =>
-    /\b(no answer|did(?: not|n't) answer|unanswered|left (?:a )?(?:voicemail|message))\b/i.test(
-      reply.text,
-    ),
+    /\b(no answer|did(?: not|n't) answer|unanswered|left (?:a )?(?:voicemail|message))\b/i.test(reply.text),
   ).length;
+
+  // Total contact attempts = ack + no-answer + follow-up messages from agents
+  const contactAttempts = allAgentReplies.filter(reply =>
+    isAcknowledgment(reply.text) || isContactAttempt(reply.text)
+  ).length;
+
+  const storeTeamTagged = detectStoreTeamTag([...replies]);
+
   const teslaFootageRequested =
     input.parent.vehicleType === "ev_tesla"
       ? replies.some(
@@ -446,6 +580,42 @@ export function analyzeFnolThread(input: {
             isTeslaFootageRequest(reply.text),
         )
       : null;
+
+  const hasThreadPhotos = replies.some(reply => (reply.files?.length ?? 0) > 0);
+  const folQualityScore = factsOfLoss ? assessFolQuality(factsOfLoss) : null;
+
+  const qualityItems = buildQualityItems({
+    vehicleType: input.parent.vehicleType,
+    firstContactMinutes,
+    slaMinutes,
+    factsOfLoss,
+    folQualityScore,
+    preliminaryLiability,
+    rideshareStatus,
+    hasPhotos: input.parent.hasPhotos || hasThreadPhotos,
+    noAnswerAttempts,
+    contactAttempts,
+    storeTeamTagged,
+    teslaFootageRequested,
+  });
+
+  // Max possible points: 30+10+10+15+10+10+5+10+10 = 110 for Tesla, 100 for non-Tesla
+  // We normalise to 100 by treating tesla_footage_request as always contributing its points
+  const totalPoints = qualityItems.reduce((sum, q) => sum + q.points, 0);
+  const maxPoints = qualityItems.reduce((sum, q) => sum + q.maxPoints, 0);
+  const qualityScore = maxPoints > 0 ? Math.round((totalPoints / maxPoints) * 100) : 0;
+
+  const missingElements = qualityItems
+    .filter(criterion => criterion.result === "fail")
+    .map(criterion => criterion.criterion);
+
+  const stage: LossStage = completedAt
+    ? "complete"
+    : attemptReplies.length > 0
+      ? "contact_attempts"
+      : firstContactAt
+        ? "outreach_started"
+        : "awaiting_outreach";
 
   const events: ParsedLossEvent[] = [
     {
@@ -461,7 +631,7 @@ export function analyzeFnolThread(input: {
     ...replies.map(reply => {
       const agent = configuredAgent(reply, input.assignments);
       const eventType: LossEventType =
-        agent && isCompletion(reply.text)
+        agent && isHandlerTemplate(reply.text)
           ? "completion"
           : agent && isContactAttempt(reply.text)
             ? "contact_attempt"
@@ -481,31 +651,6 @@ export function analyzeFnolThread(input: {
     }),
   ];
 
-  const hasThreadPhotos = replies.some(reply => (reply.files?.length ?? 0) > 0);
-  const qualityItems = buildQualityItems({
-    vehicleType: input.parent.vehicleType,
-    firstContactMinutes,
-    slaMinutes,
-    factsOfLoss,
-    preliminaryLiability,
-    rideshareStatus,
-    hasPhotos: input.parent.hasPhotos || hasThreadPhotos,
-    noAnswerAttempts,
-    teslaFootageRequested,
-  });
-  const qualityScore = qualityItems.reduce((sum, criterion) => sum + criterion.points, 0);
-  const missingElements = qualityItems
-    .filter(criterion => criterion.result === "fail")
-    .map(criterion => criterion.criterion);
-
-  const stage: LossStage = completedAt
-    ? "complete"
-    : attemptReplies.length > 0
-      ? "contact_attempts"
-      : firstContactAt
-        ? "outreach_started"
-        : "awaiting_outreach";
-
   return {
     assignedHandlerId: assigned?.handlerId ?? null,
     assignedAgent: assigned?.handlerName ?? null,
@@ -516,9 +661,15 @@ export function analyzeFnolThread(input: {
     completedAt,
     intakeCycleMinutes,
     factsOfLoss,
+    folQualityScore,
     preliminaryLiability,
     rideshareStatus,
     noAnswerAttempts,
+    contactAttempts,
+    storeTeamTagged,
+    templatePostedAt,
+    templatePostMinutesFromContact,
+    templatePostMinutesFromReport,
     teslaFootageRequested,
     qualityScore,
     missingElements,
