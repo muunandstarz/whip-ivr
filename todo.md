@@ -735,3 +735,23 @@ Business routing logic to implement in resolveHandler():
 - [ ] Enable Slack Event Subscriptions at `https://whipivr-tyswfku7.manus.space/api/slack/loss-intake-events`, subscribe to `message.channels` and `message.groups`, and save only after explicit confirmation.
 - [ ] Send signed canary events for one approved parent post and one reply, then confirm idempotent persistence, SLA/quality recomputation, and sync-health visibility.
 - [x] Serialize processing per Slack thread so a reply arriving while its parent is still being persisted cannot be buffered and then accidentally discarded.
+
+---
+
+## QA Fix + Handler Performance Digest (Jul 14 2026)
+- [x] Audit QA page and qa_scorecards/qa_scores tables to find root cause of broken QA
+- [x] Fix QA scoring pipeline: retroactively score all weeks since launch (Apr 2026)
+- [x] QA: ensure every week with calls has at least a sample scored
+- [x] Build handler performance digest: daily + weekly per-handler stats card
+- [x] Digest content: calls received today/week/month, callbacks completed, answer rate, avg handle time
+- [x] Digest content: AI coaching paragraph comparing to team average and suggesting improvements
+- [x] In-app: show digest on each handler's My Dashboard page
+- [x] Admin: show all-handler digest summary on admin dashboard (via qa.allHandlerDigests)
+- [x] Scheduled: /api/scheduled/dailyDigest endpoint ready — deploy then create cron via manus-heartbeat
+- [x] QA: manual push button per scorecard (push to handler profile with ability to add notes before pushing)
+
+## QA June Generation (Jul 14 2026 — Urgent)
+- [ ] Generate real AI QA scores for all 5 June 2026 weeks (Jun 2, 9, 16, 23, 30)
+- [ ] Persist scores to qa_scorecards table for all active handlers
+- [ ] Fix WeeklyQA UI Generate button so it works going forward
+- [ ] Verify scores appear on each handler's My Dashboard page

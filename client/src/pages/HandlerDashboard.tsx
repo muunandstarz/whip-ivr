@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import PerformanceDigestCard from "@/components/PerformanceDigestCard";
 
 // ── Coaching content ────────────────────────────────────────────────────────
 
@@ -277,6 +278,16 @@ export default function HandlerDashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Performance Digest */}
+        {effectiveName && (
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Performance Digest
+            </h2>
+            <PerformanceDigestCard handlerName={effectiveName} compact />
+          </section>
+        )}
 
         {/* Callback SLA Compliance */}
         {slaData && (slaData.onTime > 0 || slaData.overdue > 0 || slaData.pending > 0) && (

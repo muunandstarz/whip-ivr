@@ -1745,12 +1745,195 @@ export async function deleteScorecardsByWeek(weekOf: string) {
 }
 
 // ─── QA: Get all available weeks that have scorecards ───────────────────────
-export async function getQaWeeks(): Promise<string[]> {
+export async function getQaWeeks(): Promise<{ week: string; hasScorecards: boolean; callCount: number }[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db
-    .selectDistinct({ weekOf: qaScorecards.weekOf })
-    .from(qaScorecards)
-    .orderBy(desc(qaScorecards.weekOf));
-  return rows.map((r) => r.weekOf);
+  const client = (db as any).$client.promise();
+
+  // All weeks that have inbound answered calls
+  const [callWeeks] = await client.query(
+    `SELECT
+       DATE_FORMAT(DATE_SUB(startedAt, INTERVAL WEEKDAY(startedAt) DAY), '%Y-%m-%d') as week,
+       COUNT(*) as callCount
+     FROM call_history
+     WHERE direction='inbound' AND status='answered'
+     GROUP BY week
+     ORDER BY week DESC
+     LIMIT 30`
+  );
+
+  // Weeks that already have scorecards
+  const scorecardWeeks = new Set(
+    (await db.selectDistinct({ weekOf: qaScorecards.weekOf }).from(qaScorecards)).map((r) => r.weekOf)
+  );
+
+  return (callWeeks as any[]).map((r: any) => ({
+    week: String(r.week),
+    hasScorecards: scorecardWeeks.has(String(r.week)),
+    callCount: Number(r.callCount),
+  }));
+}
+
+// ─── Batch generate QA for all weeks since launch ─────────────────────────────
+export async function batchGenerateAllWeeks(): Promise<{ week: string; count: number; error?: string }[]> {
+  const weeks = await getQaWeeks();
+  const results: { week: string; count: number; error?: string }[] = [];
+  for (const { week, hasScorecards } of weeks) {
+    if (hasScorecards) {
+      results.push({ week, count: 0, error: 'skipped (already scored)' });
+      continue;
+    }
+    try {
+      const generated = await generateWeeklyQAReport(week);
+      const handlers = await getHandlers();
+      let saved = 0;
+      for (const r of generated) {
+        const handler = handlers.find((h) =>
+          h.name.toLowerCase().includes(r.handlerName.toLowerCase()) ||
+          r.handlerName.toLowerCase().includes(h.name.toLowerCase())
+        );
+        if (handler) {
+          await saveHandlerScorecard({
+            handlerId: handler.id,
+            handlerName: r.handlerName,
+            weekOf: r.weekOf,
+            greetingScore: r.greetingScore,
+            holdManagementScore: r.holdManagementScore,
+            resolutionScore: r.resolutionScore,
+            empathyScore: r.empathyScore,
+            callControlScore: r.callControlScore,
+            overallScore: r.overallScore,
+            strengths: r.strengths.join('\n'),
+            improvements: r.improvements.join('\n'),
+            submittedBy: 'AI QA System (Retroactive)',
+          });
+          saved++;
+        }
+      }
+      results.push({ week, count: saved });
+    } catch (err: any) {
+      results.push({ week, count: 0, error: err.message });
+    }
+  }
+  return results;
+}
+
+// ─── Handler Performance Digest ──────────────────────────────────────────────
+export async function getHandlerPerformanceDigest(handlerName: string): Promise<{
+  handlerName: string;
+  today: { calls: number; answered: number; avgDurationMin: number };
+  thisWeek: { calls: number; answered: number; callbacksCompleted: number; callbacksPending: number; avgDurationMin: number };
+  thisMonth: { calls: number; answered: number; callbacksCompleted: number; avgDurationMin: number };
+  teamAvgAnswerRate: number;
+  teamAvgDurationMin: number;
+  latestQaScore: number | null;
+  latestQaWeek: string | null;
+  coachingNote: string;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const client = (db as any).$client.promise();
+  const { invokeLLM } = await import("./_core/llm");
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 19).replace("T", " ");
+  const weekStart = new Date(now.getTime() - now.getDay() * 86400000);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekStartStr = weekStart.toISOString().slice(0, 19).replace("T", " ");
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 19).replace("T", " ");
+
+  const [[todayRows], [weekRows], [monthRows], [teamRows], [qaRows]] = await Promise.all([
+    client.query(
+      `SELECT COUNT(*) as calls, SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as answered,
+       ROUND(AVG(CASE WHEN status='answered' THEN durationSeconds ELSE NULL END)/60,1) as avgDur
+       FROM call_history WHERE agentName=? AND startedAt >= ?`,
+      [handlerName, todayStart]
+    ),
+    client.query(
+      `SELECT COUNT(*) as calls, SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as answered,
+       ROUND(AVG(CASE WHEN status='answered' THEN durationSeconds ELSE NULL END)/60,1) as avgDur
+       FROM call_history WHERE agentName=? AND startedAt >= ?`,
+      [handlerName, weekStartStr]
+    ),
+    client.query(
+      `SELECT COUNT(*) as calls, SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) as answered,
+       ROUND(AVG(CASE WHEN status='answered' THEN durationSeconds ELSE NULL END)/60,1) as avgDur
+       FROM call_history WHERE agentName=? AND startedAt >= ?`,
+      [handlerName, monthStart]
+    ),
+    client.query(
+      `SELECT ROUND(AVG(CASE WHEN status='answered' THEN 1 ELSE 0 END)*100,1) as answerRate,
+       ROUND(AVG(CASE WHEN status='answered' THEN durationSeconds ELSE NULL END)/60,1) as avgDur
+       FROM call_history WHERE startedAt >= ?`,
+      [monthStart]
+    ),
+    client.query(
+      `SELECT overallScore, weekOf FROM qa_scorecards WHERE handlerName=? ORDER BY weekOf DESC LIMIT 1`,
+      [handlerName]
+    ),
+  ]);
+
+  // Callbacks from intake_records
+  const [[cbWeek], [cbMonth]] = await Promise.all([
+    client.query(
+      `SELECT SUM(CASE WHEN callbackAt IS NOT NULL THEN 1 ELSE 0 END) as done,
+       SUM(CASE WHEN callbackAt IS NULL AND status != 'closed' THEN 1 ELSE 0 END) as pending
+       FROM intake_records WHERE handlerName=? AND createdAt >= ?`,
+      [handlerName, weekStartStr]
+    ),
+    client.query(
+      `SELECT SUM(CASE WHEN callbackAt IS NOT NULL THEN 1 ELSE 0 END) as done
+       FROM intake_records WHERE handlerName=? AND createdAt >= ?`,
+      [handlerName, monthStart]
+    ),
+  ]);
+
+  const today = { calls: Number(todayRows[0]?.calls ?? 0), answered: Number(todayRows[0]?.answered ?? 0), avgDurationMin: Number(todayRows[0]?.avgDur ?? 0) };
+  const week = { calls: Number(weekRows[0]?.calls ?? 0), answered: Number(weekRows[0]?.answered ?? 0), callbacksCompleted: Number(cbWeek[0]?.done ?? 0), callbacksPending: Number(cbWeek[0]?.pending ?? 0), avgDurationMin: Number(weekRows[0]?.avgDur ?? 0) };
+  const month = { calls: Number(monthRows[0]?.calls ?? 0), answered: Number(monthRows[0]?.answered ?? 0), callbacksCompleted: Number(cbMonth[0]?.done ?? 0), avgDurationMin: Number(monthRows[0]?.avgDur ?? 0) };
+  const teamAnswerRate = Number(teamRows[0]?.answerRate ?? 0);
+  const teamAvgDur = Number(teamRows[0]?.avgDur ?? 0);
+  const latestQa = qaRows[0] ? { score: Number(qaRows[0].overallScore), week: String(qaRows[0].weekOf) } : null;
+
+  const myAnswerRate = week.calls > 0 ? Math.round((week.answered / week.calls) * 100) : 0;
+  const prompt = `You are a supportive but direct call center manager writing a brief daily performance note for a claims handler.
+
+Handler: ${handlerName}
+Today: ${today.calls} calls received, ${today.answered} answered, avg ${today.avgDurationMin} min
+This week: ${week.calls} calls, ${week.answered} answered (${myAnswerRate}% answer rate), ${week.callbacksCompleted} callbacks completed, ${week.callbacksPending} callbacks pending
+This month: ${month.calls} calls, ${month.answered} answered, ${month.callbacksCompleted} callbacks completed
+Team avg this month: ${teamAnswerRate}% answer rate, ${teamAvgDur} min avg handle time
+${latestQa ? `Latest QA score: ${latestQa.score}/10 (week of ${latestQa.week})` : "No QA scores yet"}
+
+Write a 2-3 sentence coaching note. Be specific about what they're doing well and one concrete thing to improve. Keep it encouraging but honest. Do not use bullet points.`;
+
+  let coachingNote = "";
+  try {
+    const resp = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
+    const raw = resp?.choices?.[0]?.message?.content;
+    coachingNote = typeof raw === "string" ? raw : "";
+  } catch {
+    coachingNote = "";
+  }
+
+  return {
+    handlerName,
+    today,
+    thisWeek: week,
+    thisMonth: month,
+    teamAvgAnswerRate: teamAnswerRate,
+    teamAvgDurationMin: teamAvgDur,
+    latestQaScore: latestQa?.score ?? null,
+    latestQaWeek: latestQa?.week ?? null,
+    coachingNote,
+  };
+}
+
+// ─── All-handler digest (admin view) ─────────────────────────────────────────
+export async function getAllHandlerDigests(): Promise<Awaited<ReturnType<typeof getHandlerPerformanceDigest>>[]> {
+  const allHandlers = await getHandlers();
+  const results = await Promise.all(
+    allHandlers.map((h) => getHandlerPerformanceDigest(h.name))
+  );
+  return results.filter(Boolean);
 }

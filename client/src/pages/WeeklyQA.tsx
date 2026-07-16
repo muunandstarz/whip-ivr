@@ -327,9 +327,21 @@ export default function WeeklyQA() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [pushAgent, setPushAgent] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState(() => getMondayOf(new Date()));
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   // Fetch available weeks that have scorecards
   const { data: availableWeeks } = trpc.qa.qaWeeks.useQuery();
+
+  // Auto-select the most recent week that has scorecards when data loads
+  useEffect(() => {
+    if (!hasAutoSelected && availableWeeks && availableWeeks.length > 0) {
+      const weekWithScores = (availableWeeks as any[]).find((w: any) => w.hasScorecards);
+      if (weekWithScores) {
+        setWeekStart(weekWithScores.week);
+        setHasAutoSelected(true);
+      }
+    }
+  }, [availableWeeks, hasAutoSelected]);
 
   // Fetch scorecards for the selected week
   const { data: scorecards, isLoading: scorecardsLoading } = trpc.qa.scorecardsByWeek.useQuery({ weekOf: weekStart });
@@ -341,16 +353,19 @@ export default function WeeklyQA() {
   const bulkPushWeek = trpc.qa.bulkPushWeek.useMutation();
   const utils = trpc.useUtils();
 
-  // When available weeks load and current weekStart has no data, default to the most recent week with data
-  useEffect(() => {
-    if (availableWeeks && availableWeeks.length > 0 && scorecards && scorecards.length === 0) {
-      // Only auto-switch if the current week has no data and there are weeks with data
-      const currentMondayHasData = availableWeeks.includes(weekStart);
-      if (!currentMondayHasData) {
-        setWeekStart(availableWeeks[0]); // Most recent week with data
-      }
+  const batchGenerate = trpc.qa.batchGenerateAllWeeks.useMutation();
+
+  const handleBatchGenerate = async () => {
+    try {
+      const results = await batchGenerate.mutateAsync();
+      await utils.qa.scorecardsByWeek.invalidate();
+      await utils.qa.qaWeeks.invalidate();
+      const scored = results.filter((r: any) => r.count > 0).length;
+      toast.success(`Retroactive QA complete: scored ${scored} week${scored !== 1 ? 's' : ''}.`);
+    } catch {
+      toast.error('Batch QA generation failed. Please try again.');
     }
-  }, [availableWeeks]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
   const handleRegenerate = async () => {
     try {
@@ -439,11 +454,13 @@ export default function WeeklyQA() {
                   className="text-xs border rounded px-2 py-1.5 bg-background text-foreground pr-6 appearance-none cursor-pointer"
                 >
                   {/* Always include current week */}
-                  {!availableWeeks?.includes(weekStart) && (
-                    <option value={weekStart}>{weekStart} (no data yet)</option>
+                  {!availableWeeks?.some((w: any) => w.week === weekStart) && (
+                    <option value={weekStart}>{weekStart} (current week)</option>
                   )}
-                  {(availableWeeks ?? []).map((w: string) => (
-                    <option key={w} value={w}>{w}</option>
+                  {(availableWeeks ?? []).map((w: any) => (
+                    <option key={w.week} value={w.week}>
+                      {w.week}{w.hasScorecards ? ' ✓' : ` — ${w.callCount} calls, no QA`}
+                    </option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
@@ -472,8 +489,22 @@ export default function WeeklyQA() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={handleBatchGenerate}
+              disabled={batchGenerate.isPending || generateReport.isPending}
+              className="text-xs gap-1.5 border-amber-500 text-amber-600 hover:bg-amber-50"
+              title="Score all weeks since launch that don't have QA yet"
+            >
+              {batchGenerate.isPending ? (
+                <><span className="animate-spin">⟳</span> Scoring all weeks…</>
+              ) : (
+                <><Star className="w-3 h-3" /> Score All Weeks</>
+              )}
+            </Button>
+            <Button
+              size="sm"
               onClick={handleRegenerate}
-              disabled={generateReport.isPending}
+              disabled={generateReport.isPending || batchGenerate.isPending}
               className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs gap-1.5"
             >
               {generateReport.isPending ? (
