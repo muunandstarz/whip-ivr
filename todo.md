@@ -667,3 +667,10 @@ Business routing logic to implement in resolveHandler():
 - [ ] Persist scores to qa_scorecards table for all active handlers
 - [ ] Fix WeeklyQA UI Generate button so it works going forward
 - [ ] Verify scores appear on each handler's My Dashboard page
+
+## QA Generation Fix + Friday Auto-Post (Jul 16 2026)
+- [x] Rewrite generateWeeklyQAReport to use intake_records as primary source (agentName is NULL in call_history for historical data)
+- [x] QA generation should work for any week that has intake records with a handlerName
+- [x] Friday auto-post: scheduled job generates QA for the week and pushes scores to each handler's dashboard automatically
+- [x] Scheduled endpoint: /api/scheduled/weeklyQAPost — runs every Friday at 4pm ET
+- [x] Register Friday cron via manus-heartbeat after deploy (pending deploy)

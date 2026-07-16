@@ -1509,6 +1509,23 @@ export async function getHandlerWeeklyStats(weekStart: string): Promise<{
   const client = (db as any).$client.promise();
 
   // week window: weekStart (Monday) to weekStart + 7 days
+  // Primary source: intake_records.handlerName (always populated)
+  // Secondary: call_history.agentName (only populated for recent calls)
+  const [intakeHandlerRows] = await client.query(
+    `SELECT
+       handlerName,
+       COUNT(*) as total_intakes,
+       SUM(CASE WHEN callbackAt IS NOT NULL THEN 1 ELSE 0 END) as called_back
+     FROM intake_records
+     WHERE handlerName IS NOT NULL
+       AND createdAt >= ?
+       AND createdAt < DATE_ADD(?, INTERVAL 7 DAY)
+     GROUP BY handlerName
+     ORDER BY total_intakes DESC`,
+    [weekStart, weekStart]
+  );
+
+  // Also try call_history for handlers with agentName populated
   const [callRows] = await client.query(
     `SELECT
        agentName,
@@ -1581,10 +1598,35 @@ export async function getHandlerWeeklyStats(weekStart: string): Promise<{
     };
   }
 
-  return (callRows as any[]).map((row: any) => {
-    const hn = String(row.agentName ?? "");
-    const total = Number(row.total ?? 0);
-    const answered = Number(row.answered ?? 0);
+  // Build call_history lookup by agentName
+  const callHistoryMap: Record<string, { total: number; answered: number; avgDurationMin: number }> = {};
+  for (const row of callRows as any[]) {
+    callHistoryMap[String(row.agentName ?? "")] = {
+      total: Number(row.total ?? 0),
+      answered: Number(row.answered ?? 0),
+      avgDurationMin: Number(row.avgDurationMin ?? 0),
+    };
+  }
+
+  // Merge: use intake_records as the handler list (always populated),
+  // supplement with call_history stats where available
+  const handlerSet = new Set<string>();
+  const intakeMap: Record<string, number> = {};
+  for (const row of intakeHandlerRows as any[]) {
+    const hn = String(row.handlerName ?? "");
+    handlerSet.add(hn);
+    intakeMap[hn] = Number(row.total_intakes ?? 0);
+  }
+  for (const row of callRows as any[]) {
+    handlerSet.add(String(row.agentName ?? ""));
+  }
+
+  return Array.from(handlerSet).filter(Boolean).map((hn) => {
+    const ch = callHistoryMap[hn] ?? { total: 0, answered: 0, avgDurationMin: 0 };
+    const intakeCount = intakeMap[hn] ?? 0;
+    // Use call_history totals if available, otherwise use intake count as proxy
+    const total = ch.total > 0 ? ch.total : intakeCount;
+    const answered = ch.answered > 0 ? ch.answered : intakeCount; // intakes = answered voicemails
     const cb = callbackMap[hn] ?? { total: 0, calledBack: 0 };
     return {
       handlerName: hn,
@@ -1594,7 +1636,7 @@ export async function getHandlerWeeklyStats(weekStart: string): Promise<{
       callsByCallerType: callerTypeMap[hn] ?? {},
       overdueCallbacks: overdueMap[hn] ?? 0,
       callbackRate: cb.total > 0 ? Math.round((cb.calledBack / cb.total) * 100) : 100,
-      avgCallDurationMin: Number(row.avgDurationMin ?? 0),
+      avgCallDurationMin: ch.avgDurationMin,
     };
   });
 }

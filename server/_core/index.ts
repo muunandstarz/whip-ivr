@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { aircallRouter } from "../aircall";
 import { startAircallSyncJob } from "../aircallSync";
 import { dailyDigestHandler } from "../scheduled/dailyDigest";
+import { weeklyQAPostHandler } from "../scheduled/weeklyQAPost";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -45,6 +46,7 @@ async function startServer() {
 
   // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
+  app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
 
   // Aircall recording proxy — accepts ?url=<encoded assets.aircall.io URL> or ?callId=<id>
   // Resolves the Aircall asset URL to a fresh signed S3 URL via the Aircall API, then
