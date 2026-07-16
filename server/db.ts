@@ -507,17 +507,17 @@ export async function resolveHandlerName(name: string | null | undefined): Promi
   if (!trimmed) return undefined;
   const db = await getDb();
   if (!db) return trimmed;
-  // Exact match first
+  // Exact match first (active handlers only)
   const exact = await db.select({ name: handlers.name }).from(handlers)
-    .where(eq(handlers.name, trimmed)).limit(1);
+    .where(and(eq(handlers.name, trimmed), eq(handlers.active, true))).limit(1);
   if (exact.length > 0) return exact[0].name;
   // First-name-only match (e.g. "Jayla" → "Jayla Bernard")
   const partial = await db.select({ name: handlers.name }).from(handlers)
-    .where(like(handlers.name, `${trimmed} %`)).limit(1);
+    .where(and(like(handlers.name, `${trimmed} %`), eq(handlers.active, true))).limit(1);
   if (partial.length > 0) return partial[0].name;
   // Last-name-only match (e.g. "Bernard" → "Jayla Bernard")
   const lastNameMatch = await db.select({ name: handlers.name }).from(handlers)
-    .where(like(handlers.name, `% ${trimmed}`)).limit(1);
+    .where(and(like(handlers.name, `% ${trimmed}`), eq(handlers.active, true))).limit(1);
   if (lastNameMatch.length > 0) return lastNameMatch[0].name;
   return trimmed;
 }
@@ -1915,23 +1915,26 @@ export async function getHandlerPerformanceDigest(handlerName: string): Promise<
     ),
   ]);
 
-  // Callbacks from intake_records
-  const [[cbWeek], [cbMonth]] = await Promise.all([
+  // Callbacks from callback_logs (authoritative source — intake_records.callbackAt is sparsely populated)
+  const [[cbWeek], [cbMonth], [cbPending]] = await Promise.all([
     client.query(
-      `SELECT SUM(CASE WHEN callbackAt IS NOT NULL THEN 1 ELSE 0 END) as done,
-       SUM(CASE WHEN callbackAt IS NULL AND status != 'closed' THEN 1 ELSE 0 END) as pending
-       FROM intake_records WHERE handlerName=? AND createdAt >= ?`,
+      `SELECT COUNT(*) as done FROM callback_logs WHERE handlerName=? AND calledAt >= ?`,
       [handlerName, weekStartStr]
     ),
     client.query(
-      `SELECT SUM(CASE WHEN callbackAt IS NOT NULL THEN 1 ELSE 0 END) as done
-       FROM intake_records WHERE handlerName=? AND createdAt >= ?`,
+      `SELECT COUNT(*) as done FROM callback_logs WHERE handlerName=? AND calledAt >= ?`,
       [handlerName, monthStart]
+    ),
+    client.query(
+      `SELECT COUNT(*) as pending FROM intake_records
+       WHERE handlerName=? AND status != 'closed' AND callbackDueBy IS NOT NULL
+       AND (callbackAt IS NULL AND id NOT IN (SELECT DISTINCT intakeId FROM callback_logs WHERE intakeId IS NOT NULL))`,
+      [handlerName]
     ),
   ]);
 
   const today = { calls: Number(todayRows[0]?.calls ?? 0), answered: Number(todayRows[0]?.answered ?? 0), avgDurationMin: Number(todayRows[0]?.avgDur ?? 0) };
-  const week = { calls: Number(weekRows[0]?.calls ?? 0), answered: Number(weekRows[0]?.answered ?? 0), callbacksCompleted: Number(cbWeek[0]?.done ?? 0), callbacksPending: Number(cbWeek[0]?.pending ?? 0), avgDurationMin: Number(weekRows[0]?.avgDur ?? 0) };
+  const week = { calls: Number(weekRows[0]?.calls ?? 0), answered: Number(weekRows[0]?.answered ?? 0), callbacksCompleted: Number(cbWeek[0]?.done ?? 0), callbacksPending: Number(cbPending[0]?.pending ?? 0), avgDurationMin: Number(weekRows[0]?.avgDur ?? 0) };
   const month = { calls: Number(monthRows[0]?.calls ?? 0), answered: Number(monthRows[0]?.answered ?? 0), callbacksCompleted: Number(cbMonth[0]?.done ?? 0), avgDurationMin: Number(monthRows[0]?.avgDur ?? 0) };
   const teamAnswerRate = Number(teamRows[0]?.answerRate ?? 0);
   const teamAvgDur = Number(teamRows[0]?.avgDur ?? 0);

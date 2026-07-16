@@ -1,9 +1,10 @@
 /**
  * /api/scheduled/dailyDigest
  *
- * Project-level Heartbeat (§4a) — fires Mon–Fri at 5:30 PM ET (21:30 UTC).
- * Generates a performance digest for every active handler and sends each one
- * a notification via the Manus notification system.
+ * Project-level Heartbeat (§4a) — fires weekly (Fridays at 5:30 PM ET).
+ * Generates a performance digest for every active handler and sends the owner
+ * ONE consolidated weekly summary notification. Individual per-handler
+ * notifications are NOT sent — handlers see their own stats on their dashboard.
  *
  * Auth: cron identity only (user.isCron === true).
  */
@@ -19,7 +20,6 @@ export async function dailyDigestHandler(req: Request, res: Response) {
       return res.json({ ok: true, sent: 0, skipped: "no digests" });
     }
 
-    let sent = 0;
     const summary: string[] = [];
 
     for (const d of digests) {
@@ -30,30 +30,16 @@ export async function dailyDigestHandler(req: Request, res: Response) {
           ? Math.round((d.thisWeek.answered / d.thisWeek.calls) * 100)
           : 0;
 
-      const lines = [
-        `📞 Today: ${d.today.calls} calls received, ${d.today.answered} answered`,
-        `📅 This week: ${d.thisWeek.calls} calls · ${weekAnswerRate}% answer rate · ${d.thisWeek.callbacksCompleted} callbacks done · ${d.thisWeek.callbacksPending} pending`,
-        `📆 This month: ${d.thisMonth.calls} calls · ${d.thisMonth.callbacksCompleted} callbacks completed`,
-        d.latestQaScore !== null
-          ? `⭐ Latest QA score: ${d.latestQaScore}/10 (week of ${d.latestQaWeek})`
-          : `⭐ No QA scores yet`,
-        ``,
-        `💬 Manager note:`,
-        d.coachingNote || "Keep up the good work.",
-      ];
-
-      const content = lines.join("\n");
-      const title = `Daily Performance Digest — ${d.handlerName}`;
-
-      // Send as owner notification (visible in the Manus notification panel)
-      await notifyOwner({ title, content });
-      sent++;
-      summary.push(`${d.handlerName}: ${d.today.calls} calls, ${weekAnswerRate}% answer rate`);
+      summary.push(
+        `• ${d.handlerName}: ${d.thisWeek.calls} calls, ${weekAnswerRate}% answer rate, ${d.thisWeek.callbacksCompleted} callbacks done` +
+        (d.latestQaScore !== null ? `, QA ${d.latestQaScore}/10` : "")
+      );
     }
 
-    // Send a summary to the owner as well
+    // Send ONE consolidated weekly summary to the owner only
+    const sent = summary.length;
     await notifyOwner({
-      title: `Daily Digest Sent — ${sent} handlers`,
+      title: `Weekly Performance Digest — ${sent} handlers`,
       content: summary.join("\n"),
     });
 

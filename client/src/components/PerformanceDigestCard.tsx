@@ -1,6 +1,6 @@
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Phone,
   PhoneIncoming,
@@ -12,6 +12,8 @@ import {
   Star,
   MessageSquare,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -61,6 +63,7 @@ interface Props {
 }
 
 export default function PerformanceDigestCard({ handlerName, compact = false }: Props) {
+  const [expanded, setExpanded] = useState(true);
   const { data, isLoading, refetch, isFetching } = trpc.qa.handlerDigest.useQuery(
     { handlerName },
     { staleTime: 5 * 60 * 1000 } // cache 5 min — LLM call is expensive
@@ -110,75 +113,87 @@ export default function PerformanceDigestCard({ handlerName, compact = false }: 
             >
               <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
             </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => setExpanded((e) => !e)}
+              title={expanded ? "Collapse digest" : "Expand digest"}
+            >
+              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-4">
-        {/* Stats grid */}
-        <div className="grid grid-cols-3 gap-3">
-          {/* Today */}
-          <div className="col-span-3 grid grid-cols-3 gap-3 bg-muted/30 rounded-lg p-3">
-            <div className="col-span-3 flex items-center gap-1.5 mb-1">
-              <PhoneIncoming className="w-3.5 h-3.5 text-[#ff6221]" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Today</span>
-            </div>
-            <StatBox label="Calls" value={d.today.calls} />
-            <StatBox label="Answered" value={d.today.answered} sub={d.today.calls > 0 ? `${Math.round((d.today.answered / d.today.calls) * 100)}%` : "—"} />
-            <StatBox label="Avg Handle" value={d.today.avgDurationMin > 0 ? `${d.today.avgDurationMin}m` : "—"} />
-          </div>
 
-          {/* This Week */}
-          <div className="col-span-3 grid grid-cols-4 gap-3 bg-muted/20 rounded-lg p-3">
-            <div className="col-span-4 flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1.5">
-                <PhoneCall className="w-3.5 h-3.5 text-blue-500" />
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">This Week</span>
+      {expanded && (
+        <CardContent className="px-4 pb-4 space-y-4">
+          {/* Stats grid */}
+          <div className="grid grid-cols-3 gap-3">
+            {/* Today */}
+            <div className="col-span-3 grid grid-cols-3 gap-3 bg-muted/30 rounded-lg p-3">
+              <div className="col-span-3 flex items-center gap-1.5 mb-1">
+                <PhoneIncoming className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Today</span>
               </div>
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <TrendIcon myVal={weekAnswerRate} teamVal={d.teamAvgAnswerRate} />
-                Team avg: {d.teamAvgAnswerRate}%
+              <StatBox label="Calls" value={d.today.calls} />
+              <StatBox label="Answered" value={d.today.answered} sub={d.today.calls > 0 ? `${Math.round((d.today.answered / d.today.calls) * 100)}%` : "—"} />
+              <StatBox label="Avg Handle" value={d.today.avgDurationMin > 0 ? `${d.today.avgDurationMin}m` : "—"} />
+            </div>
+
+            {/* This Week */}
+            <div className="col-span-3 grid grid-cols-4 gap-3 bg-muted/20 rounded-lg p-3">
+              <div className="col-span-4 flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <PhoneCall className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">This Week</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <TrendIcon myVal={weekAnswerRate} teamVal={d.teamAvgAnswerRate} />
+                  Team avg: {d.teamAvgAnswerRate}%
+                </div>
               </div>
+              <StatBox label="Calls" value={d.thisWeek.calls} />
+              <StatBox
+                label="Answer Rate"
+                value={`${weekAnswerRate}%`}
+                sub={weekAnswerRate >= d.teamAvgAnswerRate ? "↑ above avg" : "↓ below avg"}
+              />
+              <StatBox label="Callbacks Done" value={d.thisWeek.callbacksCompleted} />
+              <StatBox
+                label="Pending CBs"
+                value={d.thisWeek.callbacksPending}
+                sub={d.thisWeek.callbacksPending > 5 ? "⚠ high" : d.thisWeek.callbacksPending === 0 ? "✓ clear" : undefined}
+              />
             </div>
-            <StatBox label="Calls" value={d.thisWeek.calls} />
-            <StatBox
-              label="Answer Rate"
-              value={`${weekAnswerRate}%`}
-              sub={weekAnswerRate >= d.teamAvgAnswerRate ? "↑ above avg" : "↓ below avg"}
-            />
-            <StatBox label="Callbacks Done" value={d.thisWeek.callbacksCompleted} />
-            <StatBox
-              label="Pending CBs"
-              value={d.thisWeek.callbacksPending}
-              sub={d.thisWeek.callbacksPending > 5 ? "⚠ high" : d.thisWeek.callbacksPending === 0 ? "✓ clear" : undefined}
-            />
+
+            {/* This Month */}
+            <div className="col-span-3 grid grid-cols-3 gap-3 rounded-lg p-3 border border-border/40">
+              <div className="col-span-3 flex items-center gap-1.5 mb-1">
+                <Clock className="w-3.5 h-3.5 text-purple-500" />
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">This Month</span>
+              </div>
+              <StatBox label="Calls" value={d.thisMonth.calls} />
+              <StatBox label="Answer Rate" value={`${monthAnswerRate}%`} />
+              <StatBox label="Callbacks Done" value={d.thisMonth.callbacksCompleted} />
+            </div>
           </div>
 
-          {/* This Month */}
-          <div className="col-span-3 grid grid-cols-3 gap-3 rounded-lg p-3 border border-border/40">
-            <div className="col-span-3 flex items-center gap-1.5 mb-1">
-              <Clock className="w-3.5 h-3.5 text-purple-500" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">This Month</span>
+          {/* AI Performance Note */}
+          {d.coachingNote && (
+            <div className="bg-[#ff6221]/5 border border-[#ff6221]/20 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold text-[#ff6221]">AI Performance Note</span>
+                {d.latestQaWeek && (
+                  <span className="text-[10px] text-muted-foreground ml-auto">QA: week of {d.latestQaWeek}</span>
+                )}
+              </div>
+              <p className="text-xs text-foreground/80 leading-relaxed">{d.coachingNote}</p>
             </div>
-            <StatBox label="Calls" value={d.thisMonth.calls} />
-            <StatBox label="Answer Rate" value={`${monthAnswerRate}%`} />
-            <StatBox label="Callbacks Done" value={d.thisMonth.callbacksCompleted} />
-          </div>
-        </div>
-
-        {/* AI Coaching Note */}
-        {d.coachingNote && (
-          <div className="bg-[#ff6221]/5 border border-[#ff6221]/20 rounded-lg p-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-[#ff6221]" />
-              <span className="text-xs font-semibold text-[#ff6221]">Manager Note</span>
-              {d.latestQaWeek && (
-                <span className="text-[10px] text-muted-foreground ml-auto">QA: week of {d.latestQaWeek}</span>
-              )}
-            </div>
-            <p className="text-xs text-foreground/80 leading-relaxed">{d.coachingNote}</p>
-          </div>
-        )}
-      </CardContent>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }

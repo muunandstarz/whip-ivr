@@ -732,7 +732,7 @@ Business routing logic to implement in resolveHandler():
 - [x] Store `SLACK_SIGNING_SECRET` and the installed read-only `SLACK_BOT_TOKEN` in the native Whip IVR project secrets; never commit either credential.
 - [ ] Save a native Whip IVR checkpoint and publish it before configuring Slack’s production Request URL.
 - [ ] Verify the published unsigned receiver returns JSON `401` or `503` rather than the SPA fallback before enabling Slack Event Subscriptions.
-- [ ] Enable Slack Event Subscriptions at `https://whipivr-tyswfku7.manus.space/api/slack/loss-intake-events`, subscribe to `message.channels` and `message.groups`, and save only after explicit confirmation.
+- [x] Enable Slack Event Subscriptions at `https://whipclaimsivr.com/api/slack/loss-intake-events`, subscribe to `message.channels` and `message.groups`.
 - [ ] Send signed canary events for one approved parent post and one reply, then confirm idempotent persistence, SLA/quality recomputation, and sync-health visibility.
 - [x] Serialize processing per Slack thread so a reply arriving while its parent is still being persisted cannot be buffered and then accidentally discarded.
 
@@ -762,3 +762,26 @@ Business routing logic to implement in resolveHandler():
 - [x] Friday auto-post: scheduled job generates QA for the week and pushes scores to each handler's dashboard automatically
 - [x] Scheduled endpoint: /api/scheduled/weeklyQAPost — runs every Friday at 4pm ET
 - [x] Register Friday cron via manus-heartbeat after deploy (pending deploy)
+
+## Fixes — Jul 16 2026 (Batch)
+
+### Loss Intake
+- [ ] Fix acknowledgment detection: agent assignments are set but firstContactAt still null — diagnose whether assignedAgent is being matched against Slack user IDs correctly in the domain parser
+- [ ] Join bot to #claims-remotemarkets (C092UPKR79D) via Slack API conversations.join — add server-side tRPC mutation or admin action since UI join-channels option doesn't exist
+- [ ] After joining remote markets channel, verify sync picks up claims from that channel
+
+### IVR Handler Tracking
+- [ ] Remove Madeline Green from active handler tracking (mark inactive in handlers table)
+- [ ] Remove Catherine from active handler tracking (mark inactive in handlers table)
+- [ ] Verify they no longer appear in routing, handler queue, call tracking, and analytics
+
+### QA / Weekly Reports
+- [ ] Fix QA authorship: remove impression that manager note was written by the owner — add "AI-generated coaching note" label or similar attribution, make clear it is system-generated
+- [ ] Change daily handler digest to weekly (run once per week, not daily Mon-Fri)
+- [ ] Consolidate QA emails: instead of one email per handler, send one weekly summary report to owner only
+- [ ] Update daily-handler-digest cron to weekly schedule
+
+### Handler Dashboard
+- [ ] Add collapse/expand toggle to daily digest section on handler dashboard
+- [ ] Fix inaccurate callback notes: "0 callbacks done" is likely a data/matching issue — diagnose why callbacks show 0 when team is actively making callbacks
+- [ ] Fix callback count query: ensure callbackAt timestamp is being set correctly when handlers log callbacks
