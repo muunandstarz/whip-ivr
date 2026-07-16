@@ -327,9 +327,21 @@ export default function WeeklyQA() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [pushAgent, setPushAgent] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState(() => getMondayOf(new Date()));
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   // Fetch available weeks that have scorecards
   const { data: availableWeeks } = trpc.qa.qaWeeks.useQuery();
+
+  // Auto-select the most recent week that has scorecards when data loads
+  useEffect(() => {
+    if (!hasAutoSelected && availableWeeks && availableWeeks.length > 0) {
+      const weekWithScores = (availableWeeks as any[]).find((w: any) => w.hasScorecards);
+      if (weekWithScores) {
+        setWeekStart(weekWithScores.week);
+        setHasAutoSelected(true);
+      }
+    }
+  }, [availableWeeks, hasAutoSelected]);
 
   // Fetch scorecards for the selected week
   const { data: scorecards, isLoading: scorecardsLoading } = trpc.qa.scorecardsByWeek.useQuery({ weekOf: weekStart });

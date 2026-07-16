@@ -24,7 +24,6 @@ import {
   UserCog,
   LayoutGrid,
   SlidersHorizontal,
-  FileBarChart,
   Sun,
   Moon,
   Contrast,
@@ -47,7 +46,6 @@ const ADMIN_NAV_ITEMS = [
   { href: "/qa", label: "Weekly QA", icon: Star },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/users", label: "User Management", icon: UserCog },
-  { href: "/reports", label: "Reports", icon: FileBarChart },
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
 ];
 
