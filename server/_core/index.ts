@@ -10,6 +10,11 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { aircallRouter } from "../aircall";
 import { startAircallSyncJob } from "../aircallSync";
+import { scheduledLossIntakeSyncHandler } from "../lossIntakeScheduled";
+import {
+  SLACK_LOSS_INTAKE_PATH,
+  slackLossIntakeEventsHandler,
+} from "../lossIntakeSlackEvents";
 import { dailyDigestHandler } from "../scheduled/dailyDigest";
 import { weeklyQAPostHandler } from "../scheduled/weeklyQAPost";
 
@@ -36,6 +41,13 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // Slack signs the exact raw bytes, so this endpoint must precede express.json().
+  app.post(
+    SLACK_LOSS_INTAKE_PATH,
+    express.raw({ type: "application/json", limit: "1mb" }),
+    slackLossIntakeEventsHandler,
+  );
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -43,6 +55,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   app.use("/api/aircall", aircallRouter);
+  app.post("/api/scheduled/loss-intake-sync", scheduledLossIntakeSyncHandler);
 
   // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);

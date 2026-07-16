@@ -28,6 +28,7 @@ import {
   Moon,
   Contrast,
   ListChecks,
+  ClipboardCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -44,6 +45,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/callback-log", label: "Callback Log", icon: ListChecks },
   { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
   { href: "/qa", label: "Weekly QA", icon: Star },
+  { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/users", label: "User Management", icon: UserCog },
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
@@ -53,6 +55,7 @@ const ADMIN_NAV_ITEMS = [
 const HANDLER_NAV_ITEMS = [
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
+  { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
 ];
 

@@ -9,4 +9,6 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   clerkSecretKey: process.env.CLERK_SECRET_KEY ?? "",
   clerkPublishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY ?? "",
+  slackBotToken: process.env.SLACK_BOT_TOKEN ?? "",
+  slackSigningSecret: process.env.SLACK_SIGNING_SECRET ?? "",
 };

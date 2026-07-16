@@ -650,6 +650,94 @@ Business routing logic to implement in resolveHandler():
 - [x] Save report config as named preset (DB-backed)
 - [x] Load saved report presets from dropdown
 
+---
+
+## Loss Intake Monitoring Integration (Jul 2026)
+
+- [x] Add a native Loss Intake section to Whip IVR rather than shipping a separate dashboard.
+- [x] Reuse Whip IVR authentication, roles, navigation, visual design, data access patterns, and deployment model.
+- [ ] Poll Slack channel `CHWRXH4HK` (#claims) every 5 minutes for Gas and EV/Tesla FNOL workflow posts.
+- [ ] Poll Slack channel `C092UPKR79D` (#claims-remotemarkets) every 5 minutes for remote-market FNOL posts.
+- [ ] Persist each claim with Slack source, parent timestamp, permalink, post time, market, vehicle type, member name, customer ID, VIN/last six, and attachment metadata.
+- [ ] Record whether photos are attached to each parent FNOL post.
+- [ ] Detect the first qualifying outreach acknowledgment from Ana, Bennett, or Carlito.
+- [ ] Calculate time-to-first-contact against the 10-minute SLA and preserve the exact event evidence.
+- [ ] Detect `good to go` as the authoritative completion signal.
+- [ ] Extract facts of loss, preliminary liability, and rideshare status from completion replies.
+- [ ] Calculate total intake cycle time from FNOL post to completion.
+- [ ] Detect no-answer attempt documentation, including first, second, third, and final no-contact handling.
+- [ ] Require Tesla/EV footage-request evidence in quality scoring while excluding Gas claims from that criterion.
+- [ ] Calculate a transparent quality score with criterion-level results and missing elements.
+- [ ] Apply market assignments: Bennett for Glen Burnie and Atlanta, Carlito for Rockville and Chicago, and Ana for all remote markets.
+- [ ] Implement idempotent Slack synchronization with pagination, backfill, failure logging, and sync-health visibility.
+- [x] Keep Slack credentials and sensitive claim data server-side.
+- [ ] Add a role-aware Loss Intake navigation group for Operations, Claims, My Performance or Team Performance, QA, Reports, and Settings as permitted.
+- [x] Create a private workspace for Ana, Bennett, and Carlito showing only the signed-in rep's queue, claims, SLA results, cycle times, quality scores, trends, and recurring gaps.
+- [x] Prevent intake reps from viewing other reps' claim-level data, private performance details, or QA feedback.
+- [ ] Add live rep queue status with SLA countdowns and within-SLA, at-risk, and breached states.
+- [x] Add an administrator-only Loss Intake dashboard with all open claims, team comparisons, SLA breaches, quality trends, reports, assignments, sync health, and settings.
+- [x] Add an administrator View As control that previews a rep's complete experience without exposing admin navigation to reps.
+- [x] Create searchable and filterable claim views and claim-detail timelines with Slack evidence links.
+- [ ] Create per-agent scorecards for Ana, Bennett, and Carlito with average contact time, SLA compliance, average completion time, quality, volume, and trends.
+- [ ] Create weekly and monthly administrator reports with agent breakdowns, breach counts, quality trends, and team metrics.
+- [ ] Create an administrator daily-QA queue with AI-drafted findings, manual edits, manager comments, and an explicit Send to Rep action.
+- [ ] Deliver sent QA items to the correct rep's private QA inbox with claim context, score breakdown, strengths, coaching opportunities, and evidence.
+- [ ] Track QA draft, reviewed, sent, opened, acknowledged, and resolved timestamps.
+- [ ] Allow reps to acknowledge each QA and optionally respond.
+- [ ] Show administrators unread, unacknowledged, overdue, and resolved QA items by rep and date.
+- [ ] Add settings for Slack channels, 10-minute SLA, at-risk threshold, tracked agents, assignments, quality weights, QA deadlines, and reporting behavior.
+- [ ] Add tests for FNOL recognition, acknowledgment detection, `good to go`, SLA boundaries, assignments, quality scoring, role isolation, QA delivery, and idempotent ingestion.
+- [ ] Validate extraction and scoring against representative real threads from both Slack channels.
+- [ ] Verify responsive design, keyboard accessibility, contrast, dark/high-contrast modes, loading states, empty states, and error states.
+- [ ] Review this checklist and mark every completed Loss Intake item before saving the release checkpoint.
+- [x] Define six Loss Intake Drizzle tables for claims, Slack events, quality criteria, daily QA delivery, settings, and sync-run health.
+- [x] Generate and populate the idempotent `drizzle/0002_add_loss_intake_monitoring.sql` migration.
+- [ ] Apply the Loss Intake migration and default settings seed to the Whip IVR managed database; the current managed database connection is unavailable and identifies the superseded standalone project.
+- [x] Implement deterministic FNOL recognition, labeled-field extraction, configured-rep milestone detection, SLA timing, authoritative completion, cycle time, and criterion-level quality scoring.
+- [x] Add passing unit coverage for unrelated-post rejection, member/customer ID variants, configured-rep timing, SLA boundaries, authoritative completion, and conditional Tesla scoring.
+- [x] Add idempotent Loss Intake claim/event/quality persistence, overview metrics, searchable claim queries, claim timelines, QA workflow helpers, settings, and sync-run health helpers.
+- [x] Add a compiled role-scoped Loss Intake tRPC API that restricts representatives to their linked handler profile and reserves team views, QA management, settings, and sync health for administrators.
+- [x] Implement direct Slack Web API polling for the two approved claims channels using a server-only bot token.
+- [x] Verify whether the connected Slack authorization exposes a deployable bot credential; otherwise request `SLACK_BOT_TOKEN` securely through project secrets.
+- [ ] Register an authenticated, idempotent five-minute scheduled callback and persist its task UID after deployment.
+- [x] Use the user’s authenticated Slack administration session to locate or create an internal Loss Intake polling app.
+- [x] Configure the minimum required bot scopes, install or update the app only with user confirmation at Slack’s authorization step, and invite it to the two approved claims channels.
+- [ ] Transfer the resulting bot token directly into Whip IVR’s server-only `SLACK_BOT_TOKEN` secret without exposing it in chat or source control.
+- [ ] Recover authenticated access to the current Manus workspace after the obsolete `/app` handoff returned 404.
+- [ ] Locate the live Whip IVR deployment and store the installed Slack app credential as server-only `SLACK_BOT_TOKEN` in that project.
+- [x] Add the least-privilege `channels:join` bot scope to Whip Loss Intake Monitor and reinstall the internal app with explicit workspace authorization.
+- [x] Join bot `whip_loss_intake_moni` to public channels `CHWRXH4HK` (`#claims`) and `C092UPKR79D` (`#claims-remotemarkets`), then verify read-only history access.
+- [x] Diagnose the local preview OAuth callback failure after successful Google sign-in and confirm that production authentication remains unchanged.
+- [x] Complete authenticated desktop and mobile visual verification of the Loss Intake workspace once preview access is restored.
+- [x] Add a tightly scoped local-development-only session route for visual testing because the browser takeover handoff returns 404; ensure it cannot run in production.
+- [x] Remove the temporary development-only session route immediately after desktop and mobile visual verification, then re-run TypeScript and unit tests.
+- [ ] Resolve Slack’s verified HTTP 451 regional/legal block for direct `slack.com/api` access from the current runtime before enabling the five-minute schedule.
+- [ ] Decide between validating direct polling from a different deployment egress region or using a connector-backed five-minute relay into Whip IVR’s authenticated ingestion endpoint.
+- [ ] Add a signed, replay-resistant Loss Intake relay ingestion endpoint that accepts only normalized batches for the two approved Slack channels.
+- [ ] Build the connector-backed relay payload contract and deterministic transformation from Slack parent/thread data into existing parser and scoring inputs.
+- [ ] Create a managed five-minute scheduled workflow using the authorized Slack connector and persist its task identifier for sync health controls.
+- [ ] Keep direct Slack polling disabled by default while preserving it as a documented fallback for a compatible future egress region.
+- [ ] Test invalid signatures, stale timestamps, wrong-channel rejection, duplicate delivery idempotency, successful ingestion, and sync-health reporting.
+- [ ] Replace unsupported five-minute connector task polling with signed real-time Slack Events delivery for new parent and thread messages.
+- [ ] Add connector-assisted reconciliation as an administrator-triggered or low-frequency backfill path rather than a minute-level scheduled task.
+- [ ] Configure Slack Event Subscriptions for only the two approved claims channels after explicit user confirmation, using request-signature verification and retry-safe event IDs.
+
+- [x] Implement `POST /api/slack/loss-intake-events` before the global JSON parser with endpoint-specific raw-body parsing.
+- [x] Verify Slack `v0` HMAC-SHA256 signatures with a server-only signing secret, constant-time comparison, and a five-minute replay window.
+- [x] Enforce workspace `TFFUXNU57`, app `A0BHDG7RX7D`, approved channels `CHWRXH4HK` and `C092UPKR79D`, human message authors, and supported message subtypes.
+- [x] Carry Slack `event_id` into Loss Intake event keys so retries remain idempotent without relying on timestamp-only keys.
+- [x] Rehydrate stored parent threads for real-time replies and reuse the approved FNOL, assignment, SLA, completion, and quality analysis pipeline without outbound Slack API calls.
+- [x] Add passing Slack receiver tests for valid signatures, invalid signatures, stale timestamps, missing signing-secret fail-closed behavior, and signed URL verification.
+- [ ] Apply `drizzle/0002_add_loss_intake_monitoring.sql` to the native Whip IVR managed database.
+- [ ] Store `SLACK_SIGNING_SECRET` and the installed read-only `SLACK_BOT_TOKEN` in the native Whip IVR project secrets; never commit either credential.
+- [ ] Save a native Whip IVR checkpoint and publish it before configuring Slack’s production Request URL.
+- [ ] Verify the published unsigned receiver returns JSON `401` or `503` rather than the SPA fallback before enabling Slack Event Subscriptions.
+- [ ] Enable Slack Event Subscriptions at `https://whipivr-tyswfku7.manus.space/api/slack/loss-intake-events`, subscribe to `message.channels` and `message.groups`, and save only after explicit confirmation.
+- [ ] Send signed canary events for one approved parent post and one reply, then confirm idempotent persistence, SLA/quality recomputation, and sync-health visibility.
+- [x] Serialize processing per Slack thread so a reply arriving while its parent is still being persisted cannot be buffered and then accidentally discarded.
+
+---
+
 ## QA Fix + Handler Performance Digest (Jul 14 2026)
 - [x] Audit QA page and qa_scorecards/qa_scores tables to find root cause of broken QA
 - [x] Fix QA scoring pipeline: retroactively score all weeks since launch (Apr 2026)
