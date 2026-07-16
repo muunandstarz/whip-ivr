@@ -272,3 +272,127 @@ export const savedReports = mysqlTable("saved_reports", {
 });
 export type SavedReport = typeof savedReports.$inferSelect;
 export type InsertSavedReport = typeof savedReports.$inferInsert;
+
+// ─── Loss Intake Monitoring ───────────────────────────────────────────────────
+export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
+  id: int("id").autoincrement().primaryKey(),
+  slackKey: varchar("slackKey", { length: 128 }).notNull().unique(),
+  channelId: varchar("channelId", { length: 32 }).notNull(),
+  channelName: varchar("channelName", { length: 128 }).notNull(),
+  slackMessageTs: varchar("slackMessageTs", { length: 32 }).notNull(),
+  slackPermalink: text("slackPermalink"),
+  postedAt: timestamp("postedAt").notNull(),
+  memberName: varchar("memberName", { length: 255 }),
+  customerId: varchar("customerId", { length: 128 }),
+  vinLastSix: varchar("vinLastSix", { length: 16 }),
+  market: varchar("market", { length: 128 }),
+  vehicleType: mysqlEnum("vehicleType", ["gas", "ev_tesla", "unknown"]).default("unknown").notNull(),
+  assignedHandlerId: int("assignedHandlerId"),
+  assignedAgent: varchar("assignedAgent", { length: 128 }),
+  stage: mysqlEnum("stage", ["awaiting_outreach", "outreach_started", "contact_attempts", "complete"]).default("awaiting_outreach").notNull(),
+  hasPhotos: boolean("hasPhotos").default(false).notNull(),
+  attachmentCount: int("attachmentCount").default(0).notNull(),
+  firstContactAt: timestamp("firstContactAt"),
+  firstContactMinutes: float("firstContactMinutes"),
+  slaState: mysqlEnum("slaState", ["within_sla", "at_risk", "breached"]).default("within_sla").notNull(),
+  completedAt: timestamp("completedAt"),
+  intakeCycleMinutes: float("intakeCycleMinutes"),
+  factsOfLoss: text("factsOfLoss"),
+  preliminaryLiability: text("preliminaryLiability"),
+  rideshareStatus: varchar("rideshareStatus", { length: 255 }),
+  noAnswerAttempts: int("noAnswerAttempts").default(0).notNull(),
+  teslaFootageRequested: boolean("teslaFootageRequested"),
+  qualityScore: float("qualityScore"),
+  missingElements: text("missingElements").default("[]"),
+  lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LossIntakeClaim = typeof lossIntakeClaims.$inferSelect;
+export type InsertLossIntakeClaim = typeof lossIntakeClaims.$inferInsert;
+
+export const lossIntakeEvents = mysqlTable("loss_intake_events", {
+  id: int("id").autoincrement().primaryKey(),
+  slackEventKey: varchar("slackEventKey", { length: 128 }).notNull().unique(),
+  claimId: int("claimId").notNull(),
+  slackEventTs: varchar("slackEventTs", { length: 32 }).notNull(),
+  occurredAt: timestamp("occurredAt").notNull(),
+  actorSlackUserId: varchar("actorSlackUserId", { length: 32 }),
+  actorName: varchar("actorName", { length: 128 }),
+  eventType: mysqlEnum("eventType", ["posted", "acknowledgment", "contact_attempt", "completion", "other"]).notNull(),
+  body: text("body"),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type LossIntakeEvent = typeof lossIntakeEvents.$inferSelect;
+export type InsertLossIntakeEvent = typeof lossIntakeEvents.$inferInsert;
+
+export const lossIntakeQualityItems = mysqlTable("loss_intake_quality_items", {
+  id: int("id").autoincrement().primaryKey(),
+  claimId: int("claimId").notNull(),
+  criterion: varchar("criterion", { length: 64 }).notNull(),
+  result: mysqlEnum("result", ["pass", "fail", "not_applicable"]).notNull(),
+  points: float("points").default(0).notNull(),
+  maxPoints: float("maxPoints").default(0).notNull(),
+  evidence: text("evidence"),
+  sourceEventId: int("sourceEventId"),
+  coachingNote: text("coachingNote"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LossIntakeQualityItem = typeof lossIntakeQualityItems.$inferSelect;
+export type InsertLossIntakeQualityItem = typeof lossIntakeQualityItems.$inferInsert;
+
+export const lossIntakeQas = mysqlTable("loss_intake_qas", {
+  id: int("id").autoincrement().primaryKey(),
+  claimId: int("claimId").notNull(),
+  handlerId: int("handlerId").notNull(),
+  handlerName: varchar("handlerName", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["draft", "reviewed", "sent", "opened", "acknowledged", "resolved"]).default("draft").notNull(),
+  overallScore: float("overallScore"),
+  strengths: text("strengths"),
+  coachingOpportunities: text("coachingOpportunities"),
+  managerComments: text("managerComments"),
+  repResponse: text("repResponse"),
+  createdBy: varchar("createdBy", { length: 255 }),
+  draftedAt: timestamp("draftedAt").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewedAt"),
+  sentAt: timestamp("sentAt"),
+  openedAt: timestamp("openedAt"),
+  acknowledgedAt: timestamp("acknowledgedAt"),
+  resolvedAt: timestamp("resolvedAt"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LossIntakeQa = typeof lossIntakeQas.$inferSelect;
+export type InsertLossIntakeQa = typeof lossIntakeQas.$inferInsert;
+
+export const lossIntakeSettings = mysqlTable("loss_intake_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  configKey: varchar("configKey", { length: 64 }).notNull().unique(),
+  claimsChannelId: varchar("claimsChannelId", { length: 32 }).default("CHWRXH4HK").notNull(),
+  remoteMarketsChannelId: varchar("remoteMarketsChannelId", { length: 32 }).default("C092UPKR79D").notNull(),
+  firstContactSlaMinutes: int("firstContactSlaMinutes").default(10).notNull(),
+  atRiskMinutes: int("atRiskMinutes").default(7).notNull(),
+  qaDueHours: int("qaDueHours").default(24).notNull(),
+  scoringWeights: json("scoringWeights"),
+  agentAssignments: json("agentAssignments"),
+  scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+  lastSuccessfulSyncAt: timestamp("lastSuccessfulSyncAt"),
+  lastSyncError: text("lastSyncError"),
+  updatedBy: varchar("updatedBy", { length: 255 }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LossIntakeSetting = typeof lossIntakeSettings.$inferSelect;
+export type InsertLossIntakeSetting = typeof lossIntakeSettings.$inferInsert;
+
+export const lossIntakeSyncRuns = mysqlTable("loss_intake_sync_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  status: mysqlEnum("status", ["running", "success", "failed"]).default("running").notNull(),
+  claimsDiscovered: int("claimsDiscovered").default(0).notNull(),
+  claimsUpdated: int("claimsUpdated").default(0).notNull(),
+  eventsProcessed: int("eventsProcessed").default(0).notNull(),
+  errorMessage: text("errorMessage"),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+export type LossIntakeSyncRun = typeof lossIntakeSyncRuns.$inferSelect;
+export type InsertLossIntakeSyncRun = typeof lossIntakeSyncRuns.$inferInsert;

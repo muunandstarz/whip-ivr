@@ -15,6 +15,13 @@
       "when": 1776981113838,
       "tag": "0001_strong_tony_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1784072382592,
+      "tag": "0002_add_loss_intake_monitoring",
+      "breakpoints": true
     }
   ]
 }

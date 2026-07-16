@@ -6,6 +6,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { classifyCallBatch, getUnclassifiedCount } from "./classifyCalls";
 import { TRPCError } from "@trpc/server";
 import { reportsRouter } from "./routers/reports";
+import { lossIntakeRouter } from "./routers/lossIntake";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -63,6 +64,7 @@ const callerTypeEnum = z.enum([
 
 export const appRouter = router({
   system: systemRouter,
+  lossIntake: lossIntakeRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
