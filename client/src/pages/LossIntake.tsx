@@ -72,7 +72,7 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 const CRITERION_LABELS: Record<string, string> = {
-  first_contact_sla: "First contact SLA (10 min)",
+  first_contact_sla: "First contact SLA",
   facts_of_loss: "Facts of loss documented",
   fol_quality: "Quality of facts of loss",
   preliminary_liability: "Preliminary liability",
@@ -204,6 +204,8 @@ function ClaimDetailSheet({ claimId, onClose }: { claimId: number | null; onClos
               <div><p className="text-xs text-muted-foreground">Date reported</p><p className="mt-1 font-medium">{formatDateTime(data.claim.postedAt)}</p></div>
               <div><p className="text-xs text-muted-foreground">VIN (last 6)</p><p className="mt-1 font-medium">{data.claim.vinLastSix ?? "—"}</p></div>
               <div><p className="text-xs text-muted-foreground">Market</p><p className="mt-1 font-medium">{data.claim.market ?? "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">SLA type</p><p className="mt-1 font-medium">{(data.claim as Record<string, unknown>).slaType === "after_hours" ? "After-hours (4 biz hrs)" : "Immediate (10 min)"}</p></div>
+              <div><p className="text-xs text-muted-foreground">SLA deadline</p><p className="mt-1 font-medium">{formatDateTime((data.claim as Record<string, unknown>).slaDeadlineAt as string)}</p></div>
               <div><p className="text-xs text-muted-foreground">First contact</p><p className="mt-1 font-medium">{formatMinutes(data.claim.firstContactMinutes)}</p></div>
               <div><p className="text-xs text-muted-foreground">Intake cycle</p><p className="mt-1 font-medium">{formatMinutes(data.claim.intakeCycleMinutes)}</p></div>
               {Boolean((data.claim as Record<string, unknown>).templatePostedAt) && (

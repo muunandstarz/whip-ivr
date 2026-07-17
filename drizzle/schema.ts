@@ -295,6 +295,8 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   firstContactAt: timestamp("firstContactAt"),
   firstContactMinutes: float("firstContactMinutes"),
   slaState: mysqlEnum("slaState", ["within_sla", "at_risk", "breached"]).default("within_sla").notNull(),
+  slaType: varchar("slaType", { length: 20 }).default("immediate").notNull(),
+  slaDeadlineAt: timestamp("slaDeadlineAt"),
   completedAt: timestamp("completedAt"),
   intakeCycleMinutes: float("intakeCycleMinutes"),
   factsOfLoss: text("factsOfLoss"),

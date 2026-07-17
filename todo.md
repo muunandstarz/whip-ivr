@@ -814,3 +814,12 @@ Business routing logic to implement in resolveHandler():
 - [ ] Add storeTeamTagged boolean to ThreadAnalysis and loss_intake_claims schema
 - [ ] Rescore all 75 existing claims with new rubric
 - [ ] Show rubric breakdown on overview and claims detail pages
+
+## Tiered SLA Logic — Jul 17 2026
+
+- [x] With-photos workflows: SLA is always 10 minutes (driver in office)
+- [x] After-hours workflows (posted outside 9 AM–6 PM ET, no photos): SLA is 4 business hours from next business open
+- [x] Standard in-hours, no photos: SLA remains 10 minutes
+- [x] Add slaType (immediate | after_hours) and slaDeadlineAt columns to loss_intake_claims
+- [x] Update slaState computation to use slaDeadlineAt instead of fixed 10-min window
+- [x] Show SLA type and deadline in claims table and detail sheet

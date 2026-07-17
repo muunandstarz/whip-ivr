@@ -5,6 +5,7 @@ export type LossStage =
   | "contact_attempts"
   | "complete";
 export type LossSlaState = "within_sla" | "at_risk" | "breached";
+export type LossSlaType = "immediate" | "after_hours";
 export type LossEventType =
   | "posted"
   | "acknowledgment"
@@ -94,6 +95,8 @@ export interface ThreadAnalysis {
   firstContactAt: Date | null;
   firstContactMinutes: number | null;
   slaState: LossSlaState;
+  slaType: LossSlaType;
+  slaDeadlineAt: Date | null;
   completedAt: Date | null;
   intakeCycleMinutes: number | null;
   factsOfLoss: string | null;
@@ -485,6 +488,108 @@ function buildQualityItems(input: {
   return items;
 }
 
+/**
+ * Business hours: 9 AM–6 PM Eastern Time, Mon–Fri.
+ * Returns the Date at which the next business window opens after `from`.
+ * If `from` is already within business hours, returns `from` unchanged.
+ */
+function nextBusinessOpen(from: Date): Date {
+  // Work in US/Eastern offset: ET is UTC-5 (EST) or UTC-4 (EDT)
+  // We use a simple heuristic: compute local ET offset via Intl
+  const etOffset = getEtOffsetMinutes(from);
+  const etMs = from.getTime() + etOffset * 60_000;
+  const etDate = new Date(etMs);
+
+  const dayOfWeek = etDate.getUTCDay(); // 0=Sun, 6=Sat
+  const hour = etDate.getUTCHours();
+  const minute = etDate.getUTCMinutes();
+
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+  const isWithinHours = hour >= 9 && (hour < 18 || (hour === 18 && minute === 0));
+
+  if (isWeekday && isWithinHours) return from; // already in business hours
+
+  // Advance to next 9 AM ET on a weekday
+  let candidate = new Date(etMs);
+  // Set to 9:00 AM ET
+  candidate.setUTCHours(9, 0, 0, 0);
+  // If we're past 9 AM today (or it's a weekend), advance to next weekday
+  if (hour >= 9 || !isWeekday) {
+    candidate = new Date(candidate.getTime() + 24 * 60 * 60_000);
+  }
+  // Skip weekends
+  while (candidate.getUTCDay() === 0 || candidate.getUTCDay() === 6) {
+    candidate = new Date(candidate.getTime() + 24 * 60 * 60_000);
+  }
+  // Convert back to UTC
+  return new Date(candidate.getTime() - etOffset * 60_000);
+}
+
+function getEtOffsetMinutes(date: Date): number {
+  // US Eastern: UTC-5 (EST) Nov–Mar, UTC-4 (EDT) Mar–Nov
+  // DST starts 2nd Sunday in March, ends 1st Sunday in November
+  const year = date.getUTCFullYear();
+  // 2nd Sunday in March
+  const dstStart = nthSundayOfMonth(year, 2, 2);
+  // 1st Sunday in November
+  const dstEnd = nthSundayOfMonth(year, 10, 1);
+  const isDst = date >= dstStart && date < dstEnd;
+  return isDst ? -4 * 60 : -5 * 60;
+}
+
+function nthSundayOfMonth(year: number, month: number, n: number): Date {
+  // month: 0-indexed (2=March, 10=November)
+  const d = new Date(Date.UTC(year, month, 1));
+  let sundays = 0;
+  while (sundays < n) {
+    if (d.getUTCDay() === 0) sundays += 1;
+    if (sundays < n) d.setUTCDate(d.getUTCDate() + 1);
+  }
+  // 2 AM local = 7 AM UTC (EST) or 6 AM UTC (EDT) — use 7 AM UTC as safe approximation
+  d.setUTCHours(7, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Determine SLA type and deadline for a given FNOL workflow.
+ * - With photos (driver in office): always 10 minutes from posting
+ * - After hours (no photos, posted outside 9 AM–6 PM ET): 4 business hours from next open
+ * - Standard (in hours, no photos): 10 minutes from posting
+ */
+export function computeSlaDeadline(postedAt: Date, hasPhotos: boolean, standardSlaMinutes = 10): {
+  slaType: LossSlaType;
+  slaDeadlineAt: Date;
+  effectiveSlaMinutes: number;
+} {
+  if (hasPhotos) {
+    return {
+      slaType: "immediate",
+      slaDeadlineAt: new Date(postedAt.getTime() + standardSlaMinutes * 60_000),
+      effectiveSlaMinutes: standardSlaMinutes,
+    };
+  }
+
+  const businessOpen = nextBusinessOpen(postedAt);
+  const isAfterHours = businessOpen.getTime() > postedAt.getTime();
+
+  if (isAfterHours) {
+    // 4 business hours from next open
+    const deadline = new Date(businessOpen.getTime() + 4 * 60 * 60_000);
+    const totalMinutesFromPosted = (deadline.getTime() - postedAt.getTime()) / 60_000;
+    return {
+      slaType: "after_hours",
+      slaDeadlineAt: deadline,
+      effectiveSlaMinutes: totalMinutesFromPosted,
+    };
+  }
+
+  return {
+    slaType: "immediate",
+    slaDeadlineAt: new Date(postedAt.getTime() + standardSlaMinutes * 60_000),
+    effectiveSlaMinutes: standardSlaMinutes,
+  };
+}
+
 export function analyzeFnolThread(input: {
   parent: ParsedLossParent;
   replies: SlackLossMessage[];
@@ -494,8 +599,16 @@ export function analyzeFnolThread(input: {
   atRiskMinutes?: number;
 }): ThreadAnalysis {
   const now = input.now ?? new Date();
-  const slaMinutes = input.slaMinutes ?? 10;
+  const standardSlaMinutes = input.slaMinutes ?? 10;
   const atRiskMinutes = input.atRiskMinutes ?? 7;
+
+  // Compute tiered SLA
+  const { slaType, slaDeadlineAt, effectiveSlaMinutes } = computeSlaDeadline(
+    input.parent.postedAt,
+    input.parent.hasPhotos,
+    standardSlaMinutes,
+  );
+  const slaMinutes = effectiveSlaMinutes;
   const replies = [...input.replies].sort(
     (left, right) => eventDate(left).getTime() - eventDate(right).getTime(),
   );
@@ -542,12 +655,17 @@ export function analyzeFnolThread(input: {
     ? minutesBetween(input.parent.postedAt, completedAt)
     : null;
 
+  // SLA state: compare firstContact (or elapsed) against the computed deadline
+  const deadlineMinutes = (slaDeadlineAt.getTime() - input.parent.postedAt.getTime()) / 60_000;
+  const atRiskThreshold = slaType === "after_hours"
+    ? deadlineMinutes - 30 // 30 min warning before 4-hour deadline
+    : atRiskMinutes;
   const elapsedMinutes = minutesBetween(input.parent.postedAt, now);
   const slaClock = firstContactMinutes ?? elapsedMinutes;
   const slaState: LossSlaState =
-    slaClock > slaMinutes
+    slaClock > deadlineMinutes
       ? "breached"
-      : slaClock >= atRiskMinutes
+      : slaClock >= atRiskThreshold
         ? "at_risk"
         : "within_sla";
 
@@ -658,6 +776,8 @@ export function analyzeFnolThread(input: {
     firstContactAt,
     firstContactMinutes,
     slaState,
+    slaType,
+    slaDeadlineAt,
     completedAt,
     intakeCycleMinutes,
     factsOfLoss,
