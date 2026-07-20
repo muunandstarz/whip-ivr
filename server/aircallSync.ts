@@ -96,8 +96,9 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
         const aircallUserId = user.id ? Number(user.id) : null;
 
         // Build full name map for ALL users (used for agentName on every call)
+        // Aircall API returns `name` as a single full-name field (not first_name/last_name)
         if (aircallUserId) {
-          const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+          const fullName = (user.name ?? `${user.first_name ?? ""} ${user.last_name ?? ""}`).trim();
           if (fullName) newUserIdToName.set(aircallUserId, fullName);
         }
 
@@ -184,8 +185,9 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
       const agentUser = call.user ?? null;
       // Resolve name: prefer call.user fields, fall back to the cached full-user map
       const agentIdForName = agentUser ? Number(agentUser.id) : null;
+      // Aircall API returns `name` as a single full-name field on call.user objects
       const agentName = agentUser
-        ? (`${agentUser.first_name ?? ""} ${agentUser.last_name ?? ""}`.trim() ||
+        ? ((agentUser.name ?? `${agentUser.first_name ?? ""} ${agentUser.last_name ?? ""}`).trim() ||
            (agentIdForName ? _aircallUserIdToName.get(agentIdForName) ?? null : null))
         : (agentIdForName ? _aircallUserIdToName.get(agentIdForName) ?? null : null);
       const numberId = call.number?.id ? Number(call.number.id) : null;

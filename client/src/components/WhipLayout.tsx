@@ -52,12 +52,14 @@ const ADMIN_NAV_ITEMS = [
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
-const HANDLER_NAV_ITEMS = [
+const HANDLER_NAV_ITEMS_BASE = [
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
-  { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
 ];
+// Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
+const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
+const LOSS_INTAKE_NAV = { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck };
 
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
@@ -117,9 +119,16 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
   // Determine which nav to show:
   // - Admin with no impersonation → full admin nav
-  // - Admin impersonating a handler → handler nav
-  // - Non-admin → handler nav (their own view)
-  const navItems = isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : HANDLER_NAV_ITEMS;
+  // - Admin impersonating a handler → handler nav (with Loss Intake if impersonating an authorized handler)
+  // - Non-admin → handler nav (with Loss Intake if authorized handler)
+  const showLossIntake =
+    isAdmin ||
+    (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
+  const handlerNavItems = showLossIntake
+    ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[2]]
+    : HANDLER_NAV_ITEMS_BASE;
+  const navItems: { href: string; label: string; icon: React.ElementType }[] =
+    isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems;
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -221,7 +230,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {navItems.map(({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
             return (
               <Link key={href} href={href}>

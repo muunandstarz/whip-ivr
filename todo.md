@@ -788,32 +788,32 @@ Business routing logic to implement in resolveHandler():
 
 ## Loss Intake Claims Table Enhancements — Jul 16 2026 (Batch 2)
 
-- [ ] Add `dateOfLoss` column to `loss_intake_claims` (extracted from Slack thread text)
-- [ ] Add `vinLast6` column to `loss_intake_claims` (extracted from Slack thread text)
-- [ ] Add `reportedAt` column to `loss_intake_claims` (= parent Slack message timestamp, i.e. when workflow was posted)
-- [ ] Add `templatePostedAt` column (timestamp of handler FOL/rideshare/prelim liability template post in thread)
-- [ ] Add `templatePostMinutesFromContact` column (minutes from firstContactAt to templatePostedAt)
-- [ ] Add `templatePostMinutesFromReport` column (minutes from reportedAt to templatePostedAt)
-- [ ] Add `contactAttempts` column (count of contact attempt messages in thread)
-- [ ] Update domain parser to extract dateOfLoss from thread text (regex: "date of loss", "DOL", "loss date")
-- [ ] Update domain parser to extract vinLast6 from thread text (regex: VIN patterns, last 6 chars)
-- [ ] Update domain parser: set reportedAt = parent message ts (already available as threadTs)
-- [ ] Update domain parser to detect handler template post (FOL/rideshare/prelim liability/facts of loss keywords)
-- [ ] Update domain parser to count contact attempts (messages containing "calling", "attempted", "no answer", "left voicemail", "tried")
-- [ ] Apply DB migration for new columns
-- [ ] Update Loss Intake claims table UI: show dateOfLoss, vinLast6, reportedAt columns
-- [ ] Update Loss Intake claims table UI: show templatePostedAt, templatePostMinutesFromContact, templatePostMinutesFromReport, contactAttempts
-- [ ] Fix "complete" status logic on overview: if templatePostedAt is set → stage = complete
+- [x] Add `dateOfLoss` column to `loss_intake_claims` (extracted from Slack thread text)
+- [x] Add `vinLast6` column to `loss_intake_claims` (extracted from Slack thread text)
+- [x] Add `reportedAt` column to `loss_intake_claims` (= parent Slack message timestamp, i.e. when workflow was posted)
+- [x] Add `templatePostedAt` column (timestamp of handler FOL/rideshare/prelim liability template post in thread)
+- [x] Add `templatePostMinutesFromContact` column (minutes from firstContactAt to templatePostedAt)
+- [x] Add `templatePostMinutesFromReport` column (minutes from reportedAt to templatePostedAt)
+- [x] Add `contactAttempts` column (count of contact attempt messages in thread)
+- [x] Update domain parser to extract dateOfLoss from thread text (regex: "date of loss", "DOL", "loss date")
+- [x] Update domain parser to extract vinLast6 from thread text (regex: VIN patterns, last 6 chars)
+- [x] Update domain parser: set reportedAt = parent message ts (already available as threadTs)
+- [x] Update domain parser to detect handler template post (FOL/rideshare/prelim liability/facts of loss keywords)
+- [x] Update domain parser to count contact attempts (messages containing "calling", "attempted", "no answer", "left voicemail", "tried")
+- [x] Apply DB migration for new columns
+- [x] Update Loss Intake claims table UI: show dateOfLoss, vinLast6, reportedAt columns
+- [x] Update Loss Intake claims table UI: show templatePostedAt, templatePostMinutesFromContact, templatePostMinutesFromReport, contactAttempts
+- [x] Fix "complete" status logic on overview: if templatePostedAt is set → stage = complete
 
 ## Quality Rubric Update — Jul 16 2026
 
-- [ ] Update quality rubric: FOL documented → 10 pts (was 20)
-- [ ] Add new criterion: FOL quality (AI-assessed) → 10 pts
-- [ ] Add new criterion: store team tagged (@atlteam, @chiteam, etc.) → 10 pts
-- [ ] Update domain parser to detect store team tag in thread messages
-- [ ] Add storeTeamTagged boolean to ThreadAnalysis and loss_intake_claims schema
-- [ ] Rescore all 75 existing claims with new rubric
-- [ ] Show rubric breakdown on overview and claims detail pages
+- [x] Update quality rubric: FOL documented → 10 pts (was 20)
+- [x] Add new criterion: FOL quality (AI-assessed) → 10 pts
+- [x] Add new criterion: store team tagged (@atlteam, @chiteam, etc.) → 10 pts
+- [x] Update domain parser to detect store team tag in thread messages
+- [x] Add storeTeamTagged boolean to ThreadAnalysis and loss_intake_claims schema
+- [x] Rescore all 104 existing claims with new rubric
+- [x] Show rubric breakdown on overview and claims detail pages
 
 ## Tiered SLA Logic — Jul 17 2026
 
@@ -823,3 +823,11 @@ Business routing logic to implement in resolveHandler():
 - [x] Add slaType (immediate | after_hours) and slaDeadlineAt columns to loss_intake_claims
 - [x] Update slaState computation to use slaDeadlineAt instead of fixed 10-min window
 - [x] Show SLA type and deadline in claims table and detail sheet
+
+## Handler Dashboard Fixes — Jul 20 2026
+
+- [x] Fix handler "My Performance" call metrics (calls, answer rate) showing 0 — diagnose query
+- [x] Add Loss Intake snapshot section to handler dashboard (admin, Bennet, Ana, Carlito only)
+- [x] Loss Intake snapshot: show assigned claims count, complete %, SLA breaches, avg first contact
+- [x] Loss Intake snapshot: "View more" link navigates to Loss Intake page
+- [x] Restrict Loss Intake nav item to admin + loss intake team members

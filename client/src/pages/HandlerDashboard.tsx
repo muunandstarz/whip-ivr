@@ -25,6 +25,8 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import PerformanceDigestCard from "@/components/PerformanceDigestCard";
+// Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
+const LOSS_INTAKE_HANDLER_IDS_DASH = new Set([4, 6, 30003]);
 
 // ── Coaching content ────────────────────────────────────────────────────────
 
@@ -215,6 +217,17 @@ export default function HandlerDashboard() {
     { enabled: !!effectiveName }
   );
 
+  // Determine if this user can see Loss Intake snapshot
+  const canSeeLossIntake =
+    authUser?.role === "admin" ||
+    (authUser?.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS_DASH.has(authUser.handlerProfileId));
+
+  // Fetch Loss Intake overview snapshot (only for authorized users)
+  const { data: lossIntakeOverview } = trpc.lossIntake.overview.useQuery(
+    {},
+    { enabled: canSeeLossIntake }
+  );
+
   // Fetch QA scorecards for coaching tips
   const { data: scorecards } = trpc.qa.handlerScorecards.useQuery(
     { handlerId: handlerId! },
@@ -286,6 +299,72 @@ export default function HandlerDashboard() {
               Performance Digest
             </h2>
             <PerformanceDigestCard handlerName={effectiveName} compact />
+          </section>
+        )}
+
+        {/* Loss Intake Snapshot — authorized handlers only */}
+        {canSeeLossIntake && lossIntakeOverview && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Loss Intake
+              </h2>
+              <Link href="/loss-intake">
+                <Button variant="ghost" size="sm" className="text-xs text-[#ff6221] hover:text-[#e5541a] gap-1 h-7 px-2">
+                  View More <ChevronRight className="w-3 h-3" />
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="border-l-4 border-l-[#ff6221]">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertCircle className="w-4 h-4 text-[#ff6221]" />
+                    <span className="text-xs text-muted-foreground font-medium">Total</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">{lossIntakeOverview.totalClaims}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{lossIntakeOverview.pendingClaims} pending</div>
+                </CardContent>
+              </Card>
+              <Card className={`border-l-4 ${(lossIntakeOverview.breachedCount ?? 0) > 0 ? "border-l-red-500" : "border-l-green-500"}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className={`w-4 h-4 ${(lossIntakeOverview.breachedCount ?? 0) > 0 ? "text-red-500" : "text-green-500"}`} />
+                    <span className="text-xs text-muted-foreground font-medium">SLA Breached</span>
+                  </div>
+                  <div className={`text-2xl font-bold ${(lossIntakeOverview.breachedCount ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>
+                    {lossIntakeOverview.breachedCount ?? 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {lossIntakeOverview.onTimeRate != null ? `${Math.round(lossIntakeOverview.onTimeRate)}% on-time` : "—"}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs text-muted-foreground font-medium">Complete</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">{lossIntakeOverview.byStage?.complete ?? 0}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">of {lossIntakeOverview.totalClaims} total</div>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-purple-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-purple-500" />
+                    <span className="text-xs text-muted-foreground font-medium">Avg Quality</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {lossIntakeOverview.averageQualityScore != null
+                      ? `${Math.round(lossIntakeOverview.averageQualityScore)}`
+                      : "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">/ 100 quality score</div>
+                </CardContent>
+              </Card>
+            </div>
           </section>
         )}
 

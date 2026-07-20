@@ -358,17 +358,18 @@ export async function getIntakeAnalytics() {
 export async function upsertCallHistory(data: InsertCallHistory): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(callHistory).values(data).onDuplicateKeyUpdate({
-    set: {
-      status: data.status,
-      agentId: data.agentId,
-      agentName: data.agentName,
-      durationSeconds: data.durationSeconds,
-      recordingUrl: data.recordingUrl,
-      voicemailUrl: data.voicemailUrl,
-      endedAt: data.endedAt,
-    },
-  });
+  const updateSet: Record<string, unknown> = {
+    status: data.status,
+    durationSeconds: data.durationSeconds,
+    endedAt: data.endedAt,
+  };
+  // Only overwrite agentId/agentName if the new value is non-null — prevents cold-start
+  // syncs (where _aircallUserIdToName is empty) from clobbering previously resolved names.
+  if (data.agentId != null) updateSet.agentId = data.agentId;
+  if (data.agentName != null) updateSet.agentName = data.agentName;
+  if (data.recordingUrl != null) updateSet.recordingUrl = data.recordingUrl;
+  if (data.voicemailUrl != null) updateSet.voicemailUrl = data.voicemailUrl;
+  await db.insert(callHistory).values(data).onDuplicateKeyUpdate({ set: updateSet as any });
 }
 
 export async function getCallHistory(opts: {

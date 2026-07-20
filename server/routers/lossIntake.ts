@@ -41,6 +41,15 @@ function requireAdmin(user: { role: string }) {
   }
 }
 
+// Handler IDs authorized to access Loss Intake (Carlito=4, Ana=6, Bennet=30003)
+const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
+
+function requireLossIntakeAccess(user: { role: string; handlerProfileId?: number | null }) {
+  if (user.role === "admin") return;
+  if (user.handlerProfileId && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId)) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: "Loss Intake access is restricted." });
+}
+
 function scopeHandlerId(
   user: { role: string; handlerProfileId?: number | null },
   requested?: number,
@@ -69,6 +78,7 @@ export const lossIntakeRouter = router({
   overview: protectedProcedure
     .input(dateScopeInput)
     .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
       const handlerId = scopeHandlerId(ctx.user, input.handlerId);
       return getLossIntakeOverview({
         handlerId,
@@ -90,6 +100,7 @@ export const lossIntakeRouter = router({
         }),
       )
       .query(async ({ ctx, input }) => {
+        requireLossIntakeAccess(ctx.user);
         const handlerId = scopeHandlerId(ctx.user, input.handlerId);
         return listLossIntakeClaims({
           search: input.search,
@@ -107,6 +118,7 @@ export const lossIntakeRouter = router({
     get: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
+        requireLossIntakeAccess(ctx.user);
         const handlerId = scopeHandlerId(ctx.user);
         const detail = await getLossIntakeClaimDetail(input.id, handlerId);
         if (!detail) throw new TRPCError({ code: "NOT_FOUND" });
