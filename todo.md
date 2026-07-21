@@ -870,3 +870,46 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix HandlerDashboard loss intake section: show real metrics with week/month/YTD toggle
 - [x] Each rep only sees their own metrics (scoped by handlerName)
 - [x] Metrics: threads assigned, completed, completion %, avg first contact, SLA breaches, contact attempts
+
+## Team Comparison Fixes + Snapsheet + Call QA (Jul 21 2026)
+
+### Metrics Fixes
+- [ ] Fix "completed" logic: count as complete if (a) template posted OR (b) rep posted 2+ contact attempt messages in thread
+- [ ] Fix SLA breach: measure from FNOL post time (reportedAt), not date of loss
+- [ ] Fix avg first contact: display to 1 decimal place (e.g. 4.3m not 4m)
+
+### Awaiting Outreach Drill-Down
+- [ ] Make "Awaiting Outreach" count clickable on each rep card in Team Comparison
+- [ ] Drill-down shows list of claims: member name, market, VIN, FNOL posted time, Slack thread link
+- [ ] Multi-select checkboxes on drill-down list
+- [ ] Bulk reassign button: assign selected claims to any of the 3 reps
+- [ ] Reassign updates assignedAgent in loss_intake_claims and logs a reassignment event
+
+### Snapsheet Integration
+- [ ] Add snapsheetClaimId column to loss_intake_claims table
+- [ ] Build server/snapsheet.ts: authenticate with SNAPSHEET_API_KEY + SNAPSHEET_API_SECRET against https://snapsheetvice.com/
+- [ ] Build searchSnapsheetByVin(vin6): search claims by middle 6 digits of claim number (VIN)
+- [ ] Build verifySnapsheetClaim(claimId, dol, market, memberName): verify correct claim by DOL + market abbreviation + member name
+- [ ] Build getSnapsheetNotes(claimId): pull all file notes (contact attempts, statement notes)
+- [ ] Add lossIntake.snapsheet.link tRPC mutation: link a loss_intake_claim to a Snapsheet claim ID
+- [ ] Add lossIntake.snapsheet.notes tRPC query: fetch notes for a linked claim
+- [ ] Show Snapsheet link status on claim detail sheet (linked / not linked)
+- [ ] Show Snapsheet notes panel on claim detail sheet when linked
+
+### Aircall Call-to-Claim Matching
+- [ ] Add loss_intake_voice_comms table: claimId, callId, direction, duration, recordingUrl, transcript, agentName, callerPhone, callerName, calledAt, aiQaScore, aiQaNotes
+- [ ] Build matchCallsToClaim(claimId): query call_history for calls matching member phone number or member name within ±7 days of FNOL post date
+- [ ] Pull Aircall recording URL via Aircall API for matched calls
+- [ ] Store matched calls in loss_intake_voice_comms table
+- [ ] Add lossIntake.voiceComms.list tRPC query: list voice comms for a claim
+- [ ] Add lossIntake.voiceComms.match tRPC mutation: trigger matching for a claim
+- [ ] Show voice comms panel on claim detail sheet: call direction, duration, agent, recording player, transcript
+
+### AI QA Scoring
+- [ ] Build scoreCallQA(transcript, callType): AI scores call against rubric (greeting, identified self, documented FOL, confirmed DOL, rideshare status asked, professional close) → 0-100 + per-criterion breakdown
+- [ ] Build scoreSnapsheetNotes(notes): AI scores file notes (contact attempt documented, voicemail talk path noted, info provided captured, statement quality) → 0-100 + notes
+- [ ] Add aiCallQaScore + aiCallQaNotes to loss_intake_voice_comms
+- [ ] Add snapsheetNotesQaScore + snapsheetNotesQaNotes to loss_intake_claims
+- [ ] Add lossIntake.qa.scoreCall tRPC mutation: trigger AI QA for a specific call
+- [ ] Add lossIntake.qa.scoreSnapsheetNotes tRPC mutation: trigger AI QA for Snapsheet notes
+- [ ] Show QA score badges on voice comms panel and Snapsheet notes panel

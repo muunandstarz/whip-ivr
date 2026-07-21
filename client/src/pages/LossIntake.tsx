@@ -294,6 +294,9 @@ export default function LossIntake() {
   const [dateTo, setDateTo] = useState("");
   const [qaResponses, setQaResponses] = useState<Record<number, string>>({});
   const [comparisonPeriod, setComparisonPeriod] = useState<"today" | "week" | "month" | "ytd">("month");
+  const [awaitingDrillAgent, setAwaitingDrillAgent] = useState<string | null>(null);
+  const [selectedAwaitingIds, setSelectedAwaitingIds] = useState<Set<number>>(new Set());
+  const [bulkReassignTarget, setBulkReassignTarget] = useState<string>("");
 
   const dateScope = useMemo(() => ({
     ...(dateFrom ? { dateFromMs: new Date(`${dateFrom}T00:00:00`).getTime() } : {}),
@@ -322,7 +325,23 @@ export default function LossIntake() {
     { period: comparisonPeriod },
     { enabled: !!isAdmin && !isImpersonating, refetchInterval: 5 * 60 * 1000 },
   );
+  const awaitingOutreach = trpc.lossIntake.awaitingOutreach.useQuery(
+    { agentName: awaitingDrillAgent ?? undefined },
+    { enabled: awaitingDrillAgent !== null },
+  );
   const utils = trpc.useUtils();
+  const reassignMutation = trpc.lossIntake.reassignClaims.useMutation({
+    onSuccess: async (result) => {
+      toast.success(`${result.reassigned} claim${result.reassigned !== 1 ? "s" : ""} reassigned to ${bulkReassignTarget}`);
+      setSelectedAwaitingIds(new Set());
+      setBulkReassignTarget("");
+      await Promise.all([
+        utils.lossIntake.awaitingOutreach.invalidate(),
+        utils.lossIntake.repComparison.invalidate(),
+      ]);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const runNow = trpc.lossIntake.sync.runNow.useMutation({
     onSuccess: async result => {
@@ -617,8 +636,14 @@ export default function LossIntake() {
                               </div>
                               <div className="space-y-0.5">
                                 <div className="text-xs text-muted-foreground">Awaiting outreach</div>
-                                <div className="text-xl font-bold">{rep.awaiting}</div>
-                                <div className="text-[11px] text-muted-foreground">not yet contacted</div>
+                                <button
+                                  onClick={() => { setAwaitingDrillAgent(rep.agentName); setSelectedAwaitingIds(new Set()); }}
+                                  className="text-xl font-bold text-[#ff6221] underline-offset-2 hover:underline focus:outline-none"
+                                  title={`View ${rep.awaiting} awaiting outreach claims for ${rep.agentName}`}
+                                >
+                                  {rep.awaiting}
+                                </button>
+                                <div className="text-[11px] text-muted-foreground">click to view</div>
                               </div>
                               <div className="space-y-0.5">
                                 <div className="text-xs text-muted-foreground">In outreach</div>
@@ -702,6 +727,129 @@ export default function LossIntake() {
                   </p>
                 </>
               )}
+
+              {/* ─── Awaiting Outreach Drill-Down Sheet ─── */}
+              <Sheet open={awaitingDrillAgent !== null} onOpenChange={(open) => { if (!open) { setAwaitingDrillAgent(null); setSelectedAwaitingIds(new Set()); setBulkReassignTarget(""); } }}>
+                <SheetContent side="right" className="w-full max-w-2xl overflow-y-auto p-0 sm:max-w-2xl">
+                  <SheetHeader className="border-b px-6 py-4">
+                    <SheetTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      Awaiting Outreach — {awaitingDrillAgent?.split(" ")[0]}
+                    </SheetTitle>
+                    <SheetDescription>
+                      Claims not yet contacted. Click a Slack link to open the thread. Select claims to bulk reassign.
+                    </SheetDescription>
+                  </SheetHeader>
+
+                  {/* Bulk reassign bar */}
+                  {selectedAwaitingIds.size > 0 && (
+                    <div className="flex items-center gap-3 border-b bg-amber-50 px-6 py-3 dark:bg-amber-950/20">
+                      <span className="text-sm font-medium">{selectedAwaitingIds.size} selected</span>
+                      <Select value={bulkReassignTarget} onValueChange={setBulkReassignTarget}>
+                        <SelectTrigger className="h-8 w-48 text-xs">
+                          <SelectValue placeholder="Reassign to…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["Ana Padilla", "Bennet Carlos", "Carlito Legarde Jr"].map(name => (
+                            <SelectItem key={name} value={name}>{name.split(" ")[0]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        disabled={!bulkReassignTarget || reassignMutation.isPending}
+                        onClick={() => {
+                          if (!bulkReassignTarget) return;
+                          reassignMutation.mutate({
+                            claimIds: Array.from(selectedAwaitingIds),
+                            newAgentName: bulkReassignTarget,
+                            newHandlerId: null,
+                          });
+                        }}
+                      >
+                        {reassignMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reassign"}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedAwaitingIds(new Set())}>Clear</Button>
+                    </div>
+                  )}
+
+                  <div className="divide-y">
+                    {awaitingOutreach.isLoading ? (
+                      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                      </div>
+                    ) : !awaitingOutreach.data || awaitingOutreach.data.length === 0 ? (
+                      <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+                        No claims awaiting outreach.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3 bg-muted/30 px-6 py-2 text-xs font-medium text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 rounded"
+                            checked={selectedAwaitingIds.size === awaitingOutreach.data.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedAwaitingIds(new Set(awaitingOutreach.data!.map(c => c.id)));
+                              else setSelectedAwaitingIds(new Set());
+                            }}
+                          />
+                          <span>Select all ({awaitingOutreach.data.length})</span>
+                        </div>
+                        {awaitingOutreach.data.map(claim => {
+                          const isSelected = selectedAwaitingIds.has(claim.id);
+                          const postedDate = new Date(claim.postedAt);
+                          const ageHours = Math.round((Date.now() - postedDate.getTime()) / 3_600_000 * 10) / 10;
+                          const slaColor = claim.slaState === "breached" ? "text-red-600 dark:text-red-400" : claim.slaState === "at_risk" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+                          return (
+                            <div
+                              key={claim.id}
+                              className={`flex items-start gap-3 px-6 py-4 transition-colors ${
+                                isSelected ? "bg-[#171b31]/5 dark:bg-[#171b31]/20" : "hover:bg-muted/30"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-3.5 w-3.5 rounded"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const next = new Set(selectedAwaitingIds);
+                                  if (e.target.checked) next.add(claim.id);
+                                  else next.delete(claim.id);
+                                  setSelectedAwaitingIds(next);
+                                }}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold">{claim.memberName ?? "Unknown member"}</span>
+                                  {claim.market && <Badge variant="outline" className="text-[10px]">{claim.market}</Badge>}
+                                  <Badge className={`text-[10px] ${slaColor}`} variant="outline">{SLA_LABELS[claim.slaState] ?? claim.slaState}</Badge>
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                  {claim.vinLastSix && <span>VIN …{claim.vinLastSix}</span>}
+                                  {claim.customerId && <span>ID: {claim.customerId}</span>}
+                                  <span>Posted {ageHours}h ago</span>
+                                  <span className="capitalize">{claim.channelName}</span>
+                                </div>
+                              </div>
+                              {claim.slackPermalink && (
+                                <a
+                                  href={claim.slackPermalink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex shrink-0 items-center gap-1 rounded border px-2 py-1 text-xs font-medium text-[#ff6221] hover:bg-[#ff6221]/10"
+                                >
+                                  <ExternalLink className="h-3 w-3" /> Slack
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
             </TabsContent>
 
             <TabsContent value="overview" className="mt-6 space-y-6">

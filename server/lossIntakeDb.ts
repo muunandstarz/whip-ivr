@@ -768,12 +768,14 @@ export async function getRepComparisonMetrics(
       assignedAgent,
       channelName,
       COUNT(*) AS total,
-      SUM(CASE WHEN templatePostedAt IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN templatePostedAt IS NOT NULL OR contactAttempts >= 2 THEN 1 ELSE 0 END) AS completed,
       SUM(CASE WHEN stage = 'awaiting_outreach' THEN 1 ELSE 0 END) AS awaiting,
-      SUM(CASE WHEN stage IN ('outreach_started','contact_attempts') THEN 1 ELSE 0 END) AS inOutreach,
+      SUM(CASE WHEN stage IN ('outreach_started','contact_attempts') AND templatePostedAt IS NULL AND contactAttempts < 2 THEN 1 ELSE 0 END) AS inOutreach,
       SUM(CASE WHEN slaState = 'breached' THEN 1 ELSE 0 END) AS slaBreaches,
       ROUND(AVG(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes END), 1) AS avgFirstContactMin,
-      SUM(COALESCE(contactAttempts, 0)) AS totalAttempts
+      SUM(COALESCE(contactAttempts, 0)) AS totalAttempts,
+      COUNT(CASE WHEN firstContactMinutes IS NOT NULL THEN 1 END) AS contactedCount,
+      SUM(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes ELSE 0 END) AS contactedSum
     FROM loss_intake_claims
     WHERE assignedAgent IS NOT NULL
       AND ${whereClause}
@@ -790,6 +792,8 @@ export async function getRepComparisonMetrics(
     slaBreaches: number;
     avgFirstContactMin: number | null;
     totalAttempts: number;
+    contactedCount: number;
+    contactedSum: number;
   }>;
 
   // Aggregate by agent across channels
@@ -801,9 +805,18 @@ export async function getRepComparisonMetrics(
     "Carlito Legarde Jr": "Rockville + Chicago (In-Store)",
   };
 
+  // Track weighted sum/count for proper avg first contact
+  const agentContactedSum = new Map<string, number>();
+  const agentContactedCount = new Map<string, number>();
+
   for (const row of rows) {
     const agent = row.assignedAgent;
     const isRemote = row.channelName === "claims-remotemarkets";
+    const cSum = Number(row.contactedSum ?? 0);
+    const cCount = Number(row.contactedCount ?? 0);
+
+    agentContactedSum.set(agent, (agentContactedSum.get(agent) ?? 0) + cSum);
+    agentContactedCount.set(agent, (agentContactedCount.get(agent) ?? 0) + cCount);
 
     const existing = byAgent.get(agent);
     if (!existing) {
@@ -816,7 +829,7 @@ export async function getRepComparisonMetrics(
         awaiting: Number(row.awaiting),
         inOutreach: Number(row.inOutreach),
         slaBreaches: Number(row.slaBreaches),
-        avgFirstContactMin: row.avgFirstContactMin != null ? Number(row.avgFirstContactMin) : null,
+        avgFirstContactMin: null, // computed after loop
         totalAttempts: Number(row.totalAttempts),
         instoreTotal: isRemote ? 0 : Number(row.total),
         remoteTotal: isRemote ? Number(row.total) : 0,
@@ -828,23 +841,18 @@ export async function getRepComparisonMetrics(
       existing.inOutreach += Number(row.inOutreach);
       existing.slaBreaches += Number(row.slaBreaches);
       existing.totalAttempts += Number(row.totalAttempts);
-      if (isRemote) {
-        existing.remoteTotal += Number(row.total);
-      } else {
-        existing.instoreTotal += Number(row.total);
-      }
-      // Weighted average for firstContactMin
-      if (row.avgFirstContactMin != null) {
-        if (existing.avgFirstContactMin == null) {
-          existing.avgFirstContactMin = Number(row.avgFirstContactMin);
-        } else {
-          // Simple average of averages (close enough for display)
-          existing.avgFirstContactMin = Math.round(
-            (existing.avgFirstContactMin + Number(row.avgFirstContactMin)) / 2,
-          );
-        }
-      }
+      if (isRemote) existing.remoteTotal += Number(row.total);
+      else existing.instoreTotal += Number(row.total);
     }
+  }
+
+  // Apply proper weighted average (1 decimal) for avg first contact
+  for (const [agent, stat] of Array.from(byAgent.entries())) {
+    const totalSum = agentContactedSum.get(agent) ?? 0;
+    const totalCount = agentContactedCount.get(agent) ?? 0;
+    stat.avgFirstContactMin = totalCount > 0
+      ? Math.round((totalSum / totalCount) * 10) / 10
+      : null;
   }
 
   // Compute completion %
@@ -881,11 +889,12 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
       SELECT
         channelName,
         COUNT(*) AS total,
-        SUM(CASE WHEN templatePostedAt IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN templatePostedAt IS NOT NULL OR contactAttempts >= 2 THEN 1 ELSE 0 END) AS completed,
         SUM(CASE WHEN stage = 'awaiting_outreach' THEN 1 ELSE 0 END) AS awaiting,
-        SUM(CASE WHEN stage IN ('outreach_started','contact_attempts') THEN 1 ELSE 0 END) AS inOutreach,
+        SUM(CASE WHEN stage IN ('outreach_started','contact_attempts') AND templatePostedAt IS NULL AND contactAttempts < 2 THEN 1 ELSE 0 END) AS inOutreach,
         SUM(CASE WHEN slaState = 'breached' THEN 1 ELSE 0 END) AS slaBreaches,
-        ROUND(AVG(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes END), 1) AS avgFirstContactMin,
+        COUNT(CASE WHEN firstContactMinutes IS NOT NULL THEN 1 END) AS contactedCount,
+        SUM(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes ELSE 0 END) AS contactedSum,
         SUM(COALESCE(contactAttempts, 0)) AS totalAttempts
       FROM loss_intake_claims
       WHERE assignedAgent = '${agentName.replace(/'/g, "''")}'
@@ -899,13 +908,14 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
       awaiting: number;
       inOutreach: number;
       slaBreaches: number;
-      avgFirstContactMin: number | null;
+      contactedCount: number;
+      contactedSum: number;
       totalAttempts: number;
     }>;
 
     let total = 0, completed = 0, awaiting = 0, inOutreach = 0, slaBreaches = 0, totalAttempts = 0;
     let instoreTotal = 0, remoteTotal = 0;
-    let avgSum = 0, avgCount = 0;
+    let contactedSum = 0, contactedCount = 0;
 
     for (const row of rows2) {
       const isRemote = row.channelName === "claims-remotemarkets";
@@ -915,12 +925,10 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
       inOutreach += Number(row.inOutreach);
       slaBreaches += Number(row.slaBreaches);
       totalAttempts += Number(row.totalAttempts);
+      contactedSum += Number(row.contactedSum ?? 0);
+      contactedCount += Number(row.contactedCount ?? 0);
       if (isRemote) remoteTotal += Number(row.total);
       else instoreTotal += Number(row.total);
-      if (row.avgFirstContactMin != null) {
-        avgSum += Number(row.avgFirstContactMin);
-        avgCount++;
-      }
     }
 
     return {
@@ -932,7 +940,9 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
       awaiting,
       inOutreach,
       slaBreaches,
-      avgFirstContactMin: avgCount > 0 ? Math.round(avgSum / avgCount) : null,
+      avgFirstContactMin: contactedCount > 0
+        ? Math.round((contactedSum / contactedCount) * 10) / 10
+        : null,
       totalAttempts,
       instoreTotal,
       remoteTotal,
@@ -946,4 +956,82 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
   ]);
 
   return { week, month, ytd };
+}
+
+/**
+ * Returns all claims in awaiting_outreach stage for a given agent (or all agents).
+ * Used by the Team Comparison drill-down modal.
+ */
+export async function getAwaitingOutreachClaims(agentName?: string): Promise<Array<{
+  id: number;
+  slackKey: string;
+  channelName: string;
+  slackPermalink: string | null;
+  postedAt: Date;
+  memberName: string | null;
+  customerId: string | null;
+  vinLastSix: string | null;
+  market: string | null;
+  assignedAgent: string | null;
+  slaState: string;
+  slaDeadlineAt: Date | null;
+  firstContactMinutes: number | null;
+  contactAttempts: number;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const agentFilter = agentName
+    ? `AND assignedAgent = '${agentName.replace(/'/g, "''")}'`
+    : "";
+
+  const rawResult = await db.execute(sql.raw(`
+    SELECT
+      id, slackKey, channelName, slackPermalink, postedAt,
+      memberName, customerId, vinLastSix, market, assignedAgent,
+      slaState, slaDeadlineAt, firstContactMinutes, contactAttempts
+    FROM loss_intake_claims
+    WHERE stage = 'awaiting_outreach'
+      ${agentFilter}
+    ORDER BY postedAt ASC
+  `));
+
+  return ((rawResult as any[][])[0] ?? []) as any[];
+}
+
+/**
+ * Bulk reassign a list of claim IDs to a new agent.
+ * Logs a reassignment event for each claim.
+ */
+export async function reassignClaims(
+  claimIds: number[],
+  newAgentName: string,
+  newHandlerId: number | null,
+): Promise<void> {
+  if (claimIds.length === 0) return;
+  const db = await getDb();
+  if (!db) return;
+
+  const idList = claimIds.join(",");
+  const safeName = newAgentName.replace(/'/g, "''");
+  const handlerVal = newHandlerId != null ? String(newHandlerId) : "NULL";
+
+  await db.execute(sql.raw(`
+    UPDATE loss_intake_claims
+    SET assignedAgent = '${safeName}',
+        assignedHandlerId = ${handlerVal},
+        updatedAt = NOW()
+    WHERE id IN (${idList})
+  `));
+
+  // Log a reassignment event for each claim
+  for (const claimId of claimIds) {
+    await db.execute(sql.raw(`
+      INSERT INTO loss_intake_events
+        (claimId, slackEventKey, slackEventTs, occurredAt, actorSlackUserId, actorName, eventType, body, metadata)
+      VALUES
+        (${claimId}, CONCAT('reassign:${claimId}:', UNIX_TIMESTAMP(NOW())), UNIX_TIMESTAMP(NOW()), NOW(),
+         NULL, 'System', 'other', 'Claim reassigned to ${safeName}', '{}')
+    `));
+  }
 }

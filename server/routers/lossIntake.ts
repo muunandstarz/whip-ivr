@@ -13,6 +13,8 @@ import {
   getRepComparisonMetrics,
   getHandlerLossIntakeStats,
   getTodayRepActivity,
+  getAwaitingOutreachClaims,
+  reassignClaims,
   listLossIntakeClaims,
   listLossIntakeHandlers,
   listLossIntakeQas,
@@ -349,5 +351,24 @@ export const lossIntakeRouter = router({
     .query(async ({ ctx, input }) => {
       requireLossIntakeAccess(ctx.user);
       return getHandlerLossIntakeStats(input.agentName);
+    }),
+  /** All claims in awaiting_outreach stage, optionally filtered by agent */
+  awaitingOutreach: protectedProcedure
+    .input(z.object({ agentName: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      return getAwaitingOutreachClaims(input.agentName);
+    }),
+  /** Bulk reassign a list of claims to a new agent */
+  reassignClaims: protectedProcedure
+    .input(z.object({
+      claimIds: z.array(z.number()).min(1),
+      newAgentName: z.string(),
+      newHandlerId: z.number().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      await reassignClaims(input.claimIds, input.newAgentName, input.newHandlerId ?? null);
+      return { success: true, reassigned: input.claimIds.length };
     }),
 });
