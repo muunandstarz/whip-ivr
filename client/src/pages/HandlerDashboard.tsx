@@ -222,10 +222,13 @@ export default function HandlerDashboard() {
     authUser?.role === "admin" ||
     (authUser?.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS_DASH.has(authUser.handlerProfileId));
 
-  // Fetch Loss Intake overview snapshot (only for authorized users)
-  const { data: lossIntakeOverview } = trpc.lossIntake.overview.useQuery(
-    {},
-    { enabled: canSeeLossIntake }
+  // Period toggle for Loss Intake stats
+  const [liPeriod, setLiPeriod] = useState<"week" | "month" | "ytd">("month");
+
+  // Fetch per-handler Loss Intake stats (week/month/YTD) — uses effectiveName to scope to this rep only
+  const { data: handlerLiStats, isLoading: liLoading } = trpc.lossIntake.handlerStats.useQuery(
+    { agentName: effectiveName },
+    { enabled: canSeeLossIntake && !!effectiveName },
   );
 
   // Fetch QA scorecards for coaching tips
@@ -302,69 +305,93 @@ export default function HandlerDashboard() {
           </section>
         )}
 
-        {/* Loss Intake Snapshot — authorized handlers only */}
-        {canSeeLossIntake && lossIntakeOverview && (
+        {/* Loss Intake — per-handler stats with week/month/YTD toggle */}
+        {canSeeLossIntake && (
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                Loss Intake
-              </h2>
-              <Link href="/loss-intake">
-                <Button variant="ghost" size="sm" className="text-xs text-[#ff6221] hover:text-[#e5541a] gap-1 h-7 px-2">
-                  View More <ChevronRight className="w-3 h-3" />
-                </Button>
-              </Link>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Loss Intake</h2>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-0.5 rounded-md border bg-background p-0.5">
+                  {(["week", "month", "ytd"] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setLiPeriod(p)}
+                      className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                        liPeriod === p ? "bg-[#171b31] text-white" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {p === "week" ? "Week" : p === "month" ? "Month" : "YTD"}
+                    </button>
+                  ))}
+                </div>
+                <Link href="/loss-intake">
+                  <Button variant="ghost" size="sm" className="text-xs text-[#ff6221] hover:text-[#e5541a] gap-1 h-7 px-2">
+                    View More <ChevronRight className="w-3 h-3" />
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="border-l-4 border-l-[#ff6221]">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertCircle className="w-4 h-4 text-[#ff6221]" />
-                    <span className="text-xs text-muted-foreground font-medium">Total</span>
-                  </div>
-                  <div className="text-2xl font-bold text-foreground">{lossIntakeOverview.totalClaims}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{lossIntakeOverview.pendingClaims} pending</div>
-                </CardContent>
-              </Card>
-              <Card className={`border-l-4 ${(lossIntakeOverview.breachedCount ?? 0) > 0 ? "border-l-red-500" : "border-l-green-500"}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Clock className={`w-4 h-4 ${(lossIntakeOverview.breachedCount ?? 0) > 0 ? "text-red-500" : "text-green-500"}`} />
-                    <span className="text-xs text-muted-foreground font-medium">SLA Breached</span>
-                  </div>
-                  <div className={`text-2xl font-bold ${(lossIntakeOverview.breachedCount ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>
-                    {lossIntakeOverview.breachedCount ?? 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {lossIntakeOverview.onTimeRate != null ? `${Math.round(lossIntakeOverview.onTimeRate)}% on-time` : "—"}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-l-4 border-l-blue-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CheckCircle2 className="w-4 h-4 text-blue-500" />
-                    <span className="text-xs text-muted-foreground font-medium">Complete</span>
-                  </div>
-                  <div className="text-2xl font-bold text-foreground">{lossIntakeOverview.byStage?.complete ?? 0}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">of {lossIntakeOverview.totalClaims} total</div>
-                </CardContent>
-              </Card>
-              <Card className="border-l-4 border-l-purple-500">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <TrendingUp className="w-4 h-4 text-purple-500" />
-                    <span className="text-xs text-muted-foreground font-medium">Avg Quality</span>
-                  </div>
-                  <div className="text-2xl font-bold text-foreground">
-                    {lossIntakeOverview.averageQualityScore != null
-                      ? `${Math.round(lossIntakeOverview.averageQualityScore)}`
-                      : "—"}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">/ 100 quality score</div>
-                </CardContent>
-              </Card>
-            </div>
+            {liLoading ? (
+              <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">Loading…</div>
+            ) : (() => {
+              const s = handlerLiStats?.[liPeriod];
+              if (!s) return (
+                <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
+                  No Loss Intake data for this period.
+                </div>
+              );
+              const completionColor = s.completionPct >= 70 ? "text-emerald-600" : s.completionPct >= 40 ? "text-amber-600" : "text-red-600";
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="border-l-4 border-l-[#ff6221]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertCircle className="w-4 h-4 text-[#ff6221]" />
+                        <span className="text-xs text-muted-foreground font-medium">FNOLs</span>
+                      </div>
+                      <div className="text-2xl font-bold">{s.total}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {s.instoreTotal > 0 && `${s.instoreTotal} in-store`}
+                        {s.instoreTotal > 0 && s.remoteTotal > 0 && " · "}
+                        {s.remoteTotal > 0 && `${s.remoteTotal} remote`}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-blue-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle2 className="w-4 h-4 text-blue-500" />
+                        <span className="text-xs text-muted-foreground font-medium">Completed</span>
+                      </div>
+                      <div className={`text-2xl font-bold ${completionColor}`}>{s.completed}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{s.completionPct}% completion rate</div>
+                    </CardContent>
+                  </Card>
+                  <Card className={`border-l-4 ${s.slaBreaches > 0 ? "border-l-red-500" : "border-l-green-500"}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className={`w-4 h-4 ${s.slaBreaches > 0 ? "text-red-500" : "text-green-500"}`} />
+                        <span className="text-xs text-muted-foreground font-medium">SLA Breaches</span>
+                      </div>
+                      <div className={`text-2xl font-bold ${s.slaBreaches > 0 ? "text-red-600" : "text-green-600"}`}>{s.slaBreaches}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">10-min target</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-purple-500">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <TrendingUp className="w-4 h-4 text-purple-500" />
+                        <span className="text-xs text-muted-foreground font-medium">Avg First Contact</span>
+                      </div>
+                      <div className="text-2xl font-bold">
+                        {s.avgFirstContactMin == null ? "—" : s.avgFirstContactMin < 60 ? `${s.avgFirstContactMin}m` : `${Math.floor(s.avgFirstContactMin / 60)}h ${s.avgFirstContactMin % 60}m`}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{s.totalAttempts} total attempts</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })()}
           </section>
         )}
 

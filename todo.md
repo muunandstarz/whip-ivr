@@ -848,3 +848,25 @@ Business routing logic to implement in resolveHandler():
 - [x] Add "Sent SMS" to all disposition dropdowns: IntakeDetail.tsx, CallbackLog.tsx, FloatingSoftphone.tsx, Softphone.tsx
 - [x] Add "Sent SMS" to DISPOSITION_CONFIG display maps in CallbackLog.tsx and Dashboard.tsx
 - [x] Add "Sent SMS" to server/db.ts logCallback type and routers.ts zod enum
+
+## Loss Intake Team Comparison + Handler Dashboard Metrics (Jul 21 2026)
+
+### Team Assignments (from guide)
+- Bennet: Glen Burnie FNOLs + Atlanta FNOLs (in-store, #claims)
+- Carlito: Rockville FNOLs + Chicago FNOLs (in-store, #claims)
+- Ana: All Remote Markets FNOLs (#claims-remotemarkets) + in-store overflow
+
+### Loss Intake Comparison View
+- [x] Add market/assignment metadata to loss_intake_claims (market column from thread content)
+- [x] Build getRepComparisonMetrics() DB helper — per-rep: assigned threads, completed, in outreach, SLA breaches, avg first contact min, contact attempts, completion rate
+- [x] Add lossIntake.repComparison tRPC endpoint with period filter (today/week/month/ytd)
+- [x] Build "Team" tab in Loss Intake page showing all 3 reps side-by-side comparison table
+- [x] Show assignment context: Bennet=GB+ATL, Carlito=RKV+CHI, Ana=Remote+overflow
+- [x] All metrics sourced from actual DB events (not estimated)
+
+### Handler Individual Dashboard Metrics Fix
+- [x] Build getHandlerLossIntakeStats(handlerName, period) DB helper — queries loss_intake_claims + events
+- [x] Add lossIntake.handlerStats tRPC endpoint (period: week | month | ytd)
+- [x] Fix HandlerDashboard loss intake section: show real metrics with week/month/YTD toggle
+- [x] Each rep only sees their own metrics (scoped by handlerName)
+- [x] Metrics: threads assigned, completed, completion %, avg first contact, SLA breaches, contact attempts

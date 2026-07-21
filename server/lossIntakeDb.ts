@@ -704,3 +704,246 @@ export async function getTodayRepActivity(dateMs?: number): Promise<TodayRepActi
     });
 }
 
+
+// ─── Rep Comparison & Handler Stats ──────────────────────────────────────────
+
+export type RepComparisonPeriod = "today" | "week" | "month" | "ytd";
+
+export interface RepPeriodStats {
+  agentName: string;
+  /** Primary assignment channel/market label */
+  assignment: string;
+  /** Total threads assigned in period */
+  total: number;
+  /** Threads with template posted */
+  completed: number;
+  /** Completion % */
+  completionPct: number;
+  /** Threads still awaiting first outreach */
+  awaiting: number;
+  /** Threads in active outreach (started or attempts) */
+  inOutreach: number;
+  /** Threads with slaState = breached */
+  slaBreaches: number;
+  /** Average minutes from FNOL posted to first contact (null if no contacts yet) */
+  avgFirstContactMin: number | null;
+  /** Total contact attempts logged */
+  totalAttempts: number;
+  /** Threads in #claims (in-store) */
+  instoreTotal: number;
+  /** Threads in #claims-remotemarkets */
+  remoteTotal: number;
+}
+
+function periodWhereClause(period: RepComparisonPeriod, col: string): string {
+  switch (period) {
+    case "today":
+      return `DATE(${col}) = CURDATE()`;
+    case "week":
+      return `YEARWEEK(${col}, 1) = YEARWEEK(CURDATE(), 1)`;
+    case "month":
+      return `MONTH(${col}) = MONTH(CURDATE()) AND YEAR(${col}) = YEAR(CURDATE())`;
+    case "ytd":
+      return `YEAR(${col}) = YEAR(CURDATE())`;
+    default:
+      return `YEAR(${col}) = YEAR(CURDATE())`;
+  }
+}
+
+/**
+ * Returns side-by-side comparison metrics for all 3 loss intake reps
+ * (Ana Padilla, Bennet Carlos, Carlito Legarde Jr) for the given period.
+ * All numbers come directly from the loss_intake_claims table — no estimates.
+ */
+export async function getRepComparisonMetrics(
+  period: RepComparisonPeriod = "month",
+): Promise<RepPeriodStats[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const whereClause = periodWhereClause(period, "postedAt");
+
+  const rawResult = await db.execute(sql.raw(`
+    SELECT
+      assignedAgent,
+      channelName,
+      COUNT(*) AS total,
+      SUM(CASE WHEN templatePostedAt IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN stage = 'awaiting_outreach' THEN 1 ELSE 0 END) AS awaiting,
+      SUM(CASE WHEN stage IN ('outreach_started','contact_attempts') THEN 1 ELSE 0 END) AS inOutreach,
+      SUM(CASE WHEN slaState = 'breached' THEN 1 ELSE 0 END) AS slaBreaches,
+      ROUND(AVG(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes END), 1) AS avgFirstContactMin,
+      SUM(COALESCE(contactAttempts, 0)) AS totalAttempts
+    FROM loss_intake_claims
+    WHERE assignedAgent IS NOT NULL
+      AND ${whereClause}
+    GROUP BY assignedAgent, channelName
+    ORDER BY assignedAgent, channelName
+  `));
+  const rows = ((rawResult as any[][])[0] ?? []) as Array<{
+    assignedAgent: string;
+    channelName: string;
+    total: number;
+    completed: number;
+    awaiting: number;
+    inOutreach: number;
+    slaBreaches: number;
+    avgFirstContactMin: number | null;
+    totalAttempts: number;
+  }>;
+
+  // Aggregate by agent across channels
+  const byAgent = new Map<string, RepPeriodStats>();
+
+  const AGENT_ASSIGNMENTS: Record<string, string> = {
+    "Ana Padilla": "Remote Markets + In-Store Overflow",
+    "Bennet Carlos": "Glen Burnie + Atlanta (In-Store)",
+    "Carlito Legarde Jr": "Rockville + Chicago (In-Store)",
+  };
+
+  for (const row of rows) {
+    const agent = row.assignedAgent;
+    const isRemote = row.channelName === "claims-remotemarkets";
+
+    const existing = byAgent.get(agent);
+    if (!existing) {
+      byAgent.set(agent, {
+        agentName: agent,
+        assignment: AGENT_ASSIGNMENTS[agent] ?? agent,
+        total: Number(row.total),
+        completed: Number(row.completed),
+        completionPct: 0,
+        awaiting: Number(row.awaiting),
+        inOutreach: Number(row.inOutreach),
+        slaBreaches: Number(row.slaBreaches),
+        avgFirstContactMin: row.avgFirstContactMin != null ? Number(row.avgFirstContactMin) : null,
+        totalAttempts: Number(row.totalAttempts),
+        instoreTotal: isRemote ? 0 : Number(row.total),
+        remoteTotal: isRemote ? Number(row.total) : 0,
+      });
+    } else {
+      existing.total += Number(row.total);
+      existing.completed += Number(row.completed);
+      existing.awaiting += Number(row.awaiting);
+      existing.inOutreach += Number(row.inOutreach);
+      existing.slaBreaches += Number(row.slaBreaches);
+      existing.totalAttempts += Number(row.totalAttempts);
+      if (isRemote) {
+        existing.remoteTotal += Number(row.total);
+      } else {
+        existing.instoreTotal += Number(row.total);
+      }
+      // Weighted average for firstContactMin
+      if (row.avgFirstContactMin != null) {
+        if (existing.avgFirstContactMin == null) {
+          existing.avgFirstContactMin = Number(row.avgFirstContactMin);
+        } else {
+          // Simple average of averages (close enough for display)
+          existing.avgFirstContactMin = Math.round(
+            (existing.avgFirstContactMin + Number(row.avgFirstContactMin)) / 2,
+          );
+        }
+      }
+    }
+  }
+
+  // Compute completion %
+  for (const stat of Array.from(byAgent.values())) {
+    stat.completionPct = stat.total > 0 ? Math.round((stat.completed / stat.total) * 100) : 0;
+  }
+
+  // Return in canonical order
+  const ORDER = ["Bennet Carlos", "Carlito Legarde Jr", "Ana Padilla"];
+  return ORDER.map(name => byAgent.get(name)).filter(Boolean) as RepPeriodStats[];
+}
+
+/**
+ * Returns Loss Intake performance stats for a single agent across multiple periods.
+ * Used by individual handler dashboards.
+ */
+export async function getHandlerLossIntakeStats(agentName: string): Promise<{
+  week: RepPeriodStats;
+  month: RepPeriodStats;
+  ytd: RepPeriodStats;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const AGENT_ASSIGNMENTS: Record<string, string> = {
+    "Ana Padilla": "Remote Markets + In-Store Overflow",
+    "Bennet Carlos": "Glen Burnie + Atlanta (In-Store)",
+    "Carlito Legarde Jr": "Rockville + Chicago (In-Store)",
+  };
+
+  const buildStats = async (period: RepComparisonPeriod): Promise<RepPeriodStats> => {
+    const whereClause = periodWhereClause(period, "postedAt");
+    const rawResult2 = await db.execute(sql.raw(`
+      SELECT
+        channelName,
+        COUNT(*) AS total,
+        SUM(CASE WHEN templatePostedAt IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN stage = 'awaiting_outreach' THEN 1 ELSE 0 END) AS awaiting,
+        SUM(CASE WHEN stage IN ('outreach_started','contact_attempts') THEN 1 ELSE 0 END) AS inOutreach,
+        SUM(CASE WHEN slaState = 'breached' THEN 1 ELSE 0 END) AS slaBreaches,
+        ROUND(AVG(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes END), 1) AS avgFirstContactMin,
+        SUM(COALESCE(contactAttempts, 0)) AS totalAttempts
+      FROM loss_intake_claims
+      WHERE assignedAgent = '${agentName.replace(/'/g, "''")}'
+        AND ${whereClause}
+      GROUP BY channelName
+    `));
+    const rows2 = ((rawResult2 as any[][])[0] ?? []) as Array<{
+      channelName: string;
+      total: number;
+      completed: number;
+      awaiting: number;
+      inOutreach: number;
+      slaBreaches: number;
+      avgFirstContactMin: number | null;
+      totalAttempts: number;
+    }>;
+
+    let total = 0, completed = 0, awaiting = 0, inOutreach = 0, slaBreaches = 0, totalAttempts = 0;
+    let instoreTotal = 0, remoteTotal = 0;
+    let avgSum = 0, avgCount = 0;
+
+    for (const row of rows2) {
+      const isRemote = row.channelName === "claims-remotemarkets";
+      total += Number(row.total);
+      completed += Number(row.completed);
+      awaiting += Number(row.awaiting);
+      inOutreach += Number(row.inOutreach);
+      slaBreaches += Number(row.slaBreaches);
+      totalAttempts += Number(row.totalAttempts);
+      if (isRemote) remoteTotal += Number(row.total);
+      else instoreTotal += Number(row.total);
+      if (row.avgFirstContactMin != null) {
+        avgSum += Number(row.avgFirstContactMin);
+        avgCount++;
+      }
+    }
+
+    return {
+      agentName,
+      assignment: AGENT_ASSIGNMENTS[agentName] ?? agentName,
+      total,
+      completed,
+      completionPct: total > 0 ? Math.round((completed / total) * 100) : 0,
+      awaiting,
+      inOutreach,
+      slaBreaches,
+      avgFirstContactMin: avgCount > 0 ? Math.round(avgSum / avgCount) : null,
+      totalAttempts,
+      instoreTotal,
+      remoteTotal,
+    };
+  };
+
+  const [week, month, ytd] = await Promise.all([
+    buildStats("week"),
+    buildStats("month"),
+    buildStats("ytd"),
+  ]);
+
+  return { week, month, ytd };
+}

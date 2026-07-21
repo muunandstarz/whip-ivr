@@ -38,6 +38,7 @@ import {
   ExternalLink,
   FileSearch,
   Gauge,
+  GitCompare,
   Loader2,
   MessageSquareText,
   RefreshCw,
@@ -46,6 +47,7 @@ import {
   Settings2,
   ShieldCheck,
   TimerReset,
+  TrendingUp,
   UserRoundCheck,
   Users,
   Workflow,
@@ -291,6 +293,7 @@ export default function LossIntake() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [qaResponses, setQaResponses] = useState<Record<number, string>>({});
+  const [comparisonPeriod, setComparisonPeriod] = useState<"today" | "week" | "month" | "ytd">("month");
 
   const dateScope = useMemo(() => ({
     ...(dateFrom ? { dateFromMs: new Date(`${dateFrom}T00:00:00`).getTime() } : {}),
@@ -315,6 +318,10 @@ export default function LossIntake() {
   const handlers = trpc.lossIntake.handlers.useQuery(undefined, { enabled: !!isAdmin && !isImpersonating });
   const syncHealth = trpc.lossIntake.syncHealth.useQuery(undefined, { enabled: !!isAdmin && !isImpersonating });
   const todayActivity = trpc.lossIntake.todayActivity.useQuery(undefined, { refetchInterval: 5 * 60 * 1000 });
+  const repComparison = trpc.lossIntake.repComparison.useQuery(
+    { period: comparisonPeriod },
+    { enabled: !!isAdmin && !isImpersonating, refetchInterval: 5 * 60 * 1000 },
+  );
   const utils = trpc.useUtils();
 
   const runNow = trpc.lossIntake.sync.runNow.useMutation({
@@ -377,6 +384,7 @@ export default function LossIntake() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="h-auto flex-wrap justify-start bg-background p-1 shadow-sm">
               <TabsTrigger value="today" className="gap-2"><CalendarClock className="h-4 w-4" /> Today</TabsTrigger>
+              {isAdmin && !isImpersonating && <TabsTrigger value="team" className="gap-2"><GitCompare className="h-4 w-4" /> Team</TabsTrigger>}
               <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" /> Overview</TabsTrigger>
               <TabsTrigger value="claims" className="gap-2"><Workflow className="h-4 w-4" /> Claims</TabsTrigger>
               <TabsTrigger value="qa" className="gap-2"><ClipboardCheck className="h-4 w-4" /> {representativeView ? "My QA" : "QA inbox"}</TabsTrigger>
@@ -529,6 +537,170 @@ export default function LossIntake() {
                     );
                   })}
                 </div>
+              )}
+            </TabsContent>
+
+            {/* ─── Team Comparison Tab ─── */}
+            <TabsContent value="team" className="mt-6 space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Team Comparison</h2>
+                  <p className="text-sm text-muted-foreground">Side-by-side Loss Intake metrics per rep, based on actual Slack thread data. Assignments per the team guide.</p>
+                </div>
+                <div className="flex gap-1 rounded-lg border bg-background p-1">
+                  {(["today", "week", "month", "ytd"] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setComparisonPeriod(p)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                        comparisonPeriod === p
+                          ? "bg-[#171b31] text-white dark:bg-[#ff6221]"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {p === "today" ? "Today" : p === "week" ? "This Week" : p === "month" ? "This Month" : "YTD"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {repComparison.isLoading ? (
+                <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading team metrics…
+                </div>
+              ) : !repComparison.data || repComparison.data.length === 0 ? (
+                <div className="flex min-h-64 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                  No data for this period yet.
+                </div>
+              ) : (
+                <>
+                  {/* Rep cards grid */}
+                  <div className="grid gap-5 lg:grid-cols-3">
+                    {repComparison.data.map(rep => {
+                      const completionColor = rep.completionPct >= 70 ? "text-emerald-600 dark:text-emerald-400" : rep.completionPct >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
+                      const slaColor = rep.slaBreaches === 0 ? "text-emerald-600 dark:text-emerald-400" : rep.slaBreaches <= 5 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
+                      return (
+                        <Card key={rep.agentName} className="overflow-hidden border-2 border-border/50 shadow-sm">
+                          <div className="border-b bg-[#171b31] px-5 py-4 dark:bg-[#1e2340]">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-semibold text-white">{rep.agentName}</h3>
+                                <p className="mt-0.5 text-xs text-slate-300">{rep.assignment}</p>
+                              </div>
+                              <div className="text-right">
+                                <div className={`text-2xl font-bold ${completionColor.replace("text-", "text-")}`} style={{ color: rep.completionPct >= 70 ? "#34d399" : rep.completionPct >= 40 ? "#fbbf24" : "#f87171" }}>
+                                  {rep.completionPct}%
+                                </div>
+                                <div className="text-xs text-slate-300">completion</div>
+                              </div>
+                            </div>
+                            <Progress
+                              value={rep.completionPct}
+                              className="mt-3 h-1.5 bg-slate-600"
+                            />
+                          </div>
+                          <CardContent className="p-5">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-0.5">
+                                <div className="text-xs text-muted-foreground">Total FNOLs</div>
+                                <div className="text-xl font-bold">{rep.total}</div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {rep.instoreTotal > 0 && <span>{rep.instoreTotal} in-store</span>}
+                                  {rep.instoreTotal > 0 && rep.remoteTotal > 0 && <span> · </span>}
+                                  {rep.remoteTotal > 0 && <span>{rep.remoteTotal} remote</span>}
+                                </div>
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="text-xs text-muted-foreground">Completed</div>
+                                <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{rep.completed}</div>
+                                <div className="text-[11px] text-muted-foreground">templates posted</div>
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="text-xs text-muted-foreground">Awaiting outreach</div>
+                                <div className="text-xl font-bold">{rep.awaiting}</div>
+                                <div className="text-[11px] text-muted-foreground">not yet contacted</div>
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="text-xs text-muted-foreground">In outreach</div>
+                                <div className="text-xl font-bold">{rep.inOutreach}</div>
+                                <div className="text-[11px] text-muted-foreground">active attempts</div>
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="text-xs text-muted-foreground">SLA breaches</div>
+                                <div className={`text-xl font-bold ${slaColor}`}>{rep.slaBreaches}</div>
+                                <div className="text-[11px] text-muted-foreground">10-min target missed</div>
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="text-xs text-muted-foreground">Avg first contact</div>
+                                <div className="text-xl font-bold">
+                                  {rep.avgFirstContactMin == null ? "—" : rep.avgFirstContactMin < 60 ? `${rep.avgFirstContactMin}m` : `${Math.floor(rep.avgFirstContactMin / 60)}h ${rep.avgFirstContactMin % 60}m`}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">from FNOL posted</div>
+                              </div>
+                              <div className="col-span-2 space-y-0.5">
+                                <div className="text-xs text-muted-foreground">Total contact attempts</div>
+                                <div className="text-xl font-bold">{rep.totalAttempts}</div>
+                                <div className="text-[11px] text-muted-foreground">calls + SMS logged</div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  {/* Comparison table */}
+                  <Card className="overflow-hidden">
+                    <CardHeader className="border-b pb-3 pt-4">
+                      <CardTitle className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-[#ff6221]" /> Side-by-side breakdown</CardTitle>
+                    </CardHeader>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/40">
+                            <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Metric</th>
+                            {repComparison.data.map(rep => (
+                              <th key={rep.agentName} className="px-4 py-2.5 text-center font-medium">{rep.agentName.split(" ")[0]}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {[
+                            { label: "FNOLs assigned", key: "total" as const, fmt: (v: number) => String(v) },
+                            { label: "Completed (template)", key: "completed" as const, fmt: (v: number) => String(v) },
+                            { label: "Completion rate", key: "completionPct" as const, fmt: (v: number) => `${v}%` },
+                            { label: "Awaiting outreach", key: "awaiting" as const, fmt: (v: number) => String(v) },
+                            { label: "In outreach", key: "inOutreach" as const, fmt: (v: number) => String(v) },
+                            { label: "SLA breaches", key: "slaBreaches" as const, fmt: (v: number) => String(v) },
+                            { label: "Total attempts", key: "totalAttempts" as const, fmt: (v: number) => String(v) },
+                          ].map(row => (
+                            <tr key={row.label} className="hover:bg-muted/20">
+                              <td className="px-4 py-2.5 font-medium text-muted-foreground">{row.label}</td>
+                              {repComparison.data!.map(rep => (
+                                <td key={rep.agentName} className="px-4 py-2.5 text-center font-semibold">
+                                  {row.fmt(rep[row.key] as number)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                          <tr className="hover:bg-muted/20">
+                            <td className="px-4 py-2.5 font-medium text-muted-foreground">Avg first contact</td>
+                            {repComparison.data.map(rep => (
+                              <td key={rep.agentName} className="px-4 py-2.5 text-center font-semibold">
+                                {rep.avgFirstContactMin == null ? "—" : rep.avgFirstContactMin < 60 ? `${rep.avgFirstContactMin}m` : `${Math.floor(rep.avgFirstContactMin / 60)}h ${rep.avgFirstContactMin % 60}m`}
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    All figures sourced directly from Slack FNOL thread events stored in the Loss Intake database. Refreshes every 5 minutes.
+                    Ana handles Remote Markets (#claims-remotemarkets) as primary assignment plus in-store overflow from #claims.
+                  </p>
+                </>
               )}
             </TabsContent>
 

@@ -10,12 +10,15 @@ import {
   getLossIntakeClaimDetail,
   getLossIntakeOverview,
   getLossIntakeSettings,
+  getRepComparisonMetrics,
+  getHandlerLossIntakeStats,
   getTodayRepActivity,
   listLossIntakeClaims,
   listLossIntakeHandlers,
   listLossIntakeQas,
   updateLossIntakeQa,
   updateLossIntakeSettings,
+  type RepComparisonPeriod,
 } from "../lossIntakeDb";
 import { runLossIntakeSlackSync } from "../lossIntakeSlackSync";
 
@@ -331,4 +334,20 @@ export const lossIntakeRouter = router({
       return { success: true };
     }),
   }),
+
+  /** Side-by-side comparison metrics for all 3 loss intake reps */
+  repComparison: protectedProcedure
+    .input(z.object({ period: z.enum(["today", "week", "month", "ytd"]).default("month") }))
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      return getRepComparisonMetrics(input.period as RepComparisonPeriod);
+    }),
+
+  /** Per-handler stats across week / month / YTD — used by individual handler dashboards */
+  handlerStats: protectedProcedure
+    .input(z.object({ agentName: z.string() }))
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      return getHandlerLossIntakeStats(input.agentName);
+    }),
 });
