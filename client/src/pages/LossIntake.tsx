@@ -41,11 +41,14 @@ import {
   GitCompare,
   Loader2,
   MessageSquareText,
+  Mic,
+  Phone,
   RefreshCw,
   Search,
   Send,
   Settings2,
   ShieldCheck,
+  Star,
   TimerReset,
   TrendingUp,
   UserRoundCheck,
@@ -181,6 +184,29 @@ function ClaimDetailSheet({ claimId, onClose }: { claimId: number | null; onClos
     { id: claimId ?? 1 },
     { enabled: claimId !== null },
   );
+  const claimCalls = trpc.lossIntake.claimCalls.useQuery(
+    { claimId: claimId ?? 0 },
+    { enabled: claimId !== null },
+  );
+  const claimCallQas = trpc.lossIntake.claimCallQas.useQuery(
+    { claimId: claimId ?? 0 },
+    { enabled: claimId !== null },
+  );
+  const sheetUtils = trpc.useUtils();
+  const scoreCallMutation = trpc.lossIntake.scoreCall.useMutation({
+    onSuccess: () => {
+      toast.success("Call scored successfully");
+      void sheetUtils.lossIntake.claimCallQas.invalidate({ claimId: claimId ?? 0 });
+    },
+    onError: (err) => toast.error(`Scoring failed: ${err.message}`),
+  });
+  const runMatchMutation = trpc.lossIntake.runCallMatching.useMutation({
+    onSuccess: (res) => {
+      toast.success(`Matched ${res.matched} call${res.matched !== 1 ? "s" : ""}`);
+      void sheetUtils.lossIntake.claimCalls.invalidate({ claimId: claimId ?? 0 });
+    },
+    onError: (err) => toast.error(`Matching failed: ${err.message}`),
+  });
 
   return (
     <Sheet open={claimId !== null} onOpenChange={(open) => !open && onClose()}>
@@ -251,6 +277,91 @@ function ClaimDetailSheet({ claimId, onClose }: { claimId: number | null; onClos
                   </div>
                 ))}
               </div>
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold text-foreground flex items-center gap-2"><Phone className="h-4 w-4 text-[#ff6221]" /> Calls &amp; AI QA</h3>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runMatchMutation.mutate()}
+                  disabled={runMatchMutation.isPending}
+                  className="h-7 text-xs"
+                >
+                  {runMatchMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  <span className="ml-1">Match calls</span>
+                </Button>
+              </div>
+              {claimCalls.data && claimCalls.data.length > 0 ? (
+                <div className="space-y-3">
+                  {claimCalls.data.map((call) => {
+                    const qa = claimCallQas.data?.find((q) => q.callHistoryId === call.id);
+                    const scoreColor = qa?.overallScore == null ? "" : qa.overallScore >= 80 ? "text-emerald-600" : qa.overallScore >= 60 ? "text-amber-600" : "text-red-600";
+                    return (
+                      <div key={call.id} className="rounded-lg border bg-card p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium">{call.agentName ?? "Unknown agent"}</span>
+                            <Badge variant="outline" className="text-xs">{call.direction === "inbound" ? "Inbound" : "Outbound"}</Badge>
+                            {call.matchConfidence != null && (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">{Math.round((call.matchConfidence as number) * 100)}% match</Badge>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">{formatDateTime(call.startedAt)}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span>{call.durationSeconds ? `${Math.floor(call.durationSeconds / 60)}m ${call.durationSeconds % 60}s` : "—"}</span>
+                          {call.callerPhone && <span>{call.callerPhone}</span>}
+                        </div>
+                        {qa ? (
+                          <div className="rounded-md bg-muted/40 p-2 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold flex items-center gap-1"><Star className="h-3 w-3" /> AI QA Score</span>
+                              <span className={`text-sm font-bold ${scoreColor}`}>{qa.overallScore}/100</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
+                              {qa.greetingScore != null && <span>Greeting: {qa.greetingScore}/10</span>}
+                              {qa.folDocumentedScore != null && <span>FOL documented: {qa.folDocumentedScore}/10</span>}
+                              {qa.rideshareAskedScore != null && <span>Rideshare asked: {qa.rideshareAskedScore}/10</span>}
+                              {qa.professionalCloseScore != null && <span>Professional close: {qa.professionalCloseScore}/10</span>}
+                              {qa.empathyScore != null && <span>Empathy: {qa.empathyScore}/10</span>}
+                            </div>
+                            {qa.strengths && (
+                              <div className="text-xs">
+                                <span className="font-medium text-emerald-600">Strengths: </span>
+                                <span className="text-muted-foreground">{qa.strengths}</span>
+                              </div>
+                            )}
+                            {qa.improvements && (
+                              <div className="text-xs">
+                                <span className="font-medium text-amber-600">Coaching: </span>
+                                <span className="text-muted-foreground">{qa.improvements}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-full text-xs"
+                            onClick={() => scoreCallMutation.mutate({ callHistoryId: call.id, lossIntakeClaimId: claimId! })}
+                            disabled={scoreCallMutation.isPending || !call.recordingUrl}
+                          >
+                            {scoreCallMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mic className="h-3 w-3" />}
+                            <span className="ml-1">{call.recordingUrl ? "Transcribe & AI Score" : "No recording available"}</span>
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+                  No Aircall recordings matched to this claim yet. Click "Match calls" to run the matching algorithm.
+                </div>
+              )}
             </section>
 
             <section>

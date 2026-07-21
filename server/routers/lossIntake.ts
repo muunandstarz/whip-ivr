@@ -371,4 +371,42 @@ export const lossIntakeRouter = router({
       await reassignClaims(input.claimIds, input.newAgentName, input.newHandlerId ?? null);
       return { success: true, reassigned: input.claimIds.length };
     }),
+
+  /** Get all Aircall calls matched to a loss intake claim */
+  claimCalls: protectedProcedure
+    .input(z.object({ claimId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { getCallsForClaim } = await import("../lossIntakeCallMatch");
+      return getCallsForClaim(input.claimId);
+    }),
+
+  /** Get all AI QA scores for calls linked to a loss intake claim */
+  claimCallQas: protectedProcedure
+    .input(z.object({ claimId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { getCallQasForClaim } = await import("../lossIntakeCallMatch");
+      return getCallQasForClaim(input.claimId);
+    }),
+
+  /** Run call-to-claim matching for all unmatched calls */
+  runCallMatching: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { matchAllUnmatchedCalls } = await import("../lossIntakeCallMatch");
+      return matchAllUnmatchedCalls();
+    }),
+
+  /** Transcribe and AI-score a specific call for a claim */
+  scoreCall: protectedProcedure
+    .input(z.object({
+      callHistoryId: z.number(),
+      lossIntakeClaimId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { transcribeAndScoreCall } = await import("../lossIntakeCallMatch");
+      return transcribeAndScoreCall(input.callHistoryId, input.lossIntakeClaimId);
+    }),
 });

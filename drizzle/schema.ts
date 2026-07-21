@@ -124,6 +124,8 @@ export const callHistory = mysqlTable("call_history", {
   ivrEligible: boolean("ivrEligible").default(false),
   startedAt: timestamp("startedAt").notNull(),
   endedAt: timestamp("endedAt"),
+  lossIntakeClaimId: int("lossIntakeClaimId"),
+  matchConfidence: float("matchConfidence"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -392,6 +394,34 @@ export const lossIntakeSettings = mysqlTable("loss_intake_settings", {
 });
 export type LossIntakeSetting = typeof lossIntakeSettings.$inferSelect;
 export type InsertLossIntakeSetting = typeof lossIntakeSettings.$inferInsert;
+
+// ─── Loss Intake Call QA ─────────────────────────────────────────────────────
+export const lossIntakeCallQas = mysqlTable("loss_intake_call_qas", {
+  id: int("id").autoincrement().primaryKey(),
+  lossIntakeClaimId: int("lossIntakeClaimId").notNull(),
+  callHistoryId: int("callHistoryId").notNull(),
+  aircallCallId: varchar("aircallCallId", { length: 64 }).notNull(),
+  agentName: varchar("agentName", { length: 128 }),
+  callDirection: mysqlEnum("callDirection", ["inbound", "outbound"]).default("outbound"),
+  callStatus: varchar("callStatus", { length: 32 }),
+  durationSeconds: int("durationSeconds").default(0),
+  recordingUrl: text("recordingUrl"),
+  transcript: text("transcript"),
+  // AI QA Scores (1-10)
+  greetingScore: float("greetingScore"),
+  folDocumentedScore: float("folDocumentedScore"),
+  rideshareAskedScore: float("rideshareAskedScore"),
+  professionalCloseScore: float("professionalCloseScore"),
+  empathyScore: float("empathyScore"),
+  overallScore: float("overallScore"),
+  strengths: text("strengths"),
+  improvements: text("improvements"),
+  rawAiResponse: text("rawAiResponse"),
+  scoredAt: timestamp("scoredAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type LossIntakeCallQa = typeof lossIntakeCallQas.$inferSelect;
+export type InsertLossIntakeCallQa = typeof lossIntakeCallQas.$inferInsert;
 
 export const lossIntakeSyncRuns = mysqlTable("loss_intake_sync_runs", {
   id: int("id").autoincrement().primaryKey(),
