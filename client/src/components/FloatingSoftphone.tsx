@@ -58,6 +58,7 @@ const DISPOSITION_GROUPS = [
       { value: "no_answer", label: "No Answer" },
       { value: "follow_up_scheduled", label: "Follow-Up Scheduled" },
       { value: "resolved_closed", label: "Resolved — Case Closed" },
+      { value: "sent_sms", label: "Sent SMS" },
     ],
   },
   {

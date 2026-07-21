@@ -373,7 +373,7 @@ export default function Softphone() {
     if (!linkedRecord || !cbDisposition) return;
     logCallbackMutation.mutate({
       intakeId: linkedRecord.id,
-      disposition: cbDisposition as "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy",
+      disposition: cbDisposition as "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy" | "emailed" | "sent_sms",
       outcome: (cbOutcome || undefined) as "resolved" | "escalated" | "follow_up" | "closed" | undefined,
       notes: cbNotes || undefined,
       newNotes: cbUpdateNotes && cbNotes ? cbNotes : undefined,
@@ -961,6 +961,7 @@ export default function Softphone() {
                   <SelectItem value="busy">Busy</SelectItem>
                   <SelectItem value="wrong_number">Wrong Number</SelectItem>
                   <SelectItem value="emailed">Emailed</SelectItem>
+                  <SelectItem value="sent_sms">Sent SMS</SelectItem>
                 </SelectContent>
               </Select>
             </div>

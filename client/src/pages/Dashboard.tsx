@@ -698,6 +698,8 @@ export default function Dashboard() {
                       no_answer:      { bar: "bg-amber-400",  label: "text-amber-700 dark:text-amber-400",  text: "No Answer" },
                       busy:           { bar: "bg-orange-400", label: "text-orange-700 dark:text-orange-400", text: "Busy" },
                       wrong_number:   { bar: "bg-red-400",    label: "text-red-700 dark:text-red-400",    text: "Wrong Number" },
+                      emailed:        { bar: "bg-purple-400", label: "text-purple-700 dark:text-purple-400", text: "Emailed" },
+                      sent_sms:       { bar: "bg-teal-400",   label: "text-teal-700 dark:text-teal-400",   text: "Sent SMS" },
                     };
                     const c = cfg[d];
                     if (!c || count === 0) return null;

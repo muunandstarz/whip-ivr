@@ -31,6 +31,7 @@ const DISPOSITION_CONFIG: Record<string, { label: string; icon: React.ElementTyp
   busy:           { label: "Busy",           icon: PhoneMissed,  className: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-500/30" },
   wrong_number:   { label: "Wrong Number",   icon: PhoneMissed,  className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30" },
   emailed:        { label: "Emailed",        icon: PhoneMissed,  className: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-300 dark:border-purple-500/30" },
+  sent_sms:       { label: "Sent SMS",       icon: PhoneCall,    className: "bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-300 dark:border-teal-500/30" },
 };
 
 const OUTCOME_CONFIG: Record<string, { label: string; className: string }> = {
@@ -128,6 +129,7 @@ export default function CallbackLog() {
               <SelectItem value="emailed">Emailed</SelectItem>
               <SelectItem value="busy">Busy</SelectItem>
               <SelectItem value="wrong_number">Wrong Number</SelectItem>
+              <SelectItem value="sent_sms">Sent SMS</SelectItem>
             </SelectContent>
           </Select>
 

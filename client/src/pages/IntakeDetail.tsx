@@ -197,7 +197,7 @@ export default function IntakeDetail() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [callbackOpen, setCallbackOpen] = useState(false);
   const [callbackForm, setCallbackForm] = useState<{
-    disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy" | "emailed";
+    disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy" | "emailed" | "sent_sms";
     outcome: "resolved" | "escalated" | "follow_up" | "closed";
     notes: string;
     closeRecord: boolean;
@@ -752,6 +752,7 @@ export default function IntakeDetail() {
                     <SelectItem value="emailed">Emailed</SelectItem>
                     <SelectItem value="busy">Busy</SelectItem>
                     <SelectItem value="wrong_number">Wrong number</SelectItem>
+                    <SelectItem value="sent_sms">Sent SMS</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

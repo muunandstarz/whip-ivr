@@ -527,7 +527,7 @@ export const appRouter = router({
     log: protectedProcedure
       .input(z.object({
         intakeId: z.number(),
-        disposition: z.enum(["reached", "no_answer", "left_voicemail", "wrong_number", "busy", "emailed"]),
+        disposition: z.enum(["reached", "no_answer", "left_voicemail", "wrong_number", "busy", "emailed", "sent_sms"]),
         notes: z.string().optional(),
         outcome: z.enum(["resolved", "escalated", "follow_up", "closed"]).optional(),
         closeRecord: z.boolean().optional(),

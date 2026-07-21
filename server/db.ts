@@ -908,7 +908,7 @@ export async function getHandlerCallMetrics(handlerName: string) {
 export async function logCallback(data: {
   intakeId: number;
   handlerName?: string;
-  disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy" | "emailed";
+  disposition: "reached" | "no_answer" | "left_voicemail" | "wrong_number" | "busy" | "emailed" | "sent_sms";
   notes?: string;
   outcome?: "resolved" | "escalated" | "follow_up" | "closed";
 }) {

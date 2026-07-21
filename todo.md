@@ -840,3 +840,11 @@ Business routing logic to implement in resolveHandler():
 - [x] Build Today's Activity UI: summary KPI row (total threads, completed, in outreach), per-rep collapsible cards, per-claim rows with stage, SLA, timing, FOL snippet, and event timeline
 - [x] Fix template detection: isHandlerTemplate() now also recognizes short format (Member/DOL/Fact of loss/Preliminary) used by some reps
 - [x] Both #claims and #claims-remotemarkets channels included in today's view
+
+## Callback Disposition — Add "Sent SMS" (Jul 21 2026)
+
+- [x] Add "sent_sms" to the disposition enum in drizzle/schema.ts (callbackLogs table)
+- [x] Run migration SQL to update the MySQL enum
+- [x] Add "Sent SMS" to all disposition dropdowns: IntakeDetail.tsx, CallbackLog.tsx, FloatingSoftphone.tsx, Softphone.tsx
+- [x] Add "Sent SMS" to DISPOSITION_CONFIG display maps in CallbackLog.tsx and Dashboard.tsx
+- [x] Add "Sent SMS" to server/db.ts logCallback type and routers.ts zod enum
