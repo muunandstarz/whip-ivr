@@ -10,6 +10,7 @@ import {
   getLossIntakeClaimDetail,
   getLossIntakeOverview,
   getLossIntakeSettings,
+  getTodayRepActivity,
   listLossIntakeClaims,
   listLossIntakeHandlers,
   listLossIntakeQas,
@@ -261,6 +262,13 @@ export const lossIntakeRouter = router({
     requireAdmin(ctx.user);
     return listLossIntakeHandlers();
   }),
+
+  todayActivity: protectedProcedure
+    .input(z.object({ dateMs: z.number().int().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      return getTodayRepActivity(input?.dateMs);
+    }),
 
   syncHealth: protectedProcedure.query(async ({ ctx }) => {
     requireAdmin(ctx.user);

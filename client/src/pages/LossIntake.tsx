@@ -28,8 +28,11 @@ import {
 import {
   AlertTriangle,
   BarChart3,
+  CalendarClock,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   ClipboardCheck,
   Clock3,
   ExternalLink,
@@ -278,7 +281,8 @@ export default function LossIntake() {
   const isAdmin = user?.role === "admin";
   const representativeView = !isAdmin || isImpersonating;
   const scopedHandlerId = isAdmin && impersonating ? impersonating.id : undefined;
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("today");
+  const [expandedHandlers, setExpandedHandlers] = useState<Record<string, boolean>>({});
   const [selectedClaimId, setSelectedClaimId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
@@ -310,6 +314,7 @@ export default function LossIntake() {
   const settings = trpc.lossIntake.settings.get.useQuery(undefined, { enabled: !!isAdmin && !isImpersonating });
   const handlers = trpc.lossIntake.handlers.useQuery(undefined, { enabled: !!isAdmin && !isImpersonating });
   const syncHealth = trpc.lossIntake.syncHealth.useQuery(undefined, { enabled: !!isAdmin && !isImpersonating });
+  const todayActivity = trpc.lossIntake.todayActivity.useQuery(undefined, { refetchInterval: 5 * 60 * 1000 });
   const utils = trpc.useUtils();
 
   const runNow = trpc.lossIntake.sync.runNow.useMutation({
@@ -371,11 +376,161 @@ export default function LossIntake() {
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="h-auto flex-wrap justify-start bg-background p-1 shadow-sm">
+              <TabsTrigger value="today" className="gap-2"><CalendarClock className="h-4 w-4" /> Today</TabsTrigger>
               <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" /> Overview</TabsTrigger>
               <TabsTrigger value="claims" className="gap-2"><Workflow className="h-4 w-4" /> Claims</TabsTrigger>
               <TabsTrigger value="qa" className="gap-2"><ClipboardCheck className="h-4 w-4" /> {representativeView ? "My QA" : "QA inbox"}</TabsTrigger>
               {isAdmin && !isImpersonating && <TabsTrigger value="settings" className="gap-2"><Settings2 className="h-4 w-4" /> Sync & settings</TabsTrigger>}
             </TabsList>
+
+            <TabsContent value="today" className="mt-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Today's Intake Activity</h2>
+                  <p className="text-sm text-muted-foreground">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · Refreshes every 5 minutes</p>
+                </div>
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => utils.lossIntake.todayActivity.invalidate()}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </Button>
+              </div>
+              {todayActivity.isLoading ? (
+                <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading today's activity…</div>
+              ) : !todayActivity.data?.length ? (
+                <EmptyState title="No FNOL threads today" description="No claims have been posted or touched by the intake team today. Check back after the next sync." />
+              ) : (
+                <div className="space-y-4">
+                  {/* Summary row */}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Card className="border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total FNOL threads</p>
+                        <p className="mt-2 text-3xl font-bold">{todayActivity.data.reduce((s, h) => s + h.claims.length, 0)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Completed (template posted)</p>
+                        <p className="mt-2 text-3xl font-bold text-emerald-600 dark:text-emerald-400">{todayActivity.data.reduce((s, h) => s + h.completedCount, 0)}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">In outreach / attempts</p>
+                        <p className="mt-2 text-3xl font-bold text-amber-600 dark:text-amber-400">{todayActivity.data.reduce((s, h) => s + h.contactAttemptedCount, 0)}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Per-rep cards */}
+                  {todayActivity.data.map(handler => {
+                    const isExpanded = expandedHandlers[handler.handlerName] !== false; // default expanded
+                    return (
+                      <Card key={handler.handlerName} className="shadow-sm">
+                        <CardHeader
+                          className="cursor-pointer select-none"
+                          onClick={() => setExpandedHandlers(prev => ({ ...prev, [handler.handlerName]: !isExpanded }))}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ff6221]/10 text-sm font-bold text-[#ff6221]">
+                                {handler.handlerName.charAt(0)}
+                              </div>
+                              <div>
+                                <CardTitle className="text-base">{handler.handlerName}</CardTitle>
+                                <p className="text-xs text-muted-foreground">{handler.claims.length} thread{handler.claims.length !== 1 ? "s" : ""} · {handler.completedCount} completed · {handler.contactAttemptedCount} in outreach</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                {handler.completedCount} done
+                              </Badge>
+                              {handler.awaitingCount > 0 && (
+                                <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
+                                  {handler.awaitingCount} pending
+                                </Badge>
+                              )}
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </div>
+                          </div>
+                        </CardHeader>
+                        {isExpanded && (
+                          <CardContent className="pt-0">
+                            <div className="divide-y rounded-xl border">
+                              {handler.claims.map(claim => {
+                                const stageColor = claim.stage === "complete"
+                                  ? "bg-emerald-500"
+                                  : claim.stage === "outreach_started" || claim.stage === "contact_attempts"
+                                  ? "bg-amber-500"
+                                  : "bg-muted-foreground/30";
+                                const contactMin = claim.firstContactMinutes;
+                                const templateMin = claim.templatePostMinutesFromReport;
+                                return (
+                                  <div key={claim.claimId} className="flex items-start gap-3 p-3 hover:bg-muted/30">
+                                    <div className={`mt-1.5 h-8 w-1 flex-shrink-0 rounded-full ${stageColor}`} />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div>
+                                          <p className="font-semibold text-sm">
+                                            {claim.memberName ?? "Unidentified member"}
+                                            {claim.customerId ? <span className="ml-1.5 font-normal text-muted-foreground">#{claim.customerId}</span> : null}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {claim.market ?? "Market unknown"}
+                                            {claim.vinLastSix ? ` · VIN …${claim.vinLastSix}` : ""}
+                                            {claim.channelName === "claims" ? " · #claims" : " · #claims-remotemarkets"}
+                                          </p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <Badge variant="outline" className={stageBadge(claim.stage)}>{STAGE_LABELS[claim.stage]}</Badge>
+                                          {claim.slaState === "breached" && <Badge variant="outline" className={slaBadge(claim.slaState)}>SLA breached</Badge>}
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        <span><span className="font-medium text-foreground">FNOL posted:</span> {new Date(claim.postedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET</span>
+                                        {contactMin != null && <span><span className="font-medium text-foreground">First contact:</span> {contactMin < 60 ? `${Math.round(contactMin)}m` : `${Math.floor(contactMin / 60)}h ${Math.round(contactMin % 60)}m`} after posting</span>}
+                                        {templateMin != null && <span><span className="font-medium text-foreground">Template posted:</span> {templateMin < 60 ? `${Math.round(templateMin)}m` : `${Math.floor(templateMin / 60)}h ${Math.round(templateMin % 60)}m`} after posting</span>}
+                                        {claim.contactAttempts > 0 && <span><span className="font-medium text-foreground">Attempts:</span> {claim.contactAttempts}</span>}
+                                      </div>
+                                      {claim.factsOfLoss && (
+                                        <p className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-xs leading-relaxed">
+                                          <span className="font-medium">FOL: </span>{claim.factsOfLoss.length > 180 ? claim.factsOfLoss.slice(0, 180) + "…" : claim.factsOfLoss}
+                                        </p>
+                                      )}
+                                      {/* Today's events for this claim */}
+                                      {claim.events.length > 0 && (
+                                        <div className="mt-2 space-y-1">
+                                          {claim.events.map((event, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 text-xs">
+                                              <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                                                event.eventType === "completion" ? "bg-emerald-500" :
+                                                event.eventType === "contact_attempt" ? "bg-amber-500" :
+                                                event.eventType === "acknowledgment" ? "bg-blue-500" :
+                                                "bg-muted-foreground/50"
+                                              }`} />
+                                              <span className="text-muted-foreground">{new Date(event.occurredAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}</span>
+                                              <span className="font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</span>
+                                              {event.actorName && <span className="text-muted-foreground">by {event.actorName}</span>}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <Button size="sm" variant="ghost" className="flex-shrink-0" onClick={() => setSelectedClaimId(claim.claimId)}>
+                                      <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
 
             <TabsContent value="overview" className="mt-6 space-y-6">
               {isPageLoading ? (

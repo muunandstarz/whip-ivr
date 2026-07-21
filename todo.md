@@ -831,3 +831,12 @@ Business routing logic to implement in resolveHandler():
 - [x] Loss Intake snapshot: show assigned claims count, complete %, SLA breaches, avg first contact
 - [x] Loss Intake snapshot: "View more" link navigates to Loss Intake page
 - [x] Restrict Loss Intake nav item to admin + loss intake team members
+
+## Today's Activity View (Jul 20 2026)
+
+- [x] Add "Today" tab as default landing tab in Loss Intake Monitor
+- [x] Add getTodayRepActivity() DB helper — queries all claims posted today, groups by assigned handler, includes per-claim events
+- [x] Add todayActivity tRPC endpoint (protectedProcedure, refreshes every 5 min)
+- [x] Build Today's Activity UI: summary KPI row (total threads, completed, in outreach), per-rep collapsible cards, per-claim rows with stage, SLA, timing, FOL snippet, and event timeline
+- [x] Fix template detection: isHandlerTemplate() now also recognizes short format (Member/DOL/Fact of loss/Preliminary) used by some reps
+- [x] Both #claims and #claims-remotemarkets channels included in today's view

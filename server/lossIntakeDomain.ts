@@ -249,10 +249,23 @@ export function assessFolQuality(fol: string | null): number {
  */
 function isHandlerTemplate(text: string): boolean {
   const hasFol = /\b(?:facts? of loss|FOL)\s*[:\-–]/i.test(text);
-  const hasPrelim = /\b(?:preliminary liability|prelim\s*liability|liability)\s*[:\-–]/i.test(text);
+  const hasPrelim = /\b(?:preliminary liability|prelim\s*liability|preliminary|liability)\s*[:\-–]/i.test(text);
   const hasRideshare = /\b(?:rideshare|TNC)\s*(?:status)?\s*[:\-–]/i.test(text);
-  // Require at least 2 of the 3 template sections to be present
-  return [hasFol, hasPrelim, hasRideshare].filter(Boolean).length >= 2;
+  // Require at least 2 of the 3 template sections to be present (standard format)
+  if ([hasFol, hasPrelim, hasRideshare].filter(Boolean).length >= 2) return true;
+
+  // Short narrative format: Member\nDOL:\nFact of loss:\nPreliminary:
+  const hasDol = /\bDOL\s*[:\-–]/i.test(text);
+  const hasFactOfLoss = /\bfact(?:s)? of loss\s*[:\-–]/i.test(text);
+  const hasPrelimShort = /\bpreliminary\s*[:\-–]/i.test(text);
+  if (hasDol && hasFactOfLoss && hasPrelimShort) return true;
+
+  // Full template with Date of Loss + Facts of Loss + Member Name
+  const hasDateOfLoss = /\bdate of loss\s*[:\-–]/i.test(text);
+  const hasMemberName = /\bmember name\s*[:\-–]/i.test(text);
+  if (hasDateOfLoss && hasFol && hasMemberName) return true;
+
+  return false;
 }
 
 /**

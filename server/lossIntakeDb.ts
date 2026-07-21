@@ -542,3 +542,165 @@ export async function getLossIntakeSettingsByScheduleTaskUid(taskUid: string) {
     .limit(1);
   return rows[0] ?? null;
 }
+
+export interface TodayRepActivityClaim {
+  claimId: number;
+  memberName: string | null;
+  customerId: string | null;
+  vinLastSix: string | null;
+  market: string | null;
+  channelName: string;
+  postedAt: Date;
+  stage: string;
+  slaState: string;
+  slaType: string;
+  slaDeadlineAt: Date | null;
+  firstContactAt: Date | null;
+  firstContactMinutes: number | null;
+  completedAt: Date | null;
+  templatePostedAt: Date | null;
+  templatePostMinutesFromReport: number | null;
+  contactAttempts: number;
+  factsOfLoss: string | null;
+  slackPermalink: string | null;
+  events: Array<{
+    eventType: string;
+    occurredAt: Date;
+    actorName: string | null;
+    body: string | null;
+  }>;
+}
+
+export interface TodayRepActivityHandler {
+  handlerId: number;
+  handlerName: string;
+  claims: TodayRepActivityClaim[];
+  completedCount: number;
+  contactAttemptedCount: number;
+  awaitingCount: number;
+}
+
+/**
+ * Get all Loss Intake claims that were posted or updated today (ET date),
+ * grouped by assigned handler. Used for the "Today's Activity" view.
+ */
+export async function getTodayRepActivity(dateMs?: number): Promise<TodayRepActivityHandler[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Default to today in ET (UTC-4 or UTC-5 depending on DST)
+  const now = dateMs ? new Date(dateMs) : new Date();
+  // ET offset: approximate as UTC-4 (EDT) for summer
+  const ET_OFFSET_MS = 4 * 60 * 60 * 1000;
+  const etNow = new Date(now.getTime() - ET_OFFSET_MS);
+  const etDateStr = etNow.toISOString().slice(0, 10); // YYYY-MM-DD
+  const dayStartEt = new Date(`${etDateStr}T00:00:00.000Z`);
+  const dayEndEt = new Date(`${etDateStr}T23:59:59.999Z`);
+  // Convert back to UTC for DB query
+  const dayStartUtc = new Date(dayStartEt.getTime() + ET_OFFSET_MS);
+  const dayEndUtc = new Date(dayEndEt.getTime() + ET_OFFSET_MS);
+
+  // Get all claims posted today OR updated today (firstContactAt or completedAt today)
+  const claims = await db
+    .select()
+    .from(lossIntakeClaims)
+    .where(
+      and(
+        gte(lossIntakeClaims.postedAt, dayStartUtc),
+        lte(lossIntakeClaims.postedAt, dayEndUtc),
+      ),
+    )
+    .orderBy(lossIntakeClaims.postedAt);
+
+  if (claims.length === 0) return [];
+
+  // Get events for all these claims
+  const claimIds = claims.map(c => c.id);
+  const events = await db
+    .select()
+    .from(lossIntakeEvents)
+    .where(
+      and(
+        sql`${lossIntakeEvents.claimId} IN (${sql.join(claimIds.map(id => sql`${id}`), sql`, `)})`,
+        gte(lossIntakeEvents.occurredAt, dayStartUtc),
+        lte(lossIntakeEvents.occurredAt, dayEndUtc),
+      ),
+    )
+    .orderBy(lossIntakeEvents.occurredAt);
+
+  // Group events by claimId
+  const eventsByClaimId = new Map<number, typeof events>();
+  for (const event of events) {
+    const list = eventsByClaimId.get(event.claimId) ?? [];
+    list.push(event);
+    eventsByClaimId.set(event.claimId, list);
+  }
+
+  // Group claims by handler
+  const byHandler = new Map<
+    string,
+    { handlerId: number; handlerName: string; claims: TodayRepActivityClaim[] }
+  >();
+
+  for (const claim of claims) {
+    const handlerKey = claim.assignedHandlerId?.toString() ?? "unassigned";
+    const handlerName = claim.assignedAgent ?? "Unassigned";
+    const handlerId = claim.assignedHandlerId ?? 0;
+
+    const entry = byHandler.get(handlerKey) ?? {
+      handlerId,
+      handlerName,
+      claims: [],
+    };
+
+    const claimEvents = (eventsByClaimId.get(claim.id) ?? []).map(e => ({
+      eventType: e.eventType,
+      occurredAt: e.occurredAt,
+      actorName: e.actorName,
+      body: e.body ?? null,
+    }));
+
+    entry.claims.push({
+      claimId: claim.id,
+      memberName: claim.memberName,
+      customerId: claim.customerId,
+      vinLastSix: claim.vinLastSix,
+      market: claim.market,
+      channelName: claim.channelName,
+      postedAt: claim.postedAt,
+      stage: claim.stage,
+      slaState: claim.slaState,
+      slaType: claim.slaType,
+      slaDeadlineAt: claim.slaDeadlineAt ?? null,
+      firstContactAt: claim.firstContactAt ?? null,
+      firstContactMinutes: claim.firstContactMinutes ?? null,
+      completedAt: claim.completedAt ?? null,
+      templatePostedAt: claim.templatePostedAt ?? null,
+      templatePostMinutesFromReport: claim.templatePostMinutesFromReport ?? null,
+      contactAttempts: claim.contactAttempts ?? 0,
+      factsOfLoss: claim.factsOfLoss ?? null,
+      slackPermalink: claim.slackPermalink ?? null,
+      events: claimEvents,
+    });
+
+    byHandler.set(handlerKey, entry);
+  }
+
+  // Convert to array with summary counts
+  return Array.from(byHandler.values())
+    .map(handler => ({
+      ...handler,
+      completedCount: handler.claims.filter(c => c.stage === "complete").length,
+      contactAttemptedCount: handler.claims.filter(
+        c => c.stage === "outreach_started" || c.stage === "contact_attempts",
+      ).length,
+      awaitingCount: handler.claims.filter(c => c.stage === "awaiting_outreach").length,
+    }))
+    .sort((a, b) => {
+      // Sort: known handlers first, then by name
+      if (a.handlerId > 0 && b.handlerId === 0) return -1;
+      if (a.handlerId === 0 && b.handlerId > 0) return 1;
+      return a.handlerName.localeCompare(b.handlerName);
+    });
+}
+
