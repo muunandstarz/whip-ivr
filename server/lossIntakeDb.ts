@@ -267,6 +267,7 @@ export interface LossClaimListFilters {
   dateFrom?: Date;
   dateTo?: Date;
   handlerId?: number;
+  agentName?: string;
   limit?: number;
   offset?: number;
 }
@@ -275,6 +276,9 @@ function buildClaimConditions(filters: LossClaimListFilters) {
   const conditions = [];
   if (filters.handlerId !== undefined) {
     conditions.push(eq(lossIntakeClaims.assignedHandlerId, filters.handlerId));
+  }
+  if (filters.agentName) {
+    conditions.push(eq(lossIntakeClaims.assignedAgent, filters.agentName));
   }
   if (filters.stage) conditions.push(eq(lossIntakeClaims.stage, filters.stage));
   if (filters.slaState) conditions.push(eq(lossIntakeClaims.slaState, filters.slaState));
@@ -800,7 +804,7 @@ export async function getRepComparisonMetrics(
   const byAgent = new Map<string, RepPeriodStats>();
 
   const AGENT_ASSIGNMENTS: Record<string, string> = {
-    "Ana Padilla": "Remote Markets + In-Store Overflow",
+    "Ana Padilla": "Cleveland + Remote Markets + In-Store Overflow",
     "Bennet Carlos": "Glen Burnie + Atlanta (In-Store)",
     "Carlito Legarde Jr": "Rockville + Chicago (In-Store)",
   };
@@ -878,7 +882,7 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
   if (!db) return null;
 
   const AGENT_ASSIGNMENTS: Record<string, string> = {
-    "Ana Padilla": "Remote Markets + In-Store Overflow",
+    "Ana Padilla": "Cleveland + Remote Markets + In-Store Overflow",
     "Bennet Carlos": "Glen Burnie + Atlanta (In-Store)",
     "Carlito Legarde Jr": "Rockville + Chicago (In-Store)",
   };

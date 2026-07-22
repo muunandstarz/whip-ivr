@@ -401,6 +401,7 @@ export default function LossIntake() {
   const [stage, setStage] = useState("all");
   const [slaState, setSlaState] = useState("all");
   const [vehicleType, setVehicleType] = useState("all");
+  const [agentFilter, setAgentFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [qaResponses, setQaResponses] = useState<Record<number, string>>({});
@@ -421,9 +422,10 @@ export default function LossIntake() {
     ...(stage !== "all" ? { stage: stage as "awaiting_outreach" | "outreach_started" | "contact_attempts" | "complete" } : {}),
     ...(slaState !== "all" ? { slaState: slaState as "within_sla" | "at_risk" | "breached" } : {}),
     ...(vehicleType !== "all" ? { vehicleType: vehicleType as "gas" | "ev_tesla" | "unknown" } : {}),
+    ...(agentFilter !== "all" ? { agentName: agentFilter } : {}),
     limit: 100,
     offset: 0,
-  }), [dateScope, search, stage, slaState, vehicleType]);
+  }), [dateScope, search, stage, slaState, vehicleType, agentFilter]);
 
   const overview = trpc.lossIntake.overview.useQuery(dateScope);
   const claims = trpc.lossIntake.claims.list.useQuery(claimInput);
@@ -769,7 +771,7 @@ export default function LossIntake() {
                               <div className="space-y-0.5">
                                 <div className="text-xs text-muted-foreground">Avg first contact</div>
                                 <div className="text-xl font-bold">
-                                  {rep.avgFirstContactMin == null ? "—" : rep.avgFirstContactMin < 60 ? `${rep.avgFirstContactMin}m` : `${Math.floor(rep.avgFirstContactMin / 60)}h ${rep.avgFirstContactMin % 60}m`}
+                                  {rep.avgFirstContactMin == null ? "—" : rep.avgFirstContactMin < 60 ? `${Number(rep.avgFirstContactMin.toFixed(1))}m` : `${Math.floor(rep.avgFirstContactMin / 60)}h ${Number((rep.avgFirstContactMin % 60).toFixed(1))}m`}
                                 </div>
                                 <div className="text-[11px] text-muted-foreground">from FNOL posted</div>
                               </div>
@@ -823,7 +825,7 @@ export default function LossIntake() {
                             <td className="px-4 py-2.5 font-medium text-muted-foreground">Avg first contact</td>
                             {repComparison.data.map(rep => (
                               <td key={rep.agentName} className="px-4 py-2.5 text-center font-semibold">
-                                {rep.avgFirstContactMin == null ? "—" : rep.avgFirstContactMin < 60 ? `${rep.avgFirstContactMin}m` : `${Math.floor(rep.avgFirstContactMin / 60)}h ${rep.avgFirstContactMin % 60}m`}
+                                {rep.avgFirstContactMin == null ? "—" : rep.avgFirstContactMin < 60 ? `${Number(rep.avgFirstContactMin.toFixed(1))}m` : `${Math.floor(rep.avgFirstContactMin / 60)}h ${Number((rep.avgFirstContactMin % 60).toFixed(1))}m`}
                               </td>
                             ))}
                           </tr>
@@ -1040,11 +1042,12 @@ export default function LossIntake() {
             <TabsContent value="claims" className="mt-6 space-y-4">
               <Card className="shadow-sm">
                 <CardContent className="p-4">
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_180px_160px_160px]">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_180px_160px_160px_160px]">
                     <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search member, customer ID, market…" className="pl-9" /></div>
                     <Select value={stage} onValueChange={setStage}><SelectTrigger><SelectValue placeholder="All stages" /></SelectTrigger><SelectContent><SelectItem value="all">All stages</SelectItem>{Object.entries(STAGE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>
                     <Select value={slaState} onValueChange={setSlaState}><SelectTrigger><SelectValue placeholder="All SLA states" /></SelectTrigger><SelectContent><SelectItem value="all">All SLA states</SelectItem>{Object.entries(SLA_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>
                     <Select value={vehicleType} onValueChange={setVehicleType}><SelectTrigger><SelectValue placeholder="All vehicles" /></SelectTrigger><SelectContent><SelectItem value="all">All vehicles</SelectItem><SelectItem value="gas">Gas</SelectItem><SelectItem value="ev_tesla">Tesla / EV</SelectItem><SelectItem value="unknown">Unknown</SelectItem></SelectContent></Select>
+                    <Select value={agentFilter} onValueChange={setAgentFilter}><SelectTrigger><SelectValue placeholder="All agents" /></SelectTrigger><SelectContent><SelectItem value="all">All agents</SelectItem><SelectItem value="Ana Padilla">Ana Padilla</SelectItem><SelectItem value="Bennet Carlos">Bennet Carlos</SelectItem><SelectItem value="Carlito Legarde Jr">Carlito Legarde Jr</SelectItem></SelectContent></Select>
                   </div>
                 </CardContent>
               </Card>

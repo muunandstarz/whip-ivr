@@ -948,3 +948,9 @@ Business routing logic to implement in resolveHandler():
 - [x] QA score badge in My Performance header (star rating)
 - [x] QA mini-card below lower stats with score bar, scorecard count, Full Profile link
 - [x] Admin "Viewing As" mode renders identical layout with "Viewing as [Name]" header
+
+## Loss Intake Fixes (Jul 22, 2026 — Batch 2)
+- [x] Fix avg first contact decimal display — show at most 1 decimal place (e.g. "3.2 min" not "3.2000000...")
+- [x] Update Ana Padilla assignment label to include Cleveland Claims
+- [x] Add agent filter dropdown to Claims tab in Loss Intake
+- [x] Automate AI QA generation via heartbeat scheduled job (already live: weekly-qa-post cron, Fridays 4pm ET)
