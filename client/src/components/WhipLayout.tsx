@@ -327,7 +327,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile header */
+        {/* Mobile header */}
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b bg-background sticky top-0 z-30">
           <button
             onClick={() => setMobileOpen(true)}
