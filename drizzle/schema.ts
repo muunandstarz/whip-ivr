@@ -1,5 +1,6 @@
 import {
   int,
+  bigint,
   mysqlEnum,
   mysqlTable,
   text,
@@ -316,6 +317,11 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   teslaFootageRequested: boolean("teslaFootageRequested"),
   qualityScore: float("qualityScore"),
   missingElements: text("missingElements"),
+  // @claims-intake tag SLA (set when @claims-intake is mentioned in the thread)
+  claimsIntakeTaggedAt: bigint("claims_intake_tagged_at", { mode: "number" }),
+  claimsIntakeSlaType: varchar("claims_intake_sla_type", { length: 32 }),
+  claimsIntakeSlaDeadlineAt: bigint("claims_intake_sla_deadline_at", { mode: "number" }),
+
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

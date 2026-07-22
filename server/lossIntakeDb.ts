@@ -233,6 +233,25 @@ export async function upsertLossIntakeClaimBundle(input: {
   return claimId;
 }
 
+/** Called when @claims-intake is tagged in a remote-ops thread — starts the SLA clock on the existing claim */
+export async function updateClaimsIntakeTag(input: {
+  slackKey: string;
+  taggedAt: number; // Unix ms
+  slaType: "business_hours" | "after_hours";
+  slaDeadlineAt: number; // Unix ms
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(lossIntakeClaims)
+    .set({
+      claimsIntakeTaggedAt: input.taggedAt,
+      claimsIntakeSlaType: input.slaType,
+      claimsIntakeSlaDeadlineAt: input.slaDeadlineAt,
+    })
+    .where(eq(lossIntakeClaims.slackKey, input.slackKey));
+}
+
 export async function getLossIntakeThreadState(
   channelId: string,
   threadTs: string,

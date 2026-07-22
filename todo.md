@@ -962,3 +962,10 @@ Business routing logic to implement in resolveHandler():
 - [x] Notify Ana + available intake reps via Slack DM when @claims-intake is triggered
 - [x] Surface Remote Ops intakes in Loss Intake dashboard: dedicated "Remote Ops" tab with SLA countdown, claim/complete actions, badge count
 - [x] Mark intake as claimed when rep clicks Claim in the dashboard; mark complete when done
+
+## Remote Ops @claims-intake Workflow — Simplified (Jul 22, 2026)
+- [ ] Add claimsIntakeTaggedAt + claimsIntakeSlaType + claimsIntakeSlaDeadlineAt columns to loss_intake_claims
+- [ ] Detect @claims-intake tag in existing lossIntakeSlackEvents.ts processor, update existing claim record with SLA clock
+- [ ] Show original post timestamp + SLA deadline in existing claim detail view (no separate tab)
+- [ ] Remove separate Remote Ops tab from Loss Intake page
+- [ ] Remove separate remoteOpsSlackEvents.ts handler and remoteOpsDb.ts (or keep as dead code)

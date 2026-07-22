@@ -5,6 +5,7 @@ import {
   getLossIntakeSettings,
   getLossIntakeThreadState,
   upsertLossIntakeClaimBundle,
+  updateClaimsIntakeTag,
 } from "./lossIntakeDb";
 import {
   analyzeFnolThread,
@@ -23,6 +24,64 @@ export const SLACK_LOSS_INTAKE_CHANNELS = new Map([
   ["CHWRXH4HK", "claims"],
   ["C092UPKR79D", "claims-remotemarkets"],
 ] as const);
+
+// The @claims-intake user group ID — tagging this starts the SLA clock
+const CLAIMS_INTAKE_GROUP_ID = "S0AK7MBDQ49";
+
+/** Returns true if the message text mentions the @claims-intake user group */
+function mentionsClaimsIntakeGroup(text: string | undefined): boolean {
+  if (!text) return false;
+  // Slack encodes user group mentions as <!subteam^ID> or <!subteam^ID|@handle>
+  return text.includes(`<!subteam^${CLAIMS_INTAKE_GROUP_ID}>`) ||
+    text.includes(`<!subteam^${CLAIMS_INTAKE_GROUP_ID}|`);
+}
+
+/** SLA calculation: 10 min during business hours (Mon–Fri 9am–6pm ET), 4 business hours otherwise */
+function computeClaimsIntakeSla(taggedAtMs: number): {
+  slaType: "business_hours" | "after_hours";
+  slaDeadlineAt: number;
+} {
+  const taggedAt = new Date(taggedAtMs);
+  // Convert to ET (UTC-5 or UTC-4 during DST)
+  const etOffset = isDaylightSavingTime(taggedAt) ? -4 * 60 : -5 * 60;
+  const etMs = taggedAtMs + etOffset * 60 * 1000;
+  const etDate = new Date(etMs);
+  const dayOfWeek = etDate.getUTCDay(); // 0=Sun, 6=Sat
+  const hourET = etDate.getUTCHours();
+  const isBusinessHours = dayOfWeek >= 1 && dayOfWeek <= 5 && hourET >= 9 && hourET < 18;
+  if (isBusinessHours) {
+    return { slaType: "business_hours", slaDeadlineAt: taggedAtMs + 10 * 60 * 1000 };
+  }
+  // After hours: add 4 business hours from next business open
+  const nextOpen = nextBusinessOpenMs(taggedAtMs, etOffset);
+  return { slaType: "after_hours", slaDeadlineAt: nextOpen + 4 * 60 * 60 * 1000 };
+}
+
+function isDaylightSavingTime(date: Date): boolean {
+  // Simplified DST check for US ET: second Sunday in March to first Sunday in November
+  const year = date.getUTCFullYear();
+  const dstStart = nthSundayOfMonth(year, 2, 2); // March (month=2), 2nd Sunday
+  const dstEnd = nthSundayOfMonth(year, 10, 1);  // November (month=10), 1st Sunday
+  return date >= dstStart && date < dstEnd;
+}
+
+function nthSundayOfMonth(year: number, month: number, n: number): Date {
+  const d = new Date(Date.UTC(year, month, 1));
+  const firstSunday = (7 - d.getUTCDay()) % 7;
+  return new Date(Date.UTC(year, month, 1 + firstSunday + (n - 1) * 7, 7, 0, 0)); // 2am ET = 7am UTC
+}
+
+function nextBusinessOpenMs(fromMs: number, etOffsetMinutes: number): number {
+  const etMs = fromMs + etOffsetMinutes * 60 * 1000;
+  const d = new Date(etMs);
+  // Advance to 9am ET next business day
+  d.setUTCHours(9, 0, 0, 0);
+  // If already past 9am today, move to next day
+  if (d.getTime() <= etMs) d.setUTCDate(d.getUTCDate() + 1);
+  // Skip weekends
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.getTime() - etOffsetMinutes * 60 * 1000; // back to UTC ms
+}
 type SlackLossIntakeChannelId = "CHWRXH4HK" | "C092UPKR79D";
 
 function approvedChannelName(channelId: string) {
@@ -299,6 +358,20 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
       atRiskMinutes: settings.atRiskMinutes,
     });
     await upsertLossIntakeClaimBundle({ parent, analysis });
+
+    // If this reply mentions @claims-intake, start the SLA clock on the existing claim
+    if (mentionsClaimsIntakeGroup(event.text)) {
+      const taggedAtMs = Math.round(parseFloat(event.ts) * 1000);
+      const sla = computeClaimsIntakeSla(taggedAtMs);
+      await updateClaimsIntakeTag({
+        slackKey: parent.slackKey,
+        taggedAt: taggedAtMs,
+        slaType: sla.slaType,
+        slaDeadlineAt: sla.slaDeadlineAt,
+      });
+      console.log(`[Loss Intake] @claims-intake SLA clock started for ${parent.slackKey}: ${sla.slaType}, due ${new Date(sla.slaDeadlineAt).toISOString()}`);
+    }
+
     return { status: "updated" as const };
   } finally {
     inFlightEventIds.delete(eventId);
