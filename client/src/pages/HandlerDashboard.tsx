@@ -233,8 +233,8 @@ export default function HandlerDashboard() {
 
   return (
     <WhipLayout>
-      {/* Full-height no-scroll container */}
-      <div className="h-full flex flex-col overflow-hidden">
+      {/* Dashboard container */}
+      <div className="flex flex-col">
         {/* ── Top bar ── */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-border/50 flex-shrink-0">
           <div>
@@ -271,9 +271,9 @@ export default function HandlerDashboard() {
         </div>
 
         {/* ── Main two-column grid ── */}
-        <div className="flex-1 overflow-hidden grid grid-cols-2 gap-0 min-h-0">
+        <div className="flex-1 grid grid-cols-2 gap-0">
           {/* LEFT: My Performance + lower stats */}
-          <div className="flex flex-col overflow-hidden border-r border-border/40">
+          <div className="flex flex-col border-r border-border/40">
             {/* My Performance card */}
             <div className="flex-shrink-0 px-5 py-4 border-b border-border/40">
               <div className="flex items-center justify-between mb-3">
@@ -381,7 +381,7 @@ export default function HandlerDashboard() {
             </div>
 
             {/* ── Lower 4-stat row ── */}
-            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3 min-h-0">
+            <div className="px-5 py-3 space-y-3">
               {/* Loss Intake */}
               {canSeeLossIntake && (
                 <div>
@@ -551,7 +551,7 @@ export default function HandlerDashboard() {
           </div>
 
           {/* RIGHT: Callback Queue */}
-          <div className="flex flex-col overflow-hidden">
+          <div className="flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#ff6221]" />
@@ -563,7 +563,7 @@ export default function HandlerDashboard() {
             </div>
 
             {/* Queue list */}
-            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2 min-h-0">
+            <div className="px-5 py-3 space-y-2">
               {intakeLoading ? (
                 [...Array(4)].map((_, i) => (
                   <div key={i} className="h-20 bg-muted/30 rounded-lg animate-pulse" />

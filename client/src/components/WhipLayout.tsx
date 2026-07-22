@@ -134,7 +134,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems;
 
   return (
-    <div className="h-screen flex bg-background overflow-hidden">
+    <div className="h-screen flex bg-background">
       {showOnboarding && (
         <OnboardingModal onDismiss={() => setOnboardingDismissed(true)} />
       )}
@@ -326,7 +326,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile header */}
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b bg-background sticky top-0 z-30">
           <button
@@ -350,7 +350,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           )}
         </header>
 
-        <main className="flex-1 overflow-hidden h-full">{children}</main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
