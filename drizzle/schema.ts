@@ -436,3 +436,34 @@ export const lossIntakeSyncRuns = mysqlTable("loss_intake_sync_runs", {
 });
 export type LossIntakeSyncRun = typeof lossIntakeSyncRuns.$inferSelect;
 export type InsertLossIntakeSyncRun = typeof lossIntakeSyncRuns.$inferInsert;
+
+// Remote Ops @claims-intake handoff records
+// Created when a Remote Ops rep tags @claims-intake in their Slack channel
+export const remoteOpsIntakes = mysqlTable("remote_ops_intakes", {
+  id: int("id").autoincrement().primaryKey(),
+  slackTs: varchar("slackTs", { length: 64 }).notNull(),          // Slack message timestamp (unique per channel)
+  channelId: varchar("channelId", { length: 64 }).notNull(),      // Slack channel ID
+  threadTs: varchar("threadTs", { length: 64 }),                  // Thread parent ts if in a thread
+  messageText: text("messageText"),                               // Full message text from Slack
+  triggeredBySlackId: varchar("triggeredBySlackId", { length: 64 }), // Slack user ID who tagged @claims-intake
+  triggeredByName: varchar("triggeredByName", { length: 128 }),   // Display name of the triggering user
+  slackPermalink: varchar("slackPermalink", { length: 512 }),     // Deep link to the Slack message
+  // SLA
+  slaDueAt: timestamp("slaDueAt").notNull(),                      // When the intake must be claimed by
+  slaType: mysqlEnum("slaType", ["business_hours", "after_hours"]).notNull(), // Which SLA rule applied
+  // Status
+  status: mysqlEnum("status", ["pending", "claimed", "complete"]).default("pending").notNull(),
+  claimedByHandlerId: int("claimedByHandlerId"),                  // Handler who claimed it
+  claimedByName: varchar("claimedByName", { length: 128 }),
+  claimedAt: timestamp("claimedAt"),
+  completedAt: timestamp("completedAt"),
+  // Parsed context from message (AI-extracted if available)
+  memberName: varchar("memberName", { length: 256 }),
+  customerId: varchar("customerId", { length: 128 }),
+  market: varchar("market", { length: 128 }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type RemoteOpsIntake = typeof remoteOpsIntakes.$inferSelect;
+export type InsertRemoteOpsIntake = typeof remoteOpsIntakes.$inferInsert;

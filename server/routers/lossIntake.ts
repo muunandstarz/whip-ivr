@@ -411,4 +411,40 @@ export const lossIntakeRouter = router({
       const { transcribeAndScoreCall } = await import("../lossIntakeCallMatch");
       return transcribeAndScoreCall(input.callHistoryId, input.lossIntakeClaimId);
     }),
+
+  // ─── Remote Ops @claims-intake handoff procedures ───────────────────────────
+
+  /** List Remote Ops intake handoffs */
+  remoteOpsList: protectedProcedure
+    .input(z.object({
+      status: z.enum(["pending", "claimed", "complete", "all"]).default("all"),
+      limit: z.number().min(1).max(200).default(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { getRemoteOpsIntakes } = await import("../remoteOpsDb");
+      return getRemoteOpsIntakes({ status: input.status, limit: input.limit });
+    }),
+
+  /** Claim a Remote Ops intake handoff */
+  remoteOpsClaim: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { claimRemoteOpsIntake } = await import("../remoteOpsDb");
+      const handlerId = ctx.user.handlerProfileId ?? 0;
+      const handlerName = ctx.user.name ?? ctx.user.email ?? "Unknown";
+      await claimRemoteOpsIntake(input.id, handlerId, handlerName);
+      return { success: true };
+    }),
+
+  /** Mark a Remote Ops intake as complete */
+  remoteOpsComplete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      requireLossIntakeAccess(ctx.user);
+      const { completeRemoteOpsIntake } = await import("../remoteOpsDb");
+      await completeRemoteOpsIntake(input.id);
+      return { success: true };
+    }),
 });

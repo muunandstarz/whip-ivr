@@ -954,3 +954,11 @@ Business routing logic to implement in resolveHandler():
 - [x] Update Ana Padilla assignment label to include Cleveland Claims
 - [x] Add agent filter dropdown to Claims tab in Loss Intake
 - [x] Automate AI QA generation via heartbeat scheduled job (already live: weekly-qa-post cron, Fridays 4pm ET)
+
+## Remote Ops @claims-intake Workflow (Jul 22, 2026)
+- [x] Add remote_ops_intakes DB table: slack_ts, channel_id, thread_ts, message_text, triggered_by, assigned_to, sla_due_at, status (pending/claimed/complete), created_at
+- [x] SLA calculation helper: 10 min during business hours (Mon-Fri 9am-6pm ET), 4 business hours after-hours/weekends
+- [x] Slack event handler at /api/slack/remote-ops-events: detect @claims-intake mention in C092UPKR79D, post threaded reply, DM Ana + intake reps
+- [x] Notify Ana + available intake reps via Slack DM when @claims-intake is triggered
+- [x] Surface Remote Ops intakes in Loss Intake dashboard: dedicated "Remote Ops" tab with SLA countdown, claim/complete actions, badge count
+- [x] Mark intake as claimed when rep clicks Claim in the dashboard; mark complete when done

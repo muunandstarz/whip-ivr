@@ -484,6 +484,25 @@ export default function LossIntake() {
     onError: error => toast.error(error.message),
   });
 
+  // Remote Ops @claims-intake handoff queue
+  const [remoteOpsStatusFilter, setRemoteOpsStatusFilter] = useState<"all" | "pending" | "claimed" | "complete">("pending");
+  const remoteOpsList = trpc.lossIntake.remoteOpsList.useQuery(
+    { status: remoteOpsStatusFilter, limit: 100 },
+    { refetchInterval: 30 * 1000 }, // poll every 30s for live SLA countdown updates
+  );
+  const remoteOpsClaim = trpc.lossIntake.remoteOpsClaim.useMutation({
+    onSuccess: async () => { await utils.lossIntake.remoteOpsList.invalidate(); toast.success("Intake claimed — the Remote Ops rep has been notified."); },
+    onError: err => toast.error(err.message),
+  });
+  const remoteOpsComplete = trpc.lossIntake.remoteOpsComplete.useMutation({
+    onSuccess: async () => { await utils.lossIntake.remoteOpsList.invalidate(); toast.success("Intake marked complete."); },
+    onError: err => toast.error(err.message),
+  });
+  const remoteOpsPendingCount = trpc.lossIntake.remoteOpsList.useQuery(
+    { status: "pending", limit: 200 },
+    { refetchInterval: 30 * 1000 },
+  );
+
   const stats = overview.data;
   const isPageLoading = overview.isLoading || claims.isLoading;
   const currentViewLabel = representativeView ? (impersonating?.name ?? user?.name ?? "My") : "Team";
@@ -520,6 +539,14 @@ export default function LossIntake() {
               <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" /> Overview</TabsTrigger>
               <TabsTrigger value="claims" className="gap-2"><Workflow className="h-4 w-4" /> Claims</TabsTrigger>
               <TabsTrigger value="qa" className="gap-2"><ClipboardCheck className="h-4 w-4" /> {representativeView ? "My QA" : "QA inbox"}</TabsTrigger>
+              <TabsTrigger value="remote-ops" className="relative gap-2">
+                <Phone className="h-4 w-4" /> Remote Ops
+                {(remoteOpsPendingCount.data?.length ?? 0) > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#ff6221] text-[10px] font-bold text-white">
+                    {remoteOpsPendingCount.data!.length}
+                  </span>
+                )}
+              </TabsTrigger>
               {isAdmin && !isImpersonating && <TabsTrigger value="settings" className="gap-2"><Settings2 className="h-4 w-4" /> Sync & settings</TabsTrigger>}
             </TabsList>
 
@@ -1125,6 +1152,113 @@ export default function LossIntake() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="remote-ops" className="mt-6 space-y-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Remote Ops Handoffs</h2>
+                  <p className="text-sm text-muted-foreground">Triggered when Remote Ops tags @claims-intake in their channel. 10-min SLA during business hours, 4 business hours after-hours/weekends.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={remoteOpsStatusFilter} onValueChange={v => setRemoteOpsStatusFilter(v as typeof remoteOpsStatusFilter)}>
+                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="claimed">Claimed</SelectItem>
+                      <SelectItem value="complete">Complete</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => utils.lossIntake.remoteOpsList.invalidate()}>
+                    <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {remoteOpsList.isLoading ? (
+                <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading handoffs…</div>
+              ) : !remoteOpsList.data?.length ? (
+                <div className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 p-8 text-center">
+                  <Phone className="h-8 w-8 text-muted-foreground/40" />
+                  <p className="font-medium text-muted-foreground">No {remoteOpsStatusFilter === "all" ? "" : remoteOpsStatusFilter} handoffs</p>
+                  <p className="text-sm text-muted-foreground">When Remote Ops tags @claims-intake in their channel, handoffs will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {remoteOpsList.data.map(intake => {
+                    const now = Date.now();
+                    const dueMs = new Date(intake.slaDueAt).getTime();
+                    const msLeft = dueMs - now;
+                    const isOverdue = msLeft < 0;
+                    const minLeft = Math.abs(Math.round(msLeft / 60000));
+                    const slaLabel = isOverdue
+                      ? `Overdue by ${minLeft}m`
+                      : intake.slaType === "business_hours"
+                        ? `${minLeft}m remaining`
+                        : `${Math.floor(minLeft / 60)}h ${minLeft % 60}m remaining`;
+                    const slaColor = isOverdue
+                      ? "border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
+                      : msLeft < 5 * 60 * 1000
+                        ? "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"
+                        : "border-border bg-card";
+                    return (
+                      <div key={intake.id} className={`rounded-xl border p-4 shadow-sm transition-colors ${slaColor}`}>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-sm">Handoff #{intake.id}</span>
+                              <Badge variant="outline" className={intake.status === "pending" ? "border-amber-300 bg-amber-50 text-amber-700" : intake.status === "claimed" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-emerald-300 bg-emerald-50 text-emerald-700"}>
+                                {intake.status}
+                              </Badge>
+                              <Badge variant="outline" className={intake.slaType === "business_hours" ? "border-blue-200 bg-blue-50 text-blue-600" : "border-purple-200 bg-purple-50 text-purple-600"}>
+                                {intake.slaType === "business_hours" ? "10-min SLA" : "4-hr after-hours SLA"}
+                              </Badge>
+                              {intake.status === "pending" && (
+                                <span className={`text-xs font-medium ${isOverdue ? "text-red-600" : msLeft < 5 * 60 * 1000 ? "text-amber-600" : "text-muted-foreground"}`}>
+                                  <Clock3 className="mr-1 inline h-3 w-3" />{slaLabel}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              From <span className="font-medium">{intake.triggeredByName ?? "Remote Ops"}</span>
+                              {" · "}{new Date(intake.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}
+                              {intake.claimedByName && <> · Claimed by <span className="font-medium">{intake.claimedByName}</span></>}
+                            </p>
+                            {intake.messageText && (
+                              <p className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-sm italic text-muted-foreground line-clamp-3">
+                                {intake.messageText.replace(/<[^>]+>/g, "").replace(/<!subteam\^[^|>]+\|?[^>]*>/g, "@claims-intake").trim()}
+                              </p>
+                            )}
+                            {intake.slackPermalink && (
+                              <a href={intake.slackPermalink} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-[#ff6221] hover:underline">
+                                <ExternalLink className="h-3 w-3" /> View in Slack
+                              </a>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            {intake.status === "pending" && (
+                              <Button size="sm" className="gap-2 bg-[#ff6221] text-white hover:bg-[#e5541a]" disabled={remoteOpsClaim.isPending} onClick={() => remoteOpsClaim.mutate({ id: intake.id })}>
+                                <UserRoundCheck className="h-3.5 w-3.5" /> Claim
+                              </Button>
+                            )}
+                            {intake.status === "claimed" && (
+                              <Button size="sm" className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" disabled={remoteOpsComplete.isPending} onClick={() => remoteOpsComplete.mutate({ id: intake.id })}>
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Mark Complete
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        {intake.status === "complete" && intake.completedAt && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Completed {new Date(intake.completedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </TabsContent>
 
             {isAdmin && !isImpersonating && (

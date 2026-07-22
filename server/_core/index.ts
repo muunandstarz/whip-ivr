@@ -17,6 +17,10 @@ import {
 } from "../lossIntakeSlackEvents";
 import { dailyDigestHandler } from "../scheduled/dailyDigest";
 import { weeklyQAPostHandler } from "../scheduled/weeklyQAPost";
+import {
+  REMOTE_OPS_SLACK_PATH,
+  remoteOpsSlackEventsHandler,
+} from "../remoteOpsSlackEvents";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -42,8 +46,14 @@ async function startServer() {
   const server = createServer(app);
 
   // Slack signs the exact raw bytes, so this endpoint must precede express.json().
+  // Remote Ops @claims-intake event handler — must precede express.json()
   app.post(
-    SLACK_LOSS_INTAKE_PATH,
+    REMOTE_OPS_SLACK_PATH,
+    express.raw({ type: "application/json", limit: "1mb" }),
+    remoteOpsSlackEventsHandler,
+  );
+
+  app.post(SLACK_LOSS_INTAKE_PATH,
     express.raw({ type: "application/json", limit: "1mb" }),
     slackLossIntakeEventsHandler,
   );
