@@ -53,6 +53,7 @@ import {
   batchGenerateAllWeeks,
   getHandlerPerformanceDigest,
   getAllHandlerDigests,
+  getExtensionCalls,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -204,6 +205,19 @@ export const appRouter = router({
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
         return getCallerHistory(input.phone);
+      }),
+
+    extensionCalls: protectedProcedure
+      .input(
+        z.object({
+          view: z.enum(["answered", "pending_callback"]).default("pending_callback"),
+          handlerId: z.number().optional(),
+          limit: z.number().min(1).max(200).default(50),
+          offset: z.number().min(0).default(0),
+        })
+      )
+      .query(async ({ input }) => {
+        return getExtensionCalls(input);
       }),
   }),
 

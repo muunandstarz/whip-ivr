@@ -36,6 +36,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
+import SidebarMiniDialer from "@/components/SidebarMiniDialer";
 
 // ── Nav items for admin users ────────────────────────────────────────────────
 const ADMIN_NAV_ITEMS = [
@@ -52,10 +53,11 @@ const ADMIN_NAV_ITEMS = [
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
+// Order: My Dashboard → Intake Records → Loss Intake (if authorized) → Softphone
 const HANDLER_NAV_ITEMS_BASE = [
-  { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
+  { href: "/softphone", label: "Softphone", icon: Phone },
 ];
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
@@ -124,6 +126,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const showLossIntake =
     isAdmin ||
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
+  // Order: My Dashboard (0) → Intake Records (1) → Loss Intake (if authorized) → Softphone (2)
   const handlerNavItems = showLossIntake
     ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[2]]
     : HANDLER_NAV_ITEMS_BASE;
@@ -263,6 +266,9 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             </button>
           )}
         </nav>
+
+        {/* Mini Dialer */}
+        <SidebarMiniDialer />
 
         {/* User */}
         <div className="px-4 py-4 border-t border-white/10">

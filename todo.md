@@ -925,3 +925,9 @@ Business routing logic to implement in resolveHandler():
 - [ ] Backfill: pull all calls without number_id filter, match claims agents by name, store missing extension calls
 - [ ] Add filter to Intake Records page: "Voicemail Intakes" vs "Missed Extension Calls"
 - [ ] Register webhook URL in Aircall dashboard: https://whipclaimsivr.com/api/webhooks/aircall
+
+## New Features (Jul 22, 2026)
+
+- [x] Extension Calls tab in Intake Records — dedicated tab for all extension calls with Answered/Pending Callback toggle
+- [x] Handler sidebar reorder — non-admin view: My Dashboard → Intake Records → Loss Intake → Softphone
+- [x] Mini dialer widget embedded in the sidebar (compact, collapsible)

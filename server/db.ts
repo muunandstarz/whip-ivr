@@ -411,6 +411,44 @@ export async function getCallHistory(opts: {
   return { calls, total: Number(countResult[0]?.count ?? 0) };
 }
 
+export async function getExtensionCalls(opts: {
+  view: "answered" | "pending_callback";
+  handlerId?: number;
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { calls: [], total: 0 };
+
+  const conditions: ReturnType<typeof eq>[] = [];
+
+  // Only extension calls (direct to agent extension)
+  conditions.push(eq(callHistory.callSource, "extension" as any));
+
+  if (opts.view === "answered") {
+    conditions.push(eq(callHistory.status, "answered" as any));
+  } else {
+    // pending_callback: missed calls that have NOT been reached back
+    // We use missed + no callback_log with disposition='reached'
+    conditions.push(eq(callHistory.status, "missed" as any));
+  }
+
+  if (opts.handlerId) {
+    conditions.push(eq(callHistory.handlerId, opts.handlerId));
+  }
+
+  const where = and(...conditions);
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
+
+  const [calls, countResult] = await Promise.all([
+    db.select().from(callHistory).where(where).orderBy(desc(callHistory.startedAt)).limit(limit).offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(callHistory).where(where),
+  ]);
+
+  return { calls, total: Number(countResult[0]?.count ?? 0) };
+}
+
 export async function getCallHistoryAnalytics() {
   const db = await getDb();
   if (!db) return null;
