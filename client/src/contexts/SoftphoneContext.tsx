@@ -30,6 +30,8 @@ export interface ActiveCallInfo {
 export interface SoftphoneContextValue {
   // SDK state
   sdkReady: boolean;
+  /** Set to true before calling dial_number from the sidebar so the widget stays hidden */
+  sidebarDialRef: React.MutableRefObject<boolean>;
   sdkError: string | null;
   aircallRef: React.MutableRefObject<InstanceType<typeof AircallPhone> | null>;
   /** Attach this as a ref callback to the DOM container where Aircall injects its iframe */
@@ -90,6 +92,9 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
   const aircallRef = useRef<InstanceType<typeof AircallPhone> | null>(null);
   const containerIdRef = useRef<string>("aircall-global-phone-container");
   const autoDialFiredRef = useRef(false);
+  // When true, the next outgoing_call event should NOT open the floating widget
+  // (call was initiated from the sidebar dialer, not from a click-to-call action)
+  const sidebarDialRef = useRef(false);
 
   // SDK state
   const [sdkReady, setSdkReady] = useState(false);
@@ -198,7 +203,11 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
           aircallCallId: callData.call_id,
         }));
         setCallState("ringing");
-        setWidgetOpen(true);
+        // Only open the floating widget if the call was NOT initiated from the sidebar dialer
+        if (!sidebarDialRef.current) {
+          setWidgetOpen(true);
+        }
+        sidebarDialRef.current = false; // reset after consuming
       });
 
       // ── Outbound answered ──
@@ -288,7 +297,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: SoftphoneContextValue = {
-    sdkReady, sdkError, aircallRef, initAircall,
+    sdkReady, sdkError, aircallRef, initAircall, sidebarDialRef,
     callState, activeCallInfo, wrapUpCallInfo, callDuration, lookupPhone,
     selectedDisposition, setSelectedDisposition, dispositionNote, setDispositionNote,
     savedDispositions, handleSaveDisposition, handleSkipDisposition,
