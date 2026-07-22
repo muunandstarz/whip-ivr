@@ -211,6 +211,11 @@ export default function ExtensionCallsTab({ handlerId }: { handlerId?: number })
       {/* Table */}
       <Card>
         <CardContent className="p-0">
+          {(() => {
+            const calls = data?.calls ?? [];
+            const totalCount = data?.total ?? 0;
+            return null;
+          })()}
           {isLoading ? (
             <div className="divide-y">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -224,7 +229,7 @@ export default function ExtensionCallsTab({ handlerId }: { handlerId?: number })
                 </div>
               ))}
             </div>
-          ) : data?.calls.length === 0 ? (
+          ) : (data?.calls ?? []).length === 0 ? (
             <div className="p-16 text-center">
               {view === "pending_callback" ? (
                 <>
@@ -262,7 +267,7 @@ export default function ExtensionCallsTab({ handlerId }: { handlerId?: number })
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {data.calls.map((call) => {
+                    {(data?.calls ?? []).map((call) => {
                       const isAnswered = call.status === "answered";
                       const isVoicemail = call.status === "voicemail";
                       return (
@@ -373,7 +378,7 @@ export default function ExtensionCallsTab({ handlerId }: { handlerId?: number })
 
               {/* Mobile / tablet cards */}
               <div className="lg:hidden divide-y">
-                {data.calls.map((call) => {
+                {(data?.calls ?? []).map((call) => {
                   const isAnswered = call.status === "answered";
                   const isVoicemail = call.status === "voicemail";
                   return (
