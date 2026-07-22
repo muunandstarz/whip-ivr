@@ -126,6 +126,7 @@ export const callHistory = mysqlTable("call_history", {
   endedAt: timestamp("endedAt"),
   lossIntakeClaimId: int("lossIntakeClaimId"),
   matchConfidence: float("matchConfidence"),
+  callSource: mysqlEnum("callSource", ["ring_group", "extension", "outbound"]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

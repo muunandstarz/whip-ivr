@@ -558,15 +558,68 @@ export async function processVoicemail(params: {
   return { success: true, handlerName: handler.name, isRepeat, priority };
 }
 
-// Only process calls from the Whip Claims Line (ID 1125090)
+// Process calls from the Whip Claims Line OR any call where a claims-team agent
+// (drivewhip.com email) is the answering/assigned user — this captures extension transfers.
 const WHIP_CLAIMS_NUMBER_ID = 1125090;
 const WHIP_CLAIMS_NUMBER_NAME = "Whip Claims Line";
-function isWhipClaimsCall(call: any): boolean {
+
+// All known claims-team Aircall user IDs (from /v1/users)
+const CLAIMS_AGENT_USER_IDS = new Set([
+  1794311, // Ana Padilla
+  1774596, // Bennet Carlos
+  1756923, // Carlito Legarde
+  1756924, // Natashia Edulan
+  1763684, // Demily Flores
+  1827146, // Daryl Ochate
+  1836484, // Jovel Villa
+  1836944, // Annie Ortiz
+  1871743, // Lorraine Tria
+  1874373, // MJ Badua
+  1881559, // Jayla Bernard
+  1924606, // Daniel Giono
+  1940186, // Tim Chan
+  1947062, // Giovanni Cabrera
+]);
+
+// Extension map: Aircall user ID → extension number
+const AGENT_EXTENSIONS: Record<number, string> = {
+  1794311: '012', // Ana Padilla
+  1774596: '175', // Bennet Carlos
+  1756923: '325', // Carlito Legarde
+  1756924: '326', // Natashia Edulan
+  1763684: '011', // Demily Flores
+  1827146: '017', // Daryl Ochate
+  1836484: '018', // Jovel Villa
+  1836944: '019', // Annie Ortiz
+  1871743: '040', // Lorraine Tria
+  1874373: '041', // MJ Badua
+  1881559: '309', // Jayla Bernard
+  1924606: '048', // Daniel Giono
+  1940186: '028', // Tim Chan
+  1947062: '996', // Giovanni Cabrera
+};
+
+function isClaimsTeamCall(call: any): boolean {
   const numberId = call?.number?.id ? Number(call.number.id) : null;
   const numberName: string = call?.number?.name ?? "";
+  const agentId = call?.user?.id ? Number(call.user.id) : null;
+  // Include if it's on the main Claims Line
+  if (numberId === WHIP_CLAIMS_NUMBER_ID || numberName === WHIP_CLAIMS_NUMBER_NAME) return true;
+  // Include if a known claims-team agent answered/was assigned
+  if (agentId && CLAIMS_AGENT_USER_IDS.has(agentId)) return true;
   // Allow calls with no number info (legacy/manual) to pass through
   if (!numberId && !numberName) return true;
-  return numberId === WHIP_CLAIMS_NUMBER_ID || numberName === WHIP_CLAIMS_NUMBER_NAME;
+  return false;
+}
+
+function getCallSource(call: any): 'ring_group' | 'extension' | 'outbound' {
+  if (call?.direction === 'outbound') return 'outbound';
+  const numberId = call?.number?.id ? Number(call.number.id) : null;
+  const numberName: string = call?.number?.name ?? '';
+  // If it came through the main ring group line
+  if (numberId === WHIP_CLAIMS_NUMBER_ID || numberName === WHIP_CLAIMS_NUMBER_NAME) return 'ring_group';
+  // Otherwise it was routed to an agent extension directly
+  return 'extension';
 }
 
 // Aircall webhook endpoint
@@ -584,9 +637,10 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
       // Log the call start
       const call = data;
       if (!call?.id) return;
-      // Skip calls from non-Claims lines
-      if (!isWhipClaimsCall(call)) return;
+      // Skip calls not involving the claims team
+      if (!isClaimsTeamCall(call)) return;
 
+      const src = getCallSource(call);
       await db
         .insert(callHistory)
         .values({
@@ -597,10 +651,11 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
           callerName: call.contact?.name ?? undefined,
           aircallNumberId: call.number?.id,
           aircallNumberName: call.number?.name,
+          callSource: src,
           startedAt: call.started_at ? new Date(call.started_at * 1000) : new Date(),
         })
         .onDuplicateKeyUpdate({
-          set: { callerName: call.contact?.name ?? undefined },
+          set: { callerName: call.contact?.name ?? undefined, callSource: src },
         });
     }
 
@@ -629,6 +684,7 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
           recordingUrl: call.recording ?? undefined,
           voicemailUrl: call.voicemail ?? undefined,
           endedAt: call.ended_at ? new Date(call.ended_at * 1000) : new Date(),
+          callSource: getCallSource(call),
         })
         .where(eq(callHistory.aircallCallId, String(call.id)));
     }
@@ -636,8 +692,8 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
     if (event === "call.voicemail_left") {
       const call = data;
       if (!call?.id || !call?.voicemail) return;
-      // Skip voicemails from non-Claims lines
-      if (!isWhipClaimsCall(call)) return;
+      // Skip voicemails not involving the claims team
+      if (!isClaimsTeamCall(call)) return;
 
       await processVoicemail({
         aircallCallId: String(call.id),

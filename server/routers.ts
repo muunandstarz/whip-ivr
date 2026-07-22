@@ -102,6 +102,7 @@ export const appRouter = router({
           offset: z.number().min(0).default(0),
           sortBy: z.enum(["createdAt", "handlerName", "priority", "status"]).optional(),
           sortDir: z.enum(["asc", "desc"]).optional(),
+          intakeSource: z.enum(["voicemail", "extension_missed"]).optional(),
         })
       )
       .query(async ({ input }) => {

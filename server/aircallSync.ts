@@ -192,6 +192,16 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
         : (agentIdForName ? _aircallUserIdToName.get(agentIdForName) ?? null : null);
       const numberId = call.number?.id ? Number(call.number.id) : null;
 
+      // Derive call source: outbound, ring_group (main claims line), or extension
+      let callSource: 'ring_group' | 'extension' | 'outbound';
+      if (call.direction === 'outbound') {
+        callSource = 'outbound';
+      } else if (numberId === WHIP_CLAIMS_NUMBER_ID || (call.number?.name ?? '') === WHIP_CLAIMS_NUMBER_NAME) {
+        callSource = 'ring_group';
+      } else {
+        callSource = 'extension';
+      }
+
       await upsertCallHistory({
         aircallCallId: String(call.id),
         callerPhone: call.raw_digits ?? call.number?.digits ?? null,
@@ -206,6 +216,7 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
         direction: (call.direction === "outbound" ? "outbound" : "inbound") as "inbound" | "outbound",
         aircallNumberName: call.number?.name ?? null,
         aircallNumberId: numberId,
+        callSource,
       });
       synced++;
     }

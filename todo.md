@@ -908,3 +908,20 @@ Business routing logic to implement in resolveHandler():
 - [x] AI scores call against rubric: greeting, FOL documented, rideshare asked, liability noted, professional close, empathy → 0-100 + per-criterion breakdown
 - [x] Strengths and coaching points surfaced per call
 - [ ] Snapsheet notes QA scoring (deferred — blocked on Snapsheet API auth)
+
+## Aircall Agent Extension Sync (Jul 21 2026)
+
+- [ ] Discover all agent personal Aircall numbers/extensions via Aircall API (/v1/numbers)
+- [ ] Update aircallSync.ts to include all agent personal extensions in the sync scope (not just ring group 1125090)
+- [ ] Backfill historical calls from agent extensions into call_history
+- [ ] Verify agent extension calls appear in intake records
+
+## Aircall Webhook + Extension Call Filter (Jul 21 2026)
+
+- [ ] Build POST /api/webhooks/aircall endpoint to receive real-time Aircall call events
+- [ ] Handle call.created, call.answered, call.ended, call.transferred, call.missed events
+- [ ] Upsert call_history on each event so transfer legs (extension calls) are captured
+- [ ] Add callSource column to call_history: 'ring_group' | 'extension' | 'outbound'
+- [ ] Backfill: pull all calls without number_id filter, match claims agents by name, store missing extension calls
+- [ ] Add filter to Intake Records page: "Voicemail Intakes" vs "Missed Extension Calls"
+- [ ] Register webhook URL in Aircall dashboard: https://whipclaimsivr.com/api/webhooks/aircall

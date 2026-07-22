@@ -130,6 +130,7 @@ export default function IntakeRecords() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | "urgent" | "high" | "normal">(initPriority);
   const [dateFrom, setDateFrom] = useState(initDateFrom);
   const [dateTo, setDateTo] = useState(initDateTo);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "voicemail" | "extension_missed">("all");
 
   // Sync filters when URL params change (e.g. navigating from Dashboard)
   useEffect(() => {
@@ -180,6 +181,7 @@ export default function IntakeRecords() {
     offset: page * PAGE_SIZE,
     sortBy,
     sortDir,
+    intakeSource: sourceFilter === "all" ? undefined : sourceFilter,
   });
 
   const updateMutation = trpc.intake.update.useMutation({
@@ -312,6 +314,23 @@ export default function IntakeRecords() {
               </SelectContent>
             </Select>
           )}
+          {/* Source filter: voicemail intakes vs missed extension calls */}
+          <Select
+            value={sourceFilter}
+            onValueChange={(v) => {
+              setSourceFilter(v as "all" | "voicemail" | "extension_missed");
+              setPage(0);
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="voicemail">Voicemail Intakes</SelectItem>
+              <SelectItem value="extension_missed">Missed Extension Calls</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Table */}

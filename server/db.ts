@@ -226,6 +226,7 @@ export async function getIntakeRecords(opts: {
   offset?: number;
   sortBy?: "createdAt" | "handlerName" | "priority" | "status";
   sortDir?: "asc" | "desc";
+  intakeSource?: "voicemail" | "extension_missed";
 }) {
   const db = await getDb();
   if (!db) return { records: [], total: 0 };
@@ -247,6 +248,14 @@ export async function getIntakeRecords(opts: {
   if (opts.dateTo) {
     // Include the full day: use < next day so 2026-04-29 includes all records up to 23:59:59
     conditions.push(sql`${intakeRecords.createdAt} < DATE_ADD(${opts.dateTo}, INTERVAL 1 DAY)`);
+  }
+  if (opts.intakeSource === "voicemail") {
+    // Voicemail intakes: came in via ring group and left a voicemail
+    conditions.push(eq(intakeRecords.source, "voicemail"));
+  } else if (opts.intakeSource === "extension_missed") {
+    // Extension missed: routed to an agent extension but not answered
+    conditions.push(eq(intakeRecords.routingMethod, "extension"));
+    conditions.push(sql`${intakeRecords.source} != 'voicemail'`);
   }
   if (opts.search) {
     conditions.push(
@@ -369,6 +378,7 @@ export async function upsertCallHistory(data: InsertCallHistory): Promise<void> 
   if (data.agentName != null) updateSet.agentName = data.agentName;
   if (data.recordingUrl != null) updateSet.recordingUrl = data.recordingUrl;
   if (data.voicemailUrl != null) updateSet.voicemailUrl = data.voicemailUrl;
+  if (data.callSource != null) updateSet.callSource = data.callSource;
   await db.insert(callHistory).values(data).onDuplicateKeyUpdate({ set: updateSet as any });
 }
 
