@@ -931,3 +931,9 @@ Business routing logic to implement in resolveHandler():
 - [x] Extension Calls tab in Intake Records — dedicated tab for all extension calls with Answered/Pending Callback toggle
 - [x] Handler sidebar reorder — non-admin view: My Dashboard → Intake Records → Loss Intake → Softphone
 - [x] Mini dialer widget embedded in the sidebar (compact, collapsible)
+
+## New Features (Jul 22, 2026 — Session 2)
+
+- [x] Backfill today's extension calls from Aircall API into call_history with callSource=extension (confirmed ring_group = all inbound claims calls in this Aircall setup)
+- [x] Upgrade Extension Calls tab UI: richer cards with duration, handle time, caller type badge, stats bar, date label
+- [ ] Redesign handler My Performance card: hero KPIs, week/month side-by-side, AI coaching, performance score

@@ -416,33 +416,69 @@ export async function getExtensionCalls(opts: {
   handlerId?: number;
   limit?: number;
   offset?: number;
+  dateFrom?: Date;
 }) {
   const db = await getDb();
   if (!db) return { calls: [], total: 0 };
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  // Include both ring_group and extension inbound calls
+  // (In this Aircall setup all inbound claims calls come through ring_group)
+  const sourceCondition = inArray(callHistory.callSource, ["ring_group", "extension"] as any[]);
+  const directionCondition = eq(callHistory.direction, "inbound" as any);
 
-  // Only extension calls (direct to agent extension)
-  conditions.push(eq(callHistory.callSource, "extension" as any));
+  const statusCondition =
+    opts.view === "answered"
+      ? eq(callHistory.status, "answered" as any)
+      : inArray(callHistory.status, ["missed", "voicemail"] as any[]);
 
-  if (opts.view === "answered") {
-    conditions.push(eq(callHistory.status, "answered" as any));
-  } else {
-    // pending_callback: missed calls that have NOT been reached back
-    // We use missed + no callback_log with disposition='reached'
-    conditions.push(eq(callHistory.status, "missed" as any));
-  }
+  const conditions: any[] = [sourceCondition, directionCondition, statusCondition];
 
   if (opts.handlerId) {
     conditions.push(eq(callHistory.handlerId, opts.handlerId));
   }
+
+  // Default to today if no dateFrom specified
+  const since = opts.dateFrom ?? (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+  conditions.push(sql`${callHistory.startedAt} >= ${since}`);
 
   const where = and(...conditions);
   const limit = opts.limit ?? 50;
   const offset = opts.offset ?? 0;
 
   const [calls, countResult] = await Promise.all([
-    db.select().from(callHistory).where(where).orderBy(desc(callHistory.startedAt)).limit(limit).offset(offset),
+    db
+      .select({
+        id: callHistory.id,
+        aircallCallId: callHistory.aircallCallId,
+        callerPhone: callHistory.callerPhone,
+        callerName: callHistory.callerName,
+        callerType: callHistory.callerType,
+        callerOrg: callHistory.callerOrg,
+        agentId: callHistory.agentId,
+        agentName: callHistory.agentName,
+        handlerId: callHistory.handlerId,
+        status: callHistory.status,
+        durationSeconds: callHistory.durationSeconds,
+        waitTimeSeconds: callHistory.waitTimeSeconds,
+        callSource: callHistory.callSource,
+        aircallNumberName: callHistory.aircallNumberName,
+        startedAt: callHistory.startedAt,
+        endedAt: callHistory.endedAt,
+        callSummary: callHistory.callSummary,
+        whipClaimNumber: callHistory.whipClaimNumber,
+        hasIntakeRecord: callHistory.hasIntakeRecord,
+        intakeRecordId: callHistory.intakeRecordId,
+        classifiedByAI: callHistory.classifiedByAI,
+      })
+      .from(callHistory)
+      .where(where)
+      .orderBy(desc(callHistory.startedAt))
+      .limit(limit)
+      .offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(callHistory).where(where),
   ]);
 
