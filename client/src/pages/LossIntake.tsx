@@ -434,7 +434,7 @@ export default function LossIntake() {
   const todayActivity = trpc.lossIntake.todayActivity.useQuery(undefined, { refetchInterval: 5 * 60 * 1000 });
   const repComparison = trpc.lossIntake.repComparison.useQuery(
     { period: comparisonPeriod },
-    { enabled: !!isAdmin && !isImpersonating, refetchInterval: 5 * 60 * 1000 },
+    { refetchInterval: 5 * 60 * 1000 },
   );
   const awaitingOutreach = trpc.lossIntake.awaitingOutreach.useQuery(
     { agentName: awaitingDrillAgent ?? undefined },
@@ -514,7 +514,7 @@ export default function LossIntake() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="h-auto flex-wrap justify-start bg-background p-1 shadow-sm">
               <TabsTrigger value="today" className="gap-2"><CalendarClock className="h-4 w-4" /> Today</TabsTrigger>
-              {isAdmin && !isImpersonating && <TabsTrigger value="team" className="gap-2"><GitCompare className="h-4 w-4" /> Team</TabsTrigger>}
+              <TabsTrigger value="team" className="gap-2"><GitCompare className="h-4 w-4" /> Team</TabsTrigger>
               <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" /> Overview</TabsTrigger>
               <TabsTrigger value="claims" className="gap-2"><Workflow className="h-4 w-4" /> Claims</TabsTrigger>
               <TabsTrigger value="qa" className="gap-2"><ClipboardCheck className="h-4 w-4" /> {representativeView ? "My QA" : "QA inbox"}</TabsTrigger>
