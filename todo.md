@@ -937,3 +937,14 @@ Business routing logic to implement in resolveHandler():
 - [x] Backfill today's extension calls from Aircall API into call_history with callSource=extension (confirmed ring_group = all inbound claims calls in this Aircall setup)
 - [x] Upgrade Extension Calls tab UI: richer cards with duration, handle time, caller type badge, stats bar, date label
 - [ ] Redesign handler My Performance card: hero KPIs, week/month side-by-side, AI coaching, performance score
+
+## Handler Dashboard Redesign (Jul 22, 2026)
+
+- [x] Fix sidebar: height 100vh, no scroll, fixed layout — applies to both handler and admin "viewing as" mode
+- [x] My Performance: remove tab toggle, show Today / This Week / This Month simultaneously stacked
+- [x] Callback Queue: redesign to card style with caller name, company, due badge, priority, phone, voicemail time, AI summary, Mark Called Back + View actions
+- [x] Layout: two-column grid (My Performance left, Callback Queue right), four lower stat blocks in one row
+- [x] Lower stats row: Loss Intake | Callback SLA | Callbacks Completed | Call Performance — compact, no scroll
+- [x] QA score badge in My Performance header (star rating)
+- [x] QA mini-card below lower stats with score bar, scorecard count, Full Profile link
+- [x] Admin "Viewing As" mode renders identical layout with "Viewing as [Name]" header

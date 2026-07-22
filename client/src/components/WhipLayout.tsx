@@ -134,13 +134,13 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems;
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-screen flex bg-background overflow-hidden">
       {showOnboarding && (
         <OnboardingModal onDismiss={() => setOnboardingDismissed(true)} />
       )}
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col transition-transform duration-200 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col transition-transform duration-200 overflow-hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 lg:static lg:flex`}
       >
@@ -232,7 +232,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
         )}
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-hidden">
           {navItems.map(({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
             return (
@@ -326,8 +326,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile header */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Mobile header */
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b bg-background sticky top-0 z-30">
           <button
             onClick={() => setMobileOpen(true)}
@@ -350,7 +350,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
           )}
         </header>
 
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-hidden h-full">{children}</main>
       </div>
     </div>
   );
