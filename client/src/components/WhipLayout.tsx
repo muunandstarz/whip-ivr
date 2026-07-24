@@ -36,7 +36,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
-import SidebarMiniDialer from "@/components/SidebarMiniDialer";
 
 // ── Nav items for admin users ────────────────────────────────────────────────
 const ADMIN_NAV_ITEMS = [
@@ -266,9 +265,6 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             </button>
           )}
         </nav>
-
-        {/* Mini Dialer */}
-        <SidebarMiniDialer />
 
         {/* User */}
         <div className="px-4 py-4 border-t border-white/10">

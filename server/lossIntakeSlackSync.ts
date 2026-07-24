@@ -307,6 +307,22 @@ async function collectThreadTargets(input: {
     }
   }
 
+  // Also include breached claims — they may have completion/contact data in the
+  // original Slack thread that hasn't been picked up yet (e.g. Ana completing
+  // a thread that Bennet forwarded, or late replies after the SLA window).
+  for (const slaState of ["breached"] as const) {
+    const { claims } = await listLossIntakeClaims({ slaState, limit: 200, offset: 0 });
+    for (const claim of claims) {
+      // Only add if not already in targets (non-complete breached claims)
+      addTarget(targets, {
+        channelId: claim.channelId,
+        channelName: claim.channelName,
+        threadTs: claim.slackMessageTs,
+        permalink: claim.slackPermalink,
+      });
+    }
+  }
+
   return Array.from(targets.values())
     .sort((left, right) => Number(right.threadTs) - Number(left.threadTs))
     .slice(0, MAX_THREADS_PER_RUN);
@@ -317,6 +333,50 @@ export interface LossIntakeSyncResult {
   claimsUpdated: number;
   eventsProcessed: number;
   targetsProcessed: number;
+}
+
+/**
+ * Re-fetch and re-analyze a single Slack thread, updating the claim record with
+ * the latest completion/contact data. Used when a duplicate FNOL is detected to
+ * reconcile the original thread (e.g. Ana completing a thread that Bennet forwarded).
+ */
+export async function resyncLossIntakeThread(input: {
+  channelId: string;
+  channelName: string;
+  threadTs: string;
+  permalink?: string | null;
+  assignments: IntakeAgentAssignment[];
+  slaMinutes: number;
+  atRiskMinutes: number;
+}): Promise<boolean> {
+  try {
+    requireSlackToken();
+    const thread = await fetchThread(input.channelId, input.threadTs);
+    const threadParent = thread[0];
+    if (!threadParent) return false;
+    const permalink = input.permalink ?? await fetchPermalink(input.channelId, input.threadTs);
+    const parent: SlackLossParent = {
+      ...threadParent,
+      channelId: input.channelId,
+      channelName: input.channelName,
+      permalink,
+    };
+    const parsedParent = parseFnolParent(parent);
+    if (!parsedParent) return false;
+    const analysis = analyzeFnolThread({
+      parent: parsedParent,
+      replies: thread.slice(1),
+      assignments: input.assignments,
+      slaMinutes: input.slaMinutes,
+      atRiskMinutes: input.atRiskMinutes,
+    });
+    await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis });
+    console.log(`[Loss Intake] Reconciled original thread ${input.channelId}:${input.threadTs} — stage=${analysis.stage}, completed=${!!analysis.completedAt}`);
+    return true;
+  } catch (error) {
+    console.error(`[Loss Intake] Failed to resync thread ${input.channelId}:${input.threadTs}:`, error);
+    return false;
+  }
 }
 
 export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {

@@ -249,7 +249,14 @@ export async function getLossIntakeClaimBySlackKey(slackKey: string) {
   const db = await getDb();
   if (!db) return null;
   const rows = await db
-    .select({ id: lossIntakeClaims.id, slackKey: lossIntakeClaims.slackKey })
+    .select({
+      id: lossIntakeClaims.id,
+      slackKey: lossIntakeClaims.slackKey,
+      channelId: lossIntakeClaims.channelId,
+      channelName: lossIntakeClaims.channelName,
+      slackMessageTs: lossIntakeClaims.slackMessageTs,
+      slackPermalink: lossIntakeClaims.slackPermalink,
+    })
     .from(lossIntakeClaims)
     .where(eq(lossIntakeClaims.slackKey, slackKey))
     .limit(1);

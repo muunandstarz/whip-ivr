@@ -9,6 +9,7 @@ import {
   upsertLossIntakeClaimBundle,
   updateClaimsIntakeTag,
 } from "./lossIntakeDb";
+import { resyncLossIntakeThread } from "./lossIntakeSlackSync";
 import {
   analyzeFnolThread,
   parseFnolParent,
@@ -409,6 +410,31 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
       });
       await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis, isDuplicate, originalSlackKey, overflowRouted });
       pendingReplies.delete(threadKey);
+
+      // ── Cross-thread reconciliation ───────────────────────────────────────
+      // When this post is a duplicate/forwarded FNOL, the original thread may
+      // have completion/contact data (e.g. Ana's template reply) that hasn't
+      // been picked up yet. Re-sync the original thread now so its metrics
+      // reflect the true state (stage, completedAt, firstContactAt, etc.).
+      if (isDuplicate && originalSlackKey) {
+        const originalClaim = await getLossIntakeClaimBySlackKey(originalSlackKey);
+        if (originalClaim) {
+          // Fire-and-forget — don't block the webhook response
+          resyncLossIntakeThread({
+            channelId: originalClaim.channelId,
+            channelName: originalClaim.channelName,
+            threadTs: originalClaim.slackMessageTs,
+            permalink: originalClaim.slackPermalink,
+            assignments,
+            slaMinutes: settings.firstContactSlaMinutes,
+            atRiskMinutes: settings.atRiskMinutes,
+          }).catch(err =>
+            console.error(`[Loss Intake] Cross-thread reconciliation failed for ${originalSlackKey}:`, err),
+          );
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       return { status: isDuplicate ? "duplicate_fnol" as const : "created" as const, overflowRouted };
     }
 

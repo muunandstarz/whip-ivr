@@ -977,3 +977,9 @@ Business routing logic to implement in resolveHandler():
 - [x] Duplicate FNOL detection: recognize when a post links to an original workflow, mark as duplicate, recalibrate metrics
 - [x] Overflow routing: if both in-store agents are busy, route intake to Ana
 - [x] Generate QA button: add to Loss Intake page, generate first team QA report
+
+## Loss Intake Fixes (Jul 24, 2026 — Session 2)
+- [x] Investigate why Ana Padilla is missing from Today tab — confirmed no claims today (last posted Jul 23)
+- [x] Remove sidebar dialer widget from WhipLayout / DashboardLayout
+- [x] Cross-thread completion reconciliation: when Bennet's forwarded post links to an original claim, re-sync the original claim's thread to pick up completion/contact data (Ana's template post, etc.)
+- [x] Ensure breached claims that have completion data in the original thread are corrected to 'complete' stage (breached claims now included in every sync run)
