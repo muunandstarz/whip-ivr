@@ -437,9 +437,11 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const cause = error instanceof Error && error.cause instanceof Error ? `\nCaused by: ${error.cause.message}` : "";
+    console.error("[Loss Intake Sync] FAILED:", message, cause);
     await finishLossIntakeSyncRun(runId, {
       status: "failed",
-      errorMessage: message.slice(0, 4_000),
+      errorMessage: (message + cause).slice(0, 4_000),
     }).catch(() => undefined);
     throw error;
   }

@@ -646,7 +646,16 @@ export function analyzeFnolThread(input: {
     reply => configuredAgent(reply, input.assignments),
   );
 
-  const firstContactAt = firstAck ? eventDate(firstAck) : null;
+  // If a different agent posted the template (e.g. Ana completing Bennet's FNOL),
+  // re-attribute the claim to the completing agent and measure SLA from their first action.
+  const completingAgent = templatePost ? configuredAgent(templatePost, input.assignments) : null;
+  const effectiveAssigned = completingAgent ?? assigned;
+
+  // firstContact = first action by the effective assigned agent in this thread
+  const firstActionByEffective = effectiveAssigned
+    ? replies.find(reply => configuredAgent(reply, input.assignments)?.handlerId === effectiveAssigned.handlerId)
+    : firstAck;
+  const firstContactAt = firstActionByEffective ? eventDate(firstActionByEffective) : (firstAck ? eventDate(firstAck) : null);
   const firstContactMinutes = firstContactAt
     ? minutesBetween(input.parent.postedAt, firstContactAt)
     : null;
@@ -660,6 +669,7 @@ export function analyzeFnolThread(input: {
     : null;
 
   // completedAt = template was posted AND at least 2 agent thread posts exist
+  // OR agent made contact attempts + tagged store team (member unreachable but agent did their job)
   // OR legacy "g2g" signal (backward compat)
   const legacyCompletion = replies.find(
     reply => configuredAgent(reply, input.assignments) && /\b(?:good to go|g2g)\b/i.test(reply.text),
@@ -667,9 +677,26 @@ export function analyzeFnolThread(input: {
   // Minimum 2 agent posts required for template-based completion
   const agentPostCount = allAgentReplies.length;
   const templateCompletionMet = templatePostedAt !== null && agentPostCount >= 2;
+  // Store-team-tagged completion: agent reached out + tagged store team (even without template)
+  const storeTeamTaggedEarly = detectStoreTeamTag([...replies]);
+  const contactAttemptsMade = allAgentReplies.filter(reply =>
+    isAcknowledgment(reply.text) || isContactAttempt(reply.text)
+  ).length;
+  const storeTeamCompletionMet = storeTeamTaggedEarly && contactAttemptsMade >= 1;
+  // Pick the earliest completion signal
+  const storeTeamCompletionAt = storeTeamCompletionMet
+    ? replies.reduce<Date | null>((latest, reply) => {
+        const agent = configuredAgent(reply, input.assignments);
+        if (!agent) return latest;
+        const d = eventDate(reply);
+        return !latest || d > latest ? d : latest;
+      }, null)
+    : null;
   const completedAt = templateCompletionMet
     ? templatePostedAt
-    : (legacyCompletion ? eventDate(legacyCompletion) : null);
+    : legacyCompletion
+      ? eventDate(legacyCompletion)
+      : storeTeamCompletionAt;
   const intakeCycleMinutes = completedAt
     ? minutesBetween(input.parent.postedAt, completedAt)
     : null;
@@ -789,8 +816,8 @@ export function analyzeFnolThread(input: {
   ];
 
   return {
-    assignedHandlerId: assigned?.handlerId ?? null,
-    assignedAgent: assigned?.handlerName ?? null,
+    assignedHandlerId: effectiveAssigned?.handlerId ?? null,
+    assignedAgent: effectiveAssigned?.handlerName ?? null,
     stage,
     firstContactAt,
     firstContactMinutes,

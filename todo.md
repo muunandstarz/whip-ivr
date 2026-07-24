@@ -983,3 +983,8 @@ Business routing logic to implement in resolveHandler():
 - [x] Remove sidebar dialer widget from WhipLayout / DashboardLayout
 - [x] Cross-thread completion reconciliation: when Bennet's forwarded post links to an original claim, re-sync the original claim's thread to pick up completion/contact data (Ana's template post, etc.)
 - [x] Ensure breached claims that have completion data in the original thread are corrected to 'complete' stage (breached claims now included in every sync run)
+
+## Loss Intake Fixes (Jul 24, 2026 — Session 3)
+- [x] Fix failed Slack sync run — root cause: production running old code without new columns; improved error logging; fix deploys with checkpoint
+- [x] Broaden completion definition: contact attempts + store team tag = complete even without template posted
+- [x] Ana attribution fix: when Ana completes a claim (posts template in original thread), assign it to her with her SLA measured from her first action
