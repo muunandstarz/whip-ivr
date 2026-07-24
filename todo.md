@@ -993,3 +993,9 @@ Business routing logic to implement in resolveHandler():
 - [x] Duplicate posts are fully invisible to all metrics (Today, Team, Overview, Claims list, Awaiting Outreach)
 - [x] When a duplicate is detected, immediately re-sync the original thread so its metrics reflect the real work done there
 - [x] Original thread is the sole source of truth — agent who worked the original thread gets credit
+
+## Features (Jul 24, 2026 — Session 5)
+- [x] Build missed-call breakdown analytics (by time slot, agent, reason) on Dashboard
+- [x] Fix QA scoring criteria — remove Photo Evidence and Rideshare Status, redistribute weights
+- [x] Add per-person dashboard overview cards (Daryl, MJ, Carlito, Bennet, Ana) with click-through
+- [x] Open Loss Intake Team tab to intake reps (not admin-only) — already open, no change needed

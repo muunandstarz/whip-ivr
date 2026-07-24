@@ -110,6 +110,12 @@ export default function Dashboard() {
   const { data: overdueDetails } = trpc.handlerMetrics.overdueDetails.useQuery();
   const { data: trend7d, isLoading: trendLoading } = trpc.dashboard.intakeTrend7d.useQuery();
   const { data: handlerSummary } = trpc.handlerMetrics.intakeSummary.useQuery();
+  const { data: allDigests } = trpc.qa.allHandlerDigests.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
+  const { data: handlersData } = trpc.handlers.list.useQuery();
+  const { data: missedBreakdown } = trpc.calls.missedBreakdown.useQuery(
+    { yearMonth: format(new Date(), "yyyy-MM") },
+    { staleTime: 10 * 60 * 1000 }
+  );
 
   // ── Month selector ────────────────────────────────────────────────────────
   const currentYearMonth = format(new Date(), "yyyy-MM");
@@ -210,6 +216,19 @@ export default function Dashboard() {
     const types = new Set(trend7d.map((r) => r.callerType));
     return Array.from(types).filter((t) => t !== "unknown" && t !== "wrong_department");
   }, [trend7d]);
+
+  // Handler ID map for profile links
+  const handlerIdMap = useMemo(() =>
+    Object.fromEntries((handlersData ?? []).map((h: { id: number; name: string }) => [h.name, h.id])),
+    [handlersData]
+  );
+
+  // Missed call by hour — find the worst hour during business hours
+  const worstMissedHour = useMemo(() => {
+    if (!missedBreakdown?.byHour) return null;
+    const bizHours = missedBreakdown.byHour.filter(h => h.hour >= 9 && h.hour < 18);
+    return bizHours.sort((a, b) => b.missed - a.missed)[0] ?? null;
+  }, [missedBreakdown]);
 
   // Disposition headline
   const totalDispositions = dispositionBreakdown.reduce((s, d) => s + Number(d.count), 0);
@@ -750,7 +769,7 @@ export default function Dashboard() {
             )}
 
             {/* Context-aware Quick Actions */}
-            <Card>
+            <Card className="mt-0">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
               </CardHeader>
@@ -768,6 +787,237 @@ export default function Dashboard() {
             </Card>
           </div>
         </div>
+
+        {/* ── Team Overview: Per-Person Cards ── */}
+        {allDigests && allDigests.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-foreground">Team Overview</h2>
+              <span className="text-xs text-muted-foreground">Click a card to view full profile</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              {allDigests.map((digest: any) => {
+                const weekAnswerRate = digest.thisWeek?.calls > 0
+                  ? Math.round((digest.thisWeek.answered / digest.thisWeek.calls) * 100) : 0;
+                const monthAnswerRate = digest.thisMonth?.calls > 0
+                  ? Math.round((digest.thisMonth.answered / digest.thisMonth.calls) * 100) : 0;
+                const qaScore = digest.latestQaScore;
+                const handlerId = handlerIdMap[digest.handlerName];
+                const scoreColor = qaScore === null ? 'text-muted-foreground'
+                  : qaScore >= 8 ? 'text-green-600 dark:text-green-400'
+                  : qaScore >= 6 ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-red-600 dark:text-red-400';
+                const rateColor = weekAnswerRate >= (digest.teamAvgAnswerRate ?? 70)
+                  ? 'text-green-600 dark:text-green-400'
+                  : weekAnswerRate >= (digest.teamAvgAnswerRate ?? 70) - 10
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-red-600 dark:text-red-400';
+                const initials = digest.handlerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                const CardWrapper = handlerId ? Link : 'div' as any;
+                const cardProps = handlerId ? { href: `/handlers/${handlerId}` } : {};
+                return (
+                  <CardWrapper key={digest.handlerName} {...cardProps}>
+                    <Card className={`border border-border/60 transition-all ${
+                      handlerId ? 'cursor-pointer hover:shadow-md hover:border-[#ff6221]/40' : ''
+                    }`}>
+                      <CardContent className="p-4 space-y-3">
+                        {/* Header */}
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-full bg-[#ff6221]/15 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-[#ff6221]">{initials}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold truncate">{digest.handlerName}</div>
+                            {qaScore !== null && (
+                              <div className={`text-xs font-medium ${scoreColor}`}>QA {qaScore}/10</div>
+                            )}
+                          </div>
+                          {handlerId && <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+                        </div>
+                        {/* Stats */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">This Week</div>
+                            <div className={`text-lg font-bold leading-tight ${rateColor}`}>{weekAnswerRate}%</div>
+                            <div className="text-[10px] text-muted-foreground">{digest.thisWeek?.calls ?? 0} calls</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">This Month</div>
+                            <div className="text-lg font-bold leading-tight text-foreground">{monthAnswerRate}%</div>
+                            <div className="text-[10px] text-muted-foreground">{digest.thisMonth?.calls ?? 0} calls</div>
+                          </div>
+                        </div>
+                        {/* Pending callbacks */}
+                        {(digest.thisWeek?.callbacksPending ?? 0) > 0 && (
+                          <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded px-2 py-1">
+                            <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                            <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+                              {digest.thisWeek.callbacksPending} pending callback{digest.thisWeek.callbacksPending !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        )}
+                        {/* Coaching note snippet */}
+                        {digest.coachingNote && (
+                          <p className="text-[10px] text-muted-foreground leading-relaxed line-clamp-2 border-t border-border/40 pt-2">
+                            {digest.coachingNote}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </CardWrapper>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Missed Call Breakdown (Business Hours) ── */}
+        {missedBreakdown && missedBreakdown.byHour.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Missed Call Breakdown</h2>
+              <InfoTooltip text="Why are we missing calls? This section breaks down missed inbound calls by time of day, agent, and day of week for the current month. Business hours = Mon–Fri 9am–6pm ET." />
+              <Link href="/call-tracking">
+                <span className="text-xs text-[#ff6221] hover:underline ml-auto">View full call tracking →</span>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* By time window */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">When Are We Missing Calls?</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {missedBreakdown.byTimeWindow
+                    .sort((a: any, b: any) => b.missed - a.missed)
+                    .map((tw: any) => {
+                      const label: Record<string, string> = {
+                        business_hours: 'Business Hours', before_hours: 'Before 9am',
+                        after_hours: 'After 6pm', weekend: 'Weekend',
+                      };
+                      const isBiz = tw.timeWindow === 'business_hours';
+                      return (
+                        <div key={tw.timeWindow}>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className={`text-xs font-medium ${isBiz ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                              {label[tw.timeWindow] ?? tw.timeWindow}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-bold ${isBiz ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
+                                {tw.missed} missed
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">{tw.answerRate}% ans</span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${isBiz ? 'bg-red-500' : 'bg-muted-foreground/40'}`}
+                              style={{ width: `${tw.total > 0 ? Math.round((tw.missed / tw.total) * 100) : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </CardContent>
+              </Card>
+
+              {/* By agent */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">By Agent</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {missedBreakdown.byAgent.slice(0, 6).map((agent: any) => (
+                    <div key={agent.agentName}>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-xs truncate max-w-[120px]" title={agent.agentName}>
+                          {agent.agentName.split(' ').slice(0, 2).join(' ')}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-bold ${
+                            agent.missedDuringBizHours > 10 ? 'text-red-600 dark:text-red-400' :
+                            agent.missedDuringBizHours > 3 ? 'text-amber-600 dark:text-amber-400' :
+                            'text-muted-foreground'
+                          }`}>{agent.missedDuringBizHours} biz hrs</span>
+                          <span className="text-[10px] text-muted-foreground">{agent.answerRate}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            agent.answerRate >= 80 ? 'bg-green-500' :
+                            agent.answerRate >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${agent.answerRate}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* By hour of day */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">By Hour (Business Hours)</CardTitle>
+                    {worstMissedHour && (
+                      <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">
+                        Worst: {worstMissedHour.hour % 12 || 12}{worstMissedHour.hour < 12 ? 'am' : 'pm'}
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-end gap-0.5 h-20">
+                    {missedBreakdown.byHour
+                      .filter((h: any) => h.hour >= 9 && h.hour < 18)
+                      .map((h: any) => {
+                        const maxMissed = Math.max(...missedBreakdown.byHour
+                          .filter((x: any) => x.hour >= 9 && x.hour < 18)
+                          .map((x: any) => x.missed), 1);
+                        const pct = Math.round((h.missed / maxMissed) * 100);
+                        const isWorst = h.hour === worstMissedHour?.hour;
+                        return (
+                          <div key={h.hour} className="flex-1 flex flex-col items-center gap-0.5" title={`${h.hour % 12 || 12}${h.hour < 12 ? 'am' : 'pm'}: ${h.missed} missed / ${h.total} total`}>
+                            <div className="w-full rounded-t" style={{ height: `${Math.max(pct, 4)}%`, backgroundColor: isWorst ? '#ef4444' : '#94a3b8' }} />
+                            <span className="text-[8px] text-muted-foreground">{h.hour % 12 || 12}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+                    <span>9am</span><span>12pm</span><span>6pm</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* By day of week */}
+            {missedBreakdown.byDayOfWeek.length > 0 && (
+              <div className="grid grid-cols-5 sm:grid-cols-7 gap-2">
+                {missedBreakdown.byDayOfWeek
+                  .filter((d: any) => d.dayOfWeek >= 2 && d.dayOfWeek <= 6) // Mon-Fri only
+                  .map((d: any) => (
+                    <Card key={d.dayName} className="text-center">
+                      <CardContent className="p-3">
+                        <div className="text-xs font-semibold text-muted-foreground">{d.dayName.slice(0, 3)}</div>
+                        <div className={`text-xl font-bold mt-1 ${
+                          d.missed > 10 ? 'text-red-600 dark:text-red-400' :
+                          d.missed > 5 ? 'text-amber-600 dark:text-amber-400' :
+                          'text-foreground'
+                        }`}>{d.missed}</div>
+                        <div className="text-[10px] text-muted-foreground">missed</div>
+                        <div className="text-[10px] font-medium text-muted-foreground mt-0.5">{d.answerRate}% ans</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </WhipLayout>
   );

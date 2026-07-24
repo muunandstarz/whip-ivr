@@ -435,28 +435,17 @@ function buildQualityItems(input: {
     item(
       "preliminary_liability",
       Boolean(input.preliminaryLiability),
-      15,
+      25,
       input.preliminaryLiability ?? "Preliminary liability not documented.",
       "Record the preliminary liability assessment.",
     ),
-    item(
-      "rideshare_status",
-      Boolean(input.rideshareStatus && !/^(?:unknown|n\/?a)$/i.test(input.rideshareStatus)),
-      10,
-      input.rideshareStatus ?? "Rideshare status not documented.",
-      "Confirm and record the member's rideshare status at the time of loss.",
-    ),
-    item(
-      "photo_evidence",
-      input.hasPhotos,
-      10,
-      input.hasPhotos ? "Photo or video evidence is attached." : "No photo or video evidence attached.",
-      "Attach or link available photo evidence in the FNOL thread.",
-    ),
+    // rideshare_status and photo_evidence removed — agents cannot control these
+    // (photos posted by local store teams; rideshare status disclosed by member)
+    // Their 20 pts redistributed: +10 to preliminary_liability (now 25), +5 to attempt_documentation (now 10), +5 to store_team_tagged (now 15)
     item(
       "attempt_documentation",
       input.contactAttempts > 0 || input.firstContactMinutes !== null,
-      5,
+      10,
       input.contactAttempts > 0
         ? `${input.contactAttempts} contact attempt(s) documented.`
         : input.firstContactMinutes !== null
@@ -467,7 +456,7 @@ function buildQualityItems(input: {
     item(
       "store_team_tagged",
       input.storeTeamTagged,
-      10,
+      15,
       input.storeTeamTagged
         ? "Store team (@atlteam, @chiteam, etc.) was tagged in the thread."
         : "Store team was not tagged in the thread.",
@@ -763,7 +752,8 @@ export function analyzeFnolThread(input: {
     teslaFootageRequested,
   });
 
-  // Max possible points: 30+10+10+15+10+10+5+10+10 = 110 for Tesla, 100 for non-Tesla
+  // Max possible points: 30+10+10+25+10+15+10 = 110 for Tesla, 100 for non-Tesla
+  // (photo_evidence and rideshare_status removed; weights redistributed to preliminary_liability, attempt_documentation, store_team_tagged)
   // We normalise to 100 by treating tesla_footage_request as always contributing its points
   const totalPoints = qualityItems.reduce((sum, q) => sum + q.points, 0);
   const maxPoints = qualityItems.reduce((sum, q) => sum + q.maxPoints, 0);

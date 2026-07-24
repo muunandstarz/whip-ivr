@@ -2067,3 +2067,139 @@ export async function getAllHandlerDigests(): Promise<Awaited<ReturnType<typeof 
   );
   return results.filter(Boolean);
 }
+
+// ─── Missed Call Breakdown (business hours deep-dive) ────────────────────────
+export async function getMissedCallBreakdown(yearMonth: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const client = (db as any).$client.promise();
+
+  const [byHourRows, byAgentRows, byDayOfWeekRows, afterHoursRows, reasonRows] = await Promise.all([
+    // Missed calls by hour of day (ET, business hours 9am-6pm)
+    client.query(
+      `SELECT
+         HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) AS hour,
+         CAST(COUNT(*) AS SIGNED) AS total,
+         CAST(SUM(CASE WHEN status IN ('missed','voicemail') THEN 1 ELSE 0 END) AS SIGNED) AS missed,
+         CAST(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS answered,
+         ROUND(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS answerRate
+       FROM call_history
+       WHERE direction = 'inbound'
+         AND DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ?
+       GROUP BY hour
+       ORDER BY hour`,
+      [yearMonth]
+    ),
+    // Missed calls by agent (who was supposed to answer)
+    client.query(
+      `SELECT
+         COALESCE(agentName, 'Unassigned / Ring Group') AS agentName,
+         CAST(COUNT(*) AS SIGNED) AS total,
+         CAST(SUM(CASE WHEN status IN ('missed','voicemail') THEN 1 ELSE 0 END) AS SIGNED) AS missed,
+         CAST(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS answered,
+         ROUND(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS answerRate,
+         CAST(SUM(CASE WHEN status IN ('missed','voicemail')
+           AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 9
+           AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 18
+           AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
+         THEN 1 ELSE 0 END) AS SIGNED) AS missedDuringBizHours
+       FROM call_history
+       WHERE direction = 'inbound'
+         AND DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ?
+       GROUP BY agentName
+       ORDER BY missed DESC`,
+      [yearMonth]
+    ),
+    // Missed calls by day of week
+    client.query(
+      `SELECT
+         DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) AS dayOfWeek,
+         DAYNAME(CONVERT_TZ(startedAt, '+00:00', '-04:00')) AS dayName,
+         CAST(COUNT(*) AS SIGNED) AS total,
+         CAST(SUM(CASE WHEN status IN ('missed','voicemail') THEN 1 ELSE 0 END) AS SIGNED) AS missed,
+         ROUND(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS answerRate
+       FROM call_history
+       WHERE direction = 'inbound'
+         AND DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ?
+       GROUP BY dayOfWeek, dayName
+       ORDER BY dayOfWeek`,
+      [yearMonth]
+    ),
+    // After-hours vs business-hours missed breakdown
+    client.query(
+      `SELECT
+         CASE
+           WHEN DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) IN (1,7) THEN 'weekend'
+           WHEN HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 9 THEN 'before_hours'
+           WHEN HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 18 THEN 'after_hours'
+           ELSE 'business_hours'
+         END AS timeWindow,
+         CAST(COUNT(*) AS SIGNED) AS total,
+         CAST(SUM(CASE WHEN status IN ('missed','voicemail') THEN 1 ELSE 0 END) AS SIGNED) AS missed,
+         CAST(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS answered,
+         ROUND(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS answerRate
+       FROM call_history
+       WHERE direction = 'inbound'
+         AND DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ?
+       GROUP BY timeWindow`,
+      [yearMonth]
+    ),
+    // Missed call reason breakdown (missed vs voicemail)
+    client.query(
+      `SELECT
+         status,
+         CAST(COUNT(*) AS SIGNED) AS total,
+         CAST(SUM(CASE WHEN
+           HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) >= 9
+           AND HOUR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) < 18
+           AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
+         THEN 1 ELSE 0 END) AS SIGNED) AS duringBizHours
+       FROM call_history
+       WHERE direction = 'inbound'
+         AND status IN ('missed', 'voicemail')
+         AND DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ?
+       GROUP BY status`,
+      [yearMonth]
+    ),
+  ]);
+
+  const toRows = (result: any) => (Array.isArray(result) ? result[0] ?? [] : []) as any[];
+
+  return {
+    yearMonth,
+    byHour: toRows(byHourRows).map((r: any) => ({
+      hour: Number(r.hour),
+      total: Number(r.total),
+      missed: Number(r.missed),
+      answered: Number(r.answered),
+      answerRate: Number(r.answerRate ?? 0),
+    })),
+    byAgent: toRows(byAgentRows).map((r: any) => ({
+      agentName: String(r.agentName ?? ''),
+      total: Number(r.total),
+      missed: Number(r.missed),
+      answered: Number(r.answered),
+      answerRate: Number(r.answerRate ?? 0),
+      missedDuringBizHours: Number(r.missedDuringBizHours ?? 0),
+    })),
+    byDayOfWeek: toRows(byDayOfWeekRows).map((r: any) => ({
+      dayOfWeek: Number(r.dayOfWeek),
+      dayName: String(r.dayName ?? ''),
+      total: Number(r.total),
+      missed: Number(r.missed),
+      answerRate: Number(r.answerRate ?? 0),
+    })),
+    byTimeWindow: toRows(afterHoursRows).map((r: any) => ({
+      timeWindow: String(r.timeWindow ?? ''),
+      total: Number(r.total),
+      missed: Number(r.missed),
+      answered: Number(r.answered),
+      answerRate: Number(r.answerRate ?? 0),
+    })),
+    byReason: toRows(reasonRows).map((r: any) => ({
+      status: String(r.status ?? ''),
+      total: Number(r.total),
+      duringBizHours: Number(r.duringBizHours ?? 0),
+    })),
+  };
+}

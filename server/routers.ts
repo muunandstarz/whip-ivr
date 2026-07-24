@@ -54,6 +54,7 @@ import {
   getHandlerPerformanceDigest,
   getAllHandlerDigests,
   getExtensionCalls,
+  getMissedCallBreakdown,
 } from "./db";
 
 const callerTypeEnum = z.enum([
@@ -219,6 +220,12 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         return getExtensionCalls(input);
+      }),
+
+    missedBreakdown: protectedProcedure
+      .input(z.object({ yearMonth: z.string() }))
+      .query(async ({ input }) => {
+        return getMissedCallBreakdown(input.yearMonth);
       }),
   }),
 
