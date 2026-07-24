@@ -99,10 +99,16 @@ export async function listLossIntakeHandlers() {
 export async function upsertLossIntakeClaimBundle(input: {
   parent: ParsedLossParent;
   analysis: ThreadAnalysis;
+  isDuplicate?: boolean;
+  originalSlackKey?: string | null;
+  overflowRouted?: boolean;
 }) {
   const db = requireDb(await getDb());
   const values: InsertLossIntakeClaim = {
     slackKey: input.parent.slackKey,
+    isDuplicate: input.isDuplicate ?? false,
+    originalSlackKey: input.originalSlackKey ?? null,
+    overflowRouted: input.overflowRouted ?? false,
     channelId: input.parent.channelId,
     channelName: input.parent.channelName,
     slackMessageTs: input.parent.slackMessageTs,
@@ -176,6 +182,9 @@ export async function upsertLossIntakeClaimBundle(input: {
       teslaFootageRequested: values.teslaFootageRequested,
       qualityScore: values.qualityScore,
       missingElements: values.missingElements,
+      isDuplicate: values.isDuplicate,
+      originalSlackKey: values.originalSlackKey,
+      overflowRouted: values.overflowRouted,
       lastSyncedAt: values.lastSyncedAt,
     },
   });
@@ -231,6 +240,20 @@ export async function upsertLossIntakeClaimBundle(input: {
   }
 
   return claimId;
+}
+
+/**
+ * Look up a claim by its slackKey. Used for duplicate FNOL detection.
+ */
+export async function getLossIntakeClaimBySlackKey(slackKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ id: lossIntakeClaims.id, slackKey: lossIntakeClaims.slackKey })
+    .from(lossIntakeClaims)
+    .where(eq(lossIntakeClaims.slackKey, slackKey))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /** Called when @claims-intake is tagged in a remote-ops thread — starts the SLA clock on the existing claim */
@@ -292,7 +315,10 @@ export interface LossClaimListFilters {
 }
 
 function buildClaimConditions(filters: LossClaimListFilters) {
-  const conditions = [];
+  const conditions = [
+    // Always exclude duplicate FNOLs from list views
+    eq(lossIntakeClaims.isDuplicate, false),
+  ];
   if (filters.handlerId !== undefined) {
     conditions.push(eq(lossIntakeClaims.assignedHandlerId, filters.handlerId));
   }
@@ -308,15 +334,14 @@ function buildClaimConditions(filters: LossClaimListFilters) {
   if (filters.dateTo) conditions.push(lte(lossIntakeClaims.postedAt, filters.dateTo));
   if (filters.search?.trim()) {
     const term = `%${filters.search.trim()}%`;
-    conditions.push(
-      or(
-        like(lossIntakeClaims.market, term),
-        like(lossIntakeClaims.memberName, term),
-        like(lossIntakeClaims.customerId, term),
-        like(lossIntakeClaims.vinLastSix, term),
-        like(lossIntakeClaims.assignedAgent, term),
-      ),
+    const searchOr = or(
+      like(lossIntakeClaims.market, term),
+      like(lossIntakeClaims.memberName, term),
+      like(lossIntakeClaims.customerId, term),
+      like(lossIntakeClaims.vinLastSix, term),
+      like(lossIntakeClaims.assignedAgent, term),
     );
+    if (searchOr) conditions.push(searchOr);
   }
   return conditions.length ? and(...conditions) : undefined;
 }
@@ -604,6 +629,31 @@ export interface TodayRepActivityHandler {
 }
 
 /**
+ * Returns the set of in-store agents (Bennet Carlos, Carlito Legarde Jr) who currently
+ * have at least one non-complete claim assigned to them. Used for overflow routing:
+ * if both are active, new intakes should be routed to Ana Padilla.
+ */
+export async function getActiveInStoreAgents(): Promise<Set<string>> {
+  const db = await getDb();
+  if (!db) return new Set();
+  const rows = await db
+    .select({ assignedAgent: lossIntakeClaims.assignedAgent })
+    .from(lossIntakeClaims)
+    .where(
+      and(
+        eq(lossIntakeClaims.isDuplicate, false),
+        sql`${lossIntakeClaims.assignedAgent} IN ('Bennet Carlos', 'Carlito Legarde Jr')`,
+        sql`${lossIntakeClaims.stage} != 'complete'`,
+      ),
+    );
+  const active = new Set<string>();
+  for (const row of rows) {
+    if (row.assignedAgent) active.add(row.assignedAgent);
+  }
+  return active;
+}
+
+/**
  * Get all Loss Intake claims that were posted or updated today (ET date),
  * grouped by assigned handler. Used for the "Today's Activity" view.
  */
@@ -623,14 +673,33 @@ export async function getTodayRepActivity(dateMs?: number): Promise<TodayRepActi
   const dayStartUtc = new Date(dayStartEt.getTime() + ET_OFFSET_MS);
   const dayEndUtc = new Date(dayEndEt.getTime() + ET_OFFSET_MS);
 
-  // Get all claims posted today OR updated today (firstContactAt or completedAt today)
+  // Get all claims posted today OR where the agent had activity today
+  // (firstContactAt, completedAt, or any event today) — so agents working
+  // on older posts still appear in the Today view.
   const claims = await db
     .select()
     .from(lossIntakeClaims)
     .where(
       and(
-        gte(lossIntakeClaims.postedAt, dayStartUtc),
-        lte(lossIntakeClaims.postedAt, dayEndUtc),
+        // Exclude duplicate FNOLs
+        eq(lossIntakeClaims.isDuplicate, false),
+        or(
+          // Posted today
+          and(
+            gte(lossIntakeClaims.postedAt, dayStartUtc),
+            lte(lossIntakeClaims.postedAt, dayEndUtc),
+          ),
+          // First contact made today
+          and(
+            gte(lossIntakeClaims.firstContactAt, dayStartUtc),
+            lte(lossIntakeClaims.firstContactAt, dayEndUtc),
+          ),
+          // Completed today
+          and(
+            gte(lossIntakeClaims.completedAt, dayStartUtc),
+            lte(lossIntakeClaims.completedAt, dayEndUtc),
+          ),
+        ),
       ),
     )
     .orderBy(lossIntakeClaims.postedAt);
@@ -801,6 +870,7 @@ export async function getRepComparisonMetrics(
       SUM(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes ELSE 0 END) AS contactedSum
     FROM loss_intake_claims
     WHERE assignedAgent IS NOT NULL
+      AND is_duplicate = 0
       AND ${whereClause}
     GROUP BY assignedAgent, channelName
     ORDER BY assignedAgent, channelName
@@ -920,7 +990,8 @@ export async function getHandlerLossIntakeStats(agentName: string): Promise<{
         SUM(CASE WHEN firstContactMinutes IS NOT NULL THEN firstContactMinutes ELSE 0 END) AS contactedSum,
         SUM(COALESCE(contactAttempts, 0)) AS totalAttempts
       FROM loss_intake_claims
-      WHERE assignedAgent = '${agentName.replace(/'/g, "''")}'
+      WHERE is_duplicate = 0
+        AND assignedAgent = '${agentName.replace(/'/g, "''")}'
         AND ${whereClause}
       GROUP BY channelName
     `));
@@ -1015,6 +1086,7 @@ export async function getAwaitingOutreachClaims(agentName?: string): Promise<Arr
       slaState, slaDeadlineAt, firstContactMinutes, contactAttempts
     FROM loss_intake_claims
     WHERE stage = 'awaiting_outreach'
+      AND is_duplicate = 0
       ${agentFilter}
     ORDER BY postedAt ASC
   `));

@@ -321,6 +321,11 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   claimsIntakeTaggedAt: bigint("claims_intake_tagged_at", { mode: "number" }),
   claimsIntakeSlaType: varchar("claims_intake_sla_type", { length: 32 }),
   claimsIntakeSlaDeadlineAt: bigint("claims_intake_sla_deadline_at", { mode: "number" }),
+  // Duplicate FNOL detection: set when this post is a forwarded copy of an existing claim
+  isDuplicate: boolean("is_duplicate").default(false).notNull(),
+  originalSlackKey: varchar("original_slack_key", { length: 255 }),
+  // Overflow routing: set when both in-store agents are busy and this claim should go to Ana Padilla
+  overflowRouted: boolean("overflow_routed").default(false).notNull(),
 
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

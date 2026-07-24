@@ -964,8 +964,16 @@ Business routing logic to implement in resolveHandler():
 - [x] Mark intake as claimed when rep clicks Claim in the dashboard; mark complete when done
 
 ## Remote Ops @claims-intake Workflow — Simplified (Jul 22, 2026)
-- [ ] Add claimsIntakeTaggedAt + claimsIntakeSlaType + claimsIntakeSlaDeadlineAt columns to loss_intake_claims
-- [ ] Detect @claims-intake tag in existing lossIntakeSlackEvents.ts processor, update existing claim record with SLA clock
-- [ ] Show original post timestamp + SLA deadline in existing claim detail view (no separate tab)
-- [ ] Remove separate Remote Ops tab from Loss Intake page
-- [ ] Remove separate remoteOpsSlackEvents.ts handler and remoteOpsDb.ts (or keep as dead code)
+- [x] Add claimsIntakeTaggedAt + claimsIntakeSlaType + claimsIntakeSlaDeadlineAt columns to loss_intake_claims
+- [x] Detect @claims-intake tag in existing lossIntakeSlackEvents.ts processor, update existing claim record with SLA clock
+- [x] Show original post timestamp + SLA deadline in existing claim detail view (no separate tab)
+- [x] Remove separate Remote Ops tab from Loss Intake page
+- [x] Remove separate remoteOpsSlackEvents.ts handler and remoteOpsDb.ts (or keep as dead code)
+
+## Loss Intake Fixes (Jul 24, 2026)
+- [ ] Today tab: investigate why Ana is missing — check if she has intakes today or if it's a data/filter issue
+- [x] Today tab posts: make each post card collapsible (expand/collapse individual posts)
+- [x] Completion rate: require template posted AND minimum 2 agent thread posts (not just template)
+- [x] Duplicate FNOL detection: recognize when a post links to an original workflow, mark as duplicate, recalibrate metrics
+- [x] Overflow routing: if both in-store agents are busy, route intake to Ana
+- [x] Generate QA button: add to Loss Intake page, generate first team QA report

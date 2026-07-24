@@ -659,11 +659,17 @@ export function analyzeFnolThread(input: {
     ? minutesBetween(input.parent.postedAt, templatePostedAt)
     : null;
 
-  // completedAt = when template was posted (primary signal) OR legacy "g2g" signal
+  // completedAt = template was posted AND at least 2 agent thread posts exist
+  // OR legacy "g2g" signal (backward compat)
   const legacyCompletion = replies.find(
     reply => configuredAgent(reply, input.assignments) && /\b(?:good to go|g2g)\b/i.test(reply.text),
   );
-  const completedAt = templatePostedAt ?? (legacyCompletion ? eventDate(legacyCompletion) : null);
+  // Minimum 2 agent posts required for template-based completion
+  const agentPostCount = allAgentReplies.length;
+  const templateCompletionMet = templatePostedAt !== null && agentPostCount >= 2;
+  const completedAt = templateCompletionMet
+    ? templatePostedAt
+    : (legacyCompletion ? eventDate(legacyCompletion) : null);
   const intakeCycleMinutes = completedAt
     ? minutesBetween(input.parent.postedAt, completedAt)
     : null;

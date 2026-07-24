@@ -4,6 +4,8 @@ import { ENV } from "./_core/env";
 import {
   getLossIntakeSettings,
   getLossIntakeThreadState,
+  getLossIntakeClaimBySlackKey,
+  getActiveInStoreAgents,
   upsertLossIntakeClaimBundle,
   updateClaimsIntakeTag,
 } from "./lossIntakeDb";
@@ -98,6 +100,15 @@ interface SlackEventFile {
   mimetype?: string;
 }
 
+interface SlackAttachment {
+  /** Channel ID the message was forwarded from */
+  from_channel?: string;
+  /** Original message timestamp */
+  ts?: string;
+  original_url?: string;
+  text?: string;
+}
+
 interface SlackMessageEvent {
   type?: string;
   subtype?: string;
@@ -109,6 +120,8 @@ interface SlackMessageEvent {
   thread_ts?: string;
   text?: string;
   files?: SlackEventFile[];
+  /** Present when the message is a forwarded/shared message from another channel */
+  attachments?: SlackAttachment[];
 }
 
 export interface SlackEventEnvelope {
@@ -330,6 +343,62 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
       };
       const parsedParent = parseFnolParent(parent);
       if (!parsedParent) return { status: "ignored" as const };
+
+      // ── Duplicate FNOL detection ──────────────────────────────────────────
+      // A forwarded message has an `attachments` array with `from_channel` + `ts`.
+      // We also check the message text for a Slack permalink URL.
+      let isDuplicate = false;
+      let originalSlackKey: string | null = null;
+
+      // 1. Check Slack attachment forwarded message
+      const forwardedAttachment = event.attachments?.find(
+        att => att.from_channel && att.ts,
+      );
+      if (forwardedAttachment?.from_channel && forwardedAttachment.ts) {
+        const candidateKey = `${forwardedAttachment.from_channel}:${forwardedAttachment.ts}`;
+        const existing = await getLossIntakeClaimBySlackKey(candidateKey);
+        if (existing) {
+          isDuplicate = true;
+          originalSlackKey = candidateKey;
+          console.log(`[Loss Intake] Duplicate FNOL detected: ${parsedParent.slackKey} → original ${originalSlackKey}`);
+        }
+      }
+
+      // 2. Check message text for a Slack permalink URL (e.g. https://whipmobility.slack.com/archives/CHANNEL/pTIMESTAMP)
+      if (!isDuplicate && event.text) {
+        const permalinkMatch = event.text.match(
+          /https:\/\/[a-z0-9-]+\.slack\.com\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})/,
+        );
+        if (permalinkMatch) {
+          const linkChannelId = permalinkMatch[1];
+          const linkTs = `${permalinkMatch[2]}.${permalinkMatch[3]}`;
+          const candidateKey = `${linkChannelId}:${linkTs}`;
+          const existing = await getLossIntakeClaimBySlackKey(candidateKey);
+          if (existing) {
+            isDuplicate = true;
+            originalSlackKey = candidateKey;
+            console.log(`[Loss Intake] Duplicate FNOL (permalink) detected: ${parsedParent.slackKey} → original ${originalSlackKey}`);
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // ── Overflow routing ─────────────────────────────────────────────────
+      // If both in-store agents (Bennet Carlos and Carlito Legarde Jr) are
+      // currently active on open claims, flag this new FNOL for overflow
+      // routing to Ana Padilla so it doesn't get missed.
+      let overflowRouted = false;
+      if (!isDuplicate) {
+        const activeInStore = await getActiveInStoreAgents();
+        const BENNET = "Bennet Carlos";
+        const CARLITO = "Carlito Legarde Jr";
+        if (activeInStore.has(BENNET) && activeInStore.has(CARLITO)) {
+          overflowRouted = true;
+          console.log(`[Loss Intake] Overflow routing: both in-store agents busy — flagging ${parsedParent.slackKey} for Ana Padilla`);
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       const replies = pendingReplies.get(threadKey) ?? [];
       const analysis = analyzeFnolThread({
         parent: parsedParent,
@@ -338,9 +407,9 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
         slaMinutes: settings.firstContactSlaMinutes,
         atRiskMinutes: settings.atRiskMinutes,
       });
-      await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis });
+      await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis, isDuplicate, originalSlackKey, overflowRouted });
       pendingReplies.delete(threadKey);
-      return { status: "created" as const };
+      return { status: isDuplicate ? "duplicate_fnol" as const : "created" as const, overflowRouted };
     }
 
     if (!threadState) {

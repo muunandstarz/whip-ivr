@@ -408,6 +408,7 @@ export default function LossIntake() {
   const scopedHandlerId = isAdmin && impersonating ? impersonating.id : undefined;
   const [activeTab, setActiveTab] = useState("today");
   const [expandedHandlers, setExpandedHandlers] = useState<Record<string, boolean>>({});
+  const [expandedClaims, setExpandedClaims] = useState<Record<number, boolean>>({});
   const [selectedClaimId, setSelectedClaimId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
@@ -491,6 +492,11 @@ export default function LossIntake() {
     onSuccess: async () => { await utils.lossIntake.qa.list.invalidate(); toast.success("QA status updated."); },
     onError: error => toast.error(error.message),
   });
+  const generateQA = trpc.qa.generateReport.useMutation({
+    onSuccess: result => toast.success(`QA report generated: ${result.count} handler${result.count !== 1 ? "s" : ""} scored.`),
+    onError: err => toast.error(err.message),
+  });
+
   const updateSettings = trpc.lossIntake.settings.update.useMutation({
     onSuccess: async () => { await Promise.all([utils.lossIntake.settings.get.invalidate(), utils.lossIntake.syncHealth.invalidate()]); toast.success("Loss Intake settings saved."); },
     onError: error => toast.error(error.message),
@@ -618,60 +624,76 @@ export default function LossIntake() {
                                   : "bg-muted-foreground/30";
                                 const contactMin = claim.firstContactMinutes;
                                 const templateMin = claim.templatePostMinutesFromReport;
+                                const isClaimExpanded = expandedClaims[claim.claimId] !== false; // default expanded
                                 return (
-                                  <div key={claim.claimId} className="flex items-start gap-3 p-3 hover:bg-muted/30">
-                                    <div className={`mt-1.5 h-8 w-1 flex-shrink-0 rounded-full ${stageColor}`} />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex flex-wrap items-start justify-between gap-2">
-                                        <div>
+                                  <div key={claim.claimId} className="border-b last:border-b-0">
+                                    {/* Claim row header — always visible, click to collapse */}
+                                    <div
+                                      className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-muted/30 select-none"
+                                      onClick={() => setExpandedClaims(prev => ({ ...prev, [claim.claimId]: !isClaimExpanded }))}
+                                    >
+                                      <div className={`h-7 w-1 flex-shrink-0 rounded-full ${stageColor}`} />
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center justify-between gap-1.5">
                                           <p className="font-semibold text-sm">
                                             {claim.memberName ?? "Unidentified member"}
-                                            {claim.customerId ? <span className="ml-1.5 font-normal text-muted-foreground">#{claim.customerId}</span> : null}
+                                            {claim.customerId ? <span className="ml-1.5 font-normal text-muted-foreground text-xs">#{claim.customerId}</span> : null}
                                           </p>
-                                          <p className="text-xs text-muted-foreground">
-                                            {claim.market ?? "Market unknown"}
-                                            {claim.vinLastSix ? ` · VIN …${claim.vinLastSix}` : ""}
-                                            {claim.channelName === "claims" ? " · #claims" : " · #claims-remotemarkets"}
-                                          </p>
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            <Badge variant="outline" className={stageBadge(claim.stage)}>{STAGE_LABELS[claim.stage]}</Badge>
+                                            {claim.slaState === "breached" && <Badge variant="outline" className={slaBadge(claim.slaState)}>SLA breached</Badge>}
+                                          </div>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                          <Badge variant="outline" className={stageBadge(claim.stage)}>{STAGE_LABELS[claim.stage]}</Badge>
-                                          {claim.slaState === "breached" && <Badge variant="outline" className={slaBadge(claim.slaState)}>SLA breached</Badge>}
-                                        </div>
-                                      </div>
-                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                        <span><span className="font-medium text-foreground">FNOL posted:</span> {new Date(claim.postedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET</span>
-                                        {contactMin != null && <span><span className="font-medium text-foreground">First contact:</span> {contactMin < 60 ? `${Math.round(contactMin)}m` : `${Math.floor(contactMin / 60)}h ${Math.round(contactMin % 60)}m`} after posting</span>}
-                                        {templateMin != null && <span><span className="font-medium text-foreground">Template posted:</span> {templateMin < 60 ? `${Math.round(templateMin)}m` : `${Math.floor(templateMin / 60)}h ${Math.round(templateMin % 60)}m`} after posting</span>}
-                                        {claim.contactAttempts > 0 && <span><span className="font-medium text-foreground">Attempts:</span> {claim.contactAttempts}</span>}
-                                      </div>
-                                      {claim.factsOfLoss && (
-                                        <p className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-xs leading-relaxed">
-                                          <span className="font-medium">FOL: </span>{claim.factsOfLoss.length > 180 ? claim.factsOfLoss.slice(0, 180) + "…" : claim.factsOfLoss}
+                                        <p className="text-xs text-muted-foreground">
+                                          {claim.market ?? "Market unknown"}
+                                          {claim.vinLastSix ? ` · VIN …${claim.vinLastSix}` : ""}
+                                          {claim.channelName === "claims" ? " · #claims" : " · #claims-remotemarkets"}
+                                          {" · "}{new Date(claim.postedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET
                                         </p>
-                                      )}
-                                      {/* Today's events for this claim */}
-                                      {claim.events.length > 0 && (
-                                        <div className="mt-2 space-y-1">
-                                          {claim.events.map((event, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 text-xs">
-                                              <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                                                event.eventType === "completion" ? "bg-emerald-500" :
-                                                event.eventType === "contact_attempt" ? "bg-amber-500" :
-                                                event.eventType === "acknowledgment" ? "bg-blue-500" :
-                                                "bg-muted-foreground/50"
-                                              }`} />
-                                              <span className="text-muted-foreground">{new Date(event.occurredAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}</span>
-                                              <span className="font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</span>
-                                              {event.actorName && <span className="text-muted-foreground">by {event.actorName}</span>}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
+                                      </div>
+                                      {isClaimExpanded ? <ChevronUp className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />}
                                     </div>
-                                    <Button size="sm" variant="ghost" className="flex-shrink-0" onClick={() => setSelectedClaimId(claim.claimId)}>
-                                      <ChevronRight className="h-4 w-4" />
-                                    </Button>
+                                    {/* Expanded detail section */}
+                                    {isClaimExpanded && (
+                                      <div className="flex items-start gap-3 px-3 pb-3">
+                                        <div className="w-1 flex-shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                            {contactMin != null && <span><span className="font-medium text-foreground">First contact:</span> {contactMin < 60 ? `${Math.round(contactMin)}m` : `${Math.floor(contactMin / 60)}h ${Math.round(contactMin % 60)}m`} after posting</span>}
+                                            {templateMin != null && <span><span className="font-medium text-foreground">Template posted:</span> {templateMin < 60 ? `${Math.round(templateMin)}m` : `${Math.floor(templateMin / 60)}h ${Math.round(templateMin % 60)}m`} after posting</span>}
+                                            {claim.contactAttempts > 0 && <span><span className="font-medium text-foreground">Attempts:</span> {claim.contactAttempts}</span>}
+                                          </div>
+                                          {claim.factsOfLoss && (
+                                            <p className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-xs leading-relaxed">
+                                              <span className="font-medium">FOL: </span>{claim.factsOfLoss.length > 180 ? claim.factsOfLoss.slice(0, 180) + "…" : claim.factsOfLoss}
+                                            </p>
+                                          )}
+                                          {/* Today's events for this claim */}
+                                          {claim.events.length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                              {claim.events.map((event, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 text-xs">
+                                                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                                                    event.eventType === "completion" ? "bg-emerald-500" :
+                                                    event.eventType === "contact_attempt" ? "bg-amber-500" :
+                                                    event.eventType === "acknowledgment" ? "bg-blue-500" :
+                                                    "bg-muted-foreground/50"
+                                                  }`} />
+                                                  <span className="text-muted-foreground">{new Date(event.occurredAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}</span>
+                                                  <span className="font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</span>
+                                                  {event.actorName && <span className="text-muted-foreground">by {event.actorName}</span>}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                          <div className="mt-2 flex justify-end">
+                                            <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={e => { e.stopPropagation(); setSelectedClaimId(claim.claimId); }}>
+                                              View detail <ChevronRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -1168,6 +1190,38 @@ export default function LossIntake() {
                 <Card className="shadow-sm">
                   <CardHeader><CardTitle className="flex items-center gap-2 text-base"><UserRoundCheck className="h-4 w-4 text-[#ff6221]" /> Representative identity mapping</CardTitle></CardHeader>
                   <CardContent><AssignmentForm settings={settings.data} handlers={handlers.data ?? []} saving={updateSettings.isPending} onSave={agentAssignments => updateSettings.mutate({ agentAssignments })} /></CardContent>
+                </Card>
+
+                <Card className="shadow-sm">
+                  <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Star className="h-4 w-4 text-[#ff6221]" /> AI QA report generation</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Generate an AI-scored QA report for the current week. The system will analyze recent call recordings and transcripts for each handler, score them across greeting, hold management, resolution, empathy, and call control, and save the results to each handler's QA scorecard.</p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        className="gap-2 bg-[#ff6221] text-white hover:bg-[#e5541a]"
+                        disabled={generateQA.isPending}
+                        onClick={() => {
+                          // Default to current week's Monday
+                          const today = new Date();
+                          const dayOfWeek = today.getDay();
+                          const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                          const monday = new Date(today);
+                          monday.setDate(today.getDate() - daysToMonday);
+                          const weekStart = monday.toISOString().slice(0, 10);
+                          generateQA.mutate({ weekStart });
+                        }}
+                      >
+                        {generateQA.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
+                        Generate this week's QA
+                      </Button>
+                      {generateQA.isSuccess && (
+                        <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="mr-1 inline h-4 w-4" />
+                          {generateQA.data.count} handler{generateQA.data.count !== 1 ? "s" : ""} scored
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
                 </Card>
               </TabsContent>
             )}
