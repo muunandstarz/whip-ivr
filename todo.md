@@ -988,3 +988,8 @@ Business routing logic to implement in resolveHandler():
 - [x] Fix failed Slack sync run — root cause: production running old code without new columns; improved error logging; fix deploys with checkpoint
 - [x] Broaden completion definition: contact attempts + store team tag = complete even without template posted
 - [x] Ana attribution fix: when Ana completes a claim (posts template in original thread), assign it to her with her SLA measured from her first action
+
+## Loss Intake Fixes (Jul 24, 2026 — Session 4)
+- [x] Duplicate posts are fully invisible to all metrics (Today, Team, Overview, Claims list, Awaiting Outreach)
+- [x] When a duplicate is detected, immediately re-sync the original thread so its metrics reflect the real work done there
+- [x] Original thread is the sole source of truth — agent who worked the original thread gets credit

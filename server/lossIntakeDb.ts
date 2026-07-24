@@ -256,6 +256,8 @@ export async function getLossIntakeClaimBySlackKey(slackKey: string) {
       channelName: lossIntakeClaims.channelName,
       slackMessageTs: lossIntakeClaims.slackMessageTs,
       slackPermalink: lossIntakeClaims.slackPermalink,
+      isDuplicate: lossIntakeClaims.isDuplicate,
+      originalSlackKey: lossIntakeClaims.originalSlackKey,
     })
     .from(lossIntakeClaims)
     .where(eq(lossIntakeClaims.slackKey, slackKey))

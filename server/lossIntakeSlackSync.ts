@@ -1,6 +1,7 @@
 import { ENV } from "./_core/env";
 import {
   finishLossIntakeSyncRun,
+  getLossIntakeClaimBySlackKey,
   getLossIntakeSettings,
   listLossIntakeClaims,
   startLossIntakeSyncRun,
@@ -284,6 +285,14 @@ async function collectThreadTargets(input: {
     const parents = await fetchChannelParents({ ...channel, oldest: input.oldest });
     for (const parent of parents) {
       if (!parseFnolParent(parent)) continue;
+      // Skip posts that are already stored as duplicates — their original thread
+      // is the source of truth and will be picked up via the stage/slaState queries below.
+      const slackKey = `${parent.channelId}:${parent.ts}`;
+      const existingRecord = await getLossIntakeClaimBySlackKey(slackKey);
+      if (existingRecord?.isDuplicate) {
+        console.log(`[Loss Intake Sync] Skipping known duplicate post ${slackKey} → original ${existingRecord.originalSlackKey}`);
+        continue;
+      }
       addTarget(targets, {
         channelId: parent.channelId,
         channelName: parent.channelName,
