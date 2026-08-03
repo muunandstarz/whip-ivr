@@ -36,20 +36,20 @@
 
 ## Phase 2 — Document Generator Enhancements
 
-- [ ] Add statute of limitations language (smaller, italicized) above footer on all contact and denial letters
-- [ ] Add state/market selector to all form fillers (contact, denial, coverage, settlement tabs)
-- [ ] Rebuild General Release — BI tab: exact format from docx, Minor toggle, Limited Liability (GA) toggle, AI language validation
-- [ ] Rebuild General Release — PD tab: exact format from docx, carrier-pay toggle (paying carrier vs person), Limited Liability (GA) toggle, AI language validation
-- [ ] Add Limited Liability Release — BI as a toggle option on BI release tab (GA claims)
+- [x] SOL notice on all 15 letter tabs (addSOLNotice called 22 times across all tabs)
+- [x] State/market selector on all form fillers (WHIP_STATES selector on 8+ tabs)
+- [x] General Release — BI tab: Minor toggle, Carrier/Subrogation Payee toggle, State selector, AI validation, SOL notice
+- [x] General Release — PD tab: Minor toggle, Carrier-pay toggle, State selector, AI validation, SOL notice
+- [x] GA Limited Liability callout on BI Release tab (amber alert when GA selected, links to Limited Liability Release — BI tab)
 - [x] Rebuild TL Settlement tab (Felsenburg format, AI letter, doc upload): Felsenburg-format letter with settlement table, ACV + document uploads (estimates, tow bills), PDF settlement package output
-- [ ] Add LOU Calculator subnav: vehicle type dropdown (Whip standard rates), out-of-service days, daily/weekly/total calc, push-to-demand button
-- [ ] Add push-to-demand from LOU calc to Subro Demand Letter builder (pre-fills rental reimbursement field)
-- [ ] Carrier Rebuttal: add document upload capability for carrier response documentation
-- [ ] PIP Exhaustion: add document upload + AI parse capability (reads uploaded PIP bills/EOR and extracts benefit breakdown)
-- [ ] Add PIP Bill Review / CPT Code Reader tab: upload bills, state selector (PA/MD/FL/MA), CPT code review, AI expert summary for applicable vs not-applicable treatment, EOR generation
-- [ ] Add Klutch COI tab: correct format, prints correctly
-- [ ] Add Whip COI tab: correct format, prints correctly
-- [ ] Rebuild Towing Invoice tab: multi-provider dropdown (not just Urgently), per-provider PDF formatting, all providers built in
+- [x] LOU Calculator: vehicle class dropdown with Whip standard rates (Economy $30 → Luxury $85), custom rate input, days/total calc
+- [x] Push-to-demand from LOU Calculator to Subro Demand Letter (sessionStorage bridge)
+- [x] Carrier Rebuttal: document upload for carrier response documentation (carrierDocUrl passed to AI)
+- [x] PIP Exhaustion: document upload + AI parse (parsePIPDocument procedure, extracts benefit breakdown)
+- [x] Medical Bills Review tab: 200-page demand upload, vehicle photos, CPT code analysis, PIP/BI/UMBI exposure, AI response letter
+- [x] Klutch COI tab: correct format, market-based note, prints correctly
+- [x] Whip COI tab: correct format, market-based note, prints correctly
+- [x] Towing Invoice: multi-provider dropdown (Urgently, Agero, AAA, Copart, Local, Other), per-provider PDF formatting
 
 ## Phase 2 — New UI Enhancements (from mockup, Aug 3)
 
