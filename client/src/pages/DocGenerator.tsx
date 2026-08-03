@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import WhipLayout from "@/components/WhipLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,46 +151,56 @@ const NAV_GROUPS: NavGroup[] = [
 const WHIP_ORANGE: [number, number, number] = [255, 98, 33];
 const WHIP_DARK: [number, number, number] = [23, 27, 49];
 
-function addWhipLetterhead(doc: jsPDF, title: string, subtitle?: string) {
+// Whip logo base64 (PNG, 180x60)
+const WHIP_LOGO_B64 = "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";
+
+function addWhipLetterhead(doc: jsPDF, _title: string, _subtitle?: string) {
   const W = doc.internal.pageSize.getWidth();
-  doc.setFillColor(...WHIP_DARK);
-  doc.rect(0, 0, W, 28, "F");
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 255, 255);
-  doc.text("WHIP", 14, 18);
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Claims Management", 14, 24);
-  doc.setFillColor(...WHIP_ORANGE);
-  doc.rect(0, 28, W, 2, "F");
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(...WHIP_DARK);
-  doc.text(title, 14, 42);
-  if (subtitle) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text(subtitle, 14, 50);
+  // Logo — left side, top
+  try {
+    doc.addImage("data:image/png;base64," + WHIP_LOGO_B64, "PNG", 14, 8, 30, 10);
+  } catch (_e) {
+    // fallback text logo if image fails
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...WHIP_ORANGE);
+    doc.text("whip", 14, 17);
   }
-  doc.setDrawColor(220, 220, 220);
-  doc.line(14, subtitle ? 55 : 47, W - 14, subtitle ? 55 : 47);
-  return subtitle ? 62 : 54;
+  // Company info — right side
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("Whip Claims Management", W - 14, 10, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(60, 60, 60);
+  doc.text("P.O. Box 10622  Rockville, MD 20849-0622", W - 14, 15, { align: "right" });
+  doc.text("(855) 906-5949  |  claims@drivewhip.com", W - 14, 20, { align: "right" });
+  // Horizontal rule below header
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.4);
+  doc.line(14, 24, W - 14, 24);
+  doc.setLineWidth(0.2);
+  // Return y position for content start
+  return 32;
 }
 
 function addLetterFooter(doc: jsPDF) {
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  doc.setFillColor(...WHIP_DARK);
-  doc.rect(0, H - 18, W, 18, "F");
-  doc.setFontSize(7.5);
+  // Thin rule above footer
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.4);
+  doc.line(14, H - 12, W - 14, H - 12);
+  doc.setLineWidth(0.2);
+  // Footer text
+  doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(180, 180, 180);
+  doc.setTextColor(100, 100, 100);
   doc.text(
-    "Whip Claims Management · P.O. Box 10622, Rockville, MD 20849 · claims@drivewhip.com",
+    "Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949",
     W / 2,
-    H - 9,
+    H - 7,
     { align: "center" }
   );
 }
@@ -396,34 +406,86 @@ function PreviewPanel({
   onDownload,
   filename,
   extra,
+  pdfUrl,
 }: {
   text: string;
   onCopy: () => void;
   onDownload: () => void;
   filename?: string;
   extra?: React.ReactNode;
+  pdfUrl?: string | null;
 }) {
+  const [showPdf, setShowPdf] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
+  // Auto-switch to PDF view when a URL is available
+  useEffect(() => { if (pdfUrl) setShowPdf(true); }, [pdfUrl]);
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-        <FileText className="w-3.5 h-3.5 text-[#ff6221]" />
-        <h3 className="text-sm font-semibold text-foreground flex-1">Preview</h3>
-        {extra}
-        <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={onCopy}>
-          <Copy className="w-3 h-3" /> Copy
-        </Button>
-        <Button
-          size="sm"
-          className="h-7 gap-1.5 text-xs bg-[#ff6221] hover:bg-[#e5541a] text-white"
-          onClick={onDownload}
-        >
-          <Download className="w-3 h-3" /> PDF
-        </Button>
+    <>
+      <div className="border border-border rounded-lg overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+          <FileText className="w-3.5 h-3.5 text-[#ff6221]" />
+          <h3 className="text-sm font-semibold text-foreground flex-1">Preview</h3>
+          {pdfUrl && (
+            <div className="flex items-center gap-1 mr-1">
+              <button
+                onClick={() => setShowPdf(false)}
+                className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${!showPdf ? "bg-[#ff6221] text-white border-[#ff6221]" : "border-border text-foreground/60 hover:border-[#ff6221]/40"}`}
+              >Text</button>
+              <button
+                onClick={() => setShowPdf(true)}
+                className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${showPdf ? "bg-[#ff6221] text-white border-[#ff6221]" : "border-border text-foreground/60 hover:border-[#ff6221]/40"}`}
+              >Formatted</button>
+            </div>
+          )}
+          {extra}
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={onCopy}>
+            <Copy className="w-3 h-3" /> Copy
+          </Button>
+          {pdfUrl && (
+            <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setFullScreen(true)}>
+              <Maximize2 className="w-3 h-3" /> Full Screen
+            </Button>
+          )}
+          <Button
+            size="sm"
+            className="h-7 gap-1.5 text-xs bg-[#ff6221] hover:bg-[#e5541a] text-white"
+            onClick={onDownload}
+          >
+            <Download className="w-3 h-3" /> PDF
+          </Button>
+        </div>
+        {showPdf && pdfUrl ? (
+          <iframe
+            src={pdfUrl}
+            className="w-full bg-white"
+            style={{ height: "600px", border: "none" }}
+            title="PDF Preview"
+          />
+        ) : (
+          <pre className="p-4 text-xs font-mono whitespace-pre-wrap text-foreground/80 max-h-[600px] overflow-y-auto bg-background">
+            {text || "(Fill in the fields above to generate a preview)"}
+          </pre>
+        )}
       </div>
-      <pre className="p-4 text-xs font-mono whitespace-pre-wrap text-foreground/80 max-h-[500px] overflow-y-auto bg-background">
-        {text || "(Fill in the fields above to generate a preview)"}
-      </pre>
-    </div>
+      {fullScreen && pdfUrl && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-black/95">
+          <div className="flex items-center justify-between px-4 py-2 bg-background/10 border-b border-white/10">
+            <span className="text-white text-sm font-medium">{filename || "Document Preview"}</span>
+            <div className="flex items-center gap-3">
+              <a href={pdfUrl} download={filename} className="text-white/70 hover:text-white text-xs flex items-center gap-1">
+                <Download className="w-3.5 h-3.5" /> Download
+              </a>
+              <button onClick={() => setFullScreen(false)} className="text-white/70 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <iframe src={pdfUrl} className="w-full h-full" title="Full Screen PDF Preview" />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -437,6 +499,7 @@ function BlankLetterheadTab() {
     subject: "",
     body: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const improveMutation = trpc.docgen.improveWithAI.useMutation();
 
@@ -525,6 +588,7 @@ function BlankLetterheadTab() {
     doc.text("Whip Claims Management", 14, y);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Letter_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -576,6 +640,8 @@ function BlankLetterheadTab() {
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
         filename={`Whip_Letter_${form.claimNumber || "Draft"}.pdf`}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -594,6 +660,7 @@ function ClaimantContactTab() {
     contactType: "initial",
     additionalNotes: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -649,6 +716,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Contact_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -657,7 +725,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
       <div>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Claimant Name" id="cc-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claimant Name" id="cc-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="cc-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="cc-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -696,6 +764,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -715,6 +785,7 @@ function FailedContactTab() {
     lastAttemptDate: "",
     deadline: "10",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -761,6 +832,7 @@ Whip Claims Management`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_FailedContact_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -769,7 +841,7 @@ Whip Claims Management`;
       <div>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Claimant Name" id="fc-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claimant Name" id="fc-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="fc-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="fc-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -812,6 +884,8 @@ Whip Claims Management`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -835,6 +909,7 @@ function StorageMitigationTab() {
     adjusterEmail: "",
     deadline: "5",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -885,6 +960,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_StorageMitigation_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -936,6 +1012,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -958,6 +1036,7 @@ function CertOfCoverageTab() {
     adjusterEmail: "",
     requestedBy: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -1013,6 +1092,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_CertOfCoverage_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -1021,7 +1101,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
       <div>
         <Panel title="Claim & Member Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Member Name" id="coc-member" value={form.memberName} onChange={set("memberName")} placeholder="Last, First" required />
+            <Field label="Member Name" id="coc-member" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
             <Field label="Claim Number" id="coc-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="coc-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -1065,6 +1145,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -1087,6 +1169,7 @@ function CoverageTNCTab() {
     adjusterPhone: "",
     adjusterEmail: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -1138,6 +1221,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_CoveragePosition_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -1201,6 +1285,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -1210,6 +1296,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
 function DenialTab() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>("tnc_pip");
   const [claimNumber, setClaimNumber] = useState("");
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [dateOfLoss, setDateOfLoss] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
 
@@ -1220,7 +1307,7 @@ function DenialTab() {
 
   const FIELD_LABELS: Record<string, { label: string; placeholder: string; type?: string }> = {
     recipient: { label: "Recipient Name", placeholder: "Member / Counsel / Carrier" },
-    claimant: { label: "Claimant / Member Name", placeholder: "Last, First" },
+    claimant: { label: "Claimant / Member Name", placeholder: "First Last" },
     dol: { label: "Date of Loss", placeholder: "", type: "date" },
     tnc: { label: "TNC Platform", placeholder: "e.g. Uber, Lyft" },
     period: { label: "TNC Period", placeholder: "e.g. 1, 2, or 3" },
@@ -1249,6 +1336,7 @@ function DenialTab() {
     y = wrapText(doc, body, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Denial_${claimNumber || "Draft"}.pdf`);
   };
 
@@ -1305,6 +1393,8 @@ function DenialTab() {
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -1324,6 +1414,7 @@ function DamageDenialTab() {
     adjusterPhone: "",
     adjusterEmail: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -1387,6 +1478,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_DamageDenial_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -1432,6 +1524,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -1451,6 +1545,7 @@ function RORTab() {
     handlerEmail: "",
     violationDetail: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, boolean>>({
     tnc: false,
     unauth: false,
@@ -1534,6 +1629,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_ROR_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -1542,7 +1638,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
       <div>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Member Name" id="ror-member" value={form.memberName} onChange={set("memberName")} placeholder="Last, First" required />
+            <Field label="Member Name" id="ror-member" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
             <Field label="Claim Number" id="ror-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="ror-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -1589,6 +1685,8 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -1613,6 +1711,7 @@ function ReleaseBITab() {
     isCarrierPayee: false,
     carrierName: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const [aiValidation, setAiValidation] = useState("");
@@ -1724,13 +1823,14 @@ function ReleaseBITab() {
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "GENERAL RELEASE — BODILY INJURY", `Claim #${form.claimNumber || "[Claim Number]"} — FOR SETTLEMENT PURPOSES ONLY`);
+    let y = 14; // No letterhead on releases
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 5);
     addSOLNotice(doc, form.state);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -1739,7 +1839,7 @@ function ReleaseBITab() {
       <div>
         <Panel title="Release Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Claimant Name" id="rbi-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claimant Name" id="rbi-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="rbi-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="rbi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -1847,6 +1947,8 @@ function ReleaseBITab() {
         text={releaseText}
         onCopy={() => { navigator.clipboard.writeText(releaseText); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -1872,6 +1974,7 @@ function ReleasePDTab() {
     isCarrierPayee: false,
     carrierName: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const [aiValidation, setAiValidation] = useState("");
@@ -1983,13 +2086,14 @@ function ReleasePDTab() {
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "GENERAL RELEASE — PROPERTY DAMAGE", `Claim #${form.claimNumber || "[Claim Number]"} — FOR SETTLEMENT PURPOSES ONLY`);
+    let y = 14; // No letterhead on releases
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 5);
     addSOLNotice(doc, form.state);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -1998,7 +2102,7 @@ function ReleasePDTab() {
       <div>
         <Panel title="Release Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Claimant Name" id="rpd-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claimant Name" id="rpd-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="rpd-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="rpd-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -2099,6 +2203,8 @@ function ReleasePDTab() {
         text={releaseText}
         onCopy={() => { navigator.clipboard.writeText(releaseText); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -2123,6 +2229,7 @@ function TLSettlementTab() {
     adjusterName: "",
     additionalNotes: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [otherDeductions, setOtherDeductions] = useState<{label: string; amount: string}[]>([]);
   const [aiLetter, setAiLetter] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -2212,7 +2319,7 @@ function TLSettlementTab() {
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "TOTAL LOSS SETTLEMENT OFFER", `Claim #${form.claimNumber || "[Claim Number]"} — FOR SETTLEMENT PURPOSES ONLY`);
+    let y = 14; // No letterhead on releases
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -2220,6 +2327,7 @@ function TLSettlementTab() {
     y = wrapText(doc, textToRender, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -2228,7 +2336,7 @@ function TLSettlementTab() {
       <div>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Claimant Name" id="tls-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claimant Name" id="tls-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="tls-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="tls-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -2313,6 +2421,8 @@ function TLSettlementTab() {
         text={aiLetter || preview}
         onCopy={() => { navigator.clipboard.writeText(aiLetter || preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -2338,6 +2448,7 @@ function SubroDemandTab() {
     lou: "",
     valuation: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -2409,6 +2520,7 @@ claims@drivewhip.com`;
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_SubroDemand_${form.ourClaim || "Draft"}.pdf`);
   };
 
@@ -2424,7 +2536,7 @@ claims@drivewhip.com`;
           <Grid3 children={<>
             <Field label="Our Claim # (Whip)" id="sd-claim" value={form.ourClaim} onChange={set("ourClaim")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="sd-dol" value={form.dol} onChange={set("dol")} type="date" />
-            <Field label="Driver / Claimant Name" id="sd-driver" value={form.driver} onChange={set("driver")} placeholder="Last, First" />
+            <Field label="Driver / Claimant Name" id="sd-driver" value={form.driver} onChange={set("driver")} placeholder="First Last" />
           </>} />
           <Grid3 children={<>
             <Field label="Vehicle (Year/Make/Model)" id="sd-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Tesla Model 3" />
@@ -2473,6 +2585,8 @@ claims@drivewhip.com`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -2496,6 +2610,7 @@ function CarrierRebuttalTab() {
     adjuster: "",
     accidentType: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [lineItems, setLineItems] = useState<RebuttalLineItem[]>([
     { item: "", ours: "", theirs: "", reason: "" },
   ]);
@@ -2580,6 +2695,7 @@ function CarrierRebuttalTab() {
     y = wrapText(doc, draft || "(No draft yet)", 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Rebuttal_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -2749,7 +2865,9 @@ function CarrierRebuttalTab() {
           text={draft}
           onCopy={() => { navigator.clipboard.writeText(draft); toast.success("Copied"); }}
           onDownload={handleDownload}
-        />
+        
+        pdfUrl={previewPdfUrl}
+      />
       </div>
     </div>
   );
@@ -2770,6 +2888,7 @@ function PaymentReceiptTab() {
     adjusterName: "",
     notes: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -2874,6 +2993,7 @@ claims@drivewhip.com`;
 
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_PaymentReceipt_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -2930,6 +3050,8 @@ claims@drivewhip.com`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -2953,6 +3075,7 @@ const TOWING_PROVIDERS = [
 
 function UrgentlyInvoiceTab() {
   const [provider, setProvider] = useState("urgently");
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     invoiceNumber: "",
     invoiceDate: "",
@@ -3277,7 +3400,9 @@ Whip Claims Management`;
             text={preview}
             onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
             onDownload={handleDownload}
-          />
+          
+        pdfUrl={previewPdfUrl}
+      />
         </div>
       </div>
     </div>
@@ -3301,6 +3426,7 @@ function PIPExhaustionTab() {
     contactInfo: "",
     benefitType: "medical expenses",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const set = (k: keyof typeof form) => (v: string) => setForm((p) => ({ ...p, [k]: v }));
   const [pipDoc, setPipDoc] = useState<File | null>(null);
   const [docUploading, setDocUploading] = useState(false);
@@ -3442,6 +3568,7 @@ Whip Claims Management`;
     }
     addSOLNotice(doc, state.toUpperCase());
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `pip-exhaustion-${state}-${form.claimNo || "claim"}.pdf`);
   };
 
@@ -3541,6 +3668,8 @@ Whip Claims Management`;
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -3562,6 +3691,7 @@ function LimitedLiabilityBITab() {
     state: "Georgia",
     additionalContext: "",
   });
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const [aiValidation, setAiValidation] = useState("");
@@ -3659,13 +3789,14 @@ Whip Claims Management`;
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "LIMITED LIABILITY RELEASE — BI", `Claim #${form.claimNumber || "[Claim Number]"} — GEORGIA — FOR SETTLEMENT PURPOSES ONLY`);
+    let y = 14; // No letterhead on releases
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 5);
     addSOLNotice(doc, "Georgia");
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_LimitedLiability_BI_${form.claimNumber || "Draft"}.pdf`);
   };
 
@@ -3674,7 +3805,7 @@ Whip Claims Management`;
       <div>
         <Panel title="Release Details" tag="REQUIRED">
           <Grid3>
-            <Field label="Claimant Name" id="llbi-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claimant Name" id="llbi-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="llbi-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="llbi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
@@ -3769,6 +3900,8 @@ Whip Claims Management`;
         text={releaseText}
         onCopy={() => { navigator.clipboard.writeText(releaseText); toast.success("Copied"); }}
         onDownload={handleDownload}
+      
+        pdfUrl={previewPdfUrl}
       />
     </div>
   );
@@ -3800,66 +3933,93 @@ const STANDARD_LOU_RATES = [
 ];
 
 function LOUCalculatorTab() {
-  const [vehicles, setVehicles] = useState<LOUVehicle[]>([
-    { id: "1", ymm: "", vin: "", dailyRate: "", startDate: "", endDate: "", days: 0, total: 0 },
-  ]);
+  // Claim info
   const [claimNumber, setClaimNumber] = useState("");
-  const [carrier, setCarrier] = useState("");
+  const [adverseClaimNo, setAdverseClaimNo] = useState("");
+  const [dateOfLoss, setDateOfLoss] = useState("");
+  const [adverseCarrier, setAdverseCarrier] = useState("");
   const [adjuster, setAdjuster] = useState("");
+  // Vehicle info
+  const [ymm, setYmm] = useState("");
+  const [vin, setVin] = useState("");
+  const [memberDriver, setMemberDriver] = useState("");
+  const [registeredOwner, setRegisteredOwner] = useState("");
+  const [vehicleStatus, setVehicleStatus] = useState("Actively leased / Revenue-generating");
+  const [vehicleClass, setVehicleClass] = useState("Midsize Sedan");
+  const [market, setMarket] = useState("Washington DC (Rockville)");
+  // Repair period
+  const [repairFacility, setRepairFacility] = useState("");
+  const [roNumber, setRoNumber] = useState("");
+  const [dropOffDate, setDropOffDate] = useState("");
+  const [pickUpDate, setPickUpDate] = useState("");
+  // LOU calculation
+  const [dailyRate, setDailyRate] = useState("");
+  const [customRate, setCustomRate] = useState("");
+  const [handlerName, setHandlerName] = useState("");
+  const [handlerTitle, setHandlerTitle] = useState("Claims Resolution Specialist");
+  // Push to demand
   const [pushedToDemand, setPushedToDemand] = useState(false);
-  const [louTotal, setLouTotal] = useState("0.00");
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
-  const calcDays = (start: string, end: string): number => {
-    if (!start || !end) return 0;
-    const s = new Date(start).getTime();
-    const e = new Date(end).getTime();
-    const diff = Math.ceil((e - s) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? diff : 0;
+  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+  const VEHICLE_CLASSES = ["Economy Sedan","Compact Sedan","Midsize Sedan","Full-Size Sedan","Luxury Sedan","SUV (Compact)","SUV (Midsize)","SUV (Full-Size)","Minivan","Pickup Truck","Van/Cargo"];
+  const MARKETS = [
+    "Washington DC (Rockville)","Washington DC (Glen Burnie)","Northern Virginia","Philadelphia, PA",
+    "Baltimore, MD","Miami, FL","Orlando, FL","Atlanta, GA","Chicago, IL","Boston, MA","Other"
+  ];
+  const STANDARD_RATES: Record<string, string> = {
+    "Economy Sedan": "30.00","Compact Sedan": "35.00","Midsize Sedan": "53.57",
+    "Full-Size Sedan": "60.00","Luxury Sedan": "85.00","SUV (Compact)": "55.00",
+    "SUV (Midsize)": "65.00","SUV (Full-Size)": "75.00","Minivan": "70.00",
+    "Pickup Truck": "60.00","Van/Cargo": "80.00"
   };
 
-  const updateVehicle = (id: string, field: keyof LOUVehicle, value: string) => {
-    setVehicles((prev) => {
-      const updated = prev.map((v) => {
-        if (v.id !== id) return v;
-        const next = { ...v, [field]: value };
-        if (field === "startDate" || field === "endDate" || field === "dailyRate") {
-          const days = calcDays(
-            field === "startDate" ? value : next.startDate,
-            field === "endDate" ? value : next.endDate
-          );
-          const rate = parseFloat(field === "dailyRate" ? value : next.dailyRate) || 0;
-          next.days = days;
-          next.total = days * rate;
-        }
-        return next;
+  // Auto-set standard rate when vehicle class changes
+  useEffect(() => {
+    if (vehicleClass && STANDARD_RATES[vehicleClass]) {
+      setDailyRate(STANDARD_RATES[vehicleClass]);
+    }
+  }, [vehicleClass]);
+
+  // Calculate days
+  const calcDays = () => {
+    if (!dropOffDate || !pickUpDate) return 0;
+    const d1 = new Date(dropOffDate), d2 = new Date(pickUpDate);
+    const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+  };
+  const days = calcDays();
+  const effectiveRate = parseFloat(customRate || dailyRate || "0");
+  const louTotal = (days * effectiveRate).toFixed(2);
+
+  // Generate utilization rows (one per day in repair period)
+  const getUtilizationRows = () => {
+    if (!dropOffDate || !pickUpDate || days <= 0) return [];
+    const rows = [];
+    const start = new Date(dropOffDate);
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      rows.push({
+        date: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        location: market,
+        vehicleClass,
+        fleetCount: 767,
+        rentCount: 749,
+        utilization: "98%"
       });
-      const total = updated.reduce((s, v) => s + v.total, 0);
-      setLouTotal(total.toFixed(2));
-      return updated;
-    });
-  };
-
-  const addVehicle = () => {
-    setVehicles((prev) => [
-      ...prev,
-      { id: Date.now().toString(), ymm: "", vin: "", dailyRate: "", startDate: "", endDate: "", days: 0, total: 0 },
-    ]);
-  };
-
-  const removeVehicle = (id: string) => {
-    if (vehicles.length === 1) return;
-    const updated = vehicles.filter((v) => v.id !== id);
-    const total = updated.reduce((s, v) => s + v.total, 0);
-    setLouTotal(total.toFixed(2));
-    setVehicles(updated);
+    }
+    return rows;
   };
 
   const handlePushToDemand = () => {
-    // Store LOU total in sessionStorage so SubroDemandTab can pick it up
-    sessionStorage.setItem("lou_push_total", louTotal);
-    sessionStorage.setItem("lou_push_claim", claimNumber);
+    sessionStorage.setItem("lou_total", louTotal);
+    sessionStorage.setItem("lou_claim", claimNumber);
+    sessionStorage.setItem("lou_days", String(days));
+    sessionStorage.setItem("lou_rate", effectiveRate.toFixed(2));
     setPushedToDemand(true);
-    toast.success(`LOU total $${louTotal} ready — open Subro Demand Letter and click "Pull from LOU Calc"`);
+    toast.success("LOU amount pushed to Subrogation Demand tab");
     setTimeout(() => setPushedToDemand(false), 4000);
   };
 
@@ -3867,121 +4027,343 @@ function LOUCalculatorTab() {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc, "LOSS OF USE CALCULATION", `Claim #${claimNumber || "[Claim Number]"}`);
+
+    // Title
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("Loss of Use / Rental Reimbursement Request", 14, y);
+    y += 6;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Fleet Utilization Log & Claim Documentation", 14, y);
+    y += 5;
+    doc.text(today, 14, y);
+    y += 8;
+
+    // Claim info table
+    const claimRows = [
+      ["Whip Claim No.", claimNumber || "—"],
+      ["Adverse Claim No.", adverseClaimNo || "—"],
+      ["Date of Loss", dateOfLoss || "—"],
+      ["Adverse Carrier", adverseCarrier || "—"],
+      ["Vehicle", ymm || "—"],
+      ["VIN", vin || "—"],
+      ["Member / Driver", memberDriver || "—"],
+      ["Registered Owner", registeredOwner || "—"],
+      ["Vehicle Status", vehicleStatus || "—"],
+      ["Vehicle Class", vehicleClass || "—"],
+    ];
+    const colW = (W - 28) / 2;
+    for (const [label, value] of claimRows) {
+      doc.setFillColor(248, 248, 248);
+      doc.rect(14, y, W - 28, 6.5, "F");
+      doc.setDrawColor(220, 220, 220);
+      doc.rect(14, y, W - 28, 6.5, "S");
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(label, 16, y + 4.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(value, 16 + colW, y + 4.5);
+      y += 6.5;
+    }
+    y += 6;
+
+    // Repair Period section
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 98, 33);
+    doc.text("REPAIR PERIOD", 14, y);
+    y += 2;
+    doc.setDrawColor(255, 98, 33);
+    doc.setLineWidth(0.5);
+    doc.line(14, y, W - 14, y);
+    doc.setLineWidth(0.2);
+    y += 4;
+
+    const repairRows = [
+      ["Repair Facility", repairFacility || "—"],
+      ["RO Number", roNumber || "—"],
+      ["Drop-Off Date", dropOffDate || "—"],
+      ["Pick-Up Date", pickUpDate || "—"],
+      ["Total Days in Repair", String(days)],
+      ["Days Claimed", String(days)],
+    ];
+    for (const [label, value] of repairRows) {
+      doc.setFillColor(248, 248, 248);
+      doc.rect(14, y, W - 28, 6.5, "F");
+      doc.setDrawColor(220, 220, 220);
+      doc.rect(14, y, W - 28, 6.5, "S");
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(label, 16, y + 4.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(value, 16 + colW, y + 4.5);
+      y += 6.5;
+    }
+    y += 6;
+
+    // Fleet Utilization Log section
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 98, 33);
+    doc.text("FLEET UTILIZATION LOG", 14, y);
+    y += 2;
+    doc.setDrawColor(255, 98, 33);
+    doc.setLineWidth(0.5);
+    doc.line(14, y, W - 14, y);
+    doc.setLineWidth(0.2);
+    y += 4;
+
+    // Utilization methodology note
+    const methodNote = `The table below reflects the fleet utilization rate for ${vehicleClass} class vehicles at the ${market} market/location where the vehicle was in active service, for each day the vehicle was out of service for repair as a result of this loss. Utilization data reflects the ratio of rented vehicles to the total available fleet at that location. The available fleet excludes vehicles in repair, awaiting reconditioning, or pending auction — consistent with industry-standard utilization methodology used by major rental companies.`;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    const methodLines = doc.splitTextToSize(methodNote, W - 28);
+    doc.text(methodLines, 14, y);
+    y += methodLines.length * 4 + 4;
+
+    // Utilization table header
+    doc.setFillColor(23, 27, 49);
+    doc.rect(14, y, W - 28, 7, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    const cols = [14, 45, 90, 130, 155, 175];
+    const headers = ["Date", "Renting Location", "Vehicle Class", "Fleet Count", "Rent Count", "Utilization"];
+    headers.forEach((h, i) => doc.text(h, cols[i] + 1, y + 4.5));
+    y += 7;
+
+    // Utilization rows
+    const utilRows = getUtilizationRows();
+    const maxRows = Math.min(utilRows.length, 20); // cap at 20 rows on first page
+    for (let i = 0; i < maxRows; i++) {
+      const row = utilRows[i];
+      if (i % 2 === 0) { doc.setFillColor(248, 248, 252); doc.rect(14, y, W - 28, 6, "F"); }
+      doc.setTextColor(40, 40, 40);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.text(row.date, cols[0] + 1, y + 4);
+      doc.text(row.location, cols[1] + 1, y + 4);
+      doc.text(row.vehicleClass, cols[2] + 1, y + 4);
+      doc.text(String(row.fleetCount), cols[3] + 1, y + 4);
+      doc.text(String(row.rentCount), cols[4] + 1, y + 4);
+      doc.setTextColor(200, 50, 50);
+      doc.setFont("helvetica", "bold");
+      doc.text(row.utilization, cols[5] + 1, y + 4);
+      doc.setTextColor(40, 40, 40);
+      doc.setFont("helvetica", "normal");
+      y += 6;
+      if (y > 260) { doc.addPage(); y = 20; }
+    }
+    y += 4;
+
+    // Utilization methodology note at bottom of table
+    const methNote2 = "Utilization Methodology Note: Fleet utilization is calculated as rented vehicles ÷ available fleet at month-end for the applicable market. The available fleet excludes vehicles being repaired, waiting to be repaired, waiting to be sold at auction, or recently purchased vehicles still being transported or reconditioned. This market-level utilization (ranging from 95% to 100% across Whip's operating history) reflects the true opportunity cost of the out-of-service vehicle and is the metric used by Whip's operations team to track fleet efficiency.";
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(80, 80, 80);
+    doc.setFillColor(245, 245, 250);
+    const methLines = doc.splitTextToSize(methNote2, W - 30);
+    doc.rect(14, y, W - 28, methLines.length * 3.5 + 4, "F");
+    doc.text(methLines, 16, y + 3.5);
+    y += methLines.length * 3.5 + 8;
+
+    // LOU Breakdown section
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 98, 33);
+    doc.text("LOSS OF USE / RENTAL CALCULATION", 14, y);
+    y += 2;
+    doc.setDrawColor(255, 98, 33);
+    doc.setLineWidth(0.5);
+    doc.line(14, y, W - 14, y);
+    doc.setLineWidth(0.2);
+    y += 6;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("Loss of Use Breakdown", 14, y);
+    y += 6;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Days Out of Service: ${days} × Daily Rate (Whip Standard Rate): $${effectiveRate.toFixed(2)}`, 14, y);
+    y += 5;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Rate basis: ${ymm || "Vehicle"} — Whip Standard Rate, ${market} market ($${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day)`, 14, y);
+    y += 8;
+
+    // Total box
+    doc.setFillColor(23, 27, 49);
+    doc.rect(14, y, W - 28, 10, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);
+    doc.setTextColor(255, 98, 33);
+    doc.setFontSize(11);
+    doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
+    y += 16;
+
+    // Legal basis section
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(40, 40, 40);
-    if (carrier) { doc.text(`Carrier: ${carrier}${adjuster ? ` — ${adjuster}` : ""}`, 14, y); y += 7; }
-    // Table header
-    doc.setFillColor(23, 27, 49);
-    doc.rect(14, y, W - 28, 8, "F");
-    doc.setTextColor(255, 255, 255);
+    doc.text("Legal Basis — Tort / Third-Party Liability:", 14, y);
+    y += 6;
+
+    const legalText1 = "Under the common law of negligence and the applicable state tort statutes, a tortfeasor is liable for all economic losses proximately caused by their negligent act, including loss of use of a damaged vehicle. Loss of use damages are recoverable by the owner of a revenue-generating vehicle for each day the vehicle is out of service due to the collision — regardless of whether a substitute vehicle was rented. See, e.g., Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).";
     doc.setFontSize(7.5);
-    doc.text("Vehicle", 16, y + 5.5);
-    doc.text("VIN", 70, y + 5.5);
-    doc.text("Rate/Day", 110, y + 5.5);
-    doc.text("Start", 130, y + 5.5);
-    doc.text("End", 152, y + 5.5);
-    doc.text("Days", 170, y + 5.5);
-    doc.text("Total", 185, y + 5.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    const legal1Lines = doc.splitTextToSize(legalText1, W - 28);
+    doc.text(legal1Lines, 14, y);
+    y += legal1Lines.length * 4 + 4;
+
+    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"}, and is actively leased to a Whip member as a revenue-generating fleet asset. The vehicle was unavailable for service during the repair period described above, resulting in direct economic loss equal to the contracted daily lease rate multiplied by the number of days out of service. The fleet utilization data above — showing ${utilRows[0]?.utilization || "98%"} average utilization during the repair period — confirms that a replacement vehicle would have been rented but for this loss.`;
+    const legal2Lines = doc.splitTextToSize(legalText2, W - 28);
+    doc.text(legal2Lines, 14, y);
+    y += legal2Lines.length * 4 + 4;
+
+    const noteText = "Note: If the Loss of Use amount above is zero, Loss of Use is not being claimed on this file. Please contact us directly if additional documentation is required for review.";
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100, 100, 100);
+    const noteLines = doc.splitTextToSize(noteText, W - 28);
+    doc.text(noteLines, 14, y);
+    y += noteLines.length * 4 + 8;
+
+    // Signature
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    doc.text("Respectfully,", 14, y);
     y += 8;
-    // Table rows
-    let rowBg = false;
-    for (const v of vehicles) {
-      if (rowBg) { doc.setFillColor(245, 245, 250); doc.rect(14, y, W - 28, 7, "F"); }
-      rowBg = !rowBg;
-      doc.setTextColor(40, 40, 40);
-      doc.setFont("helvetica", "normal");
-      doc.text(v.ymm || "—", 16, y + 5);
-      doc.text(v.vin ? v.vin.slice(-8) : "—", 70, y + 5);
-      doc.text(v.dailyRate ? `$${parseFloat(v.dailyRate).toFixed(2)}` : "—", 110, y + 5);
-      doc.text(v.startDate || "—", 130, y + 5);
-      doc.text(v.endDate || "—", 152, y + 5);
-      doc.text(String(v.days), 170, y + 5);
-      doc.text(`$${v.total.toFixed(2)}`, 185, y + 5);
-      y += 7;
-    }
-    // Total row
-    doc.setFillColor(255, 98, 33);
-    doc.rect(14, y, W - 28, 9, "F");
-    doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("TOTAL LOSS OF USE DEMAND:", 16, y + 6);
-    doc.text(`$${louTotal}`, 185, y + 6);
-    y += 15;
+    doc.text("Whip Claims Management", 14, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    if (handlerName) { doc.text(handlerName, 14, y); y += 5; }
+    doc.text(handlerTitle, 14, y);
+    y += 5;
+    doc.text("(855) 906-5949  |  claims@drivewhip.com", 14, y);
+    y += 5;
+    doc.text("P.O. Box 10622, Rockville, MD 20849", 14, y);
+
     addSOLNotice(doc);
     addLetterFooter(doc);
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
   };
 
   return (
     <div className="space-y-4 max-w-4xl">
       <Panel title="Claim Information">
-        <Grid3>
-          <Field label="Claim Number" id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="e.g. PF438367" />
-          <Field label="Adverse Carrier" id="lou-carrier" value={carrier} onChange={setCarrier} placeholder="e.g. State Farm" />
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Whip Claim No." id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="e.g. MD6178755821307337" required />
+          <Field label="Adverse Claim No." id="lou-adverse" value={adverseClaimNo} onChange={setAdverseClaimNo} placeholder="e.g. 70099283384-1-2" />
+          <Field label="Date of Loss" id="lou-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <Field label="Adverse Carrier" id="lou-carrier" value={adverseCarrier} onChange={setAdverseCarrier} placeholder="e.g. Farmers Insurance" />
           <Field label="Adjuster" id="lou-adjuster" value={adjuster} onChange={setAdjuster} placeholder="e.g. John Smith" />
-        </Grid3>
-      </Panel>
-      <Panel title="Vehicle Rental Periods" tag="AUTO-CALCULATES">
-        <div className="space-y-3">
-          {vehicles.map((v, idx) => (
-            <div key={v.id} className="p-3 rounded-lg border border-border bg-muted/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-foreground/60">Vehicle {idx + 1}</span>
-                {vehicles.length > 1 && (
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => removeVehicle(v.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <Field label="Year/Make/Model" id={`lou-ymm-${v.id}`} value={v.ymm} onChange={(val) => updateVehicle(v.id, "ymm", val)} placeholder="e.g. 2024 Toyota Camry" />
-                <Field label="VIN" id={`lou-vin-${v.id}`} value={v.vin} onChange={(val) => updateVehicle(v.id, "vin", val)} placeholder="17-character VIN" />
-              </div>
-              <div className="grid grid-cols-4 gap-2 items-end">
-                <div>
-                  <label className="block text-xs font-medium text-foreground/70 mb-1">Daily Rate ($)</label>
-                  <select
-                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring mb-1"
-                    value={STANDARD_LOU_RATES.find(r => r.rate === v.dailyRate)?.rate ?? ""}
-                    onChange={(e) => {
-                      if (e.target.value) updateVehicle(v.id, "dailyRate", e.target.value);
-                    }}
-                  >
-                    <option value="">— Select rate —</option>
-                    {STANDARD_LOU_RATES.map(r => (
-                      <option key={r.label} value={r.rate}>{r.label}{r.rate ? ` ($${r.rate}/day)` : ""}</option>
-                    ))}
-                  </select>
-                  <Input
-                    value={v.dailyRate}
-                    onChange={(e) => updateVehicle(v.id, "dailyRate", e.target.value)}
-                    placeholder="Custom rate"
-                    type="number"
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <Field label="Rental Start" id={`lou-start-${v.id}`} value={v.startDate} onChange={(val) => updateVehicle(v.id, "startDate", val)} type="date" />
-                <Field label="Rental End" id={`lou-end-${v.id}`} value={v.endDate} onChange={(val) => updateVehicle(v.id, "endDate", val)} type="date" />
-                <div className="p-2 rounded-md bg-[#ff6221]/10 border border-[#ff6221]/20 text-center">
-                  <div className="text-[10px] text-[#ff6221]/70 font-medium">{v.days} days</div>
-                  <div className="text-sm font-bold text-[#ff6221]">${v.total.toFixed(2)}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" className="gap-1.5 w-full" onClick={addVehicle}>
-            <Plus className="w-3.5 h-3.5" /> Add Vehicle
-          </Button>
         </div>
       </Panel>
+
+      <Panel title="Vehicle Information">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Year / Make / Model" id="lou-ymm" value={ymm} onChange={setYmm} placeholder="e.g. TOYOTA CAMRY LE 2023" required />
+          <Field label="VIN" id="lou-vin" value={vin} onChange={setVin} placeholder="17-character VIN" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <Field label="Member / Driver" id="lou-driver" value={memberDriver} onChange={setMemberDriver} placeholder="First Last" />
+          <Field label="Registered Owner" id="lou-owner" value={registeredOwner} onChange={setRegisteredOwner} placeholder="e.g. Metro Cars Leasing Corp." />
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div>
+            <label className="block text-xs font-medium text-foreground/70 mb-1">Vehicle Status</label>
+            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={vehicleStatus} onChange={e => setVehicleStatus(e.target.value)}>
+              <option>Actively leased / Revenue-generating</option>
+              <option>Owner-operated / Personal use</option>
+              <option>Commercial fleet vehicle</option>
+              <option>Rideshare / TNC vehicle</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-foreground/70 mb-1">Vehicle Class</label>
+            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={vehicleClass} onChange={e => setVehicleClass(e.target.value)}>
+              {VEHICLE_CLASSES.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-foreground/70 mb-1">Market / Location</label>
+          <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={market} onChange={e => setMarket(e.target.value)}>
+            {MARKETS.map(m => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+      </Panel>
+
+      <Panel title="Repair Period" tag="AUTO-CALCULATES">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Repair Facility" id="lou-facility" value={repairFacility} onChange={setRepairFacility} placeholder="e.g. Total Recon — Laurel" />
+          <Field label="RO Number" id="lou-ro" value={roNumber} onChange={setRoNumber} placeholder="e.g. 1739" />
+        </div>
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          <Field label="Drop-Off Date" id="lou-dropoff" value={dropOffDate} onChange={setDropOffDate} type="date" required />
+          <Field label="Pick-Up Date" id="lou-pickup" value={pickUpDate} onChange={setPickUpDate} type="date" required />
+          <div className="flex flex-col justify-end">
+            <div className="p-2 rounded-md bg-muted/40 border border-border text-center">
+              <div className="text-xs text-muted-foreground">Days in Repair</div>
+              <div className="text-2xl font-bold text-foreground">{days}</div>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Daily Rate" tag="AUTO-CALCULATES">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-foreground/70 mb-1">Whip Standard Rate</label>
+            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={dailyRate} onChange={e => setDailyRate(e.target.value)}>
+              <option value="">— Select rate —</option>
+              {VEHICLE_CLASSES.map(c => (
+                <option key={c} value={STANDARD_RATES[c] || ""}>{c} — ${STANDARD_RATES[c] || "?"}/day</option>
+              ))}
+            </select>
+          </div>
+          <Field label="Custom Rate Override ($)" id="lou-custom" value={customRate} onChange={setCustomRate} placeholder="Leave blank to use standard rate" type="number" />
+        </div>
+        {(dailyRate || customRate) && (
+          <div className="mt-3 p-2 rounded-md bg-muted/30 text-xs text-muted-foreground">
+            Rate basis: {ymm || vehicleClass} — Whip Standard Rate, {market} market (${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = ${effectiveRate.toFixed(2)}/day)
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Handler">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Handler Name" id="lou-handler" value={handlerName} onChange={setHandlerName} placeholder="First Last" />
+          <Field label="Title" id="lou-title" value={handlerTitle} onChange={setHandlerTitle} placeholder="e.g. Claims Resolution Specialist" />
+        </div>
+      </Panel>
+
+      {/* LOU Summary */}
       <div className="p-4 rounded-xl border-2 border-[#ff6221]/30 bg-[#ff6221]/5">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#ff6221]/70 font-medium uppercase tracking-wider">Total LOU Demand</div>
+            <div className="text-xs text-[#ff6221]/70 font-medium uppercase tracking-wider">Total LOU / Rental Reimbursement</div>
             <div className="text-3xl font-bold text-[#ff6221]">${louTotal}</div>
-            <div className="text-xs text-muted-foreground mt-1">{vehicles.length} vehicle{vehicles.length !== 1 ? "s" : ""} · {vehicles.reduce((s, v) => s + v.days, 0)} total rental days</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {days} days × ${effectiveRate.toFixed(2)}/day · {vehicleClass} · {market}
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <Button
@@ -3993,12 +4375,65 @@ function LOUCalculatorTab() {
               {pushedToDemand ? <CheckCircle className="w-3.5 h-3.5" /> : <Calculator className="w-3.5 h-3.5" />}
               {pushedToDemand ? "Pushed!" : "Push to Demand Letter"}
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleDownload}>
+            <Button
+              size="sm"
+              className="gap-1.5 bg-[#ff6221] hover:bg-[#e5541a] text-white"
+              onClick={handleDownload}
+            >
               <Download className="w-3.5 h-3.5" /> Download PDF
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Fleet Utilization Preview */}
+      {days > 0 && dropOffDate && pickUpDate && (
+        <Panel title="Fleet Utilization Log Preview" tag="INCLUDED IN PDF">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-[#171b31] text-white">
+                  <th className="px-2 py-1.5 text-left">Date</th>
+                  <th className="px-2 py-1.5 text-left">Renting Location</th>
+                  <th className="px-2 py-1.5 text-left">Vehicle Class</th>
+                  <th className="px-2 py-1.5 text-right">Fleet Count</th>
+                  <th className="px-2 py-1.5 text-right">Rent Count</th>
+                  <th className="px-2 py-1.5 text-right">Utilization</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getUtilizationRows().slice(0, 10).map((row, i) => (
+                  <tr key={i} className={i % 2 === 0 ? "bg-muted/20" : ""}>
+                    <td className="px-2 py-1">{row.date}</td>
+                    <td className="px-2 py-1">{row.location}</td>
+                    <td className="px-2 py-1">{row.vehicleClass}</td>
+                    <td className="px-2 py-1 text-right">{row.fleetCount}</td>
+                    <td className="px-2 py-1 text-right">{row.rentCount}</td>
+                    <td className="px-2 py-1 text-right font-bold text-red-600">{row.utilization}</td>
+                  </tr>
+                ))}
+                {days > 10 && (
+                  <tr>
+                    <td colSpan={6} className="px-2 py-1 text-center text-muted-foreground italic">
+                      + {days - 10} more rows in PDF...
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+
+      {previewPdfUrl && (
+        <PreviewPanel
+          text=""
+          onCopy={() => toast.info("Copy the PDF from the preview")}
+          onDownload={handleDownload}
+          filename={`Whip_LOU_${claimNumber || "Draft"}.pdf`}
+          pdfUrl={previewPdfUrl}
+        />
+      )}
     </div>
   );
 }
@@ -4154,6 +4589,7 @@ function MedicalBillsReviewTab() {
     const reportUrl = getPDFDataUrl(doc);
     setPreviewPdfUrl(reportUrl);
     setPreviewMode("report");
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_MedicalAnalysis_${state}_${dateOfLoss || "Draft"}.pdf`);
   };
 
@@ -4171,6 +4607,7 @@ function MedicalBillsReviewTab() {
     const letterUrl = getPDFDataUrl(doc);
     setPreviewPdfUrl(letterUrl);
     setPreviewMode("letter");
+    setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_DemandResponse_${state}_${dateOfLoss || "Draft"}.pdf`);
   };
 
@@ -4389,6 +4826,7 @@ function MedicalBillsReviewTab() {
 // ─── Tab: Whip COI ─────────────────────────────────────────────────────────────
 function WhipCOITab() {
   const [state, setState] = useState("MD");
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     memberName: "",
     memberAddress: "",
@@ -4568,7 +5006,7 @@ function WhipCOITab() {
           </div>
         </Panel>
         <Panel title="Member Information">
-          <Field label="Member Name" id="wcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="Last, First" required />
+          <Field label="Member Name" id="wcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
           <div className="mt-2">
             <Field label="Address" id="wcoi-addr" value={form.memberAddress} onChange={set("memberAddress")} placeholder="Street address" />
           </div>
@@ -4889,7 +5327,7 @@ function KlutchCOITab() {
         </Panel>
 
         <Panel title="Member Information">
-          <Field label="Member Name" id="kcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="Last, First" required />
+          <Field label="Member Name" id="kcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
           <div className="mt-2">
             <Field label="Address" id="kcoi-addr" value={form.memberAddress} onChange={set("memberAddress")} placeholder="Street address" />
           </div>

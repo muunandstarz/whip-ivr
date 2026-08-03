@@ -75,3 +75,11 @@
 - [x] Calculates PIP exposure, BI exposure, UMBI exposure by state
 - [x] Generates response/rebuttal letter with line-item analysis
 - [x] Inline PDF preview after generating report/letter (iframe with Full Screen button)
+
+## Phase 3 — Letterhead Standardization & PDF Fixes (Aug 3)
+- [x] Standardize addWhipLetterhead: logo left, bold company name right, address, rule, footer rule — match PDDenial(2).pdf exactly
+- [x] Remove letterhead from release tabs (General Release BI, PD, Limited Liability BI, TL Settlement & Release)
+- [x] Fix all name fields to first-last order (not last-first) across all tabs
+- [x] Update DocGen preview panel to render PDF-accurate letterhead layout (not plain text)
+- [x] Fix signature block: "Sincerely, / Whip Claims Management / Respectfully, / [Handler Name bold]"
+- [x] LOU Calculator: rebuild to match full carrier-defensible format (fleet utilization log, market rates, legal basis section)
