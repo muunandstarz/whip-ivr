@@ -8,6 +8,7 @@ import { TRPCError } from "@trpc/server";
 import { reportsRouter } from "./routers/reports";
 import { lossIntakeRouter } from "./routers/lossIntake";
 import { docgenRouter } from "./routers/docgen";
+import { mailBotRouter } from "./routers/mailBot";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -72,6 +73,7 @@ export const appRouter = router({
   system: systemRouter,
   lossIntake: lossIntakeRouter,
   docgen: docgenRouter,
+  mailBot: mailBotRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

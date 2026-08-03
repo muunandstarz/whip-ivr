@@ -129,3 +129,19 @@
 - [x] Remove AI Validate Release Language button from all three release tabs
 - [x] Fix subro demand letter: remove For Settlement Purposes Only, left-align date, match reference format
 - [x] Update subro demand to match Whip_SubroDemand reference (itemization table, demand for payment, payment instructions sections)
+
+## Phase 5 — Mail Bot, Pro-Rata Calc, KB Migrations (Aug 3, 2026)
+- [x] Mail Bot DB schema: mail_bot_config, mail_bot_agents, mail_bot_pto, mail_bot_assignments, mail_bot_runs tables
+- [x] Mail Bot engine: server/mailBot.ts — classification, assignment, Slack posting, Google Sheet logging
+- [x] Mail Bot tRPC router: server/routers/mailBot.ts — full CRUD + runNow + getStats
+- [x] Mail Bot wired into appRouter in server/routers.ts
+- [x] Mail Bot Dashboard UI: client/src/pages/MailBot.tsx — 5 sub-nav tabs (Bot Control, Assignment Log, Agent Rules, PTO Manager, Schedule Controller)
+- [x] Mail Bot config seeded: Slack token, Apps Script URL, Google Sheet ID
+- [x] Pro-Rata Calculator: client/src/pages/ProRataCalc.tsx — correct pro-rata logic
+- [x] KB: Liability Guide — client/src/pages/kb/LiabilityGuide.tsx
+- [x] KB: Fault Decision Tool — client/src/pages/kb/FaultDecisionTool.tsx
+- [x] KB: Denied Claim Escalation — client/src/pages/kb/DeniedClaimEscalation.tsx
+- [x] KB: Markets & Policy — client/src/pages/kb/MarketsAndPolicy.tsx
+- [x] KB: Knowledge Base — client/src/pages/kb/KnowledgeBase.tsx
+- [x] App.tsx routes added for all new pages (MailBot, ProRataCalc, 5 KB pages)
+- [x] WhipLayout nav updated: Mail Bot in ADMIN_NAV_ITEMS; all KB pages in KB_NAV_ITEMS and HANDLER_KB_NAV_ITEMS

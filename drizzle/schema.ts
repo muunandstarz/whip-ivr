@@ -532,3 +532,96 @@ export const docgenSharedTemplates = mysqlTable("docgen_shared_templates", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type DocgenSharedTemplate = typeof docgenSharedTemplates.$inferSelect;
+
+// ─── Mail / Fax Bot ────────────────────────────────────────────────────────────
+
+/** Global bot configuration (single row, id=1) */
+export const mailBotConfig = mysqlTable("mail_bot_config", {
+  id: int("id").autoincrement().primaryKey(),
+  scheduleCronTaskUid: varchar("schedule_cron_task_uid", { length: 65 }),
+  cronExpression: varchar("cron_expression", { length: 64 }).default("0 0 18 * * 2-5"),
+  scheduleEnabled: boolean("schedule_enabled").default(false).notNull(),
+  batchSize: int("batch_size").default(3).notNull(),
+  processMailChannel: boolean("process_mail_channel").default(true).notNull(),
+  processFax: boolean("process_fax").default(true).notNull(),
+  lookbackHours: int("lookback_hours").default(24).notNull(),
+  slackBotToken: varchar("slack_bot_token", { length: 256 }),
+  claimsMailChannelId: varchar("claims_mail_channel_id", { length: 32 }).default("C07R60KAC2C").notNull(),
+  claimsHubChannelId: varchar("claims_hub_channel_id", { length: 32 }).default("CHWRXH4HK").notNull(),
+  googleSheetId: varchar("google_sheet_id", { length: 128 }),
+  appsScriptUrl: varchar("apps_script_url", { length: 512 }),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type MailBotConfig = typeof mailBotConfig.$inferSelect;
+
+/** Per-agent configuration for assignment rules */
+export const mailBotAgents = mysqlTable("mail_bot_agents", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  slackId: varchar("slack_id", { length: 64 }).notNull(),
+  role: mysqlEnum("role", ["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin"]).notNull(),
+  dailyCap: int("daily_cap").default(3).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  roundRobinOrder: int("round_robin_order").default(0).notNull(),
+  isOverflowTarget: boolean("is_overflow_target").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type MailBotAgent = typeof mailBotAgents.$inferSelect;
+
+/** PTO / out-of-office dates for agents */
+export const mailBotPto = mysqlTable("mail_bot_pto", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agent_id").notNull(),
+  startDate: varchar("start_date", { length: 16 }).notNull(),
+  endDate: varchar("end_date", { length: 16 }).notNull(),
+  note: varchar("note", { length: 256 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type MailBotPto = typeof mailBotPto.$inferSelect;
+
+/** Assignment log — every item processed by the bot */
+export const mailBotAssignments = mysqlTable("mail_bot_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  source: mysqlEnum("source", ["slack_mail", "gmail_fax"]).notNull(),
+  slackMessageTs: varchar("slack_message_ts", { length: 64 }),
+  slackChannelId: varchar("slack_channel_id", { length: 32 }),
+  fileName: varchar("file_name", { length: 512 }),
+  messageText: text("message_text"),
+  mailType: varchar("mail_type", { length: 64 }).notNull(),
+  isLegal: boolean("is_legal").default(false).notNull(),
+  assignedTo: varchar("assigned_to", { length: 128 }).notNull(),
+  assignedSlackId: varchar("assigned_slack_id", { length: 64 }).notNull(),
+  claimNumber: varchar("claim_number", { length: 64 }),
+  state: varchar("state", { length: 4 }),
+  vehicleType: varchar("vehicle_type", { length: 64 }),
+  team: varchar("team", { length: 64 }),
+  reviewedBy: varchar("reviewed_by", { length: 128 }),
+  actionTaken: varchar("action_taken", { length: 256 }),
+  fileLocation: varchar("file_location", { length: 512 }),
+  notes: text("notes"),
+  deadline: varchar("deadline", { length: 32 }),
+  dollarAmount: varchar("dollar_amount", { length: 32 }),
+  denialSent: boolean("denial_sent").default(false),
+  denialType: varchar("denial_type", { length: 64 }),
+  status: mysqlEnum("status", ["open", "in_review", "actioned", "closed"]).default("open").notNull(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+  runId: varchar("run_id", { length: 64 }),
+});
+export type MailBotAssignment = typeof mailBotAssignments.$inferSelect;
+
+/** Bot run log — one row per execution */
+export const mailBotRuns = mysqlTable("mail_bot_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  runId: varchar("run_id", { length: 64 }).notNull(),
+  trigger: mysqlEnum("trigger", ["scheduled", "manual_mail", "manual_fax"]).notNull(),
+  source: mysqlEnum("source", ["slack_mail", "gmail_fax", "both"]).notNull(),
+  itemsFound: int("items_found").default(0).notNull(),
+  itemsAssigned: int("items_assigned").default(0).notNull(),
+  itemsSkipped: int("items_skipped").default(0).notNull(),
+  errors: text("errors"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  durationMs: int("duration_ms"),
+});
+export type MailBotRun = typeof mailBotRuns.$inferSelect;

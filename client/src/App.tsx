@@ -25,6 +25,13 @@ import CallbackLog from "./pages/CallbackLog";
 import Reports from "./pages/Reports";
 import LossIntake from "./pages/LossIntake";
 import DocGenerator from "./pages/DocGenerator";
+import MailBot from "./pages/MailBot";
+import ProRataCalc from "./pages/ProRataCalc";
+import LiabilityGuide from "./pages/kb/LiabilityGuide";
+import FaultDecisionTool from "./pages/kb/FaultDecisionTool";
+import DeniedClaimEscalation from "./pages/kb/DeniedClaimEscalation";
+import MarketsAndPolicy from "./pages/kb/MarketsAndPolicy";
+import KnowledgeBase from "./pages/kb/KnowledgeBase";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 
 function Router() {
@@ -48,6 +55,13 @@ function Router() {
       <Route path="/reports" component={Reports} />
       <Route path="/loss-intake" component={LossIntake} />
       <Route path="/doc-generator" component={DocGenerator} />
+      <Route path="/mail-bot" component={MailBot} />
+      <Route path="/pro-rata" component={ProRataCalc} />
+      <Route path="/kb/liability-guide" component={LiabilityGuide} />
+      <Route path="/kb/fault-decision" component={FaultDecisionTool} />
+      <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />
+      <Route path="/kb/markets" component={MarketsAndPolicy} />
+      <Route path="/kb/knowledge" component={KnowledgeBase} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

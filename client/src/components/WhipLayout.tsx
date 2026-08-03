@@ -31,6 +31,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { FileText } from "lucide-react";
+import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -50,11 +51,18 @@ const ADMIN_NAV_ITEMS = [
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/users", label: "User Management", icon: UserCog },
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
+  { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
 ];
 
 // ── Knowledge Base nav items (shown to all authenticated users) ───────────────
 const KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
+  { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
+  { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
+  { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
+  { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
+  { href: "/kb/markets", label: "Markets & Policy", icon: MapPin },
+  { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
@@ -67,6 +75,12 @@ const HANDLER_NAV_ITEMS_BASE = [
 
 const HANDLER_KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
+  { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
+  { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
+  { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
+  { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
+  { href: "/kb/markets", label: "Markets & Policy", icon: MapPin },
+  { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
