@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import CallbackLog from "./pages/CallbackLog";
 import Reports from "./pages/Reports";
 import LossIntake from "./pages/LossIntake";
+import DocGenerator from "./pages/DocGenerator";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 
 function Router() {
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/callback-log" component={CallbackLog} />
       <Route path="/reports" component={Reports} />
       <Route path="/loss-intake" component={LossIntake} />
+      <Route path="/doc-generator" component={DocGenerator} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

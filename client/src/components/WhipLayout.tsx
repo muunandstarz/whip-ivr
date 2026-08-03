@@ -30,6 +30,7 @@ import {
   ListChecks,
   ClipboardCheck,
 } from "lucide-react";
+import { FileText } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -51,12 +52,21 @@ const ADMIN_NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
 ];
 
+// ── Knowledge Base nav items (shown to all authenticated users) ───────────────
+const KB_NAV_ITEMS = [
+  { href: "/doc-generator", label: "Document Generator", icon: FileText },
+];
+
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
 // Order: My Dashboard → Intake Records → Loss Intake (if authorized) → Softphone
 const HANDLER_NAV_ITEMS_BASE = [
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
+];
+
+const HANDLER_KB_NAV_ITEMS = [
+  { href: "/doc-generator", label: "Document Generator", icon: FileText },
 ];
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
@@ -96,7 +106,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             className="h-14 w-auto object-contain"
           />
           <h1 className="text-2xl font-bold text-white">Claims IVR</h1>
-          <p className="text-white/60 text-sm">AI-powered call intake management</p>
+          <h1 className="text-2xl font-bold text-white">Whip IVR Dashboard &amp; Knowledge Base</h1>
+          <p className="text-white/60 text-sm">AI-powered call intake &amp; claims knowledge base</p>
         </div>
         <div className="bg-background rounded-xl shadow-2xl p-8 w-full max-w-sm flex flex-col items-center gap-4">
           <div className="text-foreground font-bold text-lg">Sign in to continue</div>
@@ -151,8 +162,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             className="h-10 w-auto object-contain flex-shrink-0"
           />
           <div>
-            <div className="font-bold text-sm leading-tight text-white">Claims IVR</div>
-            <div className="text-white/50 text-xs">AI Voice Intake</div>
+            <div className="font-bold text-sm leading-tight text-white">Whip IVR Dashboard</div>
+            <div className="text-white/50 text-xs leading-tight">&amp; Knowledge Base</div>
           </div>
           <button
             className="ml-auto lg:hidden text-white/60 hover:text-white"
@@ -231,7 +242,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
         )}
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-hidden">
+        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
           {navItems.map(({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
             return (
@@ -264,6 +275,31 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
               Exit Handler View
             </button>
           )}
+
+          {/* ── Knowledge Base section ── */}
+          <div className="pt-3 mt-1 border-t border-white/10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 mb-1.5">
+              Knowledge Base
+            </p>
+            {(isAdmin && !isImpersonating ? KB_NAV_ITEMS : HANDLER_KB_NAV_ITEMS).map(({ href, label, icon: Icon }) => {
+              const active = location.startsWith(href);
+              return (
+                <Link key={href} href={href}>
+                  <button
+                    onClick={() => setMobileOpen(false)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      active
+                        ? "bg-background/15 text-white font-medium"
+                        : "text-white/60 hover:bg-background/8 hover:text-white"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {label}
+                  </button>
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         {/* User */}
@@ -337,7 +373,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
               alt="Whip"
               className="h-7 w-auto object-contain"
             />
-            <span className="font-semibold text-sm text-foreground">Claims IVR</span>
+            <span className="font-semibold text-sm text-foreground">Whip IVR Dashboard &amp; KB</span>
           </div>
           {isAdmin && isImpersonating && (
             <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
