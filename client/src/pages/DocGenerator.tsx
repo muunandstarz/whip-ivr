@@ -1589,6 +1589,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
 
 // ─── Tab: General Release — BI ────────────────────────────────────────────────
 function ReleaseBITab() {
+  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "DC", "NJ", "NY"];
   const [form, setForm] = useState({
     claimantName: "",
     claimNumber: "",
@@ -1599,51 +1600,66 @@ function ReleaseBITab() {
     recipientEmail: "",
     injuryDescription: "",
     additionalNotes: "",
+    state: "MD",
+    isMinor: false,
+    minorGuardianName: "",
+    isCarrierPayee: false,
+    carrierName: "",
   });
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
+  const [aiValidation, setAiValidation] = useState("");
+  const [aiValidating, setAiValidating] = useState(false);
   const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
+  const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
 
-  const set = (k: keyof typeof form) => (v: string) =>
+  const set = (k: keyof typeof form) => (v: string | boolean) =>
     setForm((p) => ({ ...p, [k]: v }));
 
   const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
+    month: "long", day: "numeric", year: "numeric",
   });
 
-  const releaseText = `GENERAL RELEASE OF ALL CLAIMS — BODILY INJURY
-FOR SETTLEMENT PURPOSES ONLY
+  const minorLine = form.isMinor ? ` (Minor, by Guardian: ${form.minorGuardianName || "[Guardian Name]"})` : "";
+  const minorBlock = form.isMinor
+    ? `MINOR CLAIMANT PROVISION: The undersigned Guardian/Parent represents that they have the legal authority to execute this release on behalf of the minor claimant, ${form.claimantName || "[Minor's Name]"}, and that this settlement is in the best interest of the minor. Court approval may be required under applicable state law for settlements involving minors.\n\n`
+    : "";
+  const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
-Date: ${today}
-
-Claimant: ${form.claimantName || "[Claimant Name]"}
-Claim Number: ${form.claimNumber || "[Claim Number]"}
-Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-Vehicle: ${form.vehicle || "[Vehicle]"}
-Settlement Amount: $${form.settlementAmount || "[Amount]"}
-
-In consideration of the payment of ${form.settlementAmount ? `$${form.settlementAmount}` : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all bodily injury claims, medical expenses, lost wages, pain and suffering, and any other damages of any kind.
-
-This Release is intended to be a full and final settlement of all claims arising from the above-referenced incident. The Releasor acknowledges that this settlement is a compromise of a disputed claim and does not constitute an admission of liability by any of the Released Parties.
-
-The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.
-
-RELEASOR SIGNATURE:
-
-_________________________________    Date: _______________
-${form.claimantName || "[Claimant Name]"}
-
-_________________________________
-Printed Name
-
-_________________________________
-Address
-
-Accepted by:
-${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management`;
+  const releaseText = [
+    "GENERAL RELEASE OF ALL CLAIMS — BODILY INJURY",
+    "FOR SETTLEMENT PURPOSES ONLY",
+    "",
+    `Date: ${today}`,
+    "",
+    `Claimant: ${form.claimantName || "[Claimant Name]"}${minorLine}`,
+    `Claim Number: ${form.claimNumber || "[Claim Number]"}`,
+    `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`,
+    `Vehicle: ${form.vehicle || "[Vehicle]"}`,
+    `Settlement Amount: $${form.settlementAmount || "[Amount]"}`,
+    `State: ${form.state}`,
+    "",
+    `In consideration of the payment of ${form.settlementAmount ? "$" + form.settlementAmount : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all bodily injury claims, medical expenses, lost wages, pain and suffering, and any other damages of any kind.`,
+    "",
+    `This Release is intended to be a full and final settlement of all claims arising from the above-referenced incident. The Releasor acknowledges that this settlement is a compromise of a disputed claim and does not constitute an admission of liability by any of the Released Parties.`,
+    "",
+    minorBlock + "The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.",
+    "",
+    "RELEASOR SIGNATURE:",
+    "",
+    "_________________________________    Date: _______________",
+    form.claimantName || "[Claimant Name]",
+    minorSig,
+    "_________________________________",
+    "Printed Name",
+    "",
+    "_________________________________",
+    "Address",
+    "",
+    "Accepted by:",
+    form.adjusterName || "[Adjuster Name]",
+    "Whip Claims Management",
+  ].join("\n");
 
   const handleGenerateEmail = async () => {
     if (!form.claimantName || !form.claimNumber || !form.settlementAmount) {
@@ -1672,6 +1688,32 @@ Whip Claims Management`;
     }
   };
 
+  const handleValidate = async () => {
+    if (!form.claimantName || !form.settlementAmount) {
+      toast.error("Fill in Claimant Name and Settlement Amount first");
+      return;
+    }
+    setAiValidating(true);
+    try {
+      const result = await validateMutation.mutateAsync({
+        releaseType: "bi",
+        state: form.state,
+        claimantName: form.claimantName,
+        settlementAmount: form.settlementAmount,
+        isMinor: form.isMinor,
+        guardianName: form.minorGuardianName,
+        isCarrierPayee: form.isCarrierPayee,
+        carrierName: form.carrierName,
+      });
+      setAiValidation(result.review);
+      toast.success("AI validation complete");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "AI error");
+    } finally {
+      setAiValidating(false);
+    }
+  };
+
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
@@ -1680,6 +1722,7 @@ Whip Claims Management`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 5);
+    addSOLNotice(doc, form.state);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -1701,24 +1744,73 @@ Whip Claims Management`;
             <Field label="Injury Description (for email)" id="rbi-injury" value={form.injuryDescription} onChange={set("injuryDescription")} placeholder="e.g. soft tissue injuries to neck and back" />
           </div>
         </Panel>
+        <Panel title="State & Options">
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-foreground/70 mb-1">State of Claim</label>
+            <select
+              value={form.state}
+              onChange={(e) => set("state")(e.target.value)}
+              className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              {WHIP_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.isMinor} onCheckedChange={(v) => set("isMinor")(!!v)} />
+              <div>
+                <div className="text-xs font-semibold">Minor Claimant</div>
+                <div className="text-xs text-muted-foreground">Adds guardian signature block and minor court-approval notice</div>
+              </div>
+            </label>
+            {form.isMinor && (
+              <div className="ml-7">
+                <Field label="Guardian / Parent Name" id="rbi-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
+              </div>
+            )}
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.isCarrierPayee} onCheckedChange={(v) => set("isCarrierPayee")(!!v)} />
+              <div>
+                <div className="text-xs font-semibold">Carrier / Subrogation Payee</div>
+                <div className="text-xs text-muted-foreground">Payment issued to carrier, not claimant directly</div>
+              </div>
+            </label>
+            {form.isCarrierPayee && (
+              <div className="ml-7">
+                <Field label="Carrier Name" id="rbi-carrier" value={form.carrierName} onChange={set("carrierName")} placeholder="e.g. GEICO" />
+              </div>
+            )}
+          </div>
+        </Panel>
         <Panel title="Handler Info">
           <Grid2>
             <Field label="Handler Name" id="rbi-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
-            <Field label="Recipient Email (for email)" id="rbi-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="attorney@lawfirm.com" />
+            <Field label="Recipient Email" id="rbi-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="attorney@lawfirm.com" />
           </Grid2>
         </Panel>
-        <Panel title="Settlement Email" tag="AI">
-          <p className="text-xs text-muted-foreground mb-3">Generate a professional settlement offer email to accompany the release.</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 mb-3"
-            onClick={handleGenerateEmail}
-            disabled={emailLoading}
-          >
-            {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
-            {emailLoading ? "Generating..." : "✨ Generate Email Draft"}
-          </Button>
+        <Panel title="AI Tools" tag="AI">
+          <div className="flex gap-2 flex-wrap mb-3">
+            <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleValidate} disabled={aiValidating}>
+              {aiValidating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              {aiValidating ? "Validating..." : "✨ Validate Release Language"}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleGenerateEmail} disabled={emailLoading}>
+              {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+              {emailLoading ? "Generating..." : "Generate Email Draft"}
+            </Button>
+          </div>
+          {aiValidation && (
+            <div className="border border-border rounded-md overflow-hidden mb-3">
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+                <CheckCircle className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold flex-1">AI Language Validation</span>
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiValidation); toast.success("Copied"); }}>
+                  <Copy className="w-3 h-3" /> Copy
+                </Button>
+              </div>
+              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{aiValidation}</pre>
+            </div>
+          )}
           {emailDraft && (
             <div className="border border-border rounded-md overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
@@ -1747,6 +1839,7 @@ Whip Claims Management`;
 
 // ─── Tab: General Release — PD ────────────────────────────────────────────────
 function ReleasePDTab() {
+  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "DC", "NJ", "NY"];
   const [form, setForm] = useState({
     claimantName: "",
     claimNumber: "",
@@ -1758,49 +1851,66 @@ function ReleasePDTab() {
     recipientEmail: "",
     damageDescription: "",
     additionalNotes: "",
+    state: "MD",
+    isMinor: false,
+    minorGuardianName: "",
+    isCarrierPayee: false,
+    carrierName: "",
   });
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
+  const [aiValidation, setAiValidation] = useState("");
+  const [aiValidating, setAiValidating] = useState(false);
   const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
+  const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
 
-  const set = (k: keyof typeof form) => (v: string) =>
+  const set = (k: keyof typeof form) => (v: string | boolean) =>
     setForm((p) => ({ ...p, [k]: v }));
 
   const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
+    month: "long", day: "numeric", year: "numeric",
   });
 
-  const releaseText = `GENERAL RELEASE OF ALL CLAIMS — PROPERTY DAMAGE
-FOR SETTLEMENT PURPOSES ONLY
+  const minorLine = form.isMinor ? ` (Minor, by Guardian: ${form.minorGuardianName || "[Guardian Name]"})` : "";
+  const minorBlock = form.isMinor
+    ? `MINOR CLAIMANT PROVISION: The undersigned Guardian/Parent represents that they have the legal authority to execute this release on behalf of the minor claimant, ${form.claimantName || "[Minor's Name]"}, and that this settlement is in the best interest of the minor. Court approval may be required under applicable state law for settlements involving minors.\n\n`
+    : "";
+  const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
-Date: ${today}
-
-Claimant: ${form.claimantName || "[Claimant Name]"}
-Claim Number: ${form.claimNumber || "[Claim Number]"}
-Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}
-Settlement Amount: $${form.settlementAmount || "[Amount]"}
-
-In consideration of the payment of ${form.settlementAmount ? `$${form.settlementAmount}` : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all property damage claims, repair costs, diminished value, loss of use, and any other damages of any kind.
-
-This Release is intended to be a full and final settlement of all property damage claims arising from the above-referenced incident. No title transfer is required. The Releasor acknowledges that this settlement is a compromise of a disputed claim and does not constitute an admission of liability by any of the Released Parties.
-
-RELEASOR SIGNATURE:
-
-_________________________________    Date: _______________
-${form.claimantName || "[Claimant Name]"}
-
-_________________________________
-Printed Name
-
-_________________________________
-Address
-
-Accepted by:
-${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management`;
+  const releaseText = [
+    "GENERAL RELEASE OF ALL CLAIMS — PROPERTY DAMAGE",
+    "FOR SETTLEMENT PURPOSES ONLY",
+    "",
+    `Date: ${today}`,
+    "",
+    `Claimant: ${form.claimantName || "[Claimant Name]"}${minorLine}`,
+    `Claim Number: ${form.claimNumber || "[Claim Number]"}`,
+    `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`,
+    `Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}`,
+    `Settlement Amount: $${form.settlementAmount || "[Amount]"}`,
+    `State: ${form.state}`,
+    "",
+    `In consideration of the payment of ${form.settlementAmount ? "$" + form.settlementAmount : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all property damage claims, repair costs, diminished value, loss of use, and any other damages of any kind.`,
+    "",
+    "This Release is intended to be a full and final settlement of all property damage claims arising from the above-referenced incident. No title transfer is required. The Releasor acknowledges that this settlement is a compromise of a disputed claim and does not constitute an admission of liability by any of the Released Parties.",
+    "",
+    minorBlock + "The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.",
+    "",
+    "RELEASOR SIGNATURE:",
+    "",
+    "_________________________________    Date: _______________",
+    form.claimantName || "[Claimant Name]",
+    minorSig,
+    "_________________________________",
+    "Printed Name",
+    "",
+    "_________________________________",
+    "Address",
+    "",
+    "Accepted by:",
+    form.adjusterName || "[Adjuster Name]",
+    "Whip Claims Management",
+  ].join("\n");
 
   const handleGenerateEmail = async () => {
     if (!form.claimantName || !form.claimNumber || !form.settlementAmount) {
@@ -1826,6 +1936,32 @@ Whip Claims Management`;
       toast.error((e as Error).message || "AI error");
     } finally {
       setEmailLoading(false);
+    }
+  };
+
+  const handleValidate = async () => {
+    if (!form.claimantName || !form.settlementAmount) {
+      toast.error("Fill in Claimant Name and Settlement Amount first");
+      return;
+    }
+    setAiValidating(true);
+    try {
+      const result = await validateMutation.mutateAsync({
+        releaseType: "pd",
+        state: form.state,
+        claimantName: form.claimantName,
+        settlementAmount: form.settlementAmount,
+        isMinor: form.isMinor,
+        guardianName: form.minorGuardianName,
+        isCarrierPayee: form.isCarrierPayee,
+        carrierName: form.carrierName,
+      });
+      setAiValidation(result.review);
+      toast.success("AI validation complete");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "AI error");
+    } finally {
+      setAiValidating(false);
     }
   };
 
@@ -1859,24 +1995,73 @@ Whip Claims Management`;
             <Field label="Damage Description (for email)" id="rpd-damage" value={form.damageDescription} onChange={set("damageDescription")} placeholder="e.g. front-end collision damage" />
           </div>
         </Panel>
+        <Panel title="State & Options">
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-foreground/70 mb-1">State of Claim</label>
+            <select
+              value={form.state}
+              onChange={(e) => set("state")(e.target.value)}
+              className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              {WHIP_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.isMinor} onCheckedChange={(v) => set("isMinor")(!!v)} />
+              <div>
+                <div className="text-xs font-semibold">Minor Claimant</div>
+                <div className="text-xs text-muted-foreground">Adds guardian signature block and minor court-approval notice</div>
+              </div>
+            </label>
+            {form.isMinor && (
+              <div className="ml-7">
+                <Field label="Guardian / Parent Name" id="rpd-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
+              </div>
+            )}
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.isCarrierPayee} onCheckedChange={(v) => set("isCarrierPayee")(!!v)} />
+              <div>
+                <div className="text-xs font-semibold">Carrier / Subrogation Payee</div>
+                <div className="text-xs text-muted-foreground">Payment issued to carrier, not claimant directly</div>
+              </div>
+            </label>
+            {form.isCarrierPayee && (
+              <div className="ml-7">
+                <Field label="Carrier Name" id="rpd-carrier" value={form.carrierName} onChange={set("carrierName")} placeholder="e.g. GEICO" />
+              </div>
+            )}
+          </div>
+        </Panel>
         <Panel title="Handler Info">
           <Grid2>
             <Field label="Handler Name" id="rpd-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
-            <Field label="Recipient Email (for email)" id="rpd-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="claimant@email.com" />
+            <Field label="Recipient Email" id="rpd-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="claimant@email.com" />
           </Grid2>
         </Panel>
-        <Panel title="Settlement Email" tag="AI">
-          <p className="text-xs text-muted-foreground mb-3">Generate a professional settlement offer email to accompany the release.</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 mb-3"
-            onClick={handleGenerateEmail}
-            disabled={emailLoading}
-          >
-            {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
-            {emailLoading ? "Generating..." : "✨ Generate Email Draft"}
-          </Button>
+        <Panel title="AI Tools" tag="AI">
+          <div className="flex gap-2 flex-wrap mb-3">
+            <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleValidate} disabled={aiValidating}>
+              {aiValidating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              {aiValidating ? "Validating..." : "✨ Validate Release Language"}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleGenerateEmail} disabled={emailLoading}>
+              {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+              {emailLoading ? "Generating..." : "Generate Email Draft"}
+            </Button>
+          </div>
+          {aiValidation && (
+            <div className="border border-border rounded-md overflow-hidden mb-3">
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+                <CheckCircle className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold flex-1">AI Language Validation</span>
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiValidation); toast.success("Copied"); }}>
+                  <Copy className="w-3 h-3" /> Copy
+                </Button>
+              </div>
+              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{aiValidation}</pre>
+            </div>
+          )}
           {emailDraft && (
             <div className="border border-border rounded-md overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
@@ -1905,79 +2090,118 @@ Whip Claims Management`;
 
 // ─── Tab: TL Settlement & Release ─────────────────────────────────────────────
 function TLSettlementTab() {
+  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "DC", "NJ", "NY"];
   const [form, setForm] = useState({
     claimantName: "",
     claimNumber: "",
     dateOfLoss: "",
     vehicle: "",
     vin: "",
+    market: "MD",
     acv: "",
-    priorDamage: "",
-    deductible: "",
-    netSettlement: "",
-    adjusterName: "",
+    priorPayment: "",
     lienHolder: "",
+    lienPayoff: "",
+    storageDeducted: "",
+    rentalCutoffDate: "",
+    adjusterName: "",
+    additionalNotes: "",
   });
+  const [otherDeductions, setOtherDeductions] = useState<{label: string; amount: string}[]>([]);
+  const [aiLetter, setAiLetter] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiMutation = trpc.docgen.generateTLSettlementLetter.useMutation();
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
 
-  const netAmt = (() => {
-    if (form.netSettlement) return form.netSettlement;
+  const netAmount = (() => {
     const acv = parseFloat(form.acv) || 0;
-    const pd = parseFloat(form.priorDamage) || 0;
-    const ded = parseFloat(form.deductible) || 0;
-    const net = acv - pd - ded;
-    return net > 0 ? net.toFixed(2) : "";
+    const prior = parseFloat(form.priorPayment) || 0;
+    const lien = parseFloat(form.lienPayoff) || 0;
+    const storage = parseFloat(form.storageDeducted) || 0;
+    const other = otherDeductions.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
+    const net = acv - prior - lien - storage - other;
+    return net > 0 ? net.toFixed(2) : "0.00";
   })();
 
   const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
+    month: "long", day: "numeric", year: "numeric",
   });
 
-  const preview = `TOTAL LOSS SETTLEMENT & RELEASE
-FOR SETTLEMENT PURPOSES ONLY
+  const deductionLines = [];
+  if (form.priorPayment && parseFloat(form.priorPayment) > 0) deductionLines.push(`Less: Prior Payment to Claimant:          ($${parseFloat(form.priorPayment).toFixed(2)})`);
+  if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) deductionLines.push(`Less: Loan Payoff — ${form.lienHolder}:  ($${parseFloat(form.lienPayoff).toFixed(2)})`);
+  if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) deductionLines.push(`Less: Storage — Reasonable & Customary:   ($${parseFloat(form.storageDeducted).toFixed(2)})`);
+  for (const d of otherDeductions) if (d.label && d.amount && parseFloat(d.amount) > 0) deductionLines.push(`Less: ${d.label}:  ($${parseFloat(d.amount).toFixed(2)})`);
 
-Date: ${today}
+  const preview = [
+    "TOTAL LOSS SETTLEMENT OFFER",
+    `Claim #: ${form.claimNumber || "[Claim Number]"}`,
+    `Date: ${today}`,
+    "",
+    `Claimant: ${form.claimantName || "[Claimant Name]"}`,
+    `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`,
+    `Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}`,
+    `Market: ${form.market}`,
+    "",
+    "SETTLEMENT BREAKDOWN:",
+    `Actual Cash Value (ACV):                  $${form.acv || "[ACV]"}`,
+    ...deductionLines,
+    "─────────────────────────────────────────────────",
+    `Net Amount Payable to Claimant:           $${netAmount}`,
+    ...(form.lienHolder && form.lienPayoff ? [`Loan Payoff — ${form.lienHolder}:  $${parseFloat(form.lienPayoff).toFixed(2)}`] : []),
+    "",
+    ...(form.rentalCutoffDate ? [`Rental Review Cutoff: ${form.rentalCutoffDate}`, ""] : []),
+    ...(form.additionalNotes ? [`Notes: ${form.additionalNotes}`, ""] : []),
+    "Prepared by:",
+    form.adjusterName || "[Handler Name]",
+    "Whip Claims Management",
+  ].join("\n");
 
-Claimant: ${form.claimantName || "[Claimant Name]"}
-Claim Number: ${form.claimNumber || "[Claim Number]"}
-Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}
-
-SETTLEMENT BREAKDOWN:
-Actual Cash Value (ACV):        $${form.acv || "[ACV]"}
-${form.priorDamage ? `Prior Damage Deduction:         -$${form.priorDamage}` : ""}
-${form.deductible ? `Deductible:                     -$${form.deductible}` : ""}
-NET SETTLEMENT AMOUNT:          $${netAmt || "[Net Amount]"}
-
-${form.lienHolder ? `Lienholder: ${form.lienHolder}\nPayment will be issued jointly to the claimant and lienholder.\n` : ""}
-In consideration of the payment of $${netAmt || "[Net Amount]"}, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns from any and all claims arising out of or related to the total loss of the above-referenced vehicle.
-
-The Releasor agrees to cooperate with the transfer of title and any other documentation required to complete the total loss settlement. No further claims for the above-referenced vehicle will be made against the Released Parties.
-
-RELEASOR SIGNATURE:
-
-_________________________________    Date: _______________
-${form.claimantName || "[Claimant Name]"}
-
-_________________________________
-Printed Name
-
-Accepted by:
-${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management`;
+  const handleGenerateLetter = async () => {
+    if (!form.claimantName || !form.claimNumber || !form.acv) {
+      toast.error("Fill in Claimant Name, Claim Number, and ACV first");
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const result = await aiMutation.mutateAsync({
+        claimantName: form.claimantName,
+        claimNumber: form.claimNumber,
+        dateOfLoss: form.dateOfLoss,
+        vehicle: form.vehicle,
+        vin: form.vin,
+        market: form.market,
+        acv: form.acv,
+        priorPayment: form.priorPayment,
+        lienHolder: form.lienHolder,
+        lienPayoff: form.lienPayoff,
+        storageDeducted: form.storageDeducted,
+        otherDeductions: otherDeductions.filter(d => d.label && d.amount),
+        netAmount,
+        adjusterName: form.adjusterName,
+        rentalCutoffDate: form.rentalCutoffDate,
+        additionalNotes: form.additionalNotes,
+      });
+      setAiLetter(result.letter);
+      toast.success("Felsenburg letter generated");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "AI error");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "TOTAL LOSS SETTLEMENT & RELEASE", `Claim #${form.claimNumber || "[Claim Number]"} — FOR SETTLEMENT PURPOSES ONLY`);
+    let y = addWhipLetterhead(doc, "TOTAL LOSS SETTLEMENT OFFER", `Claim #${form.claimNumber || "[Claim Number]"} — FOR SETTLEMENT PURPOSES ONLY`);
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, 14, y, W - 28, 5);
+    const textToRender = aiLetter || preview;
+    y = wrapText(doc, textToRender, 14, y, W - 28, 5);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -1991,31 +2215,86 @@ Whip Claims Management`;
             <Field label="Claim Number" id="tls-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="tls-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
-          <Grid2 children={<>
+          <Grid3 children={<>
             <Field label="Vehicle (Year/Make/Model)" id="tls-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" />
             <Field label="VIN" id="tls-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+            <div>
+              <label className="block text-xs font-medium text-foreground/70 mb-1">Market (Member's Home State)</label>
+              <select value={form.market} onChange={(e) => set("market")(e.target.value)}
+                className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring">
+                {WHIP_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
           </>} />
         </Panel>
-        <Panel title="Settlement Breakdown">
-          <Grid3>
-            <Field label="ACV ($)" id="tls-acv" value={form.acv} onChange={set("acv")} placeholder="e.g. 18500.00" />
-            <Field label="Prior Damage Deduction ($)" id="tls-pd" value={form.priorDamage} onChange={set("priorDamage")} placeholder="e.g. 500.00" />
-            <Field label="Deductible ($)" id="tls-ded" value={form.deductible} onChange={set("deductible")} placeholder="e.g. 0.00" />
-          </Grid3>
-          <div className="mt-3">
-            <Field label="Net Settlement (override, optional)" id="tls-net" value={form.netSettlement} onChange={set("netSettlement")} placeholder={`Auto-calculated: $${netAmt || "0.00"}`} />
+        <Panel title="Settlement Breakdown (Felsenburg Format)">
+          <div className="space-y-3">
+            <Field label="ACV / Gross Settlement ($)" id="tls-acv" value={form.acv} onChange={set("acv")} placeholder="e.g. 18500.00" />
+            <Field label="Less: Prior Payment to Claimant ($)" id="tls-prior" value={form.priorPayment} onChange={set("priorPayment")} placeholder="e.g. 0.00" />
+            <Grid2 children={<>
+              <Field label="Lienholder Name" id="tls-lien-name" value={form.lienHolder} onChange={set("lienHolder")} placeholder="e.g. Toyota Financial" />
+              <Field label="Loan Payoff Amount ($)" id="tls-lien-amt" value={form.lienPayoff} onChange={set("lienPayoff")} placeholder="e.g. 12000.00" />
+            </>} />
+            <Field label="Less: Storage Deducted ($)" id="tls-storage" value={form.storageDeducted} onChange={set("storageDeducted")} placeholder="e.g. 350.00" />
+            {otherDeductions.map((d, i) => (
+              <div key={i} className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Field label={`Other Deduction ${i + 1} — Label`} id={`tls-ded-label-${i}`} value={d.label} onChange={(v) => setOtherDeductions(prev => prev.map((x, j) => j === i ? {...x, label: v} : x))} placeholder="e.g. Betterment" />
+                </div>
+                <div className="w-32">
+                  <Field label="Amount ($)" id={`tls-ded-amt-${i}`} value={d.amount} onChange={(v) => setOtherDeductions(prev => prev.map((x, j) => j === i ? {...x, amount: v} : x))} placeholder="0.00" />
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive mb-0.5" onClick={() => setOtherDeductions(prev => prev.filter((_, j) => j !== i))}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7" onClick={() => setOtherDeductions(prev => [...prev, {label: "", amount: ""}])}>
+              <Plus className="w-3 h-3" /> Add Deduction
+            </Button>
           </div>
-          <div className="mt-3">
-            <Field label="Lienholder (if any)" id="tls-lien" value={form.lienHolder} onChange={set("lienHolder")} placeholder="e.g. Toyota Financial Services" />
+          <div className="mt-4 p-3 rounded-lg bg-[#ff6221]/5 border border-[#ff6221]/20">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground/70">Net Amount Payable to Claimant</span>
+              <span className="text-lg font-bold text-[#ff6221]">${netAmount}</span>
+            </div>
           </div>
         </Panel>
-        <Panel title="Handler Info">
-          <Field label="Handler Name" id="tls-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+        <Panel title="Additional Details">
+          <Grid2 children={<>
+            <Field label="Rental Cutoff Date" id="tls-rental" value={form.rentalCutoffDate} onChange={set("rentalCutoffDate")} type="date" />
+            <Field label="Handler Name" id="tls-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+          </>} />
+          <div className="mt-3">
+            <Field label="Additional Notes" id="tls-notes" value={form.additionalNotes} onChange={set("additionalNotes")} placeholder="Any additional context for the letter..." />
+          </div>
+        </Panel>
+        <Panel title="AI Letter Generation" tag="AI">
+          <p className="text-xs text-muted-foreground mb-3">Generate a professional Felsenburg-format total loss settlement letter with the breakdown above.</p>
+          <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 mb-3" onClick={handleGenerateLetter} disabled={aiLoading}>
+            {aiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+            {aiLoading ? "Generating..." : "✨ Generate Felsenburg Letter"}
+          </Button>
+          {aiLetter && (
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+                <FileText className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold flex-1">AI Letter Draft</span>
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiLetter); toast.success("Copied"); }}>
+                  <Copy className="w-3 h-3" /> Copy
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs text-[#ff6221]" onClick={handleGenerateLetter} disabled={aiLoading}>
+                  <RefreshCw className="w-3 h-3" /> Regen
+                </Button>
+              </div>
+              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[300px] overflow-y-auto">{aiLetter}</pre>
+            </div>
+          )}
         </Panel>
       </div>
       <PreviewPanel
-        text={preview}
-        onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
+        text={aiLetter || preview}
+        onCopy={() => { navigator.clipboard.writeText(aiLetter || preview); toast.success("Copied"); }}
         onDownload={handleDownload}
       />
     </div>
@@ -2205,6 +2484,8 @@ function CarrierRebuttalTab() {
   const [draft, setDraft] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [polishLoading, setPolishLoading] = useState(false);
+  const [carrierDoc, setCarrierDoc] = useState<File | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
   const generateMutation = trpc.docgen.generateRebuttal.useMutation();
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
 
@@ -2297,6 +2578,70 @@ function CarrierRebuttalTab() {
         <div className="mt-3">
           <Field label="Accident Type (optional)" id="rb-type" value={form.accidentType} onChange={set("accidentType")} placeholder="e.g. Rear-end, T-bone, Sideswipe" />
         </div>
+      </Panel>
+
+      <Panel title="Carrier Document Upload (Optional)">
+        <p className="text-xs text-muted-foreground mb-3">Upload the carrier's estimate, denial letter, or valuation report to let AI extract disputed items automatically.</p>
+        <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-[#ff6221]/40 transition-colors">
+          <input
+            type="file"
+            id="cr-doc-upload"
+            accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"
+            className="hidden"
+            onChange={(e) => setCarrierDoc(e.target.files?.[0] || null)}
+          />
+          <label htmlFor="cr-doc-upload" className="cursor-pointer">
+            {carrierDoc ? (
+              <div className="flex items-center justify-center gap-2">
+                <FileText className="w-4 h-4 text-[#ff6221]" />
+                <span className="text-xs font-medium text-[#ff6221]">{carrierDoc.name}</span>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground" onClick={(e) => { e.preventDefault(); setCarrierDoc(null); }}>
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Drop carrier document here or <span className="text-[#ff6221]">browse</span></p>
+                <p className="text-xs text-muted-foreground/60 mt-0.5">PDF, DOCX, PNG, JPG (Max 50MB)</p>
+              </div>
+            )}
+          </label>
+        </div>
+        {carrierDoc && (
+          <Button
+            size="sm"
+            className="mt-2 gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white"
+            disabled={docUploading || aiLoading}
+            onClick={async () => {
+              setDocUploading(true);
+              try {
+                const fd = new FormData();
+                fd.append("file", carrierDoc);
+                const res = await fetch("/api/upload/document", { method: "POST", body: fd });
+                if (!res.ok) throw new Error("Upload failed");
+                const { url } = await res.json() as { url: string };
+                setDocUploading(false);
+                setAiLoading(true);
+                const result = await generateMutation.mutateAsync({
+                  ...form,
+                  lineItems: lineItems.map((r) => ({ item: r.item, ours: parseFloat(r.ours) || 0, theirs: parseFloat(r.theirs) || 0, reason: r.reason })),
+                  carrierDocUrl: url,
+                });
+                setDraft(result.letter);
+                toast.success("Rebuttal generated from uploaded document");
+              } catch (e: unknown) {
+                toast.error((e as Error).message || "Upload or generation failed");
+              } finally {
+                setDocUploading(false);
+                setAiLoading(false);
+              }
+            }}
+          >
+            {(docUploading || aiLoading) ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {docUploading ? "Uploading..." : aiLoading ? "Analyzing..." : "Upload & Generate Rebuttal"}
+          </Button>
+        )}
       </Panel>
 
       <Panel title="Disputed Line Items">
@@ -2836,6 +3181,46 @@ function PIPExhaustionTab() {
     benefitType: "medical expenses",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const [pipDoc, setPipDoc] = useState<File | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const [aiParsed, setAiParsed] = useState(false);
+  const parseMutation = trpc.docgen.parsePIPDocument.useMutation();
+
+  const handleParseDoc = async () => {
+    if (!pipDoc) { toast.error("Upload a PIP document first"); return; }
+    setDocUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", pipDoc);
+      const res = await fetch("/api/upload/document", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json() as { url: string };
+      setDocUploading(false);
+      toast.info("Parsing document — this may take 20–30 seconds...");
+      const result = await parseMutation.mutateAsync({ fileUrl: url, state });
+      if (result.parsed) {
+        const p = result.parsed as Partial<typeof form>;
+        setForm(prev => ({
+          ...prev,
+          ...(p.claimNo && { claimNo: p.claimNo }),
+          ...(p.recipient && { recipient: p.recipient }),
+          ...(p.dol && { dol: p.dol }),
+          ...(p.exhaustionDate && { exhaustionDate: p.exhaustionDate }),
+          ...(p.pipLimit && { pipLimit: p.pipLimit }),
+          ...(p.totalPaid && { totalPaid: p.totalPaid }),
+          ...(p.pipMedical && { pipMedical: p.pipMedical }),
+          ...(p.pipWages && { pipWages: p.pipWages }),
+          ...(p.adjuster && { adjuster: p.adjuster }),
+        }));
+        setAiParsed(true);
+        toast.success("Document parsed — fields auto-filled");
+      }
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "Parse failed");
+    } finally {
+      setDocUploading(false);
+    }
+  };
 
   const buildPreview = () => {
     const f = form;
@@ -2971,6 +3356,37 @@ Whip Claims Management`;
         )}
         {state === "va" && (
           <p className="mt-2 text-xs text-[#ff6221]/80 italic">Use when Virginia add-on PIP is exhausted. No subrogation. No impact on third-party rights.</p>
+        )}
+      </Panel>
+      <Panel title="PIP Document Upload (Optional — Auto-fills Fields)" tag="AI">
+        <p className="text-xs text-muted-foreground mb-3">Upload a PIP ledger, EOB, or exhaustion letter to automatically extract claim details.</p>
+        <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-[#ff6221]/40 transition-colors">
+          <input type="file" id="pip-doc-upload" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" className="hidden"
+            onChange={(e) => { setPipDoc(e.target.files?.[0] || null); setAiParsed(false); }} />
+          <label htmlFor="pip-doc-upload" className="cursor-pointer">
+            {pipDoc ? (
+              <div className="flex items-center justify-center gap-2">
+                <FileText className="w-4 h-4 text-[#ff6221]" />
+                <span className="text-xs font-medium text-[#ff6221]">{pipDoc.name}</span>
+                {aiParsed && <span className="text-xs text-green-500 font-medium">✓ Parsed</span>}
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground" onClick={(e) => { e.preventDefault(); setPipDoc(null); setAiParsed(false); }}>
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Drop PIP document here or <span className="text-[#ff6221]">browse</span></p>
+                <p className="text-xs text-muted-foreground/60 mt-0.5">PDF, DOCX, PNG, JPG (Max 50MB)</p>
+              </div>
+            )}
+          </label>
+        </div>
+        {pipDoc && !aiParsed && (
+          <Button size="sm" className="mt-2 gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white" disabled={docUploading} onClick={handleParseDoc}>
+            {docUploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {docUploading ? "Parsing..." : "✨ Parse & Auto-Fill Fields"}
+          </Button>
         )}
       </Panel>
       <Panel title="Claim Details" tag="AUTO-BUILDS">

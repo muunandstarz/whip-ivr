@@ -71,9 +71,10 @@ export const docgenRouter = router({
       adjuster: z.string(),
       accidentType: z.string().optional(),
       lineItems: z.array(z.object({ item: z.string(), ours: z.number(), theirs: z.number(), reason: z.string().optional() })),
+      carrierDocUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, accidentType, lineItems } = input;
+      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, accidentType, lineItems, carrierDocUrl } = input;
       const totalOurs = lineItems.reduce((s, r) => s + r.ours, 0);
       const totalTheirs = lineItems.reduce((s, r) => s + r.theirs, 0);
       const gap = totalOurs - totalTheirs;
