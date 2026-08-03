@@ -41,7 +41,7 @@
 - [ ] Rebuild General Release — BI tab: exact format from docx, Minor toggle, Limited Liability (GA) toggle, AI language validation
 - [ ] Rebuild General Release — PD tab: exact format from docx, carrier-pay toggle (paying carrier vs person), Limited Liability (GA) toggle, AI language validation
 - [ ] Add Limited Liability Release — BI as a toggle option on BI release tab (GA claims)
-- [ ] Rebuild TL Settlement tab: Felsenburg-format letter with settlement table, ACV + document uploads (estimates, tow bills), PDF settlement package output
+- [x] Rebuild TL Settlement tab (Felsenburg format, AI letter, doc upload): Felsenburg-format letter with settlement table, ACV + document uploads (estimates, tow bills), PDF settlement package output
 - [ ] Add LOU Calculator subnav: vehicle type dropdown (Whip standard rates), out-of-service days, daily/weekly/total calc, push-to-demand button
 - [ ] Add push-to-demand from LOU calc to Subro Demand Letter builder (pre-fills rental reimbursement field)
 - [ ] Carrier Rebuttal: add document upload capability for carrier response documentation

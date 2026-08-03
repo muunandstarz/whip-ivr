@@ -523,6 +523,7 @@ function BlankLetterheadTab() {
     doc.text("[Handler Name]", 14, y);
     y += 5;
     doc.text("Whip Claims Management", 14, y);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_Letter_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -646,6 +647,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_Contact_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -757,6 +759,7 @@ Whip Claims Management`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_FailedContact_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -880,6 +883,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_StorageMitigation_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -1007,6 +1011,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_CertOfCoverage_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -1131,6 +1136,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_CoveragePosition_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -1241,6 +1247,7 @@ function DenialTab() {
     doc.setTextColor(60, 60, 60);
     const body = template?.build({ ...fields, dol: fields.dol || dateOfLoss }) || "";
     y = wrapText(doc, body, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_Denial_${claimNumber || "Draft"}.pdf`);
   };
@@ -1755,6 +1762,14 @@ function ReleaseBITab() {
               {WHIP_STATES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+          {form.state === "GA" && (
+            <div className="mb-3 flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+                <strong>Georgia claim detected.</strong> For GA claims where liability is limited to policy limits, use the <strong>Limited Liability Release — BI</strong> tab instead. It includes O.C.G.A. § 33-7-11 language and the Georgia-specific limited liability provision.
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
               <Checkbox checked={form.isMinor} onCheckedChange={(v) => set("isMinor")(!!v)} />
@@ -1973,6 +1988,7 @@ function ReleasePDTab() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 5);
+    addSOLNotice(doc, form.state);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -2202,6 +2218,7 @@ function TLSettlementTab() {
     doc.setTextColor(60, 60, 60);
     const textToRender = aiLetter || preview;
     y = wrapText(doc, textToRender, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -2390,6 +2407,7 @@ claims@drivewhip.com`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_SubroDemand_${form.ourClaim || "Draft"}.pdf`);
   };
@@ -2560,6 +2578,7 @@ function CarrierRebuttalTab() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, draft || "(No draft yet)", 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_Rebuttal_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -2853,6 +2872,7 @@ claims@drivewhip.com`;
     doc.setFont("helvetica", "normal");
     doc.text("Whip Claims Management", 14, y);
 
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_PaymentReceipt_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -2915,14 +2935,24 @@ claims@drivewhip.com`;
   );
 }
 
-// ─── Tab: Urgently / Towing Invoice ──────────────────────────────────────────
+// ─── Tab: Towing Invoice (Multi-Provider) ────────────────────────────────────
 interface TowingLineItem {
   description: string;
   qty: string;
   rate: string;
 }
 
+const TOWING_PROVIDERS = [
+  { id: "urgently", name: "Urgently", logo: "URGENTLY", color: "#1a73e8", address: "Urgently, Inc. | 1775 Tysons Blvd, Tysons, VA 22102", phone: "1-800-URGENTLY" },
+  { id: "agero", name: "Agero", logo: "AGERO", color: "#003087", address: "Agero, Inc. | 400 Rivers Edge Dr, Medford, MA 02155", phone: "1-800-541-2262" },
+  { id: "aaa", name: "AAA", logo: "AAA", color: "#003087", address: "AAA | 1000 AAA Drive, Heathrow, FL 32746", phone: "1-800-222-4357" },
+  { id: "copart", name: "Copart", logo: "COPART", color: "#e31837", address: "Copart, Inc. | 14185 Dallas Pkwy, Dallas, TX 75254", phone: "1-800-998-7886" },
+  { id: "local", name: "Local Tow Company", logo: "LOCAL", color: "#555555", address: "", phone: "" },
+  { id: "other", name: "Other Provider", logo: "OTHER", color: "#888888", address: "", phone: "" },
+];
+
 function UrgentlyInvoiceTab() {
+  const [provider, setProvider] = useState("urgently");
   const [form, setForm] = useState({
     invoiceNumber: "",
     invoiceDate: "",
@@ -2940,6 +2970,9 @@ function UrgentlyInvoiceTab() {
     towPhone: "",
     adjusterName: "",
     notes: "",
+    customProviderName: "",
+    customProviderAddress: "",
+    customProviderPhone: "",
   });
   const [lineItems, setLineItems] = useState<TowingLineItem[]>([
     { description: "Towing Service", qty: "1", rate: "" },
@@ -2966,10 +2999,19 @@ function UrgentlyInvoiceTab() {
   );
 
   const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
+    month: "long", day: "numeric", year: "numeric",
   });
+
+  const selectedProvider = TOWING_PROVIDERS.find(p => p.id === provider) || TOWING_PROVIDERS[0];
+  const providerName = provider === "local" || provider === "other"
+    ? (form.customProviderName || selectedProvider.name)
+    : (form.towCompany || selectedProvider.name);
+  const providerAddress = provider === "local" || provider === "other"
+    ? form.customProviderAddress
+    : selectedProvider.address;
+  const providerPhone = provider === "local" || provider === "other"
+    ? form.customProviderPhone
+    : (form.towPhone || selectedProvider.phone);
 
   const lineItemsText = lineItems
     .filter((r) => r.description)
@@ -2979,8 +3021,8 @@ function UrgentlyInvoiceTab() {
     })
     .join("\n");
 
-  const preview = `WHIP CLAIMS MANAGEMENT
-TOWING / URGENTLY INVOICE
+  const preview = `${providerName.toUpperCase()}
+TOWING / ROADSIDE INVOICE
 
 Invoice #: ${form.invoiceNumber || "[Invoice Number]"}
 Invoice Date: ${form.invoiceDate || today}
@@ -2996,7 +3038,7 @@ ${form.vehicleYear} ${form.vehicleMake} ${form.vehicleModel}${form.vehicleVin ? 
 TOW DETAILS
 ─────────────────────────────────────────────────────────
 Pickup: ${form.pickupAddress || "[Pickup Address]"}
-Dropoff: ${form.dropoffAddress || "[Dropoff Address]"}${form.towCompany ? `\nTow Company: ${form.towCompany}` : ""}${form.towDriver ? `\nDriver: ${form.towDriver}` : ""}${form.towPhone ? `\nPhone: ${form.towPhone}` : ""}
+Dropoff: ${form.dropoffAddress || "[Dropoff Address]"}${form.towDriver ? `\nDriver: ${form.towDriver}` : ""}${providerPhone ? `\nPhone: ${providerPhone}` : ""}
 
 ─────────────────────────────────────────────────────────
 CHARGES
@@ -3012,7 +3054,30 @@ Whip Claims Management`;
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "TOWING INVOICE", `Claim #${form.claimNumber || "[Claim Number]"} — Invoice #${form.invoiceNumber || "N/A"}`);
+
+    // Provider-branded header
+    const provColor = selectedProvider.color;
+    const rgb = provColor === "#1a73e8" ? [26, 115, 232] :
+                provColor === "#003087" ? [0, 48, 135] :
+                provColor === "#e31837" ? [227, 24, 55] :
+                provColor === "#555555" ? [85, 85, 85] : [136, 136, 136];
+    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    doc.rect(0, 0, W, 20, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(providerName.toUpperCase(), 14, 13);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text("TOWING / ROADSIDE INVOICE", 14, 18);
+    doc.setFontSize(8);
+    doc.text(`Invoice #: ${form.invoiceNumber || "N/A"}  |  Claim #: ${form.claimNumber || "N/A"}  |  ${form.invoiceDate || today}`, W - 14, 13, { align: "right" });
+    if (providerAddress) {
+      doc.setFontSize(6.5);
+      doc.text(providerAddress, W - 14, 18, { align: "right" });
+    }
+
+    let y = 28;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -3032,25 +3097,43 @@ Whip Claims Management`;
     doc.setFont("helvetica", "normal");
     y = wrapText(doc, `Pickup: ${form.pickupAddress || "[Pickup]"}`, 14, y, W - 28, 5);
     y = wrapText(doc, `Dropoff: ${form.dropoffAddress || "[Dropoff]"}`, 14, y, W - 28, 5);
-    if (form.towCompany) { doc.text(`Tow Company: ${form.towCompany}`, 14, y); y += 5; }
+    if (form.towDriver) { doc.text(`Driver: ${form.towDriver}`, 14, y); y += 5; }
+    if (providerPhone) { doc.text(`Phone: ${providerPhone}`, 14, y); y += 5; }
     y += 3;
 
     // Line items table
     doc.setFont("helvetica", "bold");
     doc.text("CHARGES", 14, y); y += 5;
-    doc.setFont("helvetica", "normal");
+    // Table header
+    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    doc.rect(14, y, W - 28, 7, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7.5);
+    doc.text("Description", 16, y + 5);
+    doc.text("Qty", 120, y + 5);
+    doc.text("Rate", 140, y + 5);
+    doc.text("Total", 170, y + 5);
+    y += 7;
+    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40);
+    let rowBg = false;
     lineItems.filter(r => r.description).forEach((r) => {
+      if (rowBg) { doc.setFillColor(248, 248, 252); doc.rect(14, y, W - 28, 6, "F"); }
+      rowBg = !rowBg;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(40, 40, 40);
+      doc.text(r.description, 16, y + 4.5);
+      doc.text(r.qty, 120, y + 4.5);
+      doc.text(`$${parseFloat(r.rate || "0").toFixed(2)}`, 140, y + 4.5);
       const total = (parseFloat(r.qty) || 0) * (parseFloat(r.rate) || 0);
-      doc.text(r.description, 14, y);
-      doc.text(`${r.qty} x $${parseFloat(r.rate || "0").toFixed(2)}`, 120, y);
-      doc.text(`$${total.toFixed(2)}`, 170, y);
-      y += 5;
+      doc.text(`$${total.toFixed(2)}`, 170, y + 4.5);
+      y += 6;
     });
     doc.setDrawColor(220, 220, 220);
     doc.line(14, y, W - 14, y); y += 4;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...WHIP_ORANGE);
+    doc.setFontSize(11);
+    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
     doc.text(`TOTAL: $${subtotal.toFixed(2)}`, 14, y); y += 8;
     doc.setFontSize(9);
     doc.setTextColor(60, 60, 60);
@@ -3058,12 +3141,38 @@ Whip Claims Management`;
     if (form.notes) { y = wrapText(doc, `Notes: ${form.notes}`, 14, y, W - 28, 5); y += 4; }
     doc.text(`Authorized By: ${form.adjusterName || "[Adjuster Name]"}`, 14, y);
 
+    addSOLNotice(doc);
     addLetterFooter(doc);
-    downloadPDF(doc, `Whip_TowingInvoice_${form.claimNumber || "Draft"}.pdf`);
+    downloadPDF(doc, `${selectedProvider.id === "local" || selectedProvider.id === "other" ? (form.customProviderName || "Towing") : selectedProvider.name}_Invoice_${form.claimNumber || "Draft"}.pdf`);
   };
 
   return (
     <div className="space-y-4">
+      {/* Provider Selector */}
+      <Panel title="Towing Provider" tag="REQUIRED">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+          {TOWING_PROVIDERS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setProvider(p.id)}
+              className={`p-2 rounded-lg border-2 text-xs font-bold transition-all text-center ${
+                provider === p.id
+                  ? "border-[#ff6221] bg-[#ff6221]/10 text-[#ff6221]"
+                  : "border-border bg-muted/30 text-foreground/60 hover:border-border/80 hover:text-foreground"
+              }`}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+        {(provider === "local" || provider === "other") && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Field label="Provider Name" id="ti-custname" value={form.customProviderName} onChange={set("customProviderName")} placeholder="Company name" />
+            <Field label="Provider Address" id="ti-custaddr" value={form.customProviderAddress} onChange={set("customProviderAddress")} placeholder="Address" />
+            <Field label="Provider Phone" id="ti-custphone" value={form.customProviderPhone} onChange={set("customProviderPhone")} placeholder="(xxx) xxx-xxxx" />
+          </div>
+        )}
+      </Panel>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div>
           <Panel title="Invoice & Claim Details" tag="REQUIRED">
@@ -3092,11 +3201,23 @@ Whip Claims Management`;
               <Field label="Pickup Address" id="ui-pickup" value={form.pickupAddress} onChange={set("pickupAddress")} placeholder="Accident scene address" />
               <Field label="Dropoff Address" id="ui-dropoff" value={form.dropoffAddress} onChange={set("dropoffAddress")} placeholder="Tow yard / repair shop address" />
             </div>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <Field label="Tow Company" id="ui-company" value={form.towCompany} onChange={set("towCompany")} placeholder="Company name" />
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {(provider === "local" || provider === "other") ? (
+                <Field label="Tow Company Name" id="ui-company" value={form.towCompany} onChange={set("towCompany")} placeholder="Company name" />
+              ) : (
+                <div className="p-2 rounded-md bg-muted/30 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase">Provider</p>
+                  <p className="text-xs font-semibold">{selectedProvider.name}</p>
+                  {selectedProvider.address && <p className="text-[10px] text-muted-foreground">{selectedProvider.address}</p>}
+                </div>
+              )}
               <Field label="Driver Name" id="ui-driver" value={form.towDriver} onChange={set("towDriver")} placeholder="Driver name" />
-              <Field label="Phone" id="ui-phone" value={form.towPhone} onChange={set("towPhone")} placeholder="(xxx) xxx-xxxx" />
             </div>
+            {(provider === "local" || provider === "other") && (
+              <div className="mt-3">
+                <Field label="Phone" id="ui-phone" value={form.towPhone} onChange={set("towPhone")} placeholder="(xxx) xxx-xxxx" />
+              </div>
+            )}
           </Panel>
         </div>
         <div>
@@ -3319,6 +3440,7 @@ Whip Claims Management`;
       y = wrapText(doc, line, 14, y, W - 28, 5.5);
       y += 1.5;
     }
+    addSOLNotice(doc, state.toUpperCase());
     addLetterFooter(doc);
     downloadPDF(doc, `pip-exhaustion-${state}-${form.claimNo || "claim"}.pdf`);
   };
@@ -3664,6 +3786,19 @@ interface LOUVehicle {
   total: number;
 }
 
+// Standard LOU rates by vehicle class (Whip standard schedule)
+const STANDARD_LOU_RATES = [
+  { label: "Economy (e.g. Corolla, Civic)", rate: "30.00" },
+  { label: "Compact (e.g. Camry, Accord)", rate: "35.00" },
+  { label: "Mid-size Sedan", rate: "40.00" },
+  { label: "Full-size Sedan", rate: "45.00" },
+  { label: "Compact SUV (e.g. RAV4, CR-V)", rate: "45.00" },
+  { label: "Mid-size SUV (e.g. Highlander)", rate: "55.00" },
+  { label: "Full-size SUV / Truck", rate: "65.00" },
+  { label: "Luxury / Premium", rate: "85.00" },
+  { label: "Custom / Enter manually", rate: "" },
+];
+
 function LOUCalculatorTab() {
   const [vehicles, setVehicles] = useState<LOUVehicle[]>([
     { id: "1", ymm: "", vin: "", dailyRate: "", startDate: "", endDate: "", days: 0, total: 0 },
@@ -3774,6 +3909,7 @@ function LOUCalculatorTab() {
     doc.text("TOTAL LOSS OF USE DEMAND:", 16, y + 6);
     doc.text(`$${louTotal}`, 185, y + 6);
     y += 15;
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
   };
@@ -3804,7 +3940,28 @@ function LOUCalculatorTab() {
                 <Field label="VIN" id={`lou-vin-${v.id}`} value={v.vin} onChange={(val) => updateVehicle(v.id, "vin", val)} placeholder="17-character VIN" />
               </div>
               <div className="grid grid-cols-4 gap-2 items-end">
-                <Field label="Daily Rate ($)" id={`lou-rate-${v.id}`} value={v.dailyRate} onChange={(val) => updateVehicle(v.id, "dailyRate", val)} placeholder="e.g. 35.00" />
+                <div>
+                  <label className="block text-xs font-medium text-foreground/70 mb-1">Daily Rate ($)</label>
+                  <select
+                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring mb-1"
+                    value={STANDARD_LOU_RATES.find(r => r.rate === v.dailyRate)?.rate ?? ""}
+                    onChange={(e) => {
+                      if (e.target.value) updateVehicle(v.id, "dailyRate", e.target.value);
+                    }}
+                  >
+                    <option value="">— Select rate —</option>
+                    {STANDARD_LOU_RATES.map(r => (
+                      <option key={r.label} value={r.rate}>{r.label}{r.rate ? ` ($${r.rate}/day)` : ""}</option>
+                    ))}
+                  </select>
+                  <Input
+                    value={v.dailyRate}
+                    onChange={(e) => updateVehicle(v.id, "dailyRate", e.target.value)}
+                    placeholder="Custom rate"
+                    type="number"
+                    className="h-7 text-xs"
+                  />
+                </div>
                 <Field label="Rental Start" id={`lou-start-${v.id}`} value={v.startDate} onChange={(val) => updateVehicle(v.id, "startDate", val)} type="date" />
                 <Field label="Rental End" id={`lou-end-${v.id}`} value={v.endDate} onChange={(val) => updateVehicle(v.id, "endDate", val)} type="date" />
                 <div className="p-2 rounded-md bg-[#ff6221]/10 border border-[#ff6221]/20 text-center">
