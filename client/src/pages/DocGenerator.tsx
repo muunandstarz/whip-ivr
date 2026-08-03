@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import WhipLayout from "@/components/WhipLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,25 +14,48 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import {
-  FileText,
-  Sparkles,
-  Download,
-  Copy,
-  RefreshCw,
-  Plus,
-  Trash2,
-  ChevronRight,
-  Mail,
-  FileCheck,
-  AlertTriangle,
-  Shield,
-  Scale,
-  Truck,
-  Receipt,
-  Phone,
-} from "lucide-react";
+
 import { jsPDF } from "jspdf";
+import {
+  AlertTriangle,
+  Brain,
+  Building2,
+  Calculator,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Copy,
+  Download,
+  Eye,
+  FileCheck,
+  FileText,
+  FolderOpen,
+  Inbox,
+  Info,
+  Mail,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Phone,
+  Plus,
+  Receipt,
+  RefreshCw,
+  Save,
+  Scale,
+  Send,
+  Share2,
+  Shield,
+  Sparkles,
+  Star,
+  Stethoscope,
+  Trash2,
+  Truck,
+  Upload,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DocGenTab =
@@ -47,12 +70,17 @@ type DocGenTab =
   | "ror"
   | "release-bi"
   | "release-pd"
+  | "limited-liability-bi"
   | "tl-settlement"
   | "subro-demand"
   | "carrier-rebuttal"
   | "payment-receipt"
   | "urgently-invoice"
-  | "pip-exhaustion";
+  | "pip-exhaustion"
+  | "pip-bill-review"
+  | "lou-calculator"
+  | "coi-whip"
+  | "coi-klutch";
 
 interface NavGroup {
   label: string;
@@ -82,7 +110,6 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "denial", label: "Denial & Acknowledgment", icon: FileCheck },
       { id: "damage-denial", label: "Damage Denial", icon: AlertTriangle },
       { id: "ror", label: "Reservation of Rights", icon: Scale },
-      { id: "pip-exhaustion", label: "PIP Exhaustion (FL/PA/VA)", icon: AlertTriangle },
     ],
   },
   {
@@ -90,6 +117,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "release-bi", label: "General Release — BI", icon: FileCheck },
       { id: "release-pd", label: "General Release — PD", icon: FileCheck },
+      { id: "limited-liability-bi", label: "Limited Liability Release — BI", icon: FileCheck },
       { id: "tl-settlement", label: "TL Settlement & Release", icon: FileCheck },
     ],
   },
@@ -99,7 +127,22 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "subro-demand", label: "Subro Demand Letter", icon: Scale },
       { id: "carrier-rebuttal", label: "Carrier Rebuttal", icon: Scale },
       { id: "payment-receipt", label: "Payment Receipt", icon: Receipt },
-      { id: "urgently-invoice", label: "Towing Invoice (Urgently)", icon: Truck },
+      { id: "urgently-invoice", label: "Towing Invoice", icon: Truck },
+      { id: "lou-calculator", label: "LOU Calculator", icon: Scale },
+    ],
+  },
+  {
+    label: "Medical Review",
+    items: [
+      { id: "pip-exhaustion", label: "PIP Exhaustion (FL/PA/VA)", icon: AlertTriangle },
+      { id: "pip-bill-review", label: "Medical Bills Review", icon: FileText },
+    ],
+  },
+  {
+    label: "Coverage Docs",
+    items: [
+      { id: "coi-whip", label: "Whip COI", icon: Shield },
+      { id: "coi-klutch", label: "Klutch COI", icon: Shield },
     ],
   },
 ];
@@ -152,6 +195,23 @@ function addLetterFooter(doc: jsPDF) {
   );
 }
 
+// Statute of limitations notice — rendered above footer in smaller italic text
+function addSOLNotice(doc: jsPDF, state?: string) {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const solText = state
+    ? `STATUTE OF LIMITATIONS NOTICE: The applicable statute of limitations in ${state} may limit the time within which legal action may be commenced. Failure to file suit within the applicable limitations period may permanently bar your right to recovery. This notice does not constitute legal advice. Consult an attorney for guidance specific to your jurisdiction.`
+    : "STATUTE OF LIMITATIONS NOTICE: The applicable statute of limitations may limit the time within which legal action may be commenced. Failure to file suit within the applicable limitations period may permanently bar your right to recovery. This notice does not constitute legal advice.";
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(130, 130, 130);
+  const lines = doc.splitTextToSize(solText, W - 28);
+  const lineH = 3.5;
+  const blockH = lines.length * lineH + 4;
+  const yStart = H - 18 - blockH - 2;
+  doc.text(lines, 14, yStart);
+}
+
 function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, lineH: number): number {
   const lines = doc.splitTextToSize(text, maxW);
   doc.text(lines, x, y);
@@ -160,6 +220,10 @@ function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, 
 
 function downloadPDF(doc: jsPDF, filename: string) {
   doc.save(filename);
+}
+
+function getPDFDataUrl(doc: jsPDF): string {
+  return doc.output("datauristring");
 }
 
 // ─── Denial Templates ─────────────────────────────────────────────────────────
@@ -1314,6 +1378,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_DamageDenial_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -1460,6 +1525,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, preview, 14, y, W - 28, 5);
+    addSOLNotice(doc);
     addLetterFooter(doc);
     downloadPDF(doc, `Whip_ROR_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -2115,7 +2181,6 @@ claims@drivewhip.com`;
   );
 }
 
-
 // ─── Tab: Carrier Rebuttal ────────────────────────────────────────────────────
 interface RebuttalLineItem {
   item: string;
@@ -2753,7 +2818,6 @@ Whip Claims Management`;
   );
 }
 
-
 // ─── PIP Exhaustion Tab ───────────────────────────────────────────────────────
 function PIPExhaustionTab() {
   const [state, setState] = useState<"fl" | "pa" | "va">("fl");
@@ -2944,9 +3008,1496 @@ Whip Claims Management`;
   );
 }
 
+// ─── Tab: Limited Liability Release — BI (Georgia) ────────────────────────────
+function LimitedLiabilityBITab() {
+  const [form, setForm] = useState({
+    claimantName: "",
+    claimNumber: "",
+    dateOfLoss: "",
+    vehicle: "",
+    settlementAmount: "",
+    adjusterName: "",
+    recipientEmail: "",
+    injuryDescription: "",
+    isMinor: false,
+    minorGuardianName: "",
+    state: "Georgia",
+    additionalContext: "",
+  });
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [aiValidation, setAiValidation] = useState("");
+  const [aiValidating, setAiValidating] = useState(false);
+  const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
+  const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
+
+  const set = (k: keyof typeof form) => (v: string | boolean) =>
+    setForm((p) => ({ ...p, [k]: v }));
+
+  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+  const releaseText = `LIMITED LIABILITY RELEASE — BODILY INJURY
+FOR SETTLEMENT PURPOSES ONLY — GEORGIA
+
+Date: ${today}
+
+Claimant: ${form.claimantName || "[Claimant Name]"}${form.isMinor ? ` (Minor, by Guardian: ${form.minorGuardianName || "[Guardian Name]"})` : ""}
+Claim Number: ${form.claimNumber || "[Claim Number]"}
+Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
+Vehicle: ${form.vehicle || "[Vehicle]"}
+Settlement Amount: $${form.settlementAmount || "[Amount]"}
+
+In consideration of the payment of ${form.settlementAmount ? `$${form.settlementAmount}` : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all bodily injury claims, medical expenses, lost wages, pain and suffering, and any other damages of any kind.
+
+GEORGIA LIMITED LIABILITY PROVISION: This release is executed pursuant to O.C.G.A. § 33-7-11 and applicable Georgia law. The Released Parties' liability, if any, is limited to the applicable policy limits. This release does not constitute an admission of liability by any Released Party.
+
+${form.isMinor ? `MINOR CLAIMANT PROVISION: The undersigned Guardian/Parent represents that they have the legal authority to execute this release on behalf of the minor claimant, ${form.claimantName || "[Minor's Name]"}, and that this settlement is in the best interest of the minor. Court approval may be required under Georgia law for settlements involving minors. Consult with an attorney to confirm whether court approval is required in this matter.\n\n` : ""}The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.
+
+RELEASOR SIGNATURE:
+
+_________________________________    Date: _______________
+${form.claimantName || "[Claimant Name]"}
+${form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : ""}
+_________________________________
+Printed Name
+
+_________________________________
+Address
+
+Accepted by:
+${form.adjusterName || "[Adjuster Name]"}
+Whip Claims Management`;
+
+  const handleGenerateEmail = async () => {
+    if (!form.claimantName || !form.claimNumber || !form.settlementAmount) {
+      toast.error("Fill in Claimant Name, Claim Number, and Settlement Amount first");
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const result = await emailMutation.mutateAsync({
+        type: "bi",
+        claimantName: form.claimantName,
+        claimNumber: form.claimNumber,
+        dateOfLoss: form.dateOfLoss,
+        settlementAmount: form.settlementAmount,
+        adjusterName: form.adjusterName,
+        recipientEmail: form.recipientEmail,
+        injuryDescription: form.injuryDescription,
+        additionalNotes: `Georgia Limited Liability Release${form.isMinor ? " — Minor Claimant" : ""}`,
+      });
+      setEmailDraft(result.email);
+      toast.success("Settlement email generated");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "AI error");
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleValidate = async () => {
+    if (!form.claimantName || !form.settlementAmount) {
+      toast.error("Fill in Claimant Name and Settlement Amount first");
+      return;
+    }
+    setAiValidating(true);
+    try {
+      const result = await validateMutation.mutateAsync({
+        releaseType: "limited_bi",
+        state: form.state || "Georgia",
+        claimantName: form.claimantName,
+        settlementAmount: form.settlementAmount,
+        isMinor: form.isMinor,
+      });
+      setAiValidation(result.review);
+      toast.success("AI validation complete");
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "AI error");
+    } finally {
+      setAiValidating(false);
+    }
+  };
+
+  const handleDownload = () => {
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    let y = addWhipLetterhead(doc, "LIMITED LIABILITY RELEASE — BI", `Claim #${form.claimNumber || "[Claim Number]"} — GEORGIA — FOR SETTLEMENT PURPOSES ONLY`);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    y = wrapText(doc, releaseText, 14, y, W - 28, 5);
+    addSOLNotice(doc, "Georgia");
+    addLetterFooter(doc);
+    downloadPDF(doc, `Whip_LimitedLiability_BI_${form.claimNumber || "Draft"}.pdf`);
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div>
+        <Panel title="Release Details" tag="REQUIRED">
+          <Grid3>
+            <Field label="Claimant Name" id="llbi-name" value={form.claimantName} onChange={set("claimantName")} placeholder="Last, First" required />
+            <Field label="Claim Number" id="llbi-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
+            <Field label="Date of Loss" id="llbi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
+          </Grid3>
+          <Grid2 children={<>
+            <Field label="Vehicle (Year/Make/Model)" id="llbi-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" />
+            <Field label="Settlement Amount ($)" id="llbi-amount" value={form.settlementAmount} onChange={set("settlementAmount")} placeholder="e.g. 5000.00" required />
+          </>} />
+          <div className="mt-3">
+            <Field label="Injury Description (for email)" id="llbi-injury" value={form.injuryDescription} onChange={set("injuryDescription")} placeholder="e.g. soft tissue injuries to neck and back" />
+          </div>
+        </Panel>
+        <Panel title="Georgia-Specific Options">
+          <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 mb-3">
+            <Info className="w-4 h-4 text-amber-600 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">This release includes Georgia limited liability language per O.C.G.A. § 33-7-11. Use the AI validator to confirm language is appropriate for the specific claim.</p>
+          </div>
+          <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+            <Checkbox
+              checked={form.isMinor}
+              onCheckedChange={(v) => set("isMinor")(!!v)}
+            />
+            <div>
+              <div className="text-xs font-semibold">Minor Claimant</div>
+              <div className="text-xs text-muted-foreground">Adds guardian signature block and minor court-approval notice</div>
+            </div>
+          </label>
+          {form.isMinor && (
+            <div className="mt-3">
+              <Field label="Guardian / Parent Name" id="llbi-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
+            </div>
+          )}
+          <div className="mt-3">
+            <Field label="Additional Context (for AI validation)" id="llbi-context" value={form.additionalContext} onChange={set("additionalContext")} placeholder="e.g. claimant represented by attorney, disputed liability..." />
+          </div>
+        </Panel>
+        <Panel title="Handler Info">
+          <Grid2>
+            <Field label="Handler Name" id="llbi-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <Field label="Recipient Email" id="llbi-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="attorney@lawfirm.com" />
+          </Grid2>
+        </Panel>
+        <Panel title="AI Tools" tag="AI">
+          <div className="flex gap-2 flex-wrap mb-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"
+              onClick={handleValidate}
+              disabled={aiValidating}
+            >
+              {aiValidating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              {aiValidating ? "Validating..." : "✨ Validate Release Language"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"
+              onClick={handleGenerateEmail}
+              disabled={emailLoading}
+            >
+              {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+              {emailLoading ? "Generating..." : "Generate Email Draft"}
+            </Button>
+          </div>
+          {aiValidation && (
+            <div className="border border-border rounded-md overflow-hidden mb-3">
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+                <CheckCircle className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold flex-1">AI Language Validation</span>
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiValidation); toast.success("Copied"); }}>
+                  <Copy className="w-3 h-3" /> Copy
+                </Button>
+              </div>
+              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{aiValidation}</pre>
+            </div>
+          )}
+          {emailDraft && (
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
+                <Mail className="w-3.5 h-3.5 text-[#ff6221]" />
+                <span className="text-xs font-semibold flex-1">Email Draft</span>
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(emailDraft); toast.success("Copied"); }}>
+                  <Copy className="w-3 h-3" /> Copy
+                </Button>
+              </div>
+              <pre className="p-3 text-xs font-mono whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{emailDraft}</pre>
+            </div>
+          )}
+        </Panel>
+      </div>
+      <PreviewPanel
+        text={releaseText}
+        onCopy={() => { navigator.clipboard.writeText(releaseText); toast.success("Copied"); }}
+        onDownload={handleDownload}
+      />
+    </div>
+  );
+}
+
+// ─── Tab: LOU Calculator ──────────────────────────────────────────────────────
+interface LOUVehicle {
+  id: string;
+  ymm: string;
+  vin: string;
+  dailyRate: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  total: number;
+}
+
+function LOUCalculatorTab() {
+  const [vehicles, setVehicles] = useState<LOUVehicle[]>([
+    { id: "1", ymm: "", vin: "", dailyRate: "", startDate: "", endDate: "", days: 0, total: 0 },
+  ]);
+  const [claimNumber, setClaimNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
+  const [adjuster, setAdjuster] = useState("");
+  const [pushedToDemand, setPushedToDemand] = useState(false);
+  const [louTotal, setLouTotal] = useState("0.00");
+
+  const calcDays = (start: string, end: string): number => {
+    if (!start || !end) return 0;
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+    const diff = Math.ceil((e - s) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  };
+
+  const updateVehicle = (id: string, field: keyof LOUVehicle, value: string) => {
+    setVehicles((prev) => {
+      const updated = prev.map((v) => {
+        if (v.id !== id) return v;
+        const next = { ...v, [field]: value };
+        if (field === "startDate" || field === "endDate" || field === "dailyRate") {
+          const days = calcDays(
+            field === "startDate" ? value : next.startDate,
+            field === "endDate" ? value : next.endDate
+          );
+          const rate = parseFloat(field === "dailyRate" ? value : next.dailyRate) || 0;
+          next.days = days;
+          next.total = days * rate;
+        }
+        return next;
+      });
+      const total = updated.reduce((s, v) => s + v.total, 0);
+      setLouTotal(total.toFixed(2));
+      return updated;
+    });
+  };
+
+  const addVehicle = () => {
+    setVehicles((prev) => [
+      ...prev,
+      { id: Date.now().toString(), ymm: "", vin: "", dailyRate: "", startDate: "", endDate: "", days: 0, total: 0 },
+    ]);
+  };
+
+  const removeVehicle = (id: string) => {
+    if (vehicles.length === 1) return;
+    const updated = vehicles.filter((v) => v.id !== id);
+    const total = updated.reduce((s, v) => s + v.total, 0);
+    setLouTotal(total.toFixed(2));
+    setVehicles(updated);
+  };
+
+  const handlePushToDemand = () => {
+    // Store LOU total in sessionStorage so SubroDemandTab can pick it up
+    sessionStorage.setItem("lou_push_total", louTotal);
+    sessionStorage.setItem("lou_push_claim", claimNumber);
+    setPushedToDemand(true);
+    toast.success(`LOU total $${louTotal} ready — open Subro Demand Letter and click "Pull from LOU Calc"`);
+    setTimeout(() => setPushedToDemand(false), 4000);
+  };
+
+  const handleDownload = () => {
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    let y = addWhipLetterhead(doc, "LOSS OF USE CALCULATION", `Claim #${claimNumber || "[Claim Number]"}`);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    if (carrier) { doc.text(`Carrier: ${carrier}${adjuster ? ` — ${adjuster}` : ""}`, 14, y); y += 7; }
+    // Table header
+    doc.setFillColor(23, 27, 49);
+    doc.rect(14, y, W - 28, 8, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7.5);
+    doc.text("Vehicle", 16, y + 5.5);
+    doc.text("VIN", 70, y + 5.5);
+    doc.text("Rate/Day", 110, y + 5.5);
+    doc.text("Start", 130, y + 5.5);
+    doc.text("End", 152, y + 5.5);
+    doc.text("Days", 170, y + 5.5);
+    doc.text("Total", 185, y + 5.5);
+    y += 8;
+    // Table rows
+    let rowBg = false;
+    for (const v of vehicles) {
+      if (rowBg) { doc.setFillColor(245, 245, 250); doc.rect(14, y, W - 28, 7, "F"); }
+      rowBg = !rowBg;
+      doc.setTextColor(40, 40, 40);
+      doc.setFont("helvetica", "normal");
+      doc.text(v.ymm || "—", 16, y + 5);
+      doc.text(v.vin ? v.vin.slice(-8) : "—", 70, y + 5);
+      doc.text(v.dailyRate ? `$${parseFloat(v.dailyRate).toFixed(2)}` : "—", 110, y + 5);
+      doc.text(v.startDate || "—", 130, y + 5);
+      doc.text(v.endDate || "—", 152, y + 5);
+      doc.text(String(v.days), 170, y + 5);
+      doc.text(`$${v.total.toFixed(2)}`, 185, y + 5);
+      y += 7;
+    }
+    // Total row
+    doc.setFillColor(255, 98, 33);
+    doc.rect(14, y, W - 28, 9, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("TOTAL LOSS OF USE DEMAND:", 16, y + 6);
+    doc.text(`$${louTotal}`, 185, y + 6);
+    y += 15;
+    addLetterFooter(doc);
+    downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
+  };
+
+  return (
+    <div className="space-y-4 max-w-4xl">
+      <Panel title="Claim Information">
+        <Grid3>
+          <Field label="Claim Number" id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="e.g. PF438367" />
+          <Field label="Adverse Carrier" id="lou-carrier" value={carrier} onChange={setCarrier} placeholder="e.g. State Farm" />
+          <Field label="Adjuster" id="lou-adjuster" value={adjuster} onChange={setAdjuster} placeholder="e.g. John Smith" />
+        </Grid3>
+      </Panel>
+      <Panel title="Vehicle Rental Periods" tag="AUTO-CALCULATES">
+        <div className="space-y-3">
+          {vehicles.map((v, idx) => (
+            <div key={v.id} className="p-3 rounded-lg border border-border bg-muted/20">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-foreground/60">Vehicle {idx + 1}</span>
+                {vehicles.length > 1 && (
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => removeVehicle(v.id)}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <Field label="Year/Make/Model" id={`lou-ymm-${v.id}`} value={v.ymm} onChange={(val) => updateVehicle(v.id, "ymm", val)} placeholder="e.g. 2024 Toyota Camry" />
+                <Field label="VIN" id={`lou-vin-${v.id}`} value={v.vin} onChange={(val) => updateVehicle(v.id, "vin", val)} placeholder="17-character VIN" />
+              </div>
+              <div className="grid grid-cols-4 gap-2 items-end">
+                <Field label="Daily Rate ($)" id={`lou-rate-${v.id}`} value={v.dailyRate} onChange={(val) => updateVehicle(v.id, "dailyRate", val)} placeholder="e.g. 35.00" />
+                <Field label="Rental Start" id={`lou-start-${v.id}`} value={v.startDate} onChange={(val) => updateVehicle(v.id, "startDate", val)} type="date" />
+                <Field label="Rental End" id={`lou-end-${v.id}`} value={v.endDate} onChange={(val) => updateVehicle(v.id, "endDate", val)} type="date" />
+                <div className="p-2 rounded-md bg-[#ff6221]/10 border border-[#ff6221]/20 text-center">
+                  <div className="text-[10px] text-[#ff6221]/70 font-medium">{v.days} days</div>
+                  <div className="text-sm font-bold text-[#ff6221]">${v.total.toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" className="gap-1.5 w-full" onClick={addVehicle}>
+            <Plus className="w-3.5 h-3.5" /> Add Vehicle
+          </Button>
+        </div>
+      </Panel>
+      <div className="p-4 rounded-xl border-2 border-[#ff6221]/30 bg-[#ff6221]/5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs text-[#ff6221]/70 font-medium uppercase tracking-wider">Total LOU Demand</div>
+            <div className="text-3xl font-bold text-[#ff6221]">${louTotal}</div>
+            <div className="text-xs text-muted-foreground mt-1">{vehicles.length} vehicle{vehicles.length !== 1 ? "s" : ""} · {vehicles.reduce((s, v) => s + v.days, 0)} total rental days</div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className={`gap-1.5 ${pushedToDemand ? "border-green-500 text-green-600" : "border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"}`}
+              onClick={handlePushToDemand}
+            >
+              {pushedToDemand ? <CheckCircle className="w-3.5 h-3.5" /> : <Calculator className="w-3.5 h-3.5" />}
+              {pushedToDemand ? "Pushed!" : "Push to Demand Letter"}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleDownload}>
+              <Download className="w-3.5 h-3.5" /> Download PDF
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Medical Bills Review ────────────────────────────────────────────────
+function MedicalBillsReviewTab() {
+  const [state, setState] = useState("MD");
+  const [dateOfLoss, setDateOfLoss] = useState("");
+  const [impactType, setImpactType] = useState("");
+  const [injuryDescription, setInjuryDescription] = useState("");
+  const [factsOfLoss, setFactsOfLoss] = useState("");
+  const [coverageType, setCoverageType] = useState<"pip" | "bi" | "umbi" | "all">("all");
+  const [demandFile, setDemandFile] = useState<File | null>(null);
+  const [demandFileName, setDemandFileName] = useState("");
+  const [vehiclePhoto1, setVehiclePhoto1] = useState<File | null>(null);
+  const [vehiclePhoto2, setVehiclePhoto2] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [analysis, setAnalysis] = useState<{
+    bills: Array<{provider: string; date: string; cptCode: string; description: string; amount: number; applicable: boolean; reason: string}>;
+    cptAnalysis: Array<{code: string; description: string; applicable: boolean; redFlags: string[]}>;
+    mechanismAssessment: string;
+    pipExposure: number;
+    biExposure: number;
+    umbiExposure: number;
+    totalApplicable: number;
+    totalNotApplicable: number;
+    expertSummary: string;
+    responseLetter: string;
+    redFlags: string[];
+  } | null>(null);
+  const [activeResultTab, setActiveResultTab] = useState<"bills" | "summary" | "letter">("bills");
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"report" | "letter">("report");
+
+  const analyzeMutation = trpc.docgen.analyzeMedicalDemand.useMutation();
+
+  const STATES = ["MD","DC","VA","FL","GA","IL","MA","PA","NJ","TX","NY","NC","DE","OH"];
+  const IMPACT_TYPES = ["Rear-end (low speed)", "Rear-end (moderate)", "Rear-end (high speed)", "Side impact (T-bone)", "Head-on", "Sideswipe", "Hit pedestrian", "Single vehicle", "Parking lot"];
+
+  const uploadFile = async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload/document", { method: "POST", body: fd });
+    if (!res.ok) throw new Error("Upload failed");
+    const data = await res.json() as { url: string };
+    return data.url;
+  };
+
+  const handleAnalyze = async () => {
+    if (!demandFile) {
+      toast.error("Please upload a demand package PDF first");
+      return;
+    }
+    setUploading(true);
+    try {
+      const demandUrl = await uploadFile(demandFile);
+      let photo1Url: string | undefined;
+      let photo2Url: string | undefined;
+      if (vehiclePhoto1) photo1Url = await uploadFile(vehiclePhoto1);
+      if (vehiclePhoto2) photo2Url = await uploadFile(vehiclePhoto2);
+      setUploading(false);
+      toast.info("Analyzing demand package — this may take 30–60 seconds for large files...");
+      const result = await analyzeMutation.mutateAsync({
+        demandFileUrl: demandUrl,
+        vehiclePhoto1Url: photo1Url,
+        vehiclePhoto2Url: photo2Url,
+        state,
+        dateOfLoss,
+        impactType,
+        injuryDescription,
+        factsOfLoss,
+        coverageType,
+      });
+      if (result.analysis) {
+        setAnalysis(result.analysis as typeof analysis);
+        toast.success("Analysis complete");
+      } else {
+        toast.error("Analysis returned no structured data");
+      }
+    } catch (e: unknown) {
+      setUploading(false);
+      toast.error((e as Error).message || "Analysis failed");
+    }
+  };
+
+  const handleDownloadReport = () => {
+    if (!analysis) return;
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    let y = addWhipLetterhead(doc, "MEDICAL DEMAND ANALYSIS REPORT", `State: ${state} | Coverage: ${coverageType.toUpperCase()} | DOL: ${dateOfLoss || "N/A"}`);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+
+    // Summary box
+    doc.setFillColor(245, 245, 245);
+    doc.roundedRect(14, y, W - 28, 22, 2, 2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(`Total Applicable: $${analysis.totalApplicable.toFixed(2)}`, 18, y + 7);
+    doc.text(`Total Not Applicable: $${analysis.totalNotApplicable.toFixed(2)}`, 18, y + 13);
+    doc.text(`PIP Exposure: $${analysis.pipExposure.toFixed(2)}`, 80, y + 7);
+    doc.text(`BI Exposure: $${analysis.biExposure.toFixed(2)}`, 80, y + 13);
+    doc.text(`UMBI Exposure: $${analysis.umbiExposure.toFixed(2)}`, 140, y + 7);
+    y += 28;
+
+    // Bills table
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("BILL-BY-BILL ANALYSIS", 14, y);
+    y += 6;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setFillColor(23, 27, 49);
+    doc.setTextColor(255, 255, 255);
+    doc.rect(14, y - 4, W - 28, 6, "F");
+    doc.text("Provider", 16, y);
+    doc.text("Date", 60, y);
+    doc.text("CPT", 82, y);
+    doc.text("Amount", 100, y);
+    doc.text("Status", 120, y);
+    doc.text("Reason", 140, y);
+    y += 4;
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    for (const bill of analysis.bills) {
+      if (y > 260) { doc.addPage(); y = 20; }
+      if (bill.applicable) { doc.setFillColor(240, 255, 240); } else { doc.setFillColor(255, 240, 240); }
+      doc.rect(14, y - 3, W - 28, 5.5, "F");
+      doc.text(bill.provider.substring(0, 20), 16, y);
+      doc.text(bill.date, 60, y);
+      doc.text(bill.cptCode, 82, y);
+      doc.text(`$${bill.amount.toFixed(2)}`, 100, y);
+      if (bill.applicable) { doc.setTextColor(0, 120, 0); } else { doc.setTextColor(180, 0, 0); }
+      doc.text(bill.applicable ? "APPLICABLE" : "NOT APPLICABLE", 120, y);
+      doc.setTextColor(40, 40, 40);
+      doc.text(bill.reason.substring(0, 35), 140, y);
+      y += 6;
+    }
+
+    y += 6;
+    if (y > 230) { doc.addPage(); y = 20; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("EXPERT SUMMARY", 14, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    y = wrapText(doc, analysis.expertSummary, 14, y, W - 28, 4.5);
+
+    addSOLNotice(doc, state);
+    addLetterFooter(doc);
+    const reportUrl = getPDFDataUrl(doc);
+    setPreviewPdfUrl(reportUrl);
+    setPreviewMode("report");
+    downloadPDF(doc, `Whip_MedicalAnalysis_${state}_${dateOfLoss || "Draft"}.pdf`);
+  };
+
+  const handleDownloadLetter = () => {
+    if (!analysis) return;
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    let y = addWhipLetterhead(doc, "MEDICAL DEMAND RESPONSE LETTER", `State: ${state} | Claim DOL: ${dateOfLoss || "N/A"}`);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    y = wrapText(doc, analysis.responseLetter, 14, y, W - 28, 5);
+    addSOLNotice(doc, state);
+    addLetterFooter(doc);
+    const letterUrl = getPDFDataUrl(doc);
+    setPreviewPdfUrl(letterUrl);
+    setPreviewMode("letter");
+    downloadPDF(doc, `Whip_DemandResponse_${state}_${dateOfLoss || "Draft"}.pdf`);
+  };
+
+  const totalBilled = analysis?.bills.reduce((s, b) => s + b.amount, 0) ?? 0;
+  const isLoading = uploading || analyzeMutation.isPending;
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="space-y-4">
+        <Panel title="Claim Context">
+          <div className="mb-3">
+            <Label className="text-xs font-semibold mb-1.5 block">State of Loss</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {STATES.map((s) => (
+                <button key={s} onClick={() => setState(s)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${state === s ? "bg-[#ff6221] text-white" : "bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground"}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Grid2 children={<>
+            <Field label="Date of Loss" id="mbr-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
+            <div>
+              <Label className="text-xs font-semibold mb-1.5 block">Coverage Focus</Label>
+              <Select value={coverageType} onValueChange={(v) => setCoverageType(v as typeof coverageType)}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All (PIP + BI + UMBI)</SelectItem>
+                  <SelectItem value="pip">PIP Only</SelectItem>
+                  <SelectItem value="bi">BI Only</SelectItem>
+                  <SelectItem value="umbi">UMBI Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>} />
+          <div className="mt-3">
+            <Label className="text-xs font-semibold mb-1.5 block">Impact Type / Mechanism of Loss</Label>
+            <Select value={impactType} onValueChange={setImpactType}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select impact type..." /></SelectTrigger>
+              <SelectContent>
+                {IMPACT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="mt-3">
+            <Label className="text-xs font-semibold mb-1.5 block">Reported Injuries</Label>
+            <Input className="h-8 text-xs" placeholder="e.g. cervical strain, lumbar sprain, headaches" value={injuryDescription} onChange={e => setInjuryDescription(e.target.value)} />
+          </div>
+          <div className="mt-3">
+            <Label className="text-xs font-semibold mb-1.5 block">Facts of Loss</Label>
+            <Textarea className="text-xs h-20 resize-none" placeholder="Brief narrative of the accident..." value={factsOfLoss} onChange={e => setFactsOfLoss(e.target.value)} />
+          </div>
+        </Panel>
+
+        <Panel title="Demand Package Upload" tag="REQUIRED">
+          <label className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 border-dashed transition-colors ${demandFile ? "border-[#ff6221]/60 bg-[#ff6221]/5" : "border-border hover:border-[#ff6221]/40"}`}>
+            <Upload className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold">{demandFile ? demandFileName : "Upload Medical Demand Package (PDF)"}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{demandFile ? `${(demandFile.size / 1024 / 1024).toFixed(1)} MB — ready to analyze` : "Up to 200 pages, 50MB max"}</p>
+            </div>
+            <input type="file" className="hidden" accept=".pdf,.PDF" onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) { setDemandFile(f); setDemandFileName(f.name); }
+            }} />
+          </label>
+        </Panel>
+
+        <Panel title="Vehicle Photos (Optional — improves mechanism analysis)">
+          <div className="grid grid-cols-2 gap-3">
+            <label className={`flex flex-col items-center gap-2 cursor-pointer p-3 rounded-lg border-2 border-dashed transition-colors ${vehiclePhoto1 ? "border-[#ff6221]/60 bg-[#ff6221]/5" : "border-border hover:border-[#ff6221]/40"}`}>
+              <Upload className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-center font-medium">{vehiclePhoto1 ? vehiclePhoto1.name.substring(0, 20) + "..." : "Whip Vehicle Photo"}</span>
+              <input type="file" className="hidden" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) setVehiclePhoto1(f); }} />
+            </label>
+            <label className={`flex flex-col items-center gap-2 cursor-pointer p-3 rounded-lg border-2 border-dashed transition-colors ${vehiclePhoto2 ? "border-[#ff6221]/60 bg-[#ff6221]/5" : "border-border hover:border-[#ff6221]/40"}`}>
+              <Upload className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-center font-medium">{vehiclePhoto2 ? vehiclePhoto2.name.substring(0, 20) + "..." : "Claimant Vehicle Photo"}</span>
+              <input type="file" className="hidden" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) setVehiclePhoto2(f); }} />
+            </label>
+          </div>
+        </Panel>
+
+        <Button
+          className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white h-11"
+          onClick={handleAnalyze}
+          disabled={isLoading || !demandFile}
+        >
+          {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+          {uploading ? "Uploading files..." : analyzeMutation.isPending ? "Analyzing demand package..." : "✨ Run AI Medical Demand Analysis"}
+        </Button>
+      </div>
+
+      <div>
+        {analysis ? (
+          <div className="space-y-4">
+            {/* Exposure Summary */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                <p className="text-xs text-muted-foreground">Applicable Medical</p>
+                <p className="text-lg font-bold text-green-700 dark:text-green-400">${analysis.totalApplicable.toFixed(2)}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <p className="text-xs text-muted-foreground">Not Applicable</p>
+                <p className="text-lg font-bold text-red-700 dark:text-red-400">${analysis.totalNotApplicable.toFixed(2)}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <p className="text-xs text-muted-foreground">Total Billed</p>
+                <p className="text-lg font-bold text-blue-700 dark:text-blue-400">${totalBilled.toFixed(2)}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-muted/40 border border-border">
+                <p className="text-xs text-muted-foreground">BI Exposure</p>
+                <p className="text-lg font-bold">${analysis.biExposure.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Red Flags */}
+            {analysis.redFlags.length > 0 && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Red Flags ({analysis.redFlags.length})</span>
+                </div>
+                <ul className="space-y-1">
+                  {analysis.redFlags.map((f, i) => (
+                    <li key={i} className="text-xs text-amber-700 dark:text-amber-400">• {f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Result Tabs */}
+            <div className="rounded-xl border border-border overflow-hidden">
+              <div className="flex border-b border-border bg-muted/30">
+                {(["bills", "summary", "letter"] as const).map(tab => (
+                  <button key={tab} onClick={() => setActiveResultTab(tab)}
+                    className={`flex-1 py-2 text-xs font-semibold capitalize transition-colors ${activeResultTab === tab ? "bg-background border-b-2 border-[#ff6221] text-[#ff6221]" : "text-muted-foreground hover:text-foreground"}`}>
+                    {tab === "bills" ? "Bill Analysis" : tab === "summary" ? "Expert Summary" : "Response Letter"}
+                  </button>
+                ))}
+              </div>
+              <div className="p-4 max-h-[500px] overflow-y-auto">
+                {activeResultTab === "bills" && (
+                  <div className="space-y-2">
+                    {analysis.bills.map((bill, i) => (
+                      <div key={i} className={`p-3 rounded-lg border text-xs ${bill.applicable ? "border-green-200 bg-green-50 dark:bg-green-950/20" : "border-red-200 bg-red-50 dark:bg-red-950/20"}`}>
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div className="font-semibold">{bill.provider}</div>
+                          <div className={`px-2 py-0.5 rounded text-xs font-bold flex-shrink-0 ${bill.applicable ? "bg-green-600 text-white" : "bg-red-600 text-white"}`}>
+                            {bill.applicable ? "✓ APPLICABLE" : "✗ NOT APPLICABLE"}
+                          </div>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {bill.date} · CPT {bill.cptCode} — {bill.description} · <span className="font-semibold text-foreground">${bill.amount.toFixed(2)}</span>
+                        </div>
+                        <div className="mt-1 text-muted-foreground italic">{bill.reason}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {activeResultTab === "summary" && (
+                  <div className="text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap">{analysis.expertSummary}</div>
+                )}
+                {activeResultTab === "letter" && (
+                  <div className="text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap font-mono">{analysis.responseLetter}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={handleDownloadReport}>
+                <Download className="w-3.5 h-3.5" /> Full Analysis PDF
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={handleDownloadLetter}>
+                <FileText className="w-3.5 h-3.5" /> Response Letter PDF
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { navigator.clipboard.writeText(analysis.responseLetter); toast.success("Letter copied"); }}>
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+
+            {/* Inline PDF Preview */}
+            {previewPdfUrl && (
+              <div className="rounded-xl border border-border overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
+                  <span className="text-xs font-semibold text-foreground/70 flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5" />
+                    Preview — {previewMode === "report" ? "Full Analysis Report" : "Response Letter"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => window.open(previewPdfUrl, "_blank")} className="text-xs text-[#ff6221] hover:underline flex items-center gap-1">
+                      <Maximize2 className="w-3 h-3" /> Full Screen
+                    </button>
+                    <button onClick={() => setPreviewPdfUrl(null)} className="text-foreground/40 hover:text-foreground">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <iframe src={previewPdfUrl} className="w-full h-[500px]" title="PDF Preview" />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-80 rounded-xl border-2 border-dashed border-border text-center p-8">
+            <Brain className="w-12 h-12 text-muted-foreground/30 mb-4" />
+            <p className="text-sm font-semibold text-muted-foreground">Medical Demand Analysis</p>
+            <p className="text-xs text-muted-foreground/60 mt-2 max-w-xs">Upload a demand package PDF and fill in the claim context, then run the AI analysis to get a full bill-by-bill breakdown, CPT code review, mechanism of loss assessment, and response letter.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Whip COI ─────────────────────────────────────────────────────────────
+function WhipCOITab() {
+  const [state, setState] = useState("MD");
+  const [form, setForm] = useState({
+    memberName: "",
+    memberAddress: "",
+    memberCity: "",
+    memberState: "",
+    memberZip: "",
+    vehicleYear: "",
+    vehicleMake: "",
+    vehicleModel: "",
+    vin: "",
+    plateNumber: "",
+    weeklyRate: "",
+    certDate: "",
+    effectiveDate: "",
+    expirationDate: "",
+    policyNumber: "WH-AUTO-" + new Date().getFullYear(),
+    holderName: "",
+    holderAddress: "",
+    holderCity: "",
+    holderState: "",
+    holderZip: "",
+    additionalInsured: false,
+    waiverOfSubrogation: false,
+  });
+
+  const set = (k: keyof typeof form) => (v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+  const rules = KLUTCH_STATE_RULES[state] || KLUTCH_STATE_RULES["MD"];
+  const STATES = Object.keys(KLUTCH_STATE_RULES);
+
+  const handleDownload = () => {
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+
+    // Header bar - Whip orange
+    doc.setFillColor(255, 98, 33);
+    doc.rect(0, 0, W, 18, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("WHIP", 10, 12);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text("CERTIFICATE OF COVERAGE", 10, 16.5);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("CERTIFICATE OF AUTOMOBILE INSURANCE", W / 2, 11, { align: "center" });
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text(`State: ${state}  |  Policy: ${form.policyNumber}  |  Date: ${form.certDate || new Date().toLocaleDateString()}`, W / 2, 15.5, { align: "center" });
+
+    const col1 = 8;
+    const col2 = W / 2 + 4;
+    const colW = W / 2 - 12;
+    let y = 24;
+
+    const box = (title: string, x: number, startY: number, h: number) => {
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(248, 249, 252);
+      doc.roundedRect(x, startY, colW, h, 1.5, 1.5, "FD");
+      doc.setFillColor(255, 98, 33);
+      doc.rect(x, startY, colW, 5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, x + 2, startY + 3.5);
+      doc.setTextColor(40, 40, 40);
+      doc.setFont("helvetica", "normal");
+      return startY + 7;
+    };
+
+    const row = (label: string, value: string, x: number, rowY: number) => {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 100, 100);
+      doc.text(label.toUpperCase(), x + 2, rowY);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(20, 20, 20);
+      doc.text(value || "—", x + 2, rowY + 3.5);
+      return rowY + 7;
+    };
+
+    let ly = box("INSURED MEMBER", col1, y, 38);
+    ly = row("Name", form.memberName, col1, ly);
+    ly = row("Address", `${form.memberAddress}, ${form.memberCity}, ${form.memberState} ${form.memberZip}`, col1, ly);
+    ly = row("Insurer", "Metrocars Leasing Corp d/b/a Whip", col1, ly);
+    ly = row("Policy Number", form.policyNumber, col1, ly);
+
+    ly = y + 42;
+    ly = box("COVERED VEHICLE", col1, ly, 38);
+    ly = row("Vehicle", `${form.vehicleYear} ${form.vehicleMake} ${form.vehicleModel}`, col1, ly);
+    ly = row("VIN", form.vin, col1, ly);
+    ly = row("Plate", form.plateNumber, col1, ly);
+    ly = row("Weekly Rate", form.weeklyRate ? `$${form.weeklyRate}/week` : "—", col1, ly);
+
+    ly = y + 84;
+    ly = box("POLICY PERIOD", col1, ly, 20);
+    ly = row("Effective Date", form.effectiveDate, col1, ly);
+    ly = row("Expiration Date", form.expirationDate, col1, ly);
+
+    let ry = box("COVERAGE LIMITS", col2, y, 80);
+    const coverageRows = [
+      ["Bodily Injury Liability", rules.biLimits],
+      ["Property Damage Liability", rules.pdLimit],
+      ...(rules.pip ? [["Personal Injury Protection (PIP)", rules.pipLimit]] : []),
+      ...(rules.um ? [["Uninsured Motorist", rules.umLimit]] : []),
+      ...(rules.uim ? [["Underinsured Motorist", rules.uimLimit]] : []),
+    ];
+    for (const [label, value] of coverageRows) {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(label, col2 + 2, ry);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(255, 98, 33);
+      doc.text(value, col2 + colW - 2, ry, { align: "right" });
+      doc.setDrawColor(220, 220, 220);
+      doc.line(col2 + 2, ry + 1.5, col2 + colW - 2, ry + 1.5);
+      ry += 7;
+    }
+
+    ry = y + 84;
+    ry = box("CERTIFICATE HOLDER", col2, ry, 30);
+    ry = row("Name", form.holderName, col2, ry);
+    ry = row("Address", `${form.holderAddress}${form.holderCity ? ", " + form.holderCity : ""}${form.holderState ? ", " + form.holderState : ""} ${form.holderZip}`, col2, ry);
+    if (form.additionalInsured) {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 98, 33);
+      doc.text("✓ ADDITIONAL INSURED", col2 + 2, ry);
+      ry += 4;
+    }
+    if (form.waiverOfSubrogation) {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 98, 33);
+      doc.text("✓ WAIVER OF SUBROGATION", col2 + 2, ry);
+      ry += 4;
+    }
+
+    // Footer
+    doc.setFillColor(245, 245, 248);
+    doc.rect(0, H - 18, W, 18, "F");
+    doc.setDrawColor(200, 200, 200);
+    doc.line(0, H - 18, W, H - 18);
+    doc.setFontSize(6);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "italic");
+    doc.text(
+      "This certificate is issued as a matter of information only and confers no rights upon the certificate holder. This certificate does not amend, extend, or alter the coverage afforded by the policies below.",
+      W / 2, H - 13, { align: "center", maxWidth: W - 20 }
+    );
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 98, 33);
+    doc.text("Metrocars Leasing Corp d/b/a Whip  |  P.O. Box 10622, Rockville, MD 20849  |  Authorized Representative", W / 2, H - 6, { align: "center" });
+
+    downloadPDF(doc, `Whip_COI_${form.memberName.replace(/\s+/g, "_") || "Member"}_${state}.pdf`);
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="space-y-4">
+        <Panel title="State of Coverage (Member's Home Market)">
+          <div className="flex flex-wrap gap-1.5">
+            {STATES.map(s => (
+              <button key={s} onClick={() => setState(s)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${state === s ? "bg-[#ff6221] text-white" : "bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground"}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+              <strong>Market-based:</strong> Select the state where the <strong>member originates</strong> (home market), not where the accident occurred. Whip markets: MD (Glen Burnie, Rockville), VA, PA, FL, IL, GA, MA.
+            </p>
+          </div>
+        </Panel>
+        <Panel title="Member Information">
+          <Field label="Member Name" id="wcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="Last, First" required />
+          <div className="mt-2">
+            <Field label="Address" id="wcoi-addr" value={form.memberAddress} onChange={set("memberAddress")} placeholder="Street address" />
+          </div>
+          <Grid3 children={<>
+            <Field label="City" id="wcoi-city" value={form.memberCity} onChange={set("memberCity")} placeholder="City" />
+            <Field label="State" id="wcoi-mstate" value={form.memberState} onChange={set("memberState")} placeholder="e.g. MD" />
+            <Field label="ZIP" id="wcoi-zip" value={form.memberZip} onChange={set("memberZip")} placeholder="e.g. 20850" />
+          </>} />
+        </Panel>
+        <Panel title="Covered Vehicle">
+          <Grid3 children={<>
+            <Field label="Year" id="wcoi-yr" value={form.vehicleYear} onChange={set("vehicleYear")} placeholder="2024" />
+            <Field label="Make" id="wcoi-make" value={form.vehicleMake} onChange={set("vehicleMake")} placeholder="Toyota" />
+            <Field label="Model" id="wcoi-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Camry" />
+          </>} />
+          <Grid2 children={<>
+            <Field label="VIN" id="wcoi-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+            <Field label="Plate Number" id="wcoi-plate" value={form.plateNumber} onChange={set("plateNumber")} placeholder="e.g. ABC1234" />
+          </>} />
+          <div className="mt-2">
+            <Field label="Weekly Rate ($)" id="wcoi-rate" value={form.weeklyRate} onChange={set("weeklyRate")} placeholder="e.g. 350" />
+          </div>
+        </Panel>
+        <Panel title="Policy Period">
+          <Grid3 children={<>
+            <Field label="Certificate Date" id="wcoi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
+            <Field label="Effective Date" id="wcoi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
+            <Field label="Expiration Date" id="wcoi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+          </>} />
+        </Panel>
+        <Panel title="Certificate Holder">
+          <Field label="Holder Name" id="wcoi-holder" value={form.holderName} onChange={set("holderName")} placeholder="e.g. Toyota Financial Services" />
+          <div className="mt-2">
+            <Field label="Address" id="wcoi-haddr" value={form.holderAddress} onChange={set("holderAddress")} placeholder="Street address" />
+          </div>
+          <Grid3 children={<>
+            <Field label="City" id="wcoi-hcity" value={form.holderCity} onChange={set("holderCity")} placeholder="City" />
+            <Field label="State" id="wcoi-hstate" value={form.holderState} onChange={set("holderState")} placeholder="e.g. MD" />
+            <Field label="ZIP" id="wcoi-hzip" value={form.holderZip} onChange={set("holderZip")} placeholder="e.g. 20850" />
+          </>} />
+          <div className="mt-3 space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.additionalInsured} onCheckedChange={(v) => set("additionalInsured")(!!v)} />
+              <div className="text-xs font-semibold">Additional Insured</div>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.waiverOfSubrogation} onCheckedChange={(v) => set("waiverOfSubrogation")(!!v)} />
+              <div className="text-xs font-semibold">Waiver of Subrogation</div>
+            </label>
+          </div>
+        </Panel>
+      </div>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="bg-[#ff6221] text-white px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold">WHIP</p>
+              <p className="text-xs opacity-80">Certificate of Coverage — {state}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs opacity-80">Policy</p>
+              <p className="text-xs font-mono">{form.policyNumber}</p>
+            </div>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Member</p>
+                <p className="font-medium">{form.memberName || "—"}</p>
+                <p className="text-muted-foreground">{form.memberAddress || "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Vehicle</p>
+                <p className="font-medium">{[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}</p>
+                <p className="text-muted-foreground font-mono text-[10px]">{form.vin || "VIN not entered"}</p>
+              </div>
+            </div>
+            <div className="border-t border-border pt-3">
+              <p className="text-muted-foreground font-semibold uppercase text-[10px] mb-2">Coverage Limits — {state}</p>
+              <div className="space-y-1.5">
+                {[
+                  ["Bodily Injury", rules.biLimits],
+                  ["Property Damage", rules.pdLimit],
+                  ...(rules.pip ? [["PIP", rules.pipLimit]] : []),
+                  ...(rules.um ? [["Uninsured Motorist", rules.umLimit]] : []),
+                  ...(rules.uim ? [["Underinsured Motorist", rules.uimLimit]] : []),
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-semibold text-[#ff6221]">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-xs border-t border-border pt-3">
+              <p className="text-muted-foreground font-semibold uppercase text-[10px]">Insurer</p>
+              <p className="font-medium">Metrocars Leasing Corp d/b/a Whip</p>
+              <p className="text-muted-foreground">P.O. Box 10622, Rockville, MD 20849</p>
+            </div>
+          </div>
+        </div>
+        <Button className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white" onClick={handleDownload}>
+          <Download className="w-4 h-4" /> Download Whip COI (PDF — Landscape)
+        </Button>
+        <p className="text-xs text-muted-foreground italic text-center">Prints in standard landscape COI format. Insurer: Metrocars Leasing Corp d/b/a Whip.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Klutch COI ──────────────────────────────────────────────────────────
+// State-specific coverage rules from KlutchCOI.html source
+const KLUTCH_STATE_RULES: Record<string, {
+  biLimits: string; pdLimit: string; pip: boolean; pipLimit: string;
+  um: boolean; umLimit: string; uim: boolean; uimLimit: string;
+  medPay: boolean; medPayLimit: string;
+}> = {
+  MD: { biLimits: "$30,000/$60,000", pdLimit: "$15,000", pip: true, pipLimit: "$2,500", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
+  DC: { biLimits: "$25,000/$50,000", pdLimit: "$10,000", pip: true, pipLimit: "$50,000", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
+  VA: { biLimits: "$30,000/$60,000", pdLimit: "$20,000", pip: false, pipLimit: "", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
+  FL: { biLimits: "$10,000/$20,000", pdLimit: "$10,000", pip: true, pipLimit: "$10,000", um: true, umLimit: "$10,000/$20,000", uim: false, uimLimit: "", medPay: false, medPayLimit: "" },
+  GA: { biLimits: "$25,000/$50,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
+  IL: { biLimits: "$25,000/$50,000", pdLimit: "$20,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
+  MA: { biLimits: "$20,000/$40,000", pdLimit: "$5,000", pip: true, pipLimit: "$8,000", um: true, umLimit: "$20,000/$40,000", uim: true, uimLimit: "$20,000/$40,000", medPay: false, medPayLimit: "" },
+  PA: { biLimits: "$15,000/$30,000", pdLimit: "$5,000", pip: true, pipLimit: "$5,000", um: true, umLimit: "$15,000/$30,000", uim: true, uimLimit: "$15,000/$30,000", medPay: false, medPayLimit: "" },
+  NJ: { biLimits: "$15,000/$30,000", pdLimit: "$5,000", pip: true, pipLimit: "$15,000", um: true, umLimit: "$15,000/$30,000", uim: true, uimLimit: "$15,000/$30,000", medPay: false, medPayLimit: "" },
+  TX: { biLimits: "$30,000/$60,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
+  NY: { biLimits: "$25,000/$50,000", pdLimit: "$10,000", pip: true, pipLimit: "$50,000", um: true, umLimit: "$25,000/$50,000", uim: false, uimLimit: "", medPay: false, medPayLimit: "" },
+  NC: { biLimits: "$30,000/$60,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
+  DE: { biLimits: "$25,000/$50,000", pdLimit: "$10,000", pip: true, pipLimit: "$15,000", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
+  OH: { biLimits: "$25,000/$50,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
+};
+
+function KlutchCOITab() {
+  const [state, setState] = useState("MD");
+  const [form, setForm] = useState({
+    memberName: "",
+    memberAddress: "",
+    memberCity: "",
+    memberState: "",
+    memberZip: "",
+    vehicleYear: "",
+    vehicleMake: "",
+    vehicleModel: "",
+    vin: "",
+    plateNumber: "",
+    weeklyRate: "",
+    certDate: "",
+    effectiveDate: "",
+    expirationDate: "",
+    policyNumber: "KLT-AUTO-" + new Date().getFullYear(),
+    holderName: "",
+    holderAddress: "",
+    holderCity: "",
+    holderState: "",
+    holderZip: "",
+    additionalInsured: false,
+    waiverOfSubrogation: false,
+    specialProvisions: "",
+  });
+
+  const set = (k: keyof typeof form) => (v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+  const rules = KLUTCH_STATE_RULES[state] || KLUTCH_STATE_RULES["MD"];
+  const STATES = Object.keys(KLUTCH_STATE_RULES);
+
+  const handleDownload = () => {
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+
+    // Header bar
+    doc.setFillColor(23, 27, 49);
+    doc.rect(0, 0, W, 18, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("KLUTCH", 10, 12);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text("CERTIFICATE OF COVERAGE", 10, 16.5);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("CERTIFICATE OF AUTOMOBILE INSURANCE", W / 2, 11, { align: "center" });
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text(`State: ${state}  |  Policy: ${form.policyNumber}  |  Date: ${form.certDate || new Date().toLocaleDateString()}`, W / 2, 15.5, { align: "center" });
+
+    // Two-column layout
+    const col1 = 8;
+    const col2 = W / 2 + 4;
+    const colW = W / 2 - 12;
+    let y = 24;
+
+    // Box helper
+    const box = (title: string, x: number, startY: number, h: number) => {
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(248, 249, 252);
+      doc.roundedRect(x, startY, colW, h, 1.5, 1.5, "FD");
+      doc.setFillColor(23, 27, 49);
+      doc.rect(x, startY, colW, 5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, x + 2, startY + 3.5);
+      doc.setTextColor(40, 40, 40);
+      doc.setFont("helvetica", "normal");
+      return startY + 7;
+    };
+
+    const row = (label: string, value: string, x: number, rowY: number) => {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 100, 100);
+      doc.text(label.toUpperCase(), x + 2, rowY);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(20, 20, 20);
+      doc.text(value || "—", x + 2, rowY + 3.5);
+      return rowY + 7;
+    };
+
+    // Left column
+    let ly = box("INSURED MEMBER", col1, y, 38);
+    ly = row("Name", form.memberName, col1, ly);
+    ly = row("Address", `${form.memberAddress}, ${form.memberCity}, ${form.memberState} ${form.memberZip}`, col1, ly);
+    ly = row("Insurer", "Klutch Insurance Group", col1, ly);
+    ly = row("Policy Number", form.policyNumber, col1, ly);
+
+    ly = y + 42;
+    ly = box("COVERED VEHICLE", col1, ly, 38);
+    ly = row("Vehicle", `${form.vehicleYear} ${form.vehicleMake} ${form.vehicleModel}`, col1, ly);
+    ly = row("VIN", form.vin, col1, ly);
+    ly = row("Plate", form.plateNumber, col1, ly);
+    ly = row("Weekly Rate", form.weeklyRate ? `$${form.weeklyRate}/week` : "—", col1, ly);
+
+    ly = y + 84;
+    ly = box("POLICY PERIOD", col1, ly, 20);
+    ly = row("Effective Date", form.effectiveDate, col1, ly);
+    ly = row("Expiration Date", form.expirationDate, col1, ly);
+
+    // Right column — coverage
+    let ry = box("COVERAGE LIMITS", col2, y, 80);
+    const coverageRows = [
+      ["Bodily Injury Liability", rules.biLimits],
+      ["Property Damage Liability", rules.pdLimit],
+      ...(rules.pip ? [["Personal Injury Protection (PIP)", rules.pipLimit]] : []),
+      ...(rules.um ? [["Uninsured Motorist", rules.umLimit]] : []),
+      ...(rules.uim ? [["Underinsured Motorist", rules.uimLimit]] : []),
+    ];
+    for (const [label, value] of coverageRows) {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(label, col2 + 2, ry);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(23, 27, 49);
+      doc.text(value, col2 + colW - 2, ry, { align: "right" });
+      doc.setDrawColor(220, 220, 220);
+      doc.line(col2 + 2, ry + 1.5, col2 + colW - 2, ry + 1.5);
+      ry += 7;
+    }
+
+    ry = y + 84;
+    ry = box("CERTIFICATE HOLDER", col2, ry, 30);
+    ry = row("Name", form.holderName, col2, ry);
+    ry = row("Address", `${form.holderAddress}${form.holderCity ? ", " + form.holderCity : ""}${form.holderState ? ", " + form.holderState : ""} ${form.holderZip}`, col2, ry);
+    if (form.additionalInsured) {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 98, 33);
+      doc.text("✓ ADDITIONAL INSURED", col2 + 2, ry);
+      ry += 4;
+    }
+    if (form.waiverOfSubrogation) {
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 98, 33);
+      doc.text("✓ WAIVER OF SUBROGATION", col2 + 2, ry);
+      ry += 4;
+    }
+
+    // Footer
+    doc.setFillColor(245, 245, 248);
+    doc.rect(0, H - 18, W, 18, "F");
+    doc.setDrawColor(200, 200, 200);
+    doc.line(0, H - 18, W, H - 18);
+    doc.setFontSize(6);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "italic");
+    doc.text(
+      "This certificate is issued as a matter of information only and confers no rights upon the certificate holder. This certificate does not amend, extend, or alter the coverage afforded by the policies below.",
+      W / 2, H - 13, { align: "center", maxWidth: W - 20 }
+    );
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(23, 27, 49);
+    doc.text("Klutch Insurance Group  |  Authorized Representative", W / 2, H - 6, { align: "center" });
+
+    downloadPDF(doc, `Klutch_COI_${form.memberName.replace(/\s+/g, "_") || "Member"}_${state}.pdf`);
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="space-y-4">
+        <Panel title="State of Coverage (Member's Home Market)">
+          <div className="flex flex-wrap gap-1.5">
+            {STATES.map(s => (
+              <button key={s} onClick={() => setState(s)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${state === s ? "bg-[#ff6221] text-white" : "bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground"}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+              <strong>Market-based:</strong> Select the state where the <strong>member originates</strong> (home market), not where the accident occurred. Whip markets: MD (Glen Burnie, Rockville), VA, PA, FL, IL, GA, MA.
+            </p>
+          </div>
+        </Panel>
+
+        <Panel title="Member Information">
+          <Field label="Member Name" id="kcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="Last, First" required />
+          <div className="mt-2">
+            <Field label="Address" id="kcoi-addr" value={form.memberAddress} onChange={set("memberAddress")} placeholder="Street address" />
+          </div>
+          <Grid3 children={<>
+            <Field label="City" id="kcoi-city" value={form.memberCity} onChange={set("memberCity")} placeholder="City" />
+            <Field label="State" id="kcoi-mstate" value={form.memberState} onChange={set("memberState")} placeholder="e.g. MD" />
+            <Field label="ZIP" id="kcoi-zip" value={form.memberZip} onChange={set("memberZip")} placeholder="e.g. 20850" />
+          </>} />
+        </Panel>
+
+        <Panel title="Covered Vehicle">
+          <Grid3 children={<>
+            <Field label="Year" id="kcoi-yr" value={form.vehicleYear} onChange={set("vehicleYear")} placeholder="2024" />
+            <Field label="Make" id="kcoi-make" value={form.vehicleMake} onChange={set("vehicleMake")} placeholder="Toyota" />
+            <Field label="Model" id="kcoi-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Camry" />
+          </>} />
+          <Grid2 children={<>
+            <Field label="VIN" id="kcoi-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+            <Field label="Plate Number" id="kcoi-plate" value={form.plateNumber} onChange={set("plateNumber")} placeholder="e.g. ABC1234" />
+          </>} />
+          <div className="mt-2">
+            <Field label="Weekly Rate ($)" id="kcoi-rate" value={form.weeklyRate} onChange={set("weeklyRate")} placeholder="e.g. 350" />
+          </div>
+        </Panel>
+
+        <Panel title="Policy Period">
+          <Grid3 children={<>
+            <Field label="Certificate Date" id="kcoi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
+            <Field label="Effective Date" id="kcoi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
+            <Field label="Expiration Date" id="kcoi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+          </>} />
+        </Panel>
+
+        <Panel title="Certificate Holder">
+          <Field label="Holder Name" id="kcoi-holder" value={form.holderName} onChange={set("holderName")} placeholder="e.g. Toyota Financial Services" />
+          <div className="mt-2">
+            <Field label="Address" id="kcoi-haddr" value={form.holderAddress} onChange={set("holderAddress")} placeholder="Street address" />
+          </div>
+          <Grid3 children={<>
+            <Field label="City" id="kcoi-hcity" value={form.holderCity} onChange={set("holderCity")} placeholder="City" />
+            <Field label="State" id="kcoi-hstate" value={form.holderState} onChange={set("holderState")} placeholder="e.g. MD" />
+            <Field label="ZIP" id="kcoi-hzip" value={form.holderZip} onChange={set("holderZip")} placeholder="e.g. 20850" />
+          </>} />
+          <div className="mt-3 space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.additionalInsured} onCheckedChange={(v) => set("additionalInsured")(!!v)} />
+              <div className="text-xs font-semibold">Additional Insured</div>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.waiverOfSubrogation} onCheckedChange={(v) => set("waiverOfSubrogation")(!!v)} />
+              <div className="text-xs font-semibold">Waiver of Subrogation</div>
+            </label>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="space-y-4">
+        {/* Coverage Preview */}
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="bg-[#171b31] text-white px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold">KLUTCH</p>
+              <p className="text-xs opacity-70">Certificate of Coverage — {state}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs opacity-70">Policy</p>
+              <p className="text-xs font-mono">{form.policyNumber}</p>
+            </div>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Member</p>
+                <p className="font-medium">{form.memberName || "—"}</p>
+                <p className="text-muted-foreground">{form.memberAddress || "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Vehicle</p>
+                <p className="font-medium">{[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}</p>
+                <p className="text-muted-foreground font-mono text-[10px]">{form.vin || "VIN not entered"}</p>
+              </div>
+            </div>
+            <div className="border-t border-border pt-3">
+              <p className="text-muted-foreground font-semibold uppercase text-[10px] mb-2">Coverage Limits — {state}</p>
+              <div className="space-y-1.5">
+                {[
+                  ["Bodily Injury", rules.biLimits],
+                  ["Property Damage", rules.pdLimit],
+                  ...(rules.pip ? [["PIP", rules.pipLimit]] : []),
+                  ...(rules.um ? [["Uninsured Motorist", rules.umLimit]] : []),
+                  ...(rules.uim ? [["Underinsured Motorist", rules.uimLimit]] : []),
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-semibold text-[#ff6221]">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {form.holderName && (
+              <div className="border-t border-border pt-3 text-xs">
+                <p className="text-muted-foreground font-semibold uppercase text-[10px] mb-1">Certificate Holder</p>
+                <p className="font-medium">{form.holderName}</p>
+                {form.additionalInsured && <p className="text-amber-600 font-medium text-[10px]">✓ Additional Insured</p>}
+                {form.waiverOfSubrogation && <p className="text-amber-600 font-medium text-[10px]">✓ Waiver of Subrogation</p>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Button className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white" onClick={handleDownload}>
+          <Download className="w-4 h-4" /> Download Klutch COI (PDF — Landscape)
+        </Button>
+        <p className="text-xs text-muted-foreground italic text-center">Prints in standard landscape COI format with state-specific coverage limits auto-populated.</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main DocGenerator Page ───────────────────────────────────────────────────
 export default function DocGenerator() {
   const [activeTab, setActiveTab] = useState<DocGenTab>("blank-letterhead");
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [showRecentDocs, setShowRecentDocs] = useState(false);
+  const [showMyDocs, setShowMyDocs] = useState(false);
+  const [showSharedTemplates, setShowSharedTemplates] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareToUserId, setShareToUserId] = useState<number | null>(null);
+  const [shareTemplateName, setShareTemplateName] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
+  const [currentFormData, setCurrentFormData] = useState<Record<string, unknown>>({});
+  const [currentDraftId, setCurrentDraftId] = useState<number | undefined>(undefined);
+  const [fullScreenPreview, setFullScreenPreview] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+
+  const favoritesQ = trpc.docgen.getFavorites.useQuery();
+  const recentDocsQ = trpc.docgen.getRecentDocs.useQuery();
+  const draftsQ = trpc.docgen.getDrafts.useQuery();
+  const sharedTemplatesQ = trpc.docgen.getSharedTemplates.useQuery();
+  const usersQ = trpc.docgen.listUsers.useQuery();
+  const toggleFavMut = trpc.docgen.toggleFavorite.useMutation({ onSuccess: () => favoritesQ.refetch() });
+  const saveDraftMut = trpc.docgen.saveDraft.useMutation({ onSuccess: (d) => { setCurrentDraftId(d.id); draftsQ.refetch(); toast.success("Draft saved"); } });
+  const deleteDraftMut = trpc.docgen.deleteDraft.useMutation({ onSuccess: () => draftsQ.refetch() });
+  const addRecentMut = trpc.docgen.addRecentDoc.useMutation({ onSuccess: () => recentDocsQ.refetch() });
+  const shareTemplateMut = trpc.docgen.shareTemplate.useMutation({ onSuccess: () => { setShareModalOpen(false); toast.success("Template shared"); } });
+  const markReadMut = trpc.docgen.markTemplateRead.useMutation({ onSuccess: () => sharedTemplatesQ.refetch() });
+
+  const favTabKeys = (favoritesQ.data ?? []).map(f => f.tabKey);
+  const allItems = NAV_GROUPS.flatMap(g => g.items);
+  const activeLabel = allItems.find(i => i.id === activeTab)?.label || "";
+  const isFavorite = favTabKeys.includes(activeTab);
+  const unreadShared = (sharedTemplatesQ.data ?? []).filter(t => !t.isRead).length;
+
+  const handleToggleFavorite = () => {
+    toggleFavMut.mutate({ tabKey: activeTab, tabLabel: activeLabel });
+  };
+
+  const handleSaveDraft = () => {
+    saveDraftMut.mutate({ tabKey: activeTab, tabLabel: activeLabel, formData: currentFormData, draftId: currentDraftId });
+  };
+
+  const handleLoadDraft = (draft: { id: number; tabKey: string; formData: unknown }) => {
+    setActiveTab(draft.tabKey as DocGenTab);
+    setCurrentDraftId(draft.id);
+    setCurrentFormData(draft.formData as Record<string, unknown>);
+    setShowMyDocs(false);
+    toast.info("Draft loaded — fill in the form and generate");
+  };
+
+  const handleShareTemplate = () => {
+    if (!shareToUserId || !shareTemplateName.trim()) { toast.error("Select a recipient and enter a template name"); return; }
+    shareTemplateMut.mutate({ toUserId: shareToUserId, tabKey: activeTab, tabLabel: activeLabel, templateName: shareTemplateName, formData: currentFormData, message: shareMessage });
+  };
+
+  const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
+    setActiveTab(t.tabKey as DocGenTab);
+    setCurrentFormData(t.formData as Record<string, unknown>);
+    markReadMut.mutate({ templateId: t.id });
+    setShowSharedTemplates(false);
+    toast.info("Shared template loaded");
+  };
 
   const renderTab = () => {
     switch (activeTab) {
@@ -2967,24 +4518,48 @@ export default function DocGenerator() {
       case "payment-receipt": return <PaymentReceiptTab />;
       case "urgently-invoice": return <UrgentlyInvoiceTab />;
       case "pip-exhaustion": return <PIPExhaustionTab />;
+      case "limited-liability-bi": return <LimitedLiabilityBITab />;
+      case "lou-calculator": return <LOUCalculatorTab />;
+      case "pip-bill-review": return <MedicalBillsReviewTab />;
+      case "coi-whip": return <WhipCOITab />;
+      case "coi-klutch": return <KlutchCOITab />;
       default: return null;
     }
   };
-
-  const activeLabel = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.id === activeTab)?.label || "";
 
   return (
     <WhipLayout>
       <div className="flex h-full min-h-0">
         {/* Sidebar Nav */}
-        <aside className="w-52 shrink-0 border-r border-border bg-muted/20 overflow-y-auto">
+        <aside className="w-56 shrink-0 border-r border-border bg-muted/20 overflow-y-auto flex flex-col">
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#ff6221]" />
               <span className="text-sm font-bold text-foreground">Document Generator</span>
             </div>
           </div>
-          <nav className="p-2 space-y-3">
+
+          {/* Favorites section */}
+          {favTabKeys.length > 0 && (
+            <div className="p-2 border-b border-border">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/40 px-2 mb-1 flex items-center gap-1">
+                <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> Favorites
+              </p>
+              {allItems.filter(i => favTabKeys.includes(i.id)).map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button key={item.id} onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${isActive ? "bg-[#ff6221]/10 text-[#ff6221] font-semibold" : "text-foreground/70 hover:bg-muted hover:text-foreground"}`}>
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="leading-tight">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <nav className="p-2 space-y-3 flex-1">
             {NAV_GROUPS.map((group) => (
               <div key={group.label}>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-foreground/40 px-2 mb-1">
@@ -2993,37 +4568,241 @@ export default function DocGenerator() {
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
+                  const isFav = favTabKeys.includes(item.id);
                   return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${
-                        isActive
-                          ? "bg-[#ff6221]/10 text-[#ff6221] font-semibold"
-                          : "text-foreground/70 hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
+                    <button key={item.id} onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left ${isActive ? "bg-[#ff6221]/10 text-[#ff6221] font-semibold" : "text-foreground/70 hover:bg-muted hover:text-foreground"}`}>
                       <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="leading-tight">{item.label}</span>
+                      <span className="leading-tight flex-1">{item.label}</span>
+                      {isFav && <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400 shrink-0" />}
                     </button>
                   );
                 })}
               </div>
             ))}
           </nav>
+
+          {/* Bottom nav items */}
+          <div className="p-2 border-t border-border space-y-0.5">
+            <button onClick={() => setShowMyDocs(!showMyDocs)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-muted hover:text-foreground transition-colors">
+              <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+              <span>My Documents</span>
+              {(draftsQ.data?.length ?? 0) > 0 && (
+                <span className="ml-auto text-[10px] bg-muted rounded px-1">{draftsQ.data?.length}</span>
+              )}
+            </button>
+            <button onClick={() => setShowSharedTemplates(!showSharedTemplates)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-muted hover:text-foreground transition-colors">
+              <Inbox className="w-3.5 h-3.5 shrink-0" />
+              <span>Shared with Me</span>
+              {unreadShared > 0 && (
+                <span className="ml-auto text-[10px] bg-[#ff6221] text-white rounded-full px-1.5">{unreadShared}</span>
+              )}
+            </button>
+          </div>
         </aside>
 
         {/* Main Content */}
-        <div className="flex-1 min-w-0 overflow-y-auto">
-          <div className="p-6">
-            <div className="mb-5 flex items-center gap-2">
-              <ChevronRight className="w-3.5 h-3.5 text-foreground/40" />
-              <h1 className="text-lg font-bold text-foreground">{activeLabel}</h1>
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* Header bar */}
+          <div className="px-6 py-3 border-b border-border flex items-center gap-3 bg-background shrink-0">
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-foreground/50 font-medium">Document Generator</span>
+              <ChevronRight className="w-3.5 h-3.5 text-foreground/30" />
+              <span className="font-bold text-foreground">{activeLabel}</span>
             </div>
-            {renderTab()}
+            <button onClick={handleToggleFavorite} title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+              className={`ml-0.5 transition-colors ${isFavorite ? "text-amber-400" : "text-foreground/30 hover:text-amber-400"}`}>
+              <Star className={`w-4 h-4 ${isFavorite ? "fill-amber-400" : ""}`} />
+            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleSaveDraft} disabled={saveDraftMut.isPending}>
+                <Save className="w-3.5 h-3.5" />
+                {saveDraftMut.isPending ? "Saving..." : "Save Draft"}
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setShareModalOpen(true)}>
+                <Share2 className="w-3.5 h-3.5" />
+                Share Template
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setShowRecentDocs(!showRecentDocs)}>
+                <Clock className="w-3.5 h-3.5" />
+                Recent
+              </Button>
+            </div>
+          </div>
+
+          {/* Recent Docs Panel */}
+          {showRecentDocs && (
+            <div className="border-b border-border bg-muted/10 px-6 py-3 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-foreground/70 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Recent Documents</span>
+                <button onClick={() => setShowRecentDocs(false)} className="text-foreground/40 hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              {(recentDocsQ.data?.length ?? 0) === 0 ? (
+                <p className="text-xs text-muted-foreground">No recent documents yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-foreground/40 border-b border-border">
+                        <th className="text-left pb-1 font-medium">Document Name</th>
+                        <th className="text-left pb-1 font-medium">Template</th>
+                        <th className="text-left pb-1 font-medium">Claim #</th>
+                        <th className="text-left pb-1 font-medium">Date</th>
+                        <th className="text-left pb-1 font-medium">Status</th>
+                        <th className="text-left pb-1 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentDocsQ.data?.map(doc => (
+                        <tr key={doc.id} className="border-b border-border/50 hover:bg-muted/20">
+                          <td className="py-1.5 pr-3 font-medium text-foreground">{doc.documentName}</td>
+                          <td className="py-1.5 pr-3 text-foreground/60">{doc.tabLabel}</td>
+                          <td className="py-1.5 pr-3 text-foreground/60">{doc.claimNumber || "—"}</td>
+                          <td className="py-1.5 pr-3 text-foreground/50">{new Date(doc.createdAt).toLocaleDateString()}</td>
+                          <td className="py-1.5 pr-3">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${doc.status === "finalized" ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" : doc.status === "sent" ? "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"}`}>
+                              {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="py-1.5">
+                            <button onClick={() => { setActiveTab(doc.tabKey as DocGenTab); setShowRecentDocs(false); }} className="text-[#ff6221] hover:underline text-[10px]">Open</button>
+                            {doc.pdfDataUrl && (
+                              <button onClick={() => { setPreviewPdfUrl(doc.pdfDataUrl!); setFullScreenPreview(true); }} className="ml-2 text-foreground/50 hover:text-foreground text-[10px]">Preview</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* My Documents / Drafts Panel */}
+          {showMyDocs && (
+            <div className="border-b border-border bg-muted/10 px-6 py-3 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-foreground/70 flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> My Documents & Drafts</span>
+                <button onClick={() => setShowMyDocs(false)} className="text-foreground/40 hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              {(draftsQ.data?.length ?? 0) === 0 ? (
+                <p className="text-xs text-muted-foreground">No saved drafts yet. Use "Save Draft" to save your work.</p>
+              ) : (
+                <div className="space-y-1">
+                  {draftsQ.data?.map(draft => (
+                    <div key={draft.id} className="flex items-center gap-3 p-2 rounded-lg bg-background border border-border hover:border-[#ff6221]/30 transition-colors">
+                      <FileText className="w-4 h-4 text-[#ff6221] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{draft.tabLabel}{draft.claimNumber ? ` — ${draft.claimNumber}` : ""}</p>
+                        <p className="text-[10px] text-foreground/50">{new Date(draft.updatedAt).toLocaleString()}</p>
+                      </div>
+                      <button onClick={() => handleLoadDraft(draft)} className="text-xs text-[#ff6221] hover:underline shrink-0">Load</button>
+                      <button onClick={() => deleteDraftMut.mutate({ draftId: draft.id })} className="text-xs text-foreground/40 hover:text-red-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Shared Templates Panel */}
+          {showSharedTemplates && (
+            <div className="border-b border-border bg-muted/10 px-6 py-3 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-foreground/70 flex items-center gap-1.5"><Inbox className="w-3.5 h-3.5" /> Shared with Me</span>
+                <button onClick={() => setShowSharedTemplates(false)} className="text-foreground/40 hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              {(sharedTemplatesQ.data?.length ?? 0) === 0 ? (
+                <p className="text-xs text-muted-foreground">No templates have been shared with you yet.</p>
+              ) : (
+                <div className="space-y-1">
+                  {sharedTemplatesQ.data?.map(t => (
+                    <div key={t.id} className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${!t.isRead ? "bg-[#ff6221]/5 border-[#ff6221]/20" : "bg-background border-border"}`}>
+                      <Share2 className="w-4 h-4 text-[#ff6221] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{t.templateName} <span className="text-foreground/50 font-normal">({t.tabLabel})</span></p>
+                        {t.message && <p className="text-[10px] text-foreground/50 truncate">{t.message}</p>}
+                        <p className="text-[10px] text-foreground/40">{new Date(t.createdAt).toLocaleString()}</p>
+                      </div>
+                      {!t.isRead && <span className="text-[10px] bg-[#ff6221] text-white rounded-full px-1.5 py-0.5 shrink-0">New</span>}
+                      <button onClick={() => handleLoadSharedTemplate(t)} className="text-xs text-[#ff6221] hover:underline shrink-0">Use</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6">
+              {renderTab()}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Share Template Modal */}
+      {shareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-foreground flex items-center gap-2"><Share2 className="w-4 h-4 text-[#ff6221]" /> Share Template</h3>
+              <button onClick={() => setShareModalOpen(false)} className="text-foreground/40 hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-xs text-muted-foreground">Share the current <strong>{activeLabel}</strong> template with another handler.</p>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs font-semibold">Template Name</Label>
+                <Input value={shareTemplateName} onChange={e => setShareTemplateName(e.target.value)} placeholder="e.g. Standard Subro Demand" className="mt-1 h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Send To</Label>
+                <Select onValueChange={v => setShareToUserId(Number(v))}>
+                  <SelectTrigger className="mt-1 h-8 text-xs">
+                    <SelectValue placeholder="Select handler..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(usersQ.data ?? []).map(u => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.name || u.email || `User #${u.id}`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Message (optional)</Label>
+                <Textarea value={shareMessage} onChange={e => setShareMessage(e.target.value)} placeholder="Add a note for the recipient..." className="mt-1 text-xs" rows={2} />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setShareModalOpen(false)}>Cancel</Button>
+              <Button size="sm" className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white gap-1.5" onClick={handleShareTemplate} disabled={shareTemplateMut.isPending}>
+                <Send className="w-3.5 h-3.5" />
+                {shareTemplateMut.isPending ? "Sharing..." : "Share"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Screen PDF Preview Modal */}
+      {fullScreenPreview && previewPdfUrl && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/95">
+          <div className="flex items-center justify-between px-4 py-2 bg-background/10 border-b border-white/10">
+            <span className="text-white text-sm font-medium">Document Preview</span>
+            <div className="flex items-center gap-2">
+              <a href={previewPdfUrl} download className="text-white/70 hover:text-white text-xs flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Download</a>
+              <button onClick={() => { setFullScreenPreview(false); setPreviewPdfUrl(null); }} className="text-white/70 hover:text-white ml-2"><X className="w-5 h-5" /></button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <iframe src={previewPdfUrl} className="w-full h-full" title="PDF Preview" />
+          </div>
+        </div>
+      )}
     </WhipLayout>
   );
 }

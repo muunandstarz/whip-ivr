@@ -478,3 +478,57 @@ export const remoteOpsIntakes = mysqlTable("remote_ops_intakes", {
 });
 export type RemoteOpsIntake = typeof remoteOpsIntakes.$inferSelect;
 export type InsertRemoteOpsIntake = typeof remoteOpsIntakes.$inferInsert;
+
+// ─── Document Generator: Drafts ───────────────────────────────────────────────
+export const docgenDrafts = mysqlTable("docgen_drafts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tabKey: varchar("tabKey", { length: 64 }).notNull(),      // e.g. "release-bi", "tl-settlement"
+  tabLabel: varchar("tabLabel", { length: 128 }).notNull(), // Human-readable tab name
+  claimNumber: varchar("claimNumber", { length: 64 }),
+  formData: json("formData").notNull(),                     // Full form state as JSON
+  status: mysqlEnum("status", ["draft", "finalized"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DocgenDraft = typeof docgenDrafts.$inferSelect;
+export type InsertDocgenDraft = typeof docgenDrafts.$inferInsert;
+
+// ─── Document Generator: Favorites ────────────────────────────────────────────
+export const docgenFavorites = mysqlTable("docgen_favorites", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tabKey: varchar("tabKey", { length: 64 }).notNull(),
+  tabLabel: varchar("tabLabel", { length: 128 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DocgenFavorite = typeof docgenFavorites.$inferSelect;
+
+// ─── Document Generator: Recent Documents ─────────────────────────────────────
+export const docgenRecentDocs = mysqlTable("docgen_recent_docs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tabKey: varchar("tabKey", { length: 64 }).notNull(),
+  tabLabel: varchar("tabLabel", { length: 128 }).notNull(),
+  claimNumber: varchar("claimNumber", { length: 64 }),
+  documentName: varchar("documentName", { length: 256 }).notNull(),
+  status: mysqlEnum("status", ["draft", "sent", "finalized"]).default("draft").notNull(),
+  pdfDataUrl: text("pdfDataUrl"),                           // base64 data URL for preview
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DocgenRecentDoc = typeof docgenRecentDocs.$inferSelect;
+
+// ─── Document Generator: Shared Templates ─────────────────────────────────────
+export const docgenSharedTemplates = mysqlTable("docgen_shared_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  fromUserId: int("fromUserId").notNull(),
+  toUserId: int("toUserId").notNull(),
+  tabKey: varchar("tabKey", { length: 64 }).notNull(),
+  tabLabel: varchar("tabLabel", { length: 128 }).notNull(),
+  templateName: varchar("templateName", { length: 256 }).notNull(),
+  formData: json("formData").notNull(),
+  message: text("message"),
+  isRead: boolean("isRead").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DocgenSharedTemplate = typeof docgenSharedTemplates.$inferSelect;

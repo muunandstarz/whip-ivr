@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import multer from "multer";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
@@ -21,6 +22,7 @@ import {
   REMOTE_OPS_SLACK_PATH,
   remoteOpsSlackEventsHandler,
 } from "../remoteOpsSlackEvents";
+import { storagePut } from "../storage";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -64,6 +66,31 @@ async function startServer() {
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  // ─── Document File Upload Endpoint ─────────────────────────────────────────
+  // Used by Medical Bills Review, Carrier Rebuttal, PIP Exhaustion, TL Settlement
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  });
+
+  app.post("/api/upload/document", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No file provided" });
+        return;
+      }
+      const { originalname, mimetype, buffer } = req.file;
+      const safeFilename = originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const key = `docgen-uploads/${Date.now()}_${safeFilename}`;
+      const { url } = await storagePut(key, buffer, mimetype);
+      res.json({ url, key, filename: originalname, mimetype });
+    } catch (err) {
+      console.error("[upload/document] Error:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   app.use("/api/aircall", aircallRouter);
   app.post("/api/scheduled/loss-intake-sync", scheduledLossIntakeSyncHandler);
 

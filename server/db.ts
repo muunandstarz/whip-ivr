@@ -19,6 +19,12 @@ import {
   InsertQaScore,
   IntakeRecord,
 } from "../drizzle/schema";
+import {
+  docgenDrafts,
+  docgenFavorites,
+  docgenRecentDocs,
+  docgenSharedTemplates,
+} from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2202,4 +2208,87 @@ export async function getMissedCallBreakdown(yearMonth: string) {
       duringBizHours: Number(r.duringBizHours ?? 0),
     })),
   };
+}
+
+// ─── Document Generator: Drafts ───────────────────────────────────────────────
+
+export async function saveDocgenDraft(userId: number, tabKey: string, tabLabel: string, claimNumber: string | null, formData: Record<string, unknown>, draftId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (draftId) {
+    await db.update(docgenDrafts).set({ formData, claimNumber, updatedAt: new Date() }).where(and(eq(docgenDrafts.id, draftId), eq(docgenDrafts.userId, userId)));
+    return draftId;
+  }
+  const result = await db.insert(docgenDrafts).values({ userId, tabKey, tabLabel, claimNumber, formData });
+  return (result[0] as any).insertId as number;
+}
+
+export async function getDocgenDrafts(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(docgenDrafts).where(eq(docgenDrafts.userId, userId)).orderBy(desc(docgenDrafts.updatedAt)).limit(50);
+}
+
+export async function deleteDocgenDraft(userId: number, draftId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(docgenDrafts).where(and(eq(docgenDrafts.id, draftId), eq(docgenDrafts.userId, userId)));
+}
+
+// ─── Document Generator: Favorites ────────────────────────────────────────────
+export async function toggleDocgenFavorite(userId: number, tabKey: string, tabLabel: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db.select().from(docgenFavorites).where(and(eq(docgenFavorites.userId, userId), eq(docgenFavorites.tabKey, tabKey))).limit(1);
+  if (existing.length > 0) {
+    await db.delete(docgenFavorites).where(and(eq(docgenFavorites.userId, userId), eq(docgenFavorites.tabKey, tabKey)));
+    return false;
+  } else {
+    await db.insert(docgenFavorites).values({ userId, tabKey, tabLabel });
+    return true;
+  }
+}
+
+export async function getDocgenFavorites(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(docgenFavorites).where(eq(docgenFavorites.userId, userId)).orderBy(docgenFavorites.createdAt);
+}
+
+// ─── Document Generator: Recent Docs ──────────────────────────────────────────
+export async function addDocgenRecentDoc(userId: number, tabKey: string, tabLabel: string, documentName: string, claimNumber: string | null, status: "draft" | "sent" | "finalized", pdfDataUrl?: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(docgenRecentDocs).values({ userId, tabKey, tabLabel, documentName, claimNumber, status, pdfDataUrl });
+  // Keep only last 20 per user
+  const all = await db.select({ id: docgenRecentDocs.id }).from(docgenRecentDocs).where(eq(docgenRecentDocs.userId, userId)).orderBy(desc(docgenRecentDocs.createdAt));
+  if (all.length > 20) {
+    const toDelete = all.slice(20).map(r => r.id);
+    if (toDelete.length > 0) await db.delete(docgenRecentDocs).where(and(eq(docgenRecentDocs.userId, userId), inArray(docgenRecentDocs.id, toDelete)));
+  }
+}
+
+export async function getDocgenRecentDocs(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(docgenRecentDocs).where(eq(docgenRecentDocs.userId, userId)).orderBy(desc(docgenRecentDocs.createdAt)).limit(10);
+}
+
+// ─── Document Generator: Shared Templates ─────────────────────────────────────
+export async function shareDocgenTemplate(fromUserId: number, toUserId: number, tabKey: string, tabLabel: string, templateName: string, formData: Record<string, unknown>, message?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(docgenSharedTemplates).values({ fromUserId, toUserId, tabKey, tabLabel, templateName, formData, message });
+}
+
+export async function getDocgenSharedTemplates(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(docgenSharedTemplates).where(eq(docgenSharedTemplates.toUserId, userId)).orderBy(desc(docgenSharedTemplates.createdAt));
+}
+
+export async function markDocgenTemplateRead(userId: number, templateId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(docgenSharedTemplates).set({ isRead: true }).where(and(eq(docgenSharedTemplates.id, templateId), eq(docgenSharedTemplates.toUserId, userId)));
 }
