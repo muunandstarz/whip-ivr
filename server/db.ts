@@ -25,6 +25,7 @@ import {
   docgenRecentDocs,
   docgenSharedTemplates,
 } from "../drizzle/schema";
+import { lossIntakeClaims } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2291,4 +2292,75 @@ export async function markDocgenTemplateRead(userId: number, templateId: number)
   const db = await getDb();
   if (!db) return;
   await db.update(docgenSharedTemplates).set({ isRead: true }).where(and(eq(docgenSharedTemplates.id, templateId), eq(docgenSharedTemplates.toUserId, userId)));
+}
+
+// ─── Document Generator: Claim Lookup ─────────────────────────────────────────
+/**
+ * Look up a claim by claim number for pre-populating DocGenerator forms.
+ * Searches intakeRecords (whipClaimNumber) and lossIntakeClaims (channelName/memberName).
+ * Returns the best available data: memberName, dateOfLoss, vinLastSix, market.
+ */
+export async function lookupClaimForDocgen(claimNumber: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const normalized = claimNumber.trim().toUpperCase();
+
+  // 1. Search intakeRecords by whipClaimNumber (exact or partial match)
+  const intakeMatches = await db
+    .select({
+      whipClaimNumber: intakeRecords.whipClaimNumber,
+      callerName: intakeRecords.callerName,
+      callerOrg: intakeRecords.callerOrg,
+      message: intakeRecords.message,
+      createdAt: intakeRecords.createdAt,
+    })
+    .from(intakeRecords)
+    .where(like(intakeRecords.whipClaimNumber, `%${normalized}%`))
+    .orderBy(desc(intakeRecords.createdAt))
+    .limit(3);
+
+  // 2. Search lossIntakeClaims by memberName or channelName
+  const lossMatches = await db
+    .select({
+      memberName: lossIntakeClaims.memberName,
+      dateOfLoss: lossIntakeClaims.dateOfLoss,
+      vinLastSix: lossIntakeClaims.vinLastSix,
+      market: lossIntakeClaims.market,
+      channelName: lossIntakeClaims.channelName,
+    })
+    .from(lossIntakeClaims)
+    .where(
+      or(
+        like(lossIntakeClaims.channelName, `%${normalized}%`),
+        like(lossIntakeClaims.memberName, `%${normalized}%`)
+      )
+    )
+    .orderBy(desc(lossIntakeClaims.createdAt))
+    .limit(3);
+
+  // Merge best available data
+  const intake = intakeMatches[0] ?? null;
+  const loss = lossMatches[0] ?? null;
+
+  if (!intake && !loss) return null;
+
+  return {
+    claimNumber: intake?.whipClaimNumber ?? normalized,
+    memberName: loss?.memberName ?? intake?.callerOrg ?? intake?.callerName ?? null,
+    dateOfLoss: loss?.dateOfLoss ?? null,
+    vinLastSix: loss?.vinLastSix ?? null,
+    market: loss?.market ?? null,
+    // Derived from market: try to infer state
+    stateOfCoverage: loss?.market
+      ? (loss.market.toUpperCase().includes("VA") ? "VA"
+        : loss.market.toUpperCase().includes("PA") ? "PA"
+        : loss.market.toUpperCase().includes("FL") ? "FL"
+        : loss.market.toUpperCase().includes("IL") ? "IL"
+        : loss.market.toUpperCase().includes("GA") ? "GA"
+        : loss.market.toUpperCase().includes("MA") ? "MA"
+        : "MD")
+      : null,
+    source: intake ? "intake" : "loss_intake",
+  };
 }

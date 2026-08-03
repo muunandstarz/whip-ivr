@@ -8,6 +8,7 @@ import {
   shareDocgenTemplate, getDocgenSharedTemplates, markDocgenTemplateRead,
   listAllUsers,
 } from "../db";
+import { lookupClaimForDocgen } from "../db";
 
 function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   const content = result.choices?.[0]?.message?.content;
@@ -519,4 +520,9 @@ Format as JSON: { payments: [{date, provider, amount, serviceType}], totalPaid: 
     const users = await listAllUsers();
     return users.map(u => ({ id: u.id, name: u.name, email: u.email }));
   }),
+  claimLookup: protectedProcedure
+    .input(z.object({ claimNumber: z.string().min(1).max(64) }))
+    .query(async ({ input }) => {
+      return lookupClaimForDocgen(input.claimNumber);
+    }),
 });

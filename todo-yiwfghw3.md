@@ -93,3 +93,12 @@
 - [x] Add dec-page-whip and dec-page-klutch to DocGenTab type
 - [x] Wire MetrocarsDecPageTab and KlutchDecPageTab in renderTab switch
 - [x] TypeScript check: zero errors confirmed
+- [x] Add tRPC claimLookup procedure (docgen.claimLookup) backed by intakeRecords + lossIntakeClaims
+- [x] Add lookupClaimForDocgen() helper to db.ts
+- [x] Add Load from Claim UI (search bar + Load button) to CertOfCoverageTab
+- [x] Add Load from Claim UI to MetrocarsDecPageTab
+- [x] Add Load from Claim UI to KlutchDecPageTab
+- [x] Embed real Klutch logo (KLUTCH_LOGO_B64) in CertOfCoverageTab PDF header
+- [x] Embed real Klutch logo in KlutchDecPageTab PDF header
+- [x] Separate Preview and Download buttons in PreviewPanel (onPreview prop)
+- [x] Wire onPreview for CertOfCoverageTab, MetrocarsDecPageTab, KlutchDecPageTab
