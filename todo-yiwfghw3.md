@@ -83,3 +83,13 @@
 - [x] Update DocGen preview panel to render PDF-accurate letterhead layout (not plain text)
 - [x] Fix signature block: "Sincerely, / Whip Claims Management / Respectfully, / [Handler Name bold]"
 - [x] LOU Calculator: rebuild to match full carrier-defensible format (fleet utilization log, market rates, legal basis section)
+
+## Session 3 — Continuation Fixes (Aug 3, 2026)
+- [x] Fix missing addSOLNotice function declaration (corrupted from previous session)
+- [x] Restore missing addWhipLetterhead and addLetterFooter helper functions
+- [x] Implement MetrocarsDecPageTab component (Klutch Insurance branding, policy declarations, coverage table)
+- [x] Implement KlutchDecPageTab component (Klutch COI format, state-based coverage rules)
+- [x] Fix CertOfCoverageTab to match KlutchCOI.pdf format (landscape, Klutch branding, full coverage table with checkboxes, disclaimer box, producer/insurer grid, certificate holder/cancellation boxes)
+- [x] Add dec-page-whip and dec-page-klutch to DocGenTab type
+- [x] Wire MetrocarsDecPageTab and KlutchDecPageTab in renderTab switch
+- [x] TypeScript check: zero errors confirmed
