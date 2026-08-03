@@ -102,3 +102,8 @@
 - [x] Embed real Klutch logo in KlutchDecPageTab PDF header
 - [x] Separate Preview and Download buttons in PreviewPanel (onPreview prop)
 - [x] Wire onPreview for CertOfCoverageTab, MetrocarsDecPageTab, KlutchDecPageTab
+- [x] Remove DC/NJ/NY/NC/DE/OH from COI/Dec Page state dropdowns (already correct — only MD/VA/PA/FL/IL/GA/MA)
+- [x] Fix FL state minimums: BI = MD limits ($30k/$60k), UM/UIM = N/A (not required in FL)
+- [x] Fix policy number naming convention to [state]000S0137 across all three coverage tabs
+- [x] Fix statute citations in STATE_RULES (IL, VA, MA, FL)
+- [x] Update polNum fallback in PDF generation to use [state]000S0137

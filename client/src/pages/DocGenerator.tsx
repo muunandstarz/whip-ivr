@@ -1076,13 +1076,20 @@ function CertOfCoverageTab() {
     pip: boolean; pip_limit?: string; pipWaiverAvailable?: boolean;
     um: boolean; uim: boolean;
   }> = {
+    // MD: $30k/$60k BI, $15k PD, $2,500 PIP (waivable), UM/UIM required
     MD: { statute: "Maryland Transportation Article § 17-103", stateName: "Maryland", bi_pp: "$30,000", bi_po: "$60,000", pd: "$15,000", pip: true, pip_limit: "$2,500", pipWaiverAvailable: true, um: true, uim: true },
+    // VA: $30k/$60k BI, $20k PD, no PIP, UM/UIM required
     VA: { statute: "Virginia Code § 38.2-2206", stateName: "Virginia", bi_pp: "$30,000", bi_po: "$60,000", pd: "$20,000", pip: false, um: true, uim: true },
+    // PA: $15k/$30k BI, $5k PD, $5k PIP (first-party benefits), UM/UIM required
     PA: { statute: "75 Pa.C.S. § 1786", stateName: "Pennsylvania", bi_pp: "$15,000", bi_po: "$30,000", pd: "$5,000", pip: true, pip_limit: "$5,000", um: true, uim: true },
-    FL: { statute: "Florida Statutes § 324.021", stateName: "Florida", bi_pp: "$10,000", bi_po: "$20,000", pd: "$10,000", pip: true, pip_limit: "$10,000", um: false, uim: false },
-    IL: { statute: "215 ILCS 5/143a", stateName: "Illinois", bi_pp: "$25,000", bi_po: "$50,000", pd: "$20,000", pip: false, um: true, uim: true },
+    // FL: No state-minimum BI requirement → apply MD BI limits ($30k/$60k); $10k PD; $10k PIP required; UM/UIM not required
+    FL: { statute: "Florida Statutes § 627.736", stateName: "Florida", bi_pp: "$30,000", bi_po: "$60,000", pd: "$10,000", pip: true, pip_limit: "$10,000", um: false, uim: false },
+    // IL: $25k/$50k BI, $20k PD, no PIP, UM/UIM required
+    IL: { statute: "215 ILCS 5/7-317", stateName: "Illinois", bi_pp: "$25,000", bi_po: "$50,000", pd: "$20,000", pip: false, um: true, uim: true },
+    // GA: $25k/$50k BI, $25k PD, no PIP, UM/UIM required
     GA: { statute: "O.C.G.A. § 33-7-11", stateName: "Georgia", bi_pp: "$25,000", bi_po: "$50,000", pd: "$25,000", pip: false, um: true, uim: true },
-    MA: { statute: "M.G.L. c. 90 § 34A", stateName: "Massachusetts", bi_pp: "$20,000", bi_po: "$40,000", pd: "$5,000", pip: true, pip_limit: "$8,000", um: true, uim: true },
+    // MA: $20k/$40k BI, $5k PD, $8k PIP required, UM/UIM required
+    MA: { statute: "M.G.L. c. 175 § 113A", stateName: "Massachusetts", bi_pp: "$20,000", bi_po: "$40,000", pd: "$5,000", pip: true, pip_limit: "$8,000", um: true, uim: true },
   };
 
   const [form, setForm] = useState({
@@ -1137,7 +1144,7 @@ function CertOfCoverageTab() {
 
   const rules = STATE_RULES[form.stateOfCoverage] || STATE_RULES["MD"];
   const vehicleDesc = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "[Vehicle Year Make Model]";
-  const certNum = form.certNumber || (form.stateOfCoverage + "-" + (form.claimNumber || "00S0137"));
+  const certNum = form.certNumber || (form.stateOfCoverage + "000S0137");
 
   const handleDownload = () => {
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
@@ -1301,7 +1308,7 @@ function CertOfCoverageTab() {
 
     const effShort = form.effectiveDate ? form.effectiveDate.split("-").slice(1).concat(form.effectiveDate.split("-")[0]).join("/") : "[Eff]";
     const expShort = form.expirationDate ? form.expirationDate.split("-").slice(1).concat(form.expirationDate.split("-")[0]).join("/") : "[Exp]";
-    const polNum = form.policyNumber || "MD-00S0137";
+    const polNum = form.policyNumber || (form.stateOfCoverage + "000S0137");
 
     const coverageRows: Array<[string, string, string, string, string]> = [
       ["BI", "BODILY INJURY LIABILITY", polNum, rules.bi_pp + " PER PERSON / " + rules.bi_po + " PER OCCURRENCE", ""],
@@ -1468,7 +1475,7 @@ COMP: INCLUDED`;
         <Panel title="Certificate Information" tag="REQUIRED">
           <Grid3>
             <Field label="Certificate Number" id="coc-cert" value={form.certNumber} onChange={set("certNumber")} placeholder="MD-00S0137" />
-            <Field label="Policy Number" id="coc-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder="MD-00S0137" />
+            <Field label="Policy Number" id="coc-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
               <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
@@ -5872,7 +5879,8 @@ function MetrocarsDecPageTab() {
     MD: { bi: "$30,000 / $60,000", pd: "$15,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "WAIVED" },
     VA: { bi: "$30,000 / $60,000", pd: "$20,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "N/A" },
     PA: { bi: "$15,000 / $30,000", pd: "$5,000", um: "$15,000 / $30,000", uim: "$15,000 / $30,000", pip: "$5,000" },
-    FL: { bi: "N/A", pd: "$10,000", um: "N/A", uim: "N/A", pip: "$10,000" },
+    // FL: No state BI minimum → apply MD BI limits ($30k/$60k); UM/UIM not required in FL
+    FL: { bi: "$30,000 / $60,000", pd: "$10,000", um: "N/A — NOT REQUIRED", uim: "N/A — NOT REQUIRED", pip: "$10,000" },
     IL: { bi: "$25,000 / $50,000", pd: "$20,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A" },
     GA: { bi: "$25,000 / $50,000", pd: "$25,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A" },
     MA: { bi: "$20,000 / $40,000", pd: "$5,000", um: "$20,000 / $40,000", uim: "$20,000 / $40,000", pip: "$8,000" },
@@ -6032,7 +6040,7 @@ function MetrocarsDecPageTab() {
   const handlePreviewOnly = () => { handleDownload(); };
 
   const preview = `POLICY DECLARATIONS — Klutch Insurance Company
-Policy #: ${form.policyNumber || "KL-XXXXXXX"}
+Policy #: ${form.policyNumber || (form.stateOfCoverage + "000S0137")}
 Effective: ${form.effectiveDate || "[Date]"} — ${form.expirationDate || "[Date]"}
 State: ${form.stateOfCoverage}
 
@@ -6065,7 +6073,7 @@ VIN: ${form.vin || "[VIN]"}`;
         </div>
         <Panel title="Policy Information" tag="REQUIRED">
           <Grid3>
-            <Field label="Policy Number" id="mdp-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder="KL-XXXXXXX" />
+            <Field label="Policy Number" id="mdp-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <Field label="Effective Date" id="mdp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
             <Field label="Expiration Date" id="mdp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
           </Grid3>
@@ -6169,12 +6177,13 @@ function KlutchDecPageTab() {
 
   const KLUTCH_STATE_RULES_LOCAL: Record<string, { bi: string; pd: string; um: string; uim: string; pip: string; statute: string }> = {
     MD: { bi: "$30,000 / $60,000", pd: "$15,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "WAIVED", statute: "Maryland Transportation Article § 17-103" },
-    VA: { bi: "$30,000 / $60,000", pd: "$20,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "N/A", statute: "Virginia Code § 38.2-2200" },
-    PA: { bi: "$15,000 / $30,000", pd: "$5,000", um: "$15,000 / $30,000", uim: "$15,000 / $30,000", pip: "$5,000", statute: "Pennsylvania 75 Pa.C.S. § 1702" },
-    FL: { bi: "N/A", pd: "$10,000", um: "N/A", uim: "N/A", pip: "$10,000", statute: "Florida Statute § 627.736" },
-    IL: { bi: "$25,000 / $50,000", pd: "$20,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A", statute: "Illinois 625 ILCS 5/7-203" },
-    GA: { bi: "$25,000 / $50,000", pd: "$25,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A", statute: "Georgia O.C.G.A. § 33-7-11" },
-    MA: { bi: "$20,000 / $40,000", pd: "$5,000", um: "$20,000 / $40,000", uim: "$20,000 / $40,000", pip: "$8,000", statute: "Massachusetts G.L. c. 175, § 113A" },
+    VA: { bi: "$30,000 / $60,000", pd: "$20,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "N/A", statute: "Virginia Code § 38.2-2206" },
+    PA: { bi: "$15,000 / $30,000", pd: "$5,000", um: "$15,000 / $30,000", uim: "$15,000 / $30,000", pip: "$5,000", statute: "75 Pa.C.S. § 1786" },
+    // FL: No state BI minimum → apply MD BI limits ($30k/$60k); UM/UIM not required in FL
+    FL: { bi: "$30,000 / $60,000", pd: "$10,000", um: "N/A — NOT REQUIRED", uim: "N/A — NOT REQUIRED", pip: "$10,000", statute: "Florida Statutes § 627.736" },
+    IL: { bi: "$25,000 / $50,000", pd: "$20,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A", statute: "215 ILCS 5/7-317" },
+    GA: { bi: "$25,000 / $50,000", pd: "$25,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A", statute: "O.C.G.A. § 33-7-11" },
+    MA: { bi: "$20,000 / $40,000", pd: "$5,000", um: "$20,000 / $40,000", uim: "$20,000 / $40,000", pip: "$8,000", statute: "M.G.L. c. 175 § 113A" },
   };
 
   const handleDownload = () => {
@@ -6313,7 +6322,7 @@ function KlutchDecPageTab() {
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(7.5);
       doc.text(label, 18, y + 1);
-      doc.text(form.policyNumber || "KL-XXXXXXX", W / 2 - 20, y + 1);
+      doc.text(form.policyNumber || (form.stateOfCoverage + "000S0137"), W / 2 - 20, y + 1);
       doc.text(form.effectiveDate || "[Eff]", W / 2 + 14, y + 1);
       doc.text(form.expirationDate || "[Exp]", W / 2 + 32, y + 1);
       doc.setFont("helvetica", "bold");
@@ -6353,7 +6362,7 @@ function KlutchDecPageTab() {
 
   const preview = `KLUTCH INSURANCE COMPANY — CERTIFICATE OF COVERAGE
 Certificate No: ${form.certificateNumber || "KC-XXXXXXXX"}
-Policy #: ${form.policyNumber || "KL-XXXXXXX"}
+Policy #: ${form.policyNumber || (form.stateOfCoverage + "000S0137")}
 State: ${form.stateOfCoverage}
 
 Named Insured: Metrocars Leasing Corp
@@ -6386,7 +6395,7 @@ VIN: ${form.vin || "[VIN]"}`;
         <Panel title="Certificate Information" tag="REQUIRED">
           <Grid3>
             <Field label="Certificate Number" id="kdp-cert" value={form.certificateNumber} onChange={set("certificateNumber")} placeholder="KC-XXXXXXXX" />
-            <Field label="Policy Number" id="kdp-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder="KL-XXXXXXX" />
+            <Field label="Policy Number" id="kdp-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
               <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
