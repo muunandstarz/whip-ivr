@@ -1424,10 +1424,6 @@ function CertOfCoverageTab() {
   };
 
   const handlePreviewOnly = () => {
-    // Re-run the same PDF generation but only set preview URL, don't trigger download
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
-    // We call handleDownload which also sets preview, then immediately revoke the download
-    // Instead we duplicate the generation by calling handleDownload and suppressing the download
     // Simplest: just call handleDownload (it always sets previewPdfUrl)
     handleDownload();
   };
@@ -2092,7 +2088,6 @@ function ReleaseBITab() {
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [aiValidation, setAiValidation] = useState("");
   const [aiValidating, setAiValidating] = useState(false);
   const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
   const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
@@ -2173,31 +2168,6 @@ function ReleaseBITab() {
     }
   };
 
-  const handleValidate = async () => {
-    if (!form.claimantName || !form.settlementAmount) {
-      toast.error("Fill in Claimant Name and Settlement Amount first");
-      return;
-    }
-    setAiValidating(true);
-    try {
-      const result = await validateMutation.mutateAsync({
-        releaseType: "bi",
-        state: form.state,
-        claimantName: form.claimantName,
-        settlementAmount: form.settlementAmount,
-        isMinor: form.isMinor,
-        guardianName: form.minorGuardianName,
-        isCarrierPayee: form.isCarrierPayee,
-        carrierName: form.carrierName,
-      });
-      setAiValidation(result.review);
-      toast.success("AI validation complete");
-    } catch (e: unknown) {
-      toast.error((e as Error).message || "AI error");
-    } finally {
-      setAiValidating(false);
-    }
-  };
 
   const handleDownload = () => {
     const doc = new jsPDF();
@@ -2340,7 +2310,6 @@ function ReleasePDTab() {
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [aiValidation, setAiValidation] = useState("");
   const [aiValidating, setAiValidating] = useState(false);
   const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
   const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
@@ -2415,31 +2384,6 @@ function ReleasePDTab() {
     }
   };
 
-  const handleValidate = async () => {
-    if (!form.claimantName || !form.settlementAmount) {
-      toast.error("Fill in Claimant Name and Settlement Amount first");
-      return;
-    }
-    setAiValidating(true);
-    try {
-      const result = await validateMutation.mutateAsync({
-        releaseType: "pd",
-        state: form.state,
-        claimantName: form.claimantName,
-        settlementAmount: form.settlementAmount,
-        isMinor: form.isMinor,
-        guardianName: form.minorGuardianName,
-        isCarrierPayee: form.isCarrierPayee,
-        carrierName: form.carrierName,
-      });
-      setAiValidation(result.review);
-      toast.success("AI validation complete");
-    } catch (e: unknown) {
-      toast.error((e as Error).message || "AI error");
-    } finally {
-      setAiValidating(false);
-    }
-  };
 
   const handleDownload = () => {
     const doc = new jsPDF();
@@ -4045,7 +3989,6 @@ function LimitedLiabilityBITab() {
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [aiValidation, setAiValidation] = useState("");
   const [aiValidating, setAiValidating] = useState(false);
   const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
   const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
@@ -4114,28 +4057,6 @@ Whip Claims Management`;
     }
   };
 
-  const handleValidate = async () => {
-    if (!form.claimantName || !form.settlementAmount) {
-      toast.error("Fill in Claimant Name and Settlement Amount first");
-      return;
-    }
-    setAiValidating(true);
-    try {
-      const result = await validateMutation.mutateAsync({
-        releaseType: "limited_bi",
-        state: form.state || "Georgia",
-        claimantName: form.claimantName,
-        settlementAmount: form.settlementAmount,
-        isMinor: form.isMinor,
-      });
-      setAiValidation(result.review);
-      toast.success("AI validation complete");
-    } catch (e: unknown) {
-      toast.error((e as Error).message || "AI error");
-    } finally {
-      setAiValidating(false);
-    }
-  };
 
   const handleDownload = () => {
     const doc = new jsPDF();
