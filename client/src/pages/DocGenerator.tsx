@@ -1090,6 +1090,8 @@ function CertOfCoverageTab() {
     GA: { statute: "O.C.G.A. § 33-7-11", stateName: "Georgia", bi_pp: "$25,000", bi_po: "$50,000", pd: "$25,000", pip: false, um: true, uim: true },
     // MA: $20k/$40k BI, $5k PD, $8k PIP required, UM/UIM required
     MA: { statute: "M.G.L. c. 175 § 113A", stateName: "Massachusetts", bi_pp: "$20,000", bi_po: "$40,000", pd: "$5,000", pip: true, pip_limit: "$8,000", um: true, uim: true },
+    // TX: $30k/$60k BI, $25k PD, no PIP, UM/UIM optional
+    TX: { statute: "Texas Insurance Code § 1952.101", stateName: "Texas", bi_pp: "$30,000", bi_po: "$60,000", pd: "$25,000", pip: false, um: true, uim: true },
   };
 
   const [form, setForm] = useState({
@@ -1147,9 +1149,9 @@ function CertOfCoverageTab() {
   const certNum = form.certNumber || (form.stateOfCoverage + "000S0137");
 
   const handleDownload = () => {
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
-    const W = doc.internal.pageSize.getWidth(); // 279mm
-    const H = doc.internal.pageSize.getHeight(); // 216mm
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth(); // 216mm
+    const H = doc.internal.pageSize.getHeight(); // 279mm
 
     // ── Header ──────────────────────────────────────────────────────────────
     // Klutch logo area (left) — white background, real logo
@@ -1479,7 +1481,7 @@ COMP: INCLUDED`;
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
               <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
-                {["MD","VA","PA","FL","IL","GA","MA"].map(s => <option key={s} value={s}>{s}</option>)}
+                {["MD","VA","PA","FL","IL","GA","MA","TX"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
             </div>
@@ -2070,7 +2072,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
 
 // ─── Tab: General Release — BI ────────────────────────────────────────────────
 function ReleaseBITab() {
-  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "DC", "NJ", "NY"];
+  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"];
   const [form, setForm] = useState({
     claimantName: "",
     claimNumber: "",
@@ -2109,8 +2111,7 @@ function ReleaseBITab() {
   const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
   const releaseText = [
-    "GENERAL RELEASE OF ALL CLAIMS — BODILY INJURY",
-    "FOR SETTLEMENT PURPOSES ONLY",
+    "RELEASE OF ALL CLAIMS – BODILY INJURY",
     "",
     `Date: ${today}`,
     "",
@@ -2121,26 +2122,28 @@ function ReleaseBITab() {
     `Settlement Amount: $${form.settlementAmount || "[Amount]"}`,
     `State: ${form.state}`,
     "",
-    `In consideration of the payment of ${form.settlementAmount ? "$" + form.settlementAmount : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all bodily injury claims, medical expenses, lost wages, pain and suffering, and any other damages of any kind.`,
+    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${form.claimantName || "[Claimant Full Name]"}${minorLine} ("Claimant"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, on account of, or in any way arising out of, bodily injuries sustained by Claimant as a result of the motor vehicle incident that occurred on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident").`,
     "",
-    `This Release is intended to be a full and final settlement of all claims arising from the above-referenced incident. The Releasor acknowledges that this settlement is a compromise of a disputed claim and does not constitute an admission of liability by any of the Released Parties.`,
+    "This Release is limited to bodily injury claims arising from the Incident referenced above and includes, but is not limited to, past and future medical expenses, hospital, physician, therapy, and diagnostic services, pain and suffering, emotional distress, loss of earnings or earning capacity, and any other bodily injury damages arising from the Incident. This Release does not apply to property damage claims, claims unrelated to the Date of Loss referenced above, claims of any party not signing this Release, or claims arising from any event occurring after the date of this Release.",
     "",
-    minorBlock + "The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.",
+    "Claimant represents and warrants that all medical bills, liens, subrogation interests, and reimbursement claims, including but not limited to those of health insurers, Medicare, Medicaid, ERISA plans, hospitals, and medical providers related to the Incident, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid medical balances, liens, or reimbursement rights arising from the Incident.",
     "",
-    "RELEASOR SIGNATURE:",
+    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
     "",
-    "_________________________________    Date: _______________",
-    form.claimantName || "[Claimant Name]",
+    minorBlock + `Claimant acknowledges that this Release resolves only the bodily injury claims arising from the Incident referenced above, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.`,
+    "",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}.`,
+    "",
+    "IN WITNESS WHEREOF, Claimant has executed this Release on the date set forth below.",
+    `Claimant Signature: _________________________________`,
+    "",
+    `Printed Name: _________________________________`,
+    `Date: _________________________________`,
+    "",
+    `Witness Signature: _________________________________`,
+    `Printed Name: _________________________________`,
+    `Date: _________________________________`,
     minorSig,
-    "_________________________________",
-    "Printed Name",
-    "",
-    "_________________________________",
-    "Address",
-    "",
-    "Accepted by:",
-    form.adjusterName || "[Adjuster Name]",
-    "Whip Claims Management",
   ].join("\n");
 
   const handleGenerateEmail = async () => {
@@ -2281,27 +2284,11 @@ function ReleaseBITab() {
         </Panel>
         <Panel title="AI Tools" tag="AI">
           <div className="flex gap-2 flex-wrap mb-3">
-            <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleValidate} disabled={aiValidating}>
-              {aiValidating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-              {aiValidating ? "Validating..." : "✨ Validate Release Language"}
-            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleGenerateEmail} disabled={emailLoading}>
               {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
               {emailLoading ? "Generating..." : "Generate Email Draft"}
             </Button>
           </div>
-          {aiValidation && (
-            <div className="border border-border rounded-md overflow-hidden mb-3">
-              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
-                <CheckCircle className="w-3.5 h-3.5 text-[#ff6221]" />
-                <span className="text-xs font-semibold flex-1">AI Language Validation</span>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiValidation); toast.success("Copied"); }}>
-                  <Copy className="w-3 h-3" /> Copy
-                </Button>
-              </div>
-              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{aiValidation}</pre>
-            </div>
-          )}
           {emailDraft && (
             <div className="border border-border rounded-md overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
@@ -2332,7 +2319,7 @@ function ReleaseBITab() {
 
 // ─── Tab: General Release — PD ────────────────────────────────────────────────
 function ReleasePDTab() {
-  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "DC", "NJ", "NY"];
+  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"];
   const [form, setForm] = useState({
     claimantName: "",
     claimNumber: "",
@@ -2372,8 +2359,7 @@ function ReleasePDTab() {
   const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
   const releaseText = [
-    "GENERAL RELEASE OF ALL CLAIMS — PROPERTY DAMAGE",
-    "FOR SETTLEMENT PURPOSES ONLY",
+    "RELEASE OF ALL CLAIMS — PROPERTY DAMAGE",
     "",
     `Date: ${today}`,
     "",
@@ -2390,20 +2376,16 @@ function ReleasePDTab() {
     "",
     minorBlock + "The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.",
     "",
-    "RELEASOR SIGNATURE:",
     "",
-    "_________________________________    Date: _______________",
-    form.claimantName || "[Claimant Name]",
+    `Claimant Signature: _________________________________`,
+    "",
+    `Printed Name: _________________________________`,
+    `Date: _________________________________`,
+    "",
+    `Witness Signature: _________________________________`,
+    `Printed Name: _________________________________`,
+    `Date: _________________________________`,
     minorSig,
-    "_________________________________",
-    "Printed Name",
-    "",
-    "_________________________________",
-    "Address",
-    "",
-    "Accepted by:",
-    form.adjusterName || "[Adjuster Name]",
-    "Whip Claims Management",
   ].join("\n");
 
   const handleGenerateEmail = async () => {
@@ -2537,27 +2519,11 @@ function ReleasePDTab() {
         </Panel>
         <Panel title="AI Tools" tag="AI">
           <div className="flex gap-2 flex-wrap mb-3">
-            <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleValidate} disabled={aiValidating}>
-              {aiValidating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-              {aiValidating ? "Validating..." : "✨ Validate Release Language"}
-            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleGenerateEmail} disabled={emailLoading}>
               {emailLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
               {emailLoading ? "Generating..." : "Generate Email Draft"}
             </Button>
           </div>
-          {aiValidation && (
-            <div className="border border-border rounded-md overflow-hidden mb-3">
-              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
-                <CheckCircle className="w-3.5 h-3.5 text-[#ff6221]" />
-                <span className="text-xs font-semibold flex-1">AI Language Validation</span>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiValidation); toast.success("Copied"); }}>
-                  <Copy className="w-3 h-3" /> Copy
-                </Button>
-              </div>
-              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{aiValidation}</pre>
-            </div>
-          )}
           {emailDraft && (
             <div className="border border-border rounded-md overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
@@ -2588,7 +2554,7 @@ function ReleasePDTab() {
 
 // ─── Tab: TL Settlement & Release ─────────────────────────────────────────────
 function TLSettlementTab() {
-  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "DC", "NJ", "NY"];
+  const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"];
   const [form, setForm] = useState({
     claimantName: "",
     claimNumber: "",
@@ -2856,40 +2822,49 @@ claims@drivewhip.com
 
 ${form.carrier || "[Insurance Company]"}
 Attn: ${form.adjusterName || "[Adjuster Name]"}
+[ADDRESS ON FILE]
 
-Re: SUBROGATION DEMAND — FOR SETTLEMENT PURPOSES ONLY
-    Our Claim #: ${form.ourClaim || "[Our Claim #]"}
-    Your Claim #: ${form.advClaim || "[Their Claim #]"}
-    Date of Loss: ${form.dol || "[Date of Loss]"}
-    Driver / Claimant: ${form.driver || "[Driver Name]"}
-    Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}
+RE:  Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}
+Date of Loss: ${form.dol || "[Date of Loss]"}
+Vehicle: ${form.vehicle || "[Vehicle]"} — VIN ${form.vin || "[VIN]"}
+Our Insured: Metrocars Leasing Corp. (Driver: ${form.driver || "[Driver Name]"})
 
-Dear ${form.adjusterName || "[Adjuster Name]"},
+Dear ${form.adjusterName ? "Mr./Ms. " + form.adjusterName.split(" ").pop() : "[Adjuster Name]"}:
 
-Please be advised that this office represents Metrocars Leasing Corp d/b/a Whip Claims Management with respect to the above-referenced claim. We are writing to demand reimbursement for damages sustained as a result of the above-referenced incident.
+This office represents Metrocars Leasing Corp., the owner of the above-referenced vehicle, in connection with the loss that occurred on ${form.dol || "[Date of Loss]"}. Based on our investigation — including our review of the available police report, vehicle damage documentation, photographs, and supporting records — we have determined that your insured bears sole liability for this loss. Your insured's negligent operation of their vehicle was the direct and proximate cause of the damage sustained to the ${form.vehicle || "[Vehicle]"} described above, a vehicle owned by and registered to Metrocars Leasing Corp.
 
-DEMAND SUMMARY:
-${form.demandType === "total-loss" ? `Vehicle Valuation (ACV):        $${form.valuation || "0.00"}` : `Repair Estimate:                $${form.repair || "0.00"}`}
-${form.tow ? `Towing / Transport:             $${form.tow}` : ""}
-${form.dv ? `Diminished Value:               $${form.dv}` : ""}
-${form.lou ? `Loss of Use / Rental:           $${form.lou}` : ""}
+We accordingly submit this formal demand for reimbursement of the damages set forth below, pursuant to the doctrine of contractual and equitable subrogation, and request that this matter be resolved directly between our respective offices.
+
+ITEMIZATION OF DAMAGES
 ─────────────────────────────────────────
-TOTAL DEMAND:                   $${total}
+${form.demandType === "total-loss" ? `Vehicle Valuation (ACV)          $${form.valuation || "0.00"}` : `Estimate                         $${form.repair || "0.00"}`}
+${form.tow ? `Towing / Transport               $${form.tow}` : ""}
+${form.dv ? `Diminished Value                 $${form.dv}` : ""}
+${form.lou ? `Rental Reimbursement             $${form.lou}` : ""}
+─────────────────────────────────────────
+Total Subrogation Demand         $${total}
 
-Please respond to this demand and remit payment within ${form.deadline || "15"} days of the date of this letter.
+ENCLOSURES
+${form.attachments || "Estimate, Image Report, Police Report"}
 
-ATTACHMENTS: ${form.attachments || "Estimate, Image Report, Police Report"}
+DEMAND FOR PAYMENT
+Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
 
-Sincerely,
+This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
+
+PAYMENT INSTRUCTIONS
+Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.
+
+Respectfully,
+
 
 Whip Claims Management
-P.O. Box 10622, Rockville, MD 20849
-claims@drivewhip.com`;
+(855) 906-5949  |  claims@drivewhip.com`;
 
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "SUBROGATION DEMAND", "FOR SETTLEMENT PURPOSES ONLY");
+    let y = addWhipLetterhead(doc, "SUBROGATION DEMAND");
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -4081,7 +4056,7 @@ function LimitedLiabilityBITab() {
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   const releaseText = `LIMITED LIABILITY RELEASE — BODILY INJURY
-FOR SETTLEMENT PURPOSES ONLY — GEORGIA
+GEORGIA
 
 Date: ${today}
 
@@ -4229,16 +4204,6 @@ Whip Claims Management`;
               variant="outline"
               size="sm"
               className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"
-              onClick={handleValidate}
-              disabled={aiValidating}
-            >
-              {aiValidating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-              {aiValidating ? "Validating..." : "✨ Validate Release Language"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"
               onClick={handleGenerateEmail}
               disabled={emailLoading}
             >
@@ -4246,18 +4211,6 @@ Whip Claims Management`;
               {emailLoading ? "Generating..." : "Generate Email Draft"}
             </Button>
           </div>
-          {aiValidation && (
-            <div className="border border-border rounded-md overflow-hidden mb-3">
-              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
-                <CheckCircle className="w-3.5 h-3.5 text-[#ff6221]" />
-                <span className="text-xs font-semibold flex-1">AI Language Validation</span>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiValidation); toast.success("Copied"); }}>
-                  <Copy className="w-3 h-3" /> Copy
-                </Button>
-              </div>
-              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[250px] overflow-y-auto">{aiValidation}</pre>
-            </div>
-          )}
           {emailDraft && (
             <div className="border border-border rounded-md overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
@@ -5203,6 +5156,7 @@ function MedicalBillsReviewTab() {
 function WhipCOITab() {
   const [state, setState] = useState("MD");
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [umRejected, setUmRejected] = useState(false);
   const [form, setForm] = useState({
     memberName: "",
     memberAddress: "",
@@ -5225,6 +5179,7 @@ function WhipCOITab() {
     holderState: "",
     holderZip: "",
     additionalInsured: false,
+    pipWaiverNote: "",
     waiverOfSubrogation: false,
   });
 
@@ -5233,7 +5188,7 @@ function WhipCOITab() {
   const STATES = Object.keys(KLUTCH_STATE_RULES);
 
   const handleDownload = () => {
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
 
@@ -5377,9 +5332,21 @@ function WhipCOITab() {
           <div className="mt-2 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
             <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
-              <strong>Market-based:</strong> Select the state where the <strong>member originates</strong> (home market), not where the accident occurred. Whip markets: MD (Glen Burnie, Rockville), VA, PA, FL, IL, GA, MA.
+              <strong>Market-based:</strong> Select the state where the <strong>member originates</strong> (home market), not where the accident occurred. Whip markets: MD (Glen Burnie, Rockville), VA, PA, FL, IL, GA, MA, TX (Dallas).
             </p>
           </div>
+          {state === "GA" && (
+            <div className="mt-3 flex items-center gap-2 p-2.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+              <input type="checkbox" id="wcoi-um-rej" checked={umRejected} onChange={e => setUmRejected(e.target.checked)} className="h-4 w-4" />
+              <label htmlFor="wcoi-um-rej" className="text-xs font-medium text-amber-800 dark:text-amber-300">GA — Member rejected UM/UIM coverage (O.C.G.A. § 33-7-11)</label>
+            </div>
+          )}
+          {state === "FL" && (
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-foreground/70 mb-1">FL PIP Note (optional)</label>
+              <input className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs" placeholder="e.g. PIP reduced to $2,500 per member election" value={form.pipWaiverNote} onChange={e => set("pipWaiverNote")(e.target.value)} />
+            </div>
+          )}
         </Panel>
         <Panel title="Member Information">
           <Field label="Member Name" id="wcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
@@ -5485,9 +5452,9 @@ function WhipCOITab() {
           </div>
         </div>
         <Button className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white" onClick={handleDownload}>
-          <Download className="w-4 h-4" /> Download Whip COI (PDF — Landscape)
+          <Download className="w-4 h-4" /> Download Whip COI (PDF)
         </Button>
-        <p className="text-xs text-muted-foreground italic text-center">Prints in standard landscape COI format. Insurer: Metrocars Leasing Corp d/b/a Whip.</p>
+        <p className="text-xs text-muted-foreground italic text-center">Prints in portrait COI format. Insurer: Metrocars Leasing Corp d/b/a Whip.</p>
       </div>
     </div>
   );
@@ -5498,22 +5465,18 @@ function WhipCOITab() {
 const KLUTCH_STATE_RULES: Record<string, {
   biLimits: string; pdLimit: string; pip: boolean; pipLimit: string;
   um: boolean; umLimit: string; uim: boolean; uimLimit: string;
+  umRejectable?: boolean;
   medPay: boolean; medPayLimit: string;
 }> = {
   MD: { biLimits: "$30,000/$60,000", pdLimit: "$15,000", pip: true, pipLimit: "$2,500", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
-  DC: { biLimits: "$25,000/$50,000", pdLimit: "$10,000", pip: true, pipLimit: "$50,000", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
   VA: { biLimits: "$30,000/$60,000", pdLimit: "$20,000", pip: false, pipLimit: "", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
-  FL: { biLimits: "$10,000/$20,000", pdLimit: "$10,000", pip: true, pipLimit: "$10,000", um: true, umLimit: "$10,000/$20,000", uim: false, uimLimit: "", medPay: false, medPayLimit: "" },
-  GA: { biLimits: "$25,000/$50,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
+  // FL: No state BI minimum → apply MD BI limits ($30k/$60k); UM/UIM not required
+  FL: { biLimits: "$30,000/$60,000", pdLimit: "$10,000", pip: true, pipLimit: "$10,000", um: false, umLimit: "N/A — NOT REQUIRED", uim: false, uimLimit: "N/A — NOT REQUIRED", medPay: false, medPayLimit: "" },
+  GA: { biLimits: "$25,000/$50,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", umRejectable: true, medPay: false, medPayLimit: "" },
   IL: { biLimits: "$25,000/$50,000", pdLimit: "$20,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
   MA: { biLimits: "$20,000/$40,000", pdLimit: "$5,000", pip: true, pipLimit: "$8,000", um: true, umLimit: "$20,000/$40,000", uim: true, uimLimit: "$20,000/$40,000", medPay: false, medPayLimit: "" },
   PA: { biLimits: "$15,000/$30,000", pdLimit: "$5,000", pip: true, pipLimit: "$5,000", um: true, umLimit: "$15,000/$30,000", uim: true, uimLimit: "$15,000/$30,000", medPay: false, medPayLimit: "" },
-  NJ: { biLimits: "$15,000/$30,000", pdLimit: "$5,000", pip: true, pipLimit: "$15,000", um: true, umLimit: "$15,000/$30,000", uim: true, uimLimit: "$15,000/$30,000", medPay: false, medPayLimit: "" },
   TX: { biLimits: "$30,000/$60,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
-  NY: { biLimits: "$25,000/$50,000", pdLimit: "$10,000", pip: true, pipLimit: "$50,000", um: true, umLimit: "$25,000/$50,000", uim: false, uimLimit: "", medPay: false, medPayLimit: "" },
-  NC: { biLimits: "$30,000/$60,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$30,000/$60,000", uim: true, uimLimit: "$30,000/$60,000", medPay: false, medPayLimit: "" },
-  DE: { biLimits: "$25,000/$50,000", pdLimit: "$10,000", pip: true, pipLimit: "$15,000", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
-  OH: { biLimits: "$25,000/$50,000", pdLimit: "$25,000", pip: false, pipLimit: "", um: true, umLimit: "$25,000/$50,000", uim: true, uimLimit: "$25,000/$50,000", medPay: false, medPayLimit: "" },
 };
 
 function KlutchCOITab() {
@@ -5549,7 +5512,7 @@ function KlutchCOITab() {
   const STATES = Object.keys(KLUTCH_STATE_RULES);
 
   const handleDownload = () => {
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
 
@@ -5815,9 +5778,9 @@ function KlutchCOITab() {
         </div>
 
         <Button className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white" onClick={handleDownload}>
-          <Download className="w-4 h-4" /> Download Klutch COI (PDF — Landscape)
+          <Download className="w-4 h-4" /> Download Klutch COI (PDF)
         </Button>
-        <p className="text-xs text-muted-foreground italic text-center">Prints in standard landscape COI format with state-specific coverage limits auto-populated.</p>
+        <p className="text-xs text-muted-foreground italic text-center">Prints in portrait COI format with state-specific coverage limits auto-populated.</p>
       </div>
     </div>
   );
@@ -5884,6 +5847,7 @@ function MetrocarsDecPageTab() {
     IL: { bi: "$25,000 / $50,000", pd: "$20,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A" },
     GA: { bi: "$25,000 / $50,000", pd: "$25,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A" },
     MA: { bi: "$20,000 / $40,000", pd: "$5,000", um: "$20,000 / $40,000", uim: "$20,000 / $40,000", pip: "$8,000" },
+    TX: { bi: "$30,000 / $60,000", pd: "$25,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "N/A" },
   };
 
   const handleDownload = () => {
@@ -6084,7 +6048,7 @@ VIN: ${form.vin || "[VIN]"}`;
               <div>
                 <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
                 <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
-                  {["MD","VA","PA","FL","IL","GA","MA"].map(s => <option key={s} value={s}>{s}</option>)}
+                  {["MD","VA","PA","FL","IL","GA","MA","TX"].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
               </div>
@@ -6184,6 +6148,7 @@ function KlutchDecPageTab() {
     IL: { bi: "$25,000 / $50,000", pd: "$20,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A", statute: "215 ILCS 5/7-317" },
     GA: { bi: "$25,000 / $50,000", pd: "$25,000", um: "$25,000 / $50,000", uim: "$25,000 / $50,000", pip: "N/A", statute: "O.C.G.A. § 33-7-11" },
     MA: { bi: "$20,000 / $40,000", pd: "$5,000", um: "$20,000 / $40,000", uim: "$20,000 / $40,000", pip: "$8,000", statute: "M.G.L. c. 175 § 113A" },
+    TX: { bi: "$30,000 / $60,000", pd: "$25,000", um: "$30,000 / $60,000", uim: "$30,000 / $60,000", pip: "N/A", statute: "Texas Insurance Code § 1952.101" },
   };
 
   const handleDownload = () => {
@@ -6399,7 +6364,7 @@ VIN: ${form.vin || "[VIN]"}`;
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
               <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
-                {["MD","VA","PA","FL","IL","GA","MA"].map(s => <option key={s} value={s}>{s}</option>)}
+                {["MD","VA","PA","FL","IL","GA","MA","TX"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
             </div>

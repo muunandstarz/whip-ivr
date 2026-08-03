@@ -107,3 +107,25 @@
 - [x] Fix policy number naming convention to [state]000S0137 across all three coverage tabs
 - [x] Fix statute citations in STATE_RULES (IL, VA, MA, FL)
 - [x] Update polNum fallback in PDF generation to use [state]000S0137
+- [x] Update polNum fallback in PDF generation to use [state]000S0137
+
+## Session 4 — COI/Dec Page Portrait Rebuild & Release Fixes (Aug 3, 2026)
+- [ ] Remove any remaining DC, NJ, NY, NC, DE, OH state options from Whip COI and Dec Page flows
+- [ ] Rebuild Whip COI PDF in portrait format to match KlutchCOI.pdf exactly
+- [ ] Rebuild Metrocars and Klutch Dec Page PDFs in portrait format to match Barkley_Dec_Page.pdf exactly
+- [ ] Add TX support to COI and both Dec Page flows (TX minimums: $30k/$60k BI, $25k PD, no PIP, UM/UIM optional)
+- [ ] Add FL PIP waiver/modification note field on COI and Dec Page flows
+- [ ] Allow UM rejection in GA on COI and Dec Page flows
+- [ ] Replace BI/PD/Limited release generation with fixed reference-template formatting (no AI validation)
+- [ ] Fix subro demand letter: remove dark header line, left-align date, remove 'for settlement purposes'
+- [ ] Verify all affected documents render and download correctly before delivery
+- [x] Remove DC/NJ/NY/NC/DE/OH markets from COI/Dec Page (confirmed already clean - only MD/VA/PA/FL/IL/GA/MA/TX)
+- [x] Add TX to all three coverage tabs (COI, Metrocars Dec Page, Klutch Dec Page)
+- [x] Add FL PIP waiver checkbox on COI
+- [x] Add GA UM rejection option
+- [x] Fix policy number naming convention to [state]000S0137
+- [x] Fix FL state minimums (apply MD BI limits, UM/UIM not required)
+- [x] Rebuild BI/PD/Limited releases to use exact reference document formats
+- [x] Remove AI Validate Release Language button from all three release tabs
+- [x] Fix subro demand letter: remove For Settlement Purposes Only, left-align date, match reference format
+- [x] Update subro demand to match Whip_SubroDemand reference (itemization table, demand for payment, payment instructions sections)
