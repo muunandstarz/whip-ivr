@@ -45,6 +45,7 @@ function BotControlPanel() {
   const { data: runs } = trpc.mailBot.listRuns.useQuery({ limit: 5 });
   const [batchSize, setBatchSize] = useState<number | null>(null);
   const [lookback, setLookback] = useState<number | null>(null);
+  const [runScanMode, setRunScanMode] = useState<"hours" | "all_time" | null>(null);
   const [running, setRunning] = useState<string | null>(null);
 
   const runMutation = trpc.mailBot.runNow.useMutation({
@@ -72,6 +73,7 @@ function BotControlPanel() {
       source,
       batchSize: batchSize ?? config?.batchSize ?? 3,
       lookbackHours: lookback ?? config?.lookbackHours ?? 24,
+      scanMode: runScanMode ?? ((config as typeof config & { scanMode?: string })?.scanMode as "hours" | "all_time" | undefined) ?? "hours",
     });
   }
 
@@ -113,7 +115,27 @@ function BotControlPanel() {
                   value={lookback ?? ""}
                   onChange={(e) => setLookback(e.target.value ? Number(e.target.value) : null)}
                   className="mt-1 h-8 text-sm"
+                  disabled={(runScanMode ?? (config as typeof config & { scanMode?: string })?.scanMode) === "all_time"}
                 />
+              </div>
+
+              <div className="col-span-2">
+                <Label className="text-xs">Scan Mode (this run)</Label>
+                <div className="mt-1 flex rounded-md border border-border overflow-hidden text-xs">
+                  <button type="button"
+                    onClick={() => setRunScanMode("hours")}
+                    className={`flex-1 py-1.5 font-medium transition-colors ${(runScanMode ?? (config as typeof config & { scanMode?: string })?.scanMode ?? "hours") === "hours" ? "bg-[#ff6221] text-white" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
+                  >Last N Hours</button>
+                  <button type="button"
+                    onClick={() => setRunScanMode("all_time")}
+                    className={`flex-1 py-1.5 font-medium transition-colors ${(runScanMode ?? (config as typeof config & { scanMode?: string })?.scanMode ?? "hours") === "all_time" ? "bg-[#ff6221] text-white" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
+                  >All Unchecked</button>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {(runScanMode ?? (config as typeof config & { scanMode?: string })?.scanMode ?? "hours") === "all_time"
+                    ? "Scans every unprocessed item in #claims-mail regardless of age."
+                    : "Scans only items posted within the lookback window."}
+                </p>
               </div>
             </div>
             <div className="flex flex-col gap-2">

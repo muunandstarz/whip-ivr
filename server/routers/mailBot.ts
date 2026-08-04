@@ -35,6 +35,7 @@ export const mailBotRouter = router({
       slackBotToken: z.string().optional(),
       scheduleEnabled: z.boolean().optional(),
       cronExpression: z.string().optional(),
+      scanMode: z.enum(["hours", "all_time"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       adminOnly(ctx.user.role);
@@ -211,6 +212,7 @@ export const mailBotRouter = router({
       source: z.enum(["slack_mail", "gmail_fax", "both"]),
       batchSize: z.number().int().min(1).max(50).optional(),
       lookbackHours: z.number().int().min(1).max(168).optional(),
+      scanMode: z.enum(["hours", "all_time"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       adminOnly(ctx.user.role);

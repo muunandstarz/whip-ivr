@@ -262,6 +262,8 @@ export async function runMailBot(options: BotRunOptions): Promise<{ runId: strin
   const token = config.slackBotToken ?? process.env.SLACK_BOT_TOKEN ?? "";
   const batchSize = options.batchSize ?? config.batchSize;
   const lookbackHours = options.lookbackHours ?? config.lookbackHours;
+  // scanMode: "all_time" = no oldest filter (fetch all unchecked), "hours" = lookback window
+  const scanMode = (config as typeof config & { scanMode?: string }).scanMode ?? "hours";
   const mailChannelId = config.claimsMailChannelId;
   const hubChannelId = config.claimsHubChannelId;
 
@@ -273,7 +275,9 @@ export async function runMailBot(options: BotRunOptions): Promise<{ runId: strin
 
   try {
     if (options.source === "slack_mail" || options.source === "both") {
-      const oldest = String(Math.floor((Date.now() - lookbackHours * 3600 * 1000) / 1000));
+      const oldest = scanMode === "all_time"
+        ? undefined
+        : String(Math.floor((Date.now() - lookbackHours * 3600 * 1000) / 1000));
       const messages = await slackGetMessages(token, mailChannelId, oldest);
 
       // Filter: has file attachment, no ✅ reaction

@@ -545,6 +545,7 @@ export const mailBotConfig = mysqlTable("mail_bot_config", {
   processMailChannel: boolean("process_mail_channel").default(true).notNull(),
   processFax: boolean("process_fax").default(true).notNull(),
   lookbackHours: int("lookback_hours").default(24).notNull(),
+  scanMode: varchar("scan_mode", { length: 16 }).default("hours").notNull(),
   slackBotToken: varchar("slack_bot_token", { length: 256 }),
   claimsMailChannelId: varchar("claims_mail_channel_id", { length: 32 }).default("C07R60KAC2C").notNull(),
   claimsHubChannelId: varchar("claims_hub_channel_id", { length: 32 }).default("CHWRXH4HK").notNull(),
