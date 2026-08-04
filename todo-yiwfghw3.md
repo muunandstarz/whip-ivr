@@ -199,3 +199,13 @@
 - [x] Rename "Markets & Policy" nav label and page title to "Market and Policy Directory"
 - [x] Rebuild Vehicle Anatomy with real sedan image (Toyota Camry), 15 interactive numbered pins, no vehicle picker, no Need Help section
 - [x] Upload sedan anatomy image to webdev static storage
+- [ ] Remove Fault Decision Tool nav entry (merged into Liability Guide)
+- [ ] Recalibrate Vehicle Anatomy pin positions on sedan image
+- [ ] Add Copy Result button to Liability Guide fault determination output
+- [ ] Restrict COI and dec page state options to Whip operating markets only (MD, VA, FL, GA, IL, MA, PA, TX), pre-filled from member's originating market state
+- [x] Remove Fault Decision Tool nav entry and route (merged into Liability Guide)
+- [x] Recalibrate Vehicle Anatomy pin positions on Toyota Camry sedan image
+- [x] Add Copy Result button to Liability Guide fault determination output
+- [x] Restrict COI and dec page state selectors to Whip operating markets only (MD, VA, PA, FL, IL, GA, MA, TX)
+- [x] Pre-fill COI/dec page state from member's originating market via URL param
+- [x] Update stateOfCoverage derivation in db.ts to add TX, NJ, NC market mappings

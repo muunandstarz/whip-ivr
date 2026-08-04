@@ -60,7 +60,6 @@ const KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
-  { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
 ];
@@ -84,7 +83,6 @@ const HANDLER_KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
-  { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
 ];

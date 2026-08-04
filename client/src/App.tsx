@@ -28,7 +28,6 @@ import DocGenerator from "./pages/DocGenerator";
 import MailBot from "./pages/MailBot";
 import ProRataCalc from "./pages/ProRataCalc";
 import LiabilityGuide from "./pages/kb/LiabilityGuide";
-import FaultDecisionTool from "./pages/kb/FaultDecisionTool";
 import DeniedClaimEscalation from "./pages/kb/DeniedClaimEscalation";
 import MarketsAndPolicy from "./pages/kb/MarketsAndPolicy";
 import ReferenceHub from "./pages/kb/ReferenceHub";
@@ -61,7 +60,6 @@ function Router() {
       <Route path="/mail-bot" component={MailBot} />
       <Route path="/pro-rata" component={ProRataCalc} />
       <Route path="/kb/liability-guide" component={LiabilityGuide} />
-      <Route path="/kb/fault-decision" component={FaultDecisionTool} />
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />
       <Route path="/kb/markets" component={MarketsAndPolicy} />
       <Route path="/kb/reference-hub" component={ReferenceHub} />

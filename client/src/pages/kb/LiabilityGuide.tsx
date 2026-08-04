@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ChevronDown, ChevronRight, AlertTriangle, Loader2, RotateCcw, CheckCircle2, XCircle, HelpCircle, TrendingDown } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -114,6 +115,52 @@ function FaultMeter({ pct }: { pct: number }) {
         <span>100% (Fully at fault)</span>
       </div>
     </div>
+  );
+}
+
+function buildPlainText(data: FaultResult): string {
+  const lines: string[] = [
+    "=== FAULT DETERMINATION (AI-Assisted) ===",
+    "",
+    "Accident Type: " + data.accidentType,
+    "Estimated Fault %: " + data.estimatedFaultPct + "% (Our Driver)",
+    "Recovery Likelihood: " + data.recoveryLikelihood,
+    "",
+    "--- Fault Analysis ---",
+    data.faultAnalysis,
+    "",
+    "--- State Law Impact ---",
+    data.stateLawImpact,
+  ];
+  if (data.redFlags?.length) {
+    lines.push("", "--- Red Flags / Inconsistencies ---");
+    data.redFlags.forEach(f => lines.push("• " + f));
+  }
+  if (data.evidenceNeeded?.length) {
+    lines.push("", "--- Key Evidence Needed ---");
+    data.evidenceNeeded.forEach(e => lines.push("• " + e));
+  }
+  lines.push("", "--- Recommended Action ---", data.recommendedAction);
+  return lines.join("\n");
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [text]);
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors font-medium"
+      title="Copy determination to clipboard"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? "Copied!" : "Copy result"}
+    </button>
   );
 }
 
@@ -373,7 +420,10 @@ export default function LiabilityGuide() {
             <div className="border border-border rounded-lg p-5 bg-background">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-base">Fault Determination</h3>
-                <Badge variant="outline" className="text-xs font-mono">AI-Assisted</Badge>
+                <div className="flex items-center gap-2">
+                  <CopyButton text={buildPlainText(result)} />
+                  <Badge variant="outline" className="text-xs font-mono">AI-Assisted</Badge>
+                </div>
               </div>
               <StructuredResult data={result} />
             </div>
@@ -382,7 +432,10 @@ export default function LiabilityGuide() {
           {/* Raw fallback */}
           {rawResult && (
             <div className="border border-border rounded-lg overflow-hidden">
-              <div className="bg-muted/40 px-4 py-2 text-sm font-semibold">Fault Determination</div>
+              <div className="bg-muted/40 px-4 py-2 flex items-center justify-between">
+                <span className="text-sm font-semibold">Fault Determination</span>
+                <CopyButton text={rawResult ?? ""} />
+              </div>
               <div className="px-4 py-4 text-sm whitespace-pre-wrap leading-relaxed">{rawResult}</div>
             </div>
           )}

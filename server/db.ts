@@ -2359,6 +2359,9 @@ export async function lookupClaimForDocgen(claimNumber: string) {
         : loss.market.toUpperCase().includes("IL") ? "IL"
         : loss.market.toUpperCase().includes("GA") ? "GA"
         : loss.market.toUpperCase().includes("MA") ? "MA"
+        : loss.market.toUpperCase().includes("TX") || loss.market.toUpperCase().includes("DALLAS") ? "TX"
+        : loss.market.toUpperCase().includes("NJ") || loss.market.toUpperCase().includes("JERSEY") ? "NJ"
+        : loss.market.toUpperCase().includes("NC") || loss.market.toUpperCase().includes("CAROLINA") ? "NC"
         : "MD")
       : null,
     source: intake ? "intake" : "loss_intake",

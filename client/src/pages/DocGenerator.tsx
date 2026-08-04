@@ -1073,7 +1073,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
 }
 
 // ─── Tab: Certificate of Coverage ────────────────────────────────────────────
-function CertOfCoverageTab() {
+function CertOfCoverageTab({ initialState = "MD" }: { initialState?: string }) {
   const STATE_RULES: Record<string, {
     statute: string; stateName: string;
     bi_pp: string; bi_po: string; pd: string;
@@ -1110,7 +1110,7 @@ function CertOfCoverageTab() {
     policyNumber: "",
     effectiveDate: "",
     expirationDate: "",
-    stateOfCoverage: "MD",
+    stateOfCoverage: initialState || "MD",
     pipWaived: true,
     certNumber: "",
     requestedBy: "",
@@ -5152,8 +5152,8 @@ const KLUTCH_STATE_RULES: Record<string, {
 };
 
 // ─── Tab: Whip COI ─────────────────────────────────────────────────────────────
-function WhipCOITab() {
-  const [state, setState] = useState("MD");
+function WhipCOITab({ initialState = "MD" }: { initialState?: string }) {
+  const [state, setState] = useState(initialState || "MD");
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [pipElection, setPipElection] = useState<"full" | "limited" | "waived">("full");
   const [umRejected, setUmRejected] = useState(false);
@@ -5613,8 +5613,8 @@ function WhipCOITab() {
   );
 }
 
-function KlutchCOITab() {
-  const [state, setState] = useState("MD");
+function KlutchCOITab({ initialState = "MD" }: { initialState?: string }) {
+  const [state, setState] = useState(initialState || "MD");
   const [form, setForm] = useState({
     memberName: "",
     memberAddress: "",
@@ -5921,7 +5921,7 @@ function KlutchCOITab() {
 }
 
 // ─── Tab: Metrocars Dec Page ──────────────────────────────────────────────────
-function MetrocarsDecPageTab() {
+function MetrocarsDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const [form, setForm] = useState({
     memberName: "",
     memberAddress: "",
@@ -5936,7 +5936,7 @@ function MetrocarsDecPageTab() {
     policyNumber: "",
     effectiveDate: "",
     expirationDate: "",
-    stateOfCoverage: "MD",
+    stateOfCoverage: initialState || "MD",
     claimNumber: "",
     dateOfLoss: "",
   });
@@ -6221,7 +6221,7 @@ VIN: ${form.vin || "[VIN]"}`;
 }
 
 // ─── Tab: Klutch Dec Page ──────────────────────────────────────────────────────
-function KlutchDecPageTab() {
+function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const [form, setForm] = useState({
     memberName: "",
     memberAddress: "",
@@ -6236,7 +6236,7 @@ function KlutchDecPageTab() {
     policyNumber: "",
     effectiveDate: "",
     expirationDate: "",
-    stateOfCoverage: "MD",
+    stateOfCoverage: initialState || "MD",
     claimNumber: "",
     dateOfLoss: "",
     certificateNumber: "",
@@ -6632,6 +6632,12 @@ export default function DocGenerator() {
     const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","cert-of-coverage","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch","dv-calculator"];
     return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
   })();
+  const initialMemberState = (() => {
+    const params = new URLSearchParams(search);
+    const s = (params.get("memberState") || "").toUpperCase();
+    const WHIP_STATES = ["MD","VA","PA","FL","IL","GA","MA","TX"];
+    return WHIP_STATES.includes(s) ? s : "MD";
+  })();
   const [activeTab, setActiveTab] = useState<DocGenTab>(initialTab);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRecentDocs, setShowRecentDocs] = useState(false);
@@ -6699,7 +6705,7 @@ export default function DocGenerator() {
       case "claimant-contact": return <ClaimantContactTab />;
       case "failed-contact": return <FailedContactTab />;
       case "storage-mitigation": return <StorageMitigationTab />;
-      case "cert-of-coverage": return <CertOfCoverageTab />;
+      case "cert-of-coverage": return <CertOfCoverageTab initialState={initialMemberState} />;
       case "coverage-tnc": return <CoverageTNCTab />;
       case "denial": return <DenialTab />;
       case "damage-denial": return <DamageDenialTab />;
@@ -6715,10 +6721,10 @@ export default function DocGenerator() {
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} />;
       case "pip-bill-review": return <MedicalBillsReviewTab />;
-      case "coi-whip": return <WhipCOITab />;
-      case "coi-klutch": return <KlutchCOITab />;
-      case "dec-page-whip": return <MetrocarsDecPageTab />;
-      case "dec-page-klutch": return <KlutchDecPageTab />;
+      case "coi-whip": return <WhipCOITab initialState={initialMemberState} />;
+      case "coi-klutch": return <KlutchCOITab initialState={initialMemberState} />;
+      case "dec-page-whip": return <MetrocarsDecPageTab initialState={initialMemberState} />;
+      case "dec-page-klutch": return <KlutchDecPageTab initialState={initialMemberState} />;
       case "dv-calculator": return <DVCalculatorTab />;
       default: return null;
     }
