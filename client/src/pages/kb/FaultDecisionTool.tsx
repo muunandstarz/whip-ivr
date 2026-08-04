@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
+import WhipLayout from "@/components/WhipLayout";
 
 const STATES = [
   { value: "MD", label: "Maryland (Contributory)" },
@@ -99,6 +100,7 @@ export default function FaultDecisionTool() {
   };
 
   return (
+    <WhipLayout>
     <div className="max-w-3xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-1">Fault Decision Tool</h1>
@@ -217,5 +219,6 @@ export default function FaultDecisionTool() {
         </div>
       )}
     </div>
+    </WhipLayout>
   );
 }

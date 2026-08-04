@@ -26,6 +26,43 @@ const STATE_RULES: Record<string, string> = {
 };
 
 export const kbRouter = router({
+  searchPolicyTerms: protectedProcedure
+    .input(z.object({
+      scenario: z.string().min(5),
+      state: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const stateContext = input.state ? `The claim is in ${input.state}.` : "";
+      const prompt = `You are a Whip Claims Management policy analyst. An adjuster has described the following scenario and needs to know the exact applicable policy language, coverage rules, and any relevant exclusions or conditions.
+
+SCENARIO: ${input.scenario}
+${stateContext}
+
+Respond with a structured answer in this exact format:
+
+## Applicable Coverage
+[Which coverage period (P0/P1/P2/P3) applies and why. State the exact coverage limits.]
+
+## Policy Language
+[Quote or closely paraphrase the exact policy provision(s) that govern this scenario. Be specific — cite the section or provision name if known.]
+
+## Conditions & Requirements
+[Any conditions the member/claimant must meet for coverage to apply — notice requirements, cooperation clauses, documentation, etc.]
+
+## Exclusions That May Apply
+[List any exclusions that could limit or void coverage in this scenario. Be direct — if an exclusion clearly applies, say so.]
+
+## State-Specific Notes
+[Any state law or regulatory requirement that modifies the standard policy language for this state. If no state was specified, note the most common variations across Whip's operating markets.]
+
+## Recommended Action
+[What the adjuster should do next based on this policy analysis — accept, investigate further, deny, or escalate.]
+
+Be precise and actionable. If the scenario is ambiguous, identify the key facts needed to make a definitive determination.`;
+      const result = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
+      return { analysis: extractText(result) };
+    }),
+
   analyzeFault: protectedProcedure
     .input(z.object({
       narrative: z.string().min(10),

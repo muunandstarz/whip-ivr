@@ -3,7 +3,11 @@ import WhipLayout from "@/components/WhipLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, BookOpen, ChevronDown, ChevronRight, Phone, Mail, MessageSquare, FileText, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
+import { Search, BookOpen, ChevronDown, ChevronRight, Phone, Mail, MessageSquare, FileText, AlertTriangle, Clock, CheckCircle2, Scale, Loader2, Copy, Check } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 function Accordion({ title, badge, badgeColor, children }: { title: string; badge?: string; badgeColor?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -199,6 +203,17 @@ const ARTICLES = [
 
 export default function KnowledgeBase() {
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"articles" | "policy">("articles");
+  const [scenario, setScenario] = useState("");
+  const [scenarioState, setScenarioState] = useState("all");
+  const [policyResult, setPolicyResult] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const policySearch = trpc.kb.searchPolicyTerms.useMutation({
+    onSuccess: (data) => setPolicyResult(data.analysis),
+    onError: () => toast.error("Failed to retrieve policy language. Please try again."),
+  });
+
   const filtered = search
     ? ARTICLES.filter(a => a.title.toLowerCase().includes(search.toLowerCase()) || a.category.toLowerCase().includes(search.toLowerCase()))
     : ARTICLES;
@@ -216,23 +231,120 @@ export default function KnowledgeBase() {
           </div>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search articles…" className="pl-9 h-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        {/* Tab bar */}
+        <div className="flex gap-0 border-b border-border">
+          <button onClick={() => setActiveTab("articles")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === "articles" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            Articles
+          </button>
+          <button onClick={() => setActiveTab("policy")}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${activeTab === "policy" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <Scale className="w-3.5 h-3.5" /> Policy &amp; Terms Lookup
+          </button>
         </div>
 
-        <div className="space-y-3">
-          {filtered.map((article) => (
-            <Accordion key={article.id} title={article.title} badge={article.category}
-              badgeColor={article.category === "Compliance" ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" :
-                article.category === "Authority" ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" :
-                "bg-primary/10 text-primary"}>
-              {article.content}
-            </Accordion>
-          ))}
-        </div>
+        {/* Articles tab */}
+        {activeTab === "articles" && (
+          <>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search articles…" className="pl-9 h-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <div className="space-y-3">
+              {filtered.map((article) => (
+                <Accordion key={article.id} title={article.title} badge={article.category}
+                  badgeColor={article.category === "Compliance" ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" :
+                    article.category === "Authority" ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" :
+                    "bg-primary/10 text-primary"}>
+                  {article.content}
+                </Accordion>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Policy & Terms Lookup tab */}
+        {activeTab === "policy" && (
+          <div className="space-y-5">
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-1">
+              <p className="text-sm font-medium">Scenario-Based Policy Lookup</p>
+              <p className="text-xs text-muted-foreground">Describe the claim scenario and get the exact applicable policy language, coverage period, exclusions, and recommended action — instantly.</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5 block">Describe the Scenario *</label>
+                <textarea
+                  value={scenario}
+                  onChange={e => setScenario(e.target.value)}
+                  placeholder="e.g. Driver was en route to pick up a passenger when they rear-ended another vehicle. The member's personal auto policy denied the claim. What coverage applies?"
+                  className="w-full min-h-[100px] rounded-lg border border-border bg-background px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+              <div className="flex items-end gap-3">
+                <div className="w-48">
+                  <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5 block">State (optional)</label>
+                  <Select value={scenarioState} onValueChange={setScenarioState}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All states" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All states</SelectItem>
+                      <SelectItem value="MD">Maryland</SelectItem>
+                      <SelectItem value="VA">Virginia</SelectItem>
+                      <SelectItem value="GA">Georgia</SelectItem>
+                      <SelectItem value="FL">Florida</SelectItem>
+                      <SelectItem value="IL">Illinois</SelectItem>
+                      <SelectItem value="MA">Massachusetts</SelectItem>
+                      <SelectItem value="PA">Pennsylvania</SelectItem>
+                      <SelectItem value="TX">Texas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={() => {
+                    if (!scenario.trim()) { toast.error("Please describe a scenario first."); return; }
+                    setPolicyResult(null);
+                    policySearch.mutate({ scenario: scenario.trim(), state: scenarioState !== "all" ? scenarioState : undefined });
+                  }}
+                  disabled={policySearch.isPending || !scenario.trim()}
+                  className="h-9 px-5 shrink-0"
+                >
+                  {policySearch.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Searching…</> : <><Search className="w-4 h-4 mr-2" />Look Up Policy</>}
+                </Button>
+              </div>
+            </div>
+
+            {policyResult && (
+              <div className="border border-border rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-primary" />
+                    <span className="font-semibold text-sm">Policy Analysis</span>
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(policyResult).then(() => { setCopied(true); toast("Copied to clipboard"); setTimeout(() => setCopied(false), 2000); }); }}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <div className="px-4 py-4 space-y-3 text-sm leading-relaxed">
+                  {policyResult.split('\n').map((line, i) => {
+                    if (line.startsWith('## ')) return <h3 key={i} className="font-semibold text-base mt-4 first:mt-0">{line.replace('## ', '')}</h3>;
+                    if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-semibold">{line.replace(/\*\*/g, '')}</p>;
+                    if (line.startsWith('- ') || line.startsWith('* ')) return <li key={i} className="ml-4 text-muted-foreground">{line.replace(/^[-*] /, '')}</li>;
+                    if (line.trim() === '') return null;
+                    return <p key={i} className="text-muted-foreground">{line}</p>;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </WhipLayout>
   );
 }
-

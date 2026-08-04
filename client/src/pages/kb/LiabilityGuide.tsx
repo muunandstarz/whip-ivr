@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import WhipLayout from "@/components/WhipLayout";
 
 function Accordion({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -19,6 +20,7 @@ function Accordion({ title, icon, children }: { title: string; icon?: string; ch
 
 export default function LiabilityGuide() {
   return (
+    <WhipLayout>
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-1">Liability Reference Guide</h1>
@@ -185,5 +187,6 @@ export default function LiabilityGuide() {
         </div>
       </div>
     </div>
+    </WhipLayout>
   );
 }

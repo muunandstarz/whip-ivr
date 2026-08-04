@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle, CheckSquare, Square, ChevronDown, ChevronRight } from "lucide-react";
+import WhipLayout from "@/components/WhipLayout";
 
 function Accordion({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -46,6 +47,7 @@ export default function DeniedClaimEscalation() {
   });
 
   return (
+    <WhipLayout>
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-1">Denied Claim Escalation</h1>
@@ -249,5 +251,6 @@ export default function DeniedClaimEscalation() {
         </div>
       </div>
     </div>
+    </WhipLayout>
   );
 }
