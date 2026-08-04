@@ -63,7 +63,6 @@ const KB_NAV_ITEMS = [
   { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
-  { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 
 const KB_NAV_EXTRA = [
@@ -88,7 +87,6 @@ const HANDLER_KB_NAV_ITEMS = [
   { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
-  { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
