@@ -58,7 +58,6 @@ const ADMIN_NAV_ITEMS = [
 const KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
-  { href: "/lou-calculator", label: "LOU Calculator", icon: Car },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
@@ -77,7 +76,6 @@ const HANDLER_NAV_ITEMS_BASE = [
 const HANDLER_KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
-  { href: "/lou-calculator", label: "LOU Calculator", icon: Car },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },

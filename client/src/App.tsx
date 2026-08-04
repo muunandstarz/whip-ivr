@@ -62,6 +62,7 @@ function Router() {
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />
       <Route path="/kb/markets" component={MarketsAndPolicy} />
       <Route path="/kb/knowledge" component={KnowledgeBase} />
+      <Route path="/lou-calculator" component={() => { window.location.replace("/doc-generator?tab=lou-calculator"); return null; }} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -100,5 +101,3 @@ function App() {
 }
 
 export default App;
-import LouCalculator from "./pages/LouCalculator";
-      <Route path="/lou-calculator" component={LouCalculator} />

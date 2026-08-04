@@ -5,8 +5,10 @@ import { louCalcs } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { invokeLLM } from "../_core/llm";
 import { storagePut } from "../storage";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
+import { execSync } from "child_process";
+import { tmpdir } from "os";
 
 // ── Inline pricing data ────────────────────────────────────────────────────
 const MARKET_PRICING = [
@@ -126,7 +128,7 @@ const UtilLogEntrySchema = z.object({
 });
 
 export const louRouter = router({
-  /** Parse estimate PDF via AI and return structured claim info */
+  /** Parse estimate PDF via AI and return structured claim info (legacy: uses fileUrl) */
   parseEstimate: protectedProcedure
     .input(z.object({ fileUrl: z.string(), fileKey: z.string() }))
     .mutation(async ({ input }) => {
@@ -173,6 +175,89 @@ export const louRouter = router({
         return { success: true, data: parsed as z.infer<typeof ClaimInfoSchema> };
       } catch {
         return { success: false, data: {} as z.infer<typeof ClaimInfoSchema> };
+      }
+    }),
+
+  /** Parse a document from base64 content and extract claim fields via AI */
+  parseDocument: protectedProcedure
+    .input(z.object({
+      fileContent: z.string(), // base64 encoded
+      fileName: z.string(),
+      mimeType: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const systemPrompt = `You are a claims document parser for Whip Claims Management. Extract structured claim information from the provided document. Return ONLY valid JSON with these exact fields (use null for missing/unknown):
+{
+  "whip_claim": string|null,
+  "adv_claim": string|null,
+  "dol": string|null,
+  "carrier": string|null,
+  "member": string|null,
+  "vehicle": string|null,
+  "vin": string|null,
+  "shop": string|null,
+  "ro_num": string|null,
+  "dropoff": string|null,
+  "pickup": string|null
+}
+All dates must be in YYYY-MM-DD format. VIN must be 17 characters if found.`;
+
+      let userContent: import("../_core/llm").MessageContent[];
+
+      if (input.mimeType.startsWith("image/")) {
+        userContent = [
+          { type: "image_url" as const, image_url: { url: `data:${input.mimeType};base64,${input.fileContent}` } },
+          { type: "text" as const, text: "Extract all claim information from this document image." },
+        ];
+      } else if (input.mimeType === "text/plain") {
+        const decoded = Buffer.from(input.fileContent, "base64").toString("utf-8");
+        userContent = [{ type: "text" as const, text: `Extract claim information from this text:\n\n${decoded.slice(0, 8000)}` }];
+      } else {
+        // PDF — extract text via pdftotext
+        let pdfText = "";
+        const tmpPdf = join(tmpdir(), `lou_parse_${Date.now()}.pdf`);
+        const tmpTxt = join(tmpdir(), `lou_parse_${Date.now()}.txt`);
+        try {
+          writeFileSync(tmpPdf, Buffer.from(input.fileContent, "base64"));
+          execSync(`pdftotext "${tmpPdf}" "${tmpTxt}"`, { timeout: 15000 });
+          pdfText = readFileSync(tmpTxt, "utf-8").slice(0, 8000);
+        } catch {
+          pdfText = `[PDF file: ${input.fileName}. Could not extract text automatically.]`;
+        } finally {
+          try { unlinkSync(tmpPdf); } catch {}
+          try { unlinkSync(tmpTxt); } catch {}
+        }
+        userContent = [{ type: "text" as const, text: `Extract claim information from this PDF document text:\n\n${pdfText}` }];
+      }
+
+      try {
+        const result = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+          maxTokens: 1024,
+        });
+        const content = result.choices[0]?.message?.content;
+        if (!content) return { success: false, fields: {}, error: "AI returned an empty response." };
+        let text = typeof content === "string" ? content : JSON.stringify(content);
+        text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+        let fields: Record<string, unknown>;
+        try {
+          fields = JSON.parse(text);
+        } catch {
+          const lastComma = text.lastIndexOf(",");
+          const truncated = lastComma > 0 ? text.slice(0, lastComma) + "}" : text + "}";
+          try { fields = JSON.parse(truncated); } catch { return { success: false, fields: {}, error: "AI returned malformed JSON." }; }
+        }
+        const nonNull: Record<string, string> = {};
+        for (const [k, v] of Object.entries(fields)) {
+          if (v !== null && v !== undefined && v !== "") nonNull[k] = String(v);
+        }
+        return { success: true, fields: nonNull };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { success: false, fields: {}, error: `Parsing failed: ${msg.slice(0, 200)}` };
       }
     }),
 
@@ -256,10 +341,15 @@ export const louRouter = router({
       return { key, url };
     }),
 
-  /** Return all markets with their vehicle pricing */
-  getMarketPricing: protectedProcedure.query(() => {
-    return MARKET_PRICING;
-  }),
+  /** Return market pricing — pass marketCode to get a single market, omit for all */
+  getMarketPricing: protectedProcedure
+    .input(z.object({ marketCode: z.string().optional() }).optional())
+    .query(({ input }) => {
+      if (input?.marketCode) {
+        return MARKET_PRICING.find(m => m.code === input.marketCode) ?? null;
+      }
+      return MARKET_PRICING;
+    }),
 
   /** Return utilization rows for a given market + date range */
   getUtilRows: protectedProcedure

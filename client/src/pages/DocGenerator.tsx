@@ -58,6 +58,7 @@ import {
   XCircle,
   Search,
   Loader2,
+  TrendingDown,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -85,7 +86,8 @@ type DocGenTab =
   | "coi-whip"
   | "coi-klutch"
   | "dec-page-whip"
-  | "dec-page-klutch";
+  | "dec-page-klutch"
+  | "dv-calculator";
 
 interface NavGroup {
   label: string;
@@ -137,6 +139,8 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "carrier-rebuttal", label: "Carrier Rebuttal", icon: Scale },
       { id: "payment-receipt", label: "Payment Receipt", icon: Receipt },
       { id: "urgently-invoice", label: "Towing Invoice", icon: Truck },
+      { id: "lou-calculator", label: "LOU Calculator", icon: Calculator },
+      { id: "dv-calculator", label: "DV Calculator", icon: TrendingDown },
     ],
   },
   {
@@ -6348,12 +6352,67 @@ VIN: ${form.vin || "[VIN]"}`;
 }
 
 // ─── Main DocGenerator Page ───────────────────────────────────────────────────
+// ─── DV Calculator Tab ─────────────────────────────────────────────────────────
+function DVCalculatorTab() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Diminished Value Calculator</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Calculate diminished value using the 17c formula. Opens the DV Calculator portal in a new window.
+            After calculating, manually enter the DV amount in the Subro Demand Letter.
+          </p>
+        </div>
+        <a
+          href="https://dvcalc-unkzbfqd.manus.space/agent-login"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#ff6221] hover:bg-[#e5541a] text-white text-sm font-medium transition-colors"
+        >
+          <TrendingDown className="w-4 h-4" />
+          Open DV Calculator
+        </a>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <h3 className="font-semibold text-foreground">How to use the DV Calculator</h3>
+        <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+          <li>Click <strong className="text-foreground">Open DV Calculator</strong> above — it opens in a new window.</li>
+          <li>Log in with your agent credentials on the DV Calculator portal.</li>
+          <li>Enter the vehicle details (year, make, model, mileage, pre-loss value) and accident severity.</li>
+          <li>The portal will generate a 17c formula report with the calculated DV amount.</li>
+          <li>Print or save the report from the portal.</li>
+          <li>Return here and navigate to <strong className="text-foreground">Subro Demand Letter</strong> to manually enter the DV amount in the demand.</li>
+        </ol>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4">
+        <div className="flex gap-3">
+          <div className="text-amber-600 dark:text-amber-400 mt-0.5">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Manual entry required</p>
+            <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
+              The DV Calculator produces a separate report. You will need to manually enter the calculated DV amount
+              into the <strong>Subro Demand Letter</strong> tab. The two tools are not automatically linked.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DocGenerator() {
   const search = useSearch();
   const initialTab = (() => {
     const params = new URLSearchParams(search);
     const t = params.get("tab");
-    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","cert-of-coverage","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch"];
+    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","cert-of-coverage","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch","dv-calculator"];
     return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
   })();
   const [activeTab, setActiveTab] = useState<DocGenTab>(initialTab);
@@ -6443,6 +6502,7 @@ export default function DocGenerator() {
       case "coi-klutch": return <KlutchCOITab />;
       case "dec-page-whip": return <MetrocarsDecPageTab />;
       case "dec-page-klutch": return <KlutchDecPageTab />;
+      case "dv-calculator": return <DVCalculatorTab />;
       default: return null;
     }
   };
