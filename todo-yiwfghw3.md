@@ -171,3 +171,26 @@
 - [x] Mail Bot: seed Daniel Giono (slackId=D0B1BTBBJP9, role=total_loss) and Tim Chan (slackId=D0B22AZ6QB0, role=subro_docs)
 - [x] Remove standalone LOU Calculator from WhipLayout sidebar nav
 - [x] Add Diminished Value Calc entry in DocGen Subrogation section (opens dvcalc-unkzbfqd.manus.space/agent-login in new tab)
+
+## Phase 8 — Remaining CKB Page Syncs (Aug 4, 2026)
+- [ ] KB: Reference Hub page (/kb/reference-hub) — 50-state coverage matrix, unauthorized driver rules, total loss fees, mail protocols
+- [ ] KB: Glossary page (/kb/glossary) — 57 terms with category filter and search
+- [ ] KB: Resources & Links page (/kb/resources) — claims systems, Slack channels, docs/sheets, external tools (no team contacts, no claim handling checklist)
+- [ ] KB: Vehicle Anatomy page (/kb/vehicle-anatomy) — matching mockup with vehicle selector, pin legend, component details, documentation guide tabs
+- [ ] Markets & Policy: Update Terms of Service tab with full 19-policy DriveWhip ToS (verbatim policy language + enforcement statements)
+- [ ] Hover-to-lookup on claim notes — text selection tooltip that pre-fills Policy & Terms Lookup scenario field
+- [ ] WhipLayout: Add Reference Hub, Glossary, Resources & Links, Vehicle Anatomy to KB_NAV_ITEMS and HANDLER_KB_NAV_ITEMS
+- [ ] App.tsx: Register 4 new routes
+
+## Session 2026-08-04 Tasks
+
+- [x] Build Reference Hub page with 50-state coverage matrix, UA rules, TL fees, mail protocols
+- [x] Build Glossary page with 57 terms, category filters, and search
+- [x] Build Resources & Links page (excluding Team Contacts and Claim Handling Checklist)
+- [x] Build Vehicle Anatomy page matching mockup (SVG diagram, pin legend, component details, doc guide)
+- [x] Sync DriveWhip ToS (42 sections, effective Aug 2025) into Markets & Policy Terms of Service tab
+- [x] Add search/filter to ToS tab
+- [x] Add hover-to-lookup tooltip on claim notes (PolicyLookupZone + PolicyLookupTooltip)
+- [x] Add URL param pre-filling to KnowledgeBase (?tab=policy&scenario=...)
+- [x] Register all new KB routes in App.tsx
+- [x] Add Reference Hub, Glossary, Resources & Links, Vehicle Anatomy to nav sidebar

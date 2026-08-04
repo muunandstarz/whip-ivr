@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { FileText } from "lucide-react";
 import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car } from "lucide-react";
+import { Database, Library, Link2 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -63,6 +64,13 @@ const KB_NAV_ITEMS = [
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Markets & Policy", icon: MapPin },
   { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
+];
+
+const KB_NAV_EXTRA = [
+  { href: "/kb/reference-hub", label: "Reference Hub", icon: Database },
+  { href: "/kb/glossary", label: "Glossary", icon: Library },
+  { href: "/kb/resources", label: "Resources & Links", icon: Link2 },
+  { href: "/kb/vehicle-anatomy", label: "Vehicle Anatomy", icon: Car },
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
@@ -296,6 +304,24 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
               Knowledge Base
             </p>
             {(isAdmin && !isImpersonating ? KB_NAV_ITEMS : HANDLER_KB_NAV_ITEMS).map(({ href, label, icon: Icon }) => {
+              const active = location.startsWith(href);
+              return (
+                <Link key={href} href={href}>
+                  <button
+                    onClick={() => setMobileOpen(false)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      active
+                        ? "bg-background/15 text-white font-medium"
+                        : "text-white/60 hover:bg-background/8 hover:text-white"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {label}
+                  </button>
+                </Link>
+              );
+            })}
+            {KB_NAV_EXTRA.map(({ href, label, icon: Icon }) => {
               const active = location.startsWith(href);
               return (
                 <Link key={href} href={href}>

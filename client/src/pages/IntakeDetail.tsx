@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Phone, Mail, Building2, FileText, User, Clock, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert, ShieldX, PhoneCall, PhoneOff, PhoneForwarded, History, Headphones, Moon, Voicemail } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { PolicyLookupZone } from "@/components/PolicyLookupTooltip";
 // ─── VoicemailPlayer ─────────────────────────────────────────────────────────
 // Always fetches a fresh signed URL from the proxy at play-time using callId.
 // Falls back to the stored URL only if no callId is available.
@@ -605,9 +606,11 @@ export default function IntakeDetail() {
                 placeholder="Add internal notes..."
               />
             ) : (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                {record.notes || "No notes."}
-              </p>
+              <PolicyLookupZone>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap select-text cursor-text">
+                  {record.notes || "No notes."}
+                </p>
+              </PolicyLookupZone>
             )}
           </CardContent>
         </Card>

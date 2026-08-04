@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import "./index.css";
+import { PolicyLookupTooltip } from "@/components/PolicyLookupTooltip";
 
 // QueryClient is stable — created once outside any component
 const queryClient = new QueryClient({
@@ -56,5 +57,6 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
 createRoot(document.getElementById("root")!).render(
   <TrpcProvider>
     <App />
+    <PolicyLookupTooltip />
   </TrpcProvider>
 );

@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 
 function Accordion({ title, badge, badgeColor, children }: { title: string; badge?: string; badgeColor?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -208,6 +209,19 @@ export default function KnowledgeBase() {
   const [scenarioState, setScenarioState] = useState("all");
   const [policyResult, setPolicyResult] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Pre-fill scenario from URL params (e.g. ?tab=policy&scenario=<text>)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab");
+    const scenarioParam = params.get("scenario");
+    if (tabParam === "policy") {
+      setActiveTab("policy");
+    }
+    if (scenarioParam) {
+      setScenario(decodeURIComponent(scenarioParam));
+    }
+  }, []);
 
   const policySearch = trpc.kb.searchPolicyTerms.useMutation({
     onSuccess: (data) => setPolicyResult(data.analysis),

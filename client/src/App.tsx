@@ -32,6 +32,10 @@ import FaultDecisionTool from "./pages/kb/FaultDecisionTool";
 import DeniedClaimEscalation from "./pages/kb/DeniedClaimEscalation";
 import MarketsAndPolicy from "./pages/kb/MarketsAndPolicy";
 import KnowledgeBase from "./pages/kb/KnowledgeBase";
+import ReferenceHub from "./pages/kb/ReferenceHub";
+import Glossary from "./pages/kb/Glossary";
+import ResourcesLinks from "./pages/kb/ResourcesLinks";
+import VehicleAnatomy from "./pages/kb/VehicleAnatomy";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 
 function Router() {
@@ -62,6 +66,10 @@ function Router() {
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />
       <Route path="/kb/markets" component={MarketsAndPolicy} />
       <Route path="/kb/knowledge" component={KnowledgeBase} />
+      <Route path="/kb/reference-hub" component={ReferenceHub} />
+      <Route path="/kb/glossary" component={Glossary} />
+      <Route path="/kb/resources" component={ResourcesLinks} />
+      <Route path="/kb/vehicle-anatomy" component={VehicleAnatomy} />
       <Route path="/lou-calculator" component={() => { window.location.replace("/doc-generator?tab=lou-calculator"); return null; }} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
