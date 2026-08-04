@@ -1480,9 +1480,10 @@ COMP: INCLUDED`;
             <Field label="Policy Number" id="coc-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
-              <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
-                {["MD","VA","PA","FL","IL","GA","MA","TX"].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <div className="flex items-center gap-3 p-2.5 rounded-md bg-muted/50 border border-border">
+                <span className="text-sm font-semibold text-foreground">{form.stateOfCoverage}</span>
+                <span className="text-xs text-foreground/60">Locked to member&apos;s home market</span>
+              </div>
               <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
             </div>
           </Grid3>
@@ -5533,14 +5534,10 @@ function WhipCOITab({ initialState = "MD" }: { initialState?: string }) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <Panel title="State of Loss">
-          <div className="flex flex-wrap gap-1.5">
-            {STATES.map(s => (
-              <button key={s} onClick={() => setState(s)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${state === s ? "bg-[#ff6221] text-white" : "bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground"}`}>
-                {s}
-              </button>
-            ))}
+        <Panel title="State of Coverage (Member&apos;s Home Market)">
+          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 border border-border">
+            <span className="text-sm font-semibold text-foreground">{state}</span>
+            <span className="text-xs text-foreground/60">Member&apos;s home market — state is locked to the originating market</span>
           </div>
         </Panel>
         <Panel title="Certificate Information" tag="REQUIRED">
@@ -5782,20 +5779,10 @@ function KlutchCOITab({ initialState = "MD" }: { initialState?: string }) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <Panel title="State of Coverage (Member's Home Market)">
-          <div className="flex flex-wrap gap-1.5">
-            {STATES.map(s => (
-              <button key={s} onClick={() => setState(s)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${state === s ? "bg-[#ff6221] text-white" : "bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground"}`}>
-                {s}
-              </button>
-            ))}
-          </div>
-          <div className="mt-2 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-            <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
-              <strong>Market-based:</strong> Select the state where the <strong>member originates</strong> (home market), not where the accident occurred. Whip markets: MD (Glen Burnie, Rockville), VA, PA, FL, IL, GA, MA.
-            </p>
+        <Panel title="State of Coverage (Member&apos;s Home Market)">
+          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 border border-border">
+            <span className="text-sm font-semibold text-foreground">{state}</span>
+            <span className="text-xs text-foreground/60">Member&apos;s home market — state is locked to the originating market</span>
           </div>
         </Panel>
 
@@ -6181,10 +6168,11 @@ VIN: ${form.vin || "[VIN]"}`;
               <Field label="Date of Loss" id="mdp-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
               <div>
                 <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
-                <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
-                  {["MD","VA","PA","FL","IL","GA","MA","TX"].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
+              <div className="flex items-center gap-3 p-2.5 rounded-md bg-muted/50 border border-border">
+                <span className="text-sm font-semibold text-foreground">{form.stateOfCoverage}</span>
+                <span className="text-xs text-foreground/60">Locked to member&apos;s home market</span>
+              </div>
+              <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location</p>
               </div>
             </Grid3>
           </div>
@@ -6497,9 +6485,10 @@ VIN: ${form.vin || "[VIN]"}`;
             <Field label="Policy Number" id="kdp-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
-              <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.stateOfCoverage} onChange={e => set("stateOfCoverage")(e.target.value)}>
-                {["MD","VA","PA","FL","IL","GA","MA","TX"].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <div className="flex items-center gap-3 p-2.5 rounded-md bg-muted/50 border border-border">
+                <span className="text-sm font-semibold text-foreground">{form.stateOfCoverage}</span>
+                <span className="text-xs text-foreground/60">Locked to member&apos;s home market</span>
+              </div>
               <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
             </div>
           </Grid3>
