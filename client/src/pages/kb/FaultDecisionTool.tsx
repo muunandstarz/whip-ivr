@@ -167,9 +167,9 @@ export default function FaultDecisionTool() {
               <SelectTrigger>
                 <SelectValue placeholder="Select..." />
               </SelectTrigger>
-              <SelectContent>
-                {DAMAGE_LOCATIONS.map(d => <SelectItem key={d.value || "none"} value={d.value || "none"}>{d.label}</SelectItem>)}
-              </SelectContent>
+             <SelectContent>
+                {DAMAGE_LOCATIONS.filter(d => d.value !== "").map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+             </SelectContent>
             </Select>
           </div>
           <div>
@@ -178,9 +178,9 @@ export default function FaultDecisionTool() {
               <SelectTrigger>
                 <SelectValue placeholder="Select..." />
               </SelectTrigger>
-              <SelectContent>
-                {POLICE_REPORT_OPTIONS.map(p => <SelectItem key={p.value || "none"} value={p.value || "none"}>{p.label}</SelectItem>)}
-              </SelectContent>
+             <SelectContent>
+                {POLICE_REPORT_OPTIONS.filter(p => p.value !== "").map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+             </SelectContent>
             </Select>
           </div>
         </div>
