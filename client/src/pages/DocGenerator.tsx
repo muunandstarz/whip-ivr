@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import { useSearch } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,7 +137,6 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "carrier-rebuttal", label: "Carrier Rebuttal", icon: Scale },
       { id: "payment-receipt", label: "Payment Receipt", icon: Receipt },
       { id: "urgently-invoice", label: "Towing Invoice", icon: Truck },
-      { id: "lou-calculator", label: "LOU Calculator", icon: Scale },
     ],
   },
   {
@@ -2735,6 +2735,23 @@ function SubroDemandTab() {
     valuation: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+
+  // Pre-fill LOU amount when navigated from LOU Calculator
+  useEffect(() => {
+    const louTotal = sessionStorage.getItem("lou_total");
+    const louClaim = sessionStorage.getItem("lou_claim");
+    if (louTotal) {
+      setForm(p => ({
+        ...p,
+        lou: louTotal,
+        ...(louClaim ? { ourClaim: louClaim } : {}),
+      }));
+      sessionStorage.removeItem("lou_total");
+      sessionStorage.removeItem("lou_claim");
+      sessionStorage.removeItem("lou_days");
+      sessionStorage.removeItem("lou_rate");
+    }
+  }, []);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -6332,7 +6349,14 @@ VIN: ${form.vin || "[VIN]"}`;
 
 // ─── Main DocGenerator Page ───────────────────────────────────────────────────
 export default function DocGenerator() {
-  const [activeTab, setActiveTab] = useState<DocGenTab>("blank-letterhead");
+  const search = useSearch();
+  const initialTab = (() => {
+    const params = new URLSearchParams(search);
+    const t = params.get("tab");
+    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","cert-of-coverage","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch"];
+    return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
+  })();
+  const [activeTab, setActiveTab] = useState<DocGenTab>(initialTab);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRecentDocs, setShowRecentDocs] = useState(false);
   const [showMyDocs, setShowMyDocs] = useState(false);

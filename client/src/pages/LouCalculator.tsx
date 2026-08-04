@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Upload, FileText, ChevronRight, ChevronLeft, Calculator, Printer, Save, Loader2, X, CheckCircle } from "lucide-react";
+import { Upload, FileText, ChevronRight, ChevronLeft, Calculator, Printer, Save, Loader2, X, CheckCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -184,6 +185,7 @@ function StepBar({ step }: { step: number }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function LouCalculator() {
   const [step, setStep] = useState(0);
+  const [, navigate] = useLocation();
   const [claim, setClaim] = useState<ClaimInfo>(EMPTY_CLAIM);
   const [marketCode, setMarketCode] = useState("DC");
   const [vehicleModel, setVehicleModel] = useState("");
@@ -280,6 +282,16 @@ export default function LouCalculator() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePushToDemand = async () => {
+    if (!savedId) await handleSave();
+    sessionStorage.setItem("lou_total", totalLou.toFixed(2));
+    sessionStorage.setItem("lou_claim", claim.whipClaimNo);
+    sessionStorage.setItem("lou_days", String(totalDays));
+    sessionStorage.setItem("lou_rate", dailyRate.toFixed(2));
+    toast.success("LOU amount pushed — opening Demand Letter…");
+    setTimeout(() => navigate("/doc-gen?tab=subro-demand"), 600);
   };
 
   const handlePrint = () => {
@@ -594,8 +606,11 @@ ${utilNote}
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               <span className="ml-1">{savedId ? "Update" : "Save"}</span>
             </Button>
-            <Button onClick={handlePrint}>
-              <Printer className="w-4 h-4 mr-1" /> Print / Save as PDF
+            <Button variant="outline" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-1" /> Print Standalone Report
+            </Button>
+            <Button onClick={handlePushToDemand} disabled={saving}>
+              <Send className="w-4 h-4 mr-1" /> Push to Demand Letter
             </Button>
           </div>
         </div>

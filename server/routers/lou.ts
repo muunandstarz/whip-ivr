@@ -5,6 +5,98 @@ import { louCalcs } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { invokeLLM } from "../_core/llm";
 import { storagePut } from "../storage";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+// ── Inline pricing data ────────────────────────────────────────────────────
+const MARKET_PRICING = [
+  { code: "DC", name: "Washington DC (Rockville)", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
+    { model: "Toyota Corolla", weeklyRate: 350, dailyRate: 50.00, vehicleClass: "Compact" },
+    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 375, dailyRate: 53.57, vehicleClass: "Midsize Sedan" },
+    { model: "Toyota Camry Hybrid", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Midsize Hybrid" },
+    { model: "Toyota RAV4 (Gas)", weeklyRate: 425, dailyRate: 60.71, vehicleClass: "SUV" },
+    { model: "Toyota Highlander", weeklyRate: 450, dailyRate: 64.29, vehicleClass: "SUV" },
+  ]},
+  { code: "BWI", name: "Baltimore (Glen Burnie)", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
+    { model: "Toyota Corolla", weeklyRate: 350, dailyRate: 50.00, vehicleClass: "Compact" },
+    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 375, dailyRate: 53.57, vehicleClass: "Midsize Sedan" },
+    { model: "Toyota Camry Hybrid", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Midsize Hybrid" },
+    { model: "Toyota RAV4 (Gas)", weeklyRate: 425, dailyRate: 60.71, vehicleClass: "SUV" },
+    { model: "Toyota Highlander", weeklyRate: 450, dailyRate: 64.29, vehicleClass: "SUV" },
+  ]},
+  { code: "ATL", name: "Atlanta", taxNote: "Rates include Georgia state sales tax.", vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 430.00, dailyRate: 61.43, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 484.00, dailyRate: 69.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 592.63, dailyRate: 84.66, vehicleClass: "Electric/EV" },
+    { model: "Toyota Corolla", weeklyRate: 377.13, dailyRate: 53.88, vehicleClass: "Compact" },
+    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 404.06, dailyRate: 57.72, vehicleClass: "Midsize Sedan" },
+    { model: "Toyota Camry Hybrid", weeklyRate: 429.92, dailyRate: 61.42, vehicleClass: "Midsize Hybrid" },
+    { model: "Toyota RAV4 (Gas)", weeklyRate: 457.94, dailyRate: 65.42, vehicleClass: "SUV" },
+    { model: "Toyota Highlander", weeklyRate: 484.88, dailyRate: 69.27, vehicleClass: "SUV" },
+  ]},
+  { code: "CHI", name: "Chicago", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
+    { model: "Toyota Corolla", weeklyRate: 350, dailyRate: 50.00, vehicleClass: "Compact" },
+    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 375, dailyRate: 53.57, vehicleClass: "Midsize Sedan" },
+    { model: "Toyota Camry Hybrid", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Midsize Hybrid" },
+    { model: "Toyota RAV4 (Gas)", weeklyRate: 425, dailyRate: 60.71, vehicleClass: "SUV" },
+    { model: "Toyota Highlander", weeklyRate: 450, dailyRate: 64.29, vehicleClass: "SUV" },
+  ]},
+  { code: "MIA", name: "Miami", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
+  ]},
+  { code: "ORL", name: "Orlando", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
+  ]},
+  { code: "PHL", name: "Philadelphia", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
+  ]},
+  { code: "RIC", name: "Richmond", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
+  ]},
+  { code: "BOS", name: "Boston", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
+  ]},
+  { code: "DAL", name: "Dallas", taxNote: null, vehicles: [
+    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
+    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
+  ]},
+];
+
+const MKT_BRIDGE: Record<string, string> = {
+  DC: "RCK", BWI: "GB", ATL: "ATL", CHI: "CHI",
+  MIA: "MIA", ORL: "ORL", PHL: "PHL", RIC: "RVA", BOS: "BOS", DAL: "DAL",
+};
+
+let _utilData: any = null;
+function getUtilizationData() {
+  if (!_utilData) {
+    try {
+      const filePath = join(process.cwd(), "server/data/utilization.json");
+      _utilData = JSON.parse(readFileSync(filePath, "utf-8"));
+    } catch { _utilData = { monthly_data: {}, markets: {} }; }
+  }
+  return _utilData;
+}
 
 const ClaimInfoSchema = z.object({
   whipClaimNo: z.string().optional(),
@@ -162,5 +254,58 @@ export const louRouter = router({
       const key = `lou-estimates/${ctx.user.id}/${Date.now()}-${input.fileName}`;
       const { url } = await storagePut(key, buffer, input.mimeType);
       return { key, url };
+    }),
+
+  /** Return all markets with their vehicle pricing */
+  getMarketPricing: protectedProcedure.query(() => {
+    return MARKET_PRICING;
+  }),
+
+  /** Return utilization rows for a given market + date range */
+  getUtilRows: protectedProcedure
+    .input(z.object({ marketCode: z.string(), dropOff: z.string(), pickUp: z.string() }))
+    .query(({ input }) => {
+      const data = getUtilizationData();
+      const dataCode = MKT_BRIDGE[input.marketCode] || input.marketCode;
+      const start = new Date(input.dropOff + "T00:00:00");
+      const end = new Date(input.pickUp + "T00:00:00");
+      const rows: Array<{ date: string; fleet: number; rented: number; utilization: number; month: string }> = [];
+      const sortedMonths = Object.keys(data.monthly_data || {}).sort();
+      const latestMonthKey = sortedMonths[sortedMonths.length - 1];
+      const current = new Date(start);
+      while (current < end) {
+        const dateStr = current.toISOString().split("T")[0];
+        const year = current.getFullYear();
+        const month = current.getMonth() + 1;
+        let matchKey = sortedMonths.find((k: string) => {
+          const d = new Date(k);
+          return d.getFullYear() === year && d.getMonth() + 1 === month;
+        });
+        if (!matchKey) matchKey = latestMonthKey;
+        const monthData = matchKey ? data.monthly_data[matchKey] : null;
+        let fleet = 0, rented = 0, utilization = 0;
+        if (monthData) {
+          const mktArr: any[] = monthData.markets || [];
+          const mktEntry = mktArr.find((m: any) => m.code === dataCode);
+          if (mktEntry) {
+            fleet = mktEntry.available ?? 0;
+            rented = mktEntry.rented ?? 0;
+            utilization = mktEntry.utilization ?? 0;
+          } else {
+            fleet = monthData.total_available_fleet ?? 0;
+            rented = monthData.rented ?? 0;
+            utilization = monthData.market_utilization ?? 0;
+          }
+        }
+        rows.push({
+          date: dateStr,
+          fleet,
+          rented,
+          utilization,
+          month: current.toLocaleString("default", { month: "long", year: "numeric" }),
+        });
+        current.setDate(current.getDate() + 1);
+      }
+      return rows;
     }),
 });
