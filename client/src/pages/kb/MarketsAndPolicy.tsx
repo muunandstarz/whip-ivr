@@ -226,7 +226,7 @@ export default function MarketsAndPolicy() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold mb-1">Markets &amp; Locations</h1>
+          <h1 className="text-2xl font-bold mb-1">Market and Policy Directory</h1>
           <p className="text-muted-foreground text-sm">Whip operates across {MARKET_DIRECTORY.length} markets. Click any market card to expand full details, contacts, and local partners.</p>
         </div>
 

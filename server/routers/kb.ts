@@ -71,35 +71,49 @@ Be precise and actionable. If the scenario is ambiguous, identify the key facts 
       damageLocation: z.string().optional(),
       policeReport: z.string().optional(),
       additionalContext: z.string().optional(),
+      folNarrative: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const stateRule = STATE_RULES[input.state] ?? `State: ${input.state}`;
       const prompt = `You are a claims liability analyst for Whip Claims Management, a rideshare vehicle claims operation.
 
-Analyze the following accident and provide a fault determination.
+Analyze the following accident and return a JSON object ONLY — no markdown, no prose, no code fences. The JSON must match this exact schema:
+{
+  "accidentType": "string — identified accident type (e.g. Rear-End, Left Turn, Sideswipe)",
+  "faultAnalysis": "string — 2-4 sentences: who is at fault and why based on the narrative and evidence",
+  "redFlags": ["array of strings — any inconsistencies, suspicious elements, or missing facts. Empty array if none."],
+  "stateLawImpact": "string — how ${input.state} law affects recovery in this specific scenario",
+  "estimatedFaultPct": number between 0 and 100 for our driver,
+  "recoveryLikelihood": "Yes" | "No" | "Partial" | "Uncertain",
+  "evidenceNeeded": ["array of strings — specific evidence items that would strengthen or change the determination"],
+  "recommendedAction": "string — concrete next steps for the handler"
+}
 
 STATE LAW: ${stateRule}
 
 DRIVER NARRATIVE:
 ${input.narrative}
 
+${input.folNarrative ? `FIRST OF LOSS NARRATIVE (FOL):\n${input.folNarrative}` : ""}
 ${input.accidentType && input.accidentType !== "auto" ? `ACCIDENT TYPE: ${input.accidentType}` : ""}
 ${input.damageLocation ? `DAMAGE ON WHIP VEHICLE: ${input.damageLocation}` : ""}
 ${input.policeReport ? `POLICE REPORT STATUS: ${input.policeReport}` : ""}
 ${input.additionalContext ? `ADDITIONAL CONTEXT: ${input.additionalContext}` : ""}
 
-Provide a structured fault determination with:
-1. **Accident Type Identified** — what type of accident this appears to be
-2. **Fault Analysis** — who appears at fault and why, based on the narrative and evidence
-3. **State Law Impact** — how the applicable state law affects recovery
-4. **Estimated Fault %** — estimated fault percentage for our driver (0–100%)
-5. **Recovery Likelihood** — can Whip recover damages? (Yes / No / Partial / Uncertain)
-6. **Key Evidence Needed** — what additional evidence would strengthen or change this determination
-7. **Recommended Action** — next steps for the handler
-
-Be direct and specific. Flag any red flags or inconsistencies in the narrative.`;
+Return ONLY the JSON object. No explanation, no markdown.`;
 
       const result = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
-      return { determination: extractText(result) };
+      const raw = extractText(result);
+      // Try to parse structured JSON; fall back to raw text if parsing fails
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return { determination: null, structured: parsed };
+        }
+      } catch {
+        // fall through to raw
+      }
+      return { determination: raw, structured: null };
     }),
 });

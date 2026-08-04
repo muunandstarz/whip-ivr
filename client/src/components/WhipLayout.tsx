@@ -62,7 +62,7 @@ const KB_NAV_ITEMS = [
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
-  { href: "/kb/markets", label: "Markets & Policy", icon: MapPin },
+  { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
   { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 
@@ -87,7 +87,7 @@ const HANDLER_KB_NAV_ITEMS = [
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/fault-decision", label: "Fault Decision Tool", icon: GitFork },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
-  { href: "/kb/markets", label: "Markets & Policy", icon: MapPin },
+  { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
   { href: "/kb/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
