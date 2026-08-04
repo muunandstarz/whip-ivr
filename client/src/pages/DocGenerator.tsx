@@ -6362,8 +6362,7 @@ function DVCalculatorTab() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">Diminished Value Calculator</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Calculate diminished value using the 17c formula. Opens the DV Calculator portal in a new window.
-            After calculating, manually enter the DV amount in the Subro Demand Letter.
+            Opens the DV Calculator portal in a new window. Complete the valuation there, then return here to enter the DV amount in the Subro Demand Letter.
           </p>
         </div>
         <a
@@ -6379,13 +6378,39 @@ function DVCalculatorTab() {
 
       <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         <h3 className="font-semibold text-foreground">How to use the DV Calculator</h3>
-        <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-          <li>Click <strong className="text-foreground">Open DV Calculator</strong> above — it opens in a new window.</li>
-          <li>Log in with your agent credentials on the DV Calculator portal.</li>
-          <li>Enter the vehicle details (year, make, model, mileage, pre-loss value) and accident severity.</li>
-          <li>The portal will generate a 17c formula report with the calculated DV amount.</li>
-          <li>Print or save the report from the portal.</li>
-          <li>Return here and navigate to <strong className="text-foreground">Subro Demand Letter</strong> to manually enter the DV amount in the demand.</li>
+        <ol className="space-y-3 text-sm text-muted-foreground">
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">1</span>
+            <span>Click <strong className="text-foreground">Open DV Calculator</strong> above — it opens in a new window. Log in with your agent credentials.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">2</span>
+            <span>From the portal, go to the <strong className="text-foreground">Database</strong> and select <strong className="text-foreground">Calculator</strong> from the sidebar.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">3</span>
+            <span>Upload the combined estimate and image report as a <strong className="text-foreground">single PDF</strong> (estimate first, images after). The system will parse the document automatically.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">4</span>
+            <span>Once parsed, verify and enter the correct <strong className="text-foreground">mileage</strong>, then click <strong className="text-foreground">Confirmed</strong>. This triggers the valuation and market comparisons.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">5</span>
+            <span>Review the comparable vehicles and all line items for accuracy. Check all multipliers and review the <strong className="text-foreground">suggested intangible value score</strong> — apply as appropriate.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">6</span>
+            <span>Click <strong className="text-foreground">Generate Report</strong>. Save the case for easy lookup later, then download the PDF.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">7</span>
+            <span>Confirm the printed report is correct and all information is accurate before proceeding.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">8</span>
+            <span>Return to the <strong className="text-foreground">Subro Demand Letter</strong> tab (if applicable) and manually enter the DV amount. The DV amount will <strong className="text-foreground">not push automatically</strong>.</span>
+          </li>
         </ol>
       </div>
 
@@ -6397,10 +6422,10 @@ function DVCalculatorTab() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Manual entry required</p>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Manual entry required — DV amount does not push automatically</p>
             <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
-              The DV Calculator produces a separate report. You will need to manually enter the calculated DV amount
-              into the <strong>Subro Demand Letter</strong> tab. The two tools are not automatically linked.
+              The DV Calculator produces a separate standalone report. After downloading and confirming the PDF, navigate to the
+              <strong> Subro Demand Letter</strong> tab and enter the DV amount manually in the demand.
             </p>
           </div>
         </div>
