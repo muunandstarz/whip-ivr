@@ -36,6 +36,12 @@ export const mailBotRouter = router({
       scheduleEnabled: z.boolean().optional(),
       cronExpression: z.string().optional(),
       scanMode: z.enum(["hours", "all_time"]).optional(),
+      // Backlog Clearance Mode
+      backlogModeEnabled: z.boolean().optional(),
+      backlogModeEndDate: z.string().max(12).optional(),
+      backlogBatchSize: z.number().int().min(1).max(200).optional(),
+      backlogSplitRatio: z.number().min(0).max(1).optional(),
+      backlogReviewedMarkers: z.string().max(256).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       adminOnly(ctx.user.role);

@@ -280,14 +280,43 @@ export async function runMailBot(options: BotRunOptions): Promise<{ runId: strin
         : String(Math.floor((Date.now() - lookbackHours * 3600 * 1000) / 1000));
       const messages = await slackGetMessages(token, mailChannelId, oldest);
 
-      // Filter: has file attachment, no ✅ reaction
+      // Determine which reactions count as "reviewed"
+      const reviewedMarkers = (config.backlogReviewedMarkers ?? "white_check_mark,eyes,heavy_check_mark")
+        .split(",").map((s: string) => s.trim()).filter(Boolean);
+      // Filter: has file attachment, not already reviewed
       const unprocessed = messages.filter(m =>
         m.files && m.files.length > 0 &&
-        !m.reactions?.some(r => r.name === "white_check_mark")
+        !m.reactions?.some(r => reviewedMarkers.includes(r.name))
       );
 
       itemsFound += unprocessed.length;
-      const batch = unprocessed.slice(0, batchSize);
+
+      // ── Backlog Clearance Mode ────────────────────────────────────────────────
+      const today = new Date().toISOString().slice(0, 10);
+      const backlogActive = config.backlogModeEnabled &&
+        (!config.backlogModeEndDate || today <= config.backlogModeEndDate);
+      let batch: typeof unprocessed;
+      if (backlogActive) {
+        const effectiveBatch = config.backlogBatchSize ?? 22;
+        const splitRatio = Number(config.backlogSplitRatio ?? 0.5);
+        const oldCount = Math.round(effectiveBatch * splitRatio);
+        const newCount = effectiveBatch - oldCount;
+        // oldest first: Slack returns newest-first, so sort ascending for oldest
+        const sortedOldest = [...unprocessed].sort((a, b) => Number(a.ts) - Number(b.ts));
+        const sortedNewest = [...unprocessed].sort((a, b) => Number(b.ts) - Number(a.ts));
+        const oldBatch = sortedOldest.slice(0, oldCount);
+        const oldTsSet = new Set(oldBatch.map(m => m.ts));
+        const newBatch = sortedNewest.filter(m => !oldTsSet.has(m.ts)).slice(0, newCount);
+        // Deduplicate
+        const seen = new Set<string>();
+        batch = [...oldBatch, ...newBatch].filter(m => {
+          if (seen.has(m.ts)) return false;
+          seen.add(m.ts);
+          return true;
+        });
+      } else {
+        batch = unprocessed.slice(0, batchSize);
+      }
 
       for (const msg of batch) {
         try {

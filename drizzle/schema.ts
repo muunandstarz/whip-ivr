@@ -552,6 +552,12 @@ export const mailBotConfig = mysqlTable("mail_bot_config", {
   googleSheetId: varchar("google_sheet_id", { length: 128 }),
   appsScriptUrl: varchar("apps_script_url", { length: 512 }),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  // ── Backlog Clearance Mode ──────────────────────────────────────────────────
+  backlogModeEnabled: boolean("backlog_mode_enabled").default(false).notNull(),
+  backlogModeEndDate: varchar("backlog_mode_end_date", { length: 12 }).default("2026-10-03"),
+  backlogBatchSize: int("backlog_batch_size").default(22).notNull(),
+  backlogSplitRatio: float("backlog_split_ratio").default(0.50).notNull(),
+  backlogReviewedMarkers: varchar("backlog_reviewed_markers", { length: 256 }).default("white_check_mark,eyes,heavy_check_mark"),
 });
 export type MailBotConfig = typeof mailBotConfig.$inferSelect;
 

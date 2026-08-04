@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   Bot, Play, RefreshCw, Users, Calendar, Settings2, ClipboardList,
-  Mail, FileText, AlertTriangle, CheckCircle2, Clock, Zap, Plus, Trash2, Edit2, Save, X,
+  Mail, FileText, AlertTriangle, CheckCircle2, Clock, Zap, Plus, Trash2, Edit2, Save, X, Archive,
 } from "lucide-react";
 
 type SubPage = "control" | "log" | "agents" | "pto" | "schedule";
@@ -223,6 +223,9 @@ function BotControlPanel() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Backlog Clearance Mode */}
+      <BacklogClearanceCard />
 
       {/* Recent Runs */}
       <Card className="border-border/50">
@@ -735,6 +738,146 @@ function PtoManager() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ─── Backlog Clearance Card ────────────────────────────────────────────────────
+function BacklogClearanceCard() {
+  const utils = trpc.useUtils();
+  const { data: config, isLoading } = trpc.mailBot.getConfig.useQuery();
+  const updateConfig = trpc.mailBot.updateConfig.useMutation({
+    onSuccess: () => { toast.success("Backlog settings saved"); utils.mailBot.getConfig.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [batchSize, setBatchSize] = useState<number | "">("");
+  const [splitRatio, setSplitRatio] = useState<number | "">("");
+  const [endDate, setEndDate] = useState("");
+  const [markers, setMarkers] = useState("");
+  const [synced, setSynced] = useState(false);
+
+  if (config && !synced) {
+    setBatchSize(config.backlogBatchSize ?? 22);
+    setSplitRatio(Number(config.backlogSplitRatio ?? 0.5));
+    setEndDate(config.backlogModeEndDate ?? "2026-10-03");
+    setMarkers(config.backlogReviewedMarkers ?? "white_check_mark,eyes,heavy_check_mark");
+    setSynced(true);
+  }
+
+  const oldCount = batchSize !== "" && splitRatio !== "" ? Math.round(Number(batchSize) * Number(splitRatio)) : 11;
+  const newCount = batchSize !== "" ? Number(batchSize) - oldCount : 11;
+
+  const handleSave = () => {
+    updateConfig.mutate({
+      backlogBatchSize: Number(batchSize) || 22,
+      backlogSplitRatio: Number(splitRatio) || 0.5,
+      backlogModeEndDate: endDate,
+      backlogReviewedMarkers: markers,
+    });
+  };
+
+  return (
+    <Card className="border-border/50">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Archive className="w-4 h-4 text-[#ff6221]" /> Backlog Clearance Mode
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+          <>
+            {/* Enable toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/20">
+              <div>
+                <p className="text-sm font-medium">Backlog Mode Active</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Processes {oldCount} oldest + {newCount} newest unreviewed pieces per run
+                </p>
+              </div>
+              <Switch
+                checked={config?.backlogModeEnabled ?? false}
+                onCheckedChange={(v) => updateConfig.mutate({ backlogModeEnabled: v })}
+              />
+            </div>
+
+            {/* Status banner */}
+            {config?.backlogModeEnabled && (
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-400">
+                <strong>Active until {config.backlogModeEndDate ?? "Oct 3, 2026"}.</strong> Bot will drain backlog from both ends simultaneously. Reverts to standard mode (batch size {config.batchSize}) after end date or when unreviewed count reaches 0.
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Batch size */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Batch Size Per Run</Label>
+                <Input
+                  type="number" min={1} max={200}
+                  className="mt-1 h-8 text-sm"
+                  value={batchSize}
+                  onChange={(e) => setBatchSize(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Recommended: 22 (11 old + 11 new)</p>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Split Ratio (Old / New)</Label>
+                <Input
+                  type="number" min={0} max={1} step={0.05}
+                  className="mt-1 h-8 text-sm"
+                  value={splitRatio}
+                  onChange={(e) => setSplitRatio(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground mt-1">0.5 = 50% old, 50% new</p>
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div className="flex gap-3 text-xs">
+              <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                ↑ {oldCount} oldest (timestamp ASC)
+              </span>
+              <span className="px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
+                ↓ {newCount} newest (timestamp DESC)
+              </span>
+            </div>
+
+            {/* End date */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Backlog Mode End Date</Label>
+              <Input
+                type="date"
+                className="mt-1 h-8 text-sm"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Bot auto-reverts to standard mode after this date</p>
+            </div>
+
+            {/* Reviewed markers */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reviewed Reaction Markers</Label>
+              <Input
+                className="mt-1 h-8 text-sm font-mono text-xs"
+                value={markers}
+                onChange={(e) => setMarkers(e.target.value)}
+                placeholder="white_check_mark,eyes,heavy_check_mark"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Comma-separated Slack emoji names. Messages with any of these reactions are skipped.</p>
+            </div>
+
+            <Button
+              className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2"
+              onClick={handleSave}
+              disabled={updateConfig.isPending}
+            >
+              <Save className="w-4 h-4" /> Save Backlog Settings
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
