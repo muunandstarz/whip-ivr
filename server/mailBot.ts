@@ -22,6 +22,8 @@ export type MailType =
   | "Medical Bills / PIP Demand"
   | "Demand Letter"
   | "PD Demand"
+  | "Total Loss Document"
+  | "Subrogation Document"
   | "General / Other";
 
 const LEGAL_TYPES = new Set<MailType>([
@@ -54,6 +56,8 @@ const CLASSIFICATION_RULES: ClassificationRule[] = [
   { type: "Medical Bills / PIP Demand",   patterns: [/medical bill|pip demand/i] },
   { type: "Demand Letter",               patterns: [/demand letter/i] },
   { type: "PD Demand",                   patterns: [/pd demand|property damage demand/i] },
+  { type: "Total Loss Document",          patterns: [/total loss|salvage|diminished value|tl settlement|tl letter/i] },
+  { type: "Subrogation Document",         patterns: [/subrogation|subro demand|recovery letter|adverse carrier|subro packet/i] },
 ];
 
 export function classifyMailItem(fileName: string, messageText: string): { mailType: MailType; isLegal: boolean } {
@@ -111,6 +115,48 @@ export async function resolveAssignee(mailType: MailType, isLegal: boolean): Pro
   if (mailType === "PD Demand") {
     const gio = agents.find(a => a.role === "pd");
     return gio ? { name: gio.name, slackId: gio.slackId } : null;
+  }
+
+  // Total Loss Documents: total_loss pool (priority) → subro_docs pool (secondary) → general_roundrobin (third)
+  if (mailType === "Total Loss Document") {
+    const tlPool = agents.filter((a: MailBotAgent) => a.role === "total_loss").sort((a: MailBotAgent, b: MailBotAgent) => a.roundRobinOrder - b.roundRobinOrder);
+    for (const agent of tlPool) {
+      if (await isAgentOnPto(agent.id)) continue;
+      const count = await countTodayAssignments(agent.slackId);
+      if (count < agent.dailyCap) return { name: agent.name, slackId: agent.slackId };
+    }
+    const subroPool2 = agents.filter((a: MailBotAgent) => a.role === "subro_docs").sort((a: MailBotAgent, b: MailBotAgent) => a.roundRobinOrder - b.roundRobinOrder);
+    for (const agent of subroPool2) {
+      if (await isAgentOnPto(agent.id)) continue;
+      const count = await countTodayAssignments(agent.slackId);
+      if (count < agent.dailyCap) return { name: agent.name, slackId: agent.slackId };
+    }
+    const genPool2 = agents.filter((a: MailBotAgent) => a.role === "general_roundrobin").sort((a: MailBotAgent, b: MailBotAgent) => a.roundRobinOrder - b.roundRobinOrder);
+    for (const agent of genPool2) {
+      if (await isAgentOnPto(agent.id)) continue;
+      const count = await countTodayAssignments(agent.slackId);
+      if (count < agent.dailyCap) return { name: agent.name, slackId: agent.slackId };
+    }
+    const overflow2 = genPool2.find((a: MailBotAgent) => a.isOverflowTarget);
+    return overflow2 ? { name: overflow2.name, slackId: overflow2.slackId } : null;
+  }
+
+  // Subrogation Documents: subro_docs pool (primary) → general_roundrobin (secondary)
+  if (mailType === "Subrogation Document") {
+    const subroPool = agents.filter((a: MailBotAgent) => a.role === "subro_docs").sort((a: MailBotAgent, b: MailBotAgent) => a.roundRobinOrder - b.roundRobinOrder);
+    for (const agent of subroPool) {
+      if (await isAgentOnPto(agent.id)) continue;
+      const count = await countTodayAssignments(agent.slackId);
+      if (count < agent.dailyCap) return { name: agent.name, slackId: agent.slackId };
+    }
+    const genPool3 = agents.filter((a: MailBotAgent) => a.role === "general_roundrobin").sort((a: MailBotAgent, b: MailBotAgent) => a.roundRobinOrder - b.roundRobinOrder);
+    for (const agent of genPool3) {
+      if (await isAgentOnPto(agent.id)) continue;
+      const count = await countTodayAssignments(agent.slackId);
+      if (count < agent.dailyCap) return { name: agent.name, slackId: agent.slackId };
+    }
+    const overflow3 = genPool3.find((a: MailBotAgent) => a.isOverflowTarget);
+    return overflow3 ? { name: overflow3.name, slackId: overflow3.slackId } : null;
   }
 
   // Round-robin roles

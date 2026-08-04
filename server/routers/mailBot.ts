@@ -145,12 +145,16 @@ export const mailBotRouter = router({
       dateTo: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      adminOnly(ctx.user.role);
+      // Admins see all; non-admins see only assignments where assignedTo matches their display name
+      const isAdmin = ctx.user.role === "admin";
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const conditions = [];
+      if (!isAdmin) {
+        conditions.push(eq(mailBotAssignments.assignedTo, ctx.user.name ?? ""));
+      }
       if (input.status) conditions.push(eq(mailBotAssignments.status, input.status));
-      if (input.assignedTo) conditions.push(eq(mailBotAssignments.assignedTo, input.assignedTo));
+      if (isAdmin && input.assignedTo) conditions.push(eq(mailBotAssignments.assignedTo, input.assignedTo));
       if (input.mailType) conditions.push(eq(mailBotAssignments.mailType, input.mailType));
       if (input.dateFrom) conditions.push(gte(mailBotAssignments.processedAt, new Date(input.dateFrom)));
       if (input.dateTo) conditions.push(lte(mailBotAssignments.processedAt, new Date(input.dateTo)));
@@ -175,9 +179,17 @@ export const mailBotRouter = router({
       denialType: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      adminOnly(ctx.user.role);
+      // Allow non-admins to update only their own assignments
+      const isAdmin = ctx.user.role === "admin";
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      if (!isAdmin) {
+        // Verify this assignment belongs to the current user
+        const rows = await db.select({ assignedTo: mailBotAssignments.assignedTo }).from(mailBotAssignments).where(eq(mailBotAssignments.id, input.id)).limit(1);
+        if (!rows[0] || rows[0].assignedTo !== (ctx.user.name ?? "")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only update your own assignments" });
+        }
+      }
       const { id, ...updates } = input;
       await db.update(mailBotAssignments).set(updates).where(eq(mailBotAssignments.id, id));
       return { success: true };
