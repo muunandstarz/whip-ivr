@@ -1,288 +1,221 @@
 import { useState } from "react";
-import WhipLayout from "@/components/WhipLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { GitFork, RefreshCw, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
-type FaultLevel = "0%" | "0-25%" | "25-50%" | "50-75%" | "75-100%" | "100%";
-
-interface FaultResult {
-  whipFault: FaultLevel;
-  claimantFault: FaultLevel;
-  recommendation: string;
-  canRecover: boolean;
-  notes: string[];
-  urgency: "normal" | "urgent" | "legal";
-}
-
-const STATES_CONTRIBUTORY = new Set(["MD", "VA", "DC", "NC"]);
-const STATES_PURE_COMPARATIVE = new Set(["NY"]);
-const STATES_50_MODIFIED = new Set(["GA"]);
-const STATES_51_MODIFIED = new Set(["PA", "IL", "MA", "TX", "NJ", "OH"]);
-// FL: 50% modified as of 3/24/2023
-
-function getFaultRule(state: string): string {
-  if (STATES_CONTRIBUTORY.has(state)) return "contributory";
-  if (STATES_PURE_COMPARATIVE.has(state)) return "pure_comparative";
-  if (STATES_50_MODIFIED.has(state)) return "modified_50";
-  if (state === "FL") return "modified_50";
-  return "modified_51";
-}
-
-function analyze(inputs: {
-  state: string;
-  scenario: string;
-  whipDriverFaultPct: number;
-  claimantFaultPct: number;
-  isLegal: boolean;
-  isDUI: boolean;
-  isPeriod0: boolean;
-  isPeriod1: boolean;
-}): FaultResult {
-  const notes: string[] = [];
-  let urgency: "normal" | "urgent" | "legal" = "normal";
-
-  if (inputs.isPeriod0) {
-    return {
-      whipFault: "0%", claimantFault: "0%",
-      recommendation: "Period 0 — App Off. Whip has no coverage obligation. Direct claimant to driver's personal auto insurer.",
-      canRecover: false,
-      notes: ["Driver's personal policy is primary.", "Whip should issue a coverage denial letter.", "Document the period status from the trip log."],
-      urgency: "normal",
-    };
-  }
-
-  if (inputs.isDUI) {
-    urgency = "legal";
-    notes.push("DUI involved — escalate to legal immediately.", "Punitive damages may be alleged.", "Preserve all evidence and trip records.");
-  }
-
-  if (inputs.isLegal) {
-    urgency = "legal";
-    notes.push("Legal action filed — route to Jasmine immediately.", "Do not communicate directly with claimant's attorney without legal clearance.");
-  }
-
-  const rule = getFaultRule(inputs.state);
-  const wFault = inputs.whipDriverFaultPct;
-  const cFault = inputs.claimantFaultPct;
-
-  let canRecover = false;
-  let recommendation = "";
-
-  if (rule === "contributory") {
-    canRecover = cFault === 0;
-    if (cFault > 0) {
-      recommendation = `${inputs.state} uses contributory negligence. Claimant is ${cFault}% at fault — they are barred from recovery entirely.`;
-      notes.push("Issue a denial letter citing contributory negligence.", "Document all evidence of claimant's fault.");
-    } else {
-      recommendation = `Claimant has no fault. ${inputs.state} contributory negligence does not bar recovery. Evaluate damages.`;
-    }
-  } else if (rule === "pure_comparative") {
-    canRecover = true;
-    recommendation = `${inputs.state} uses pure comparative negligence. Claimant recovers ${100 - cFault}% of damages (reduced by their ${cFault}% fault).`;
-    notes.push(`Whip's exposure is ${wFault}% of total damages.`);
-  } else if (rule === "modified_50") {
-    canRecover = cFault < 50;
-    if (cFault >= 50) {
-      recommendation = `${inputs.state} bars recovery at ≥50% fault. Claimant is ${cFault}% at fault — deny.`;
-      notes.push("Issue denial letter citing modified comparative negligence bar.");
-    } else {
-      recommendation = `Claimant is ${cFault}% at fault (under 50% bar). They recover ${100 - cFault}% of damages.`;
-      notes.push(`Whip's exposure is ${wFault}% of total damages.`);
-    }
-  } else {
-    // modified_51
-    canRecover = cFault <= 50;
-    if (cFault > 50) {
-      recommendation = `${inputs.state} bars recovery if claimant is >50% at fault. Claimant is ${cFault}% — deny.`;
-      notes.push("Issue denial letter citing modified comparative negligence bar.");
-    } else {
-      recommendation = `Claimant is ${cFault}% at fault (at or under 50% bar). They recover ${100 - cFault}% of damages.`;
-      notes.push(`Whip's exposure is ${wFault}% of total damages.`);
-    }
-  }
-
-  if (inputs.isPeriod1 && wFault > 0) {
-    notes.push("Period 1 — contingent coverage only. Verify driver's personal policy denied the claim first before Whip's contingent policy applies.");
-  }
-
-  const toRange = (pct: number): FaultLevel => {
-    if (pct === 0) return "0%";
-    if (pct <= 25) return "0-25%";
-    if (pct <= 50) return "25-50%";
-    if (pct <= 75) return "50-75%";
-    if (pct < 100) return "75-100%";
-    return "100%";
-  };
-
-  return { whipFault: toRange(wFault), claimantFault: toRange(cFault), recommendation, canRecover, notes, urgency };
-}
-
-const STATES = ["MD", "VA", "DC", "FL", "PA", "IL", "GA", "MA", "TX", "NC", "NJ", "NY", "OH"];
-const SCENARIOS = [
-  "Rear-end (Whip driver struck claimant)",
-  "Rear-end (Claimant struck Whip driver)",
-  "Left-turn (Whip driver turning)",
-  "Left-turn (Claimant turning)",
-  "Lane change (Whip driver merged)",
-  "Lane change (Claimant merged)",
-  "Intersection — Whip driver ran stop sign",
-  "Intersection — Claimant ran stop sign",
-  "Backing out of parking space (Whip driver)",
-  "Backing out of parking space (Claimant)",
-  "Pedestrian — Whip driver at fault",
-  "Pedestrian — Claimant jaywalked",
-  "Other / Custom",
+const STATES = [
+  { value: "MD", label: "Maryland (Contributory)" },
+  { value: "VA", label: "Virginia (Contributory)" },
+  { value: "FL", label: "Florida (Pure Comparative)" },
+  { value: "GA", label: "Georgia (50% Bar)" },
+  { value: "IL", label: "Illinois (51% Bar)" },
+  { value: "MA", label: "Massachusetts (51% Bar)" },
+  { value: "PA", label: "Pennsylvania (51% Bar)" },
 ];
 
-const SCENARIO_DEFAULTS: Record<string, { whip: number; claimant: number }> = {
-  "Rear-end (Whip driver struck claimant)": { whip: 100, claimant: 0 },
-  "Rear-end (Claimant struck Whip driver)": { whip: 0, claimant: 100 },
-  "Left-turn (Whip driver turning)": { whip: 80, claimant: 20 },
-  "Left-turn (Claimant turning)": { whip: 20, claimant: 80 },
-  "Lane change (Whip driver merged)": { whip: 75, claimant: 25 },
-  "Lane change (Claimant merged)": { whip: 25, claimant: 75 },
-  "Intersection — Whip driver ran stop sign": { whip: 100, claimant: 0 },
-  "Intersection — Claimant ran stop sign": { whip: 0, claimant: 100 },
-  "Backing out of parking space (Whip driver)": { whip: 80, claimant: 20 },
-  "Backing out of parking space (Claimant)": { whip: 20, claimant: 80 },
-  "Pedestrian — Whip driver at fault": { whip: 100, claimant: 0 },
-  "Pedestrian — Claimant jaywalked": { whip: 30, claimant: 70 },
-};
+const ACCIDENT_TYPES = [
+  { value: "auto", label: "Auto-detect..." },
+  { value: "rear-end", label: "Rear-End" },
+  { value: "merge", label: "Merging / Lane Change" },
+  { value: "backing", label: "Backing / Reversing" },
+  { value: "left-turn", label: "Left Turn / Intersection" },
+  { value: "t-bone", label: "T-Bone / Broadside" },
+  { value: "sideswipe", label: "Sideswipe" },
+  { value: "parking", label: "Parking Lot / Dooring" },
+  { value: "single", label: "Single Vehicle" },
+];
+
+const DAMAGE_LOCATIONS = [
+  { value: "", label: "Select..." },
+  { value: "front", label: "Front" },
+  { value: "rear", label: "Rear" },
+  { value: "front-left", label: "Front Left" },
+  { value: "front-right", label: "Front Right" },
+  { value: "driver-side", label: "Driver Side" },
+  { value: "passenger-side", label: "Passenger Side" },
+  { value: "rear-left", label: "Rear Left" },
+  { value: "rear-right", label: "Rear Right" },
+  { value: "multiple", label: "Multiple Areas" },
+];
+
+const POLICE_REPORT_OPTIONS = [
+  { value: "", label: "Select..." },
+  { value: "none", label: "No police report" },
+  { value: "pending", label: "Report pending" },
+  { value: "yes-no-citation", label: "Yes - No citation" },
+  { value: "yes-citation-other", label: "Yes - Citation to OTHER driver" },
+  { value: "yes-citation-ours", label: "Yes - Citation to OUR driver" },
+];
 
 export default function FaultDecisionTool() {
-  const [state, setState] = useState("MD");
-  const [scenario, setScenario] = useState(SCENARIOS[0]);
-  const [whipFaultPct, setWhipFaultPct] = useState(100);
-  const [claimantFaultPct, setClaimantFaultPct] = useState(0);
-  const [isLegal, setIsLegal] = useState(false);
-  const [isDUI, setIsDUI] = useState(false);
-  const [isPeriod0, setIsPeriod0] = useState(false);
-  const [isPeriod1, setIsPeriod1] = useState(false);
-  const [result, setResult] = useState<FaultResult | null>(null);
+  const [narrative, setNarrative] = useState("");
+  const [state, setState] = useState("");
+  const [accidentType, setAccidentType] = useState("auto");
+  const [damageLocation, setDamageLocation] = useState("");
+  const [policeReport, setPoliceReport] = useState("");
+  const [additionalContext, setAdditionalContext] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleScenarioChange(s: string) {
-    setScenario(s);
-    const defaults = SCENARIO_DEFAULTS[s];
-    if (defaults) {
-      setWhipFaultPct(defaults.whip);
-      setClaimantFaultPct(defaults.claimant);
-    }
-  }
+  const analyzeMutation = trpc.kb.analyzeFault.useMutation({
+    onSuccess: (data) => {
+      setResult(data.determination);
+      setLoading(false);
+    },
+    onError: (err) => {
+      setError(err.message);
+      setLoading(false);
+    },
+  });
 
-  function handleAnalyze() {
-    setResult(analyze({ state, scenario, whipDriverFaultPct: whipFaultPct, claimantFaultPct, isLegal, isDUI, isPeriod0, isPeriod1 }));
-  }
+  const handleSubmit = () => {
+    if (!narrative.trim()) { setError("Enter a driver narrative first."); return; }
+    if (!state) { setError("Select a state of loss."); return; }
+    setError(null);
+    setResult(null);
+    setLoading(true);
+    analyzeMutation.mutate({
+      narrative,
+      state,
+      accidentType: accidentType === "auto" ? undefined : accidentType,
+      damageLocation: damageLocation || undefined,
+      policeReport: policeReport || undefined,
+      additionalContext: additionalContext || undefined,
+    });
+  };
 
-  const urgencyColors = { normal: "border-border/50", urgent: "border-amber-400", legal: "border-red-500" };
-  const urgencyBg = { normal: "", urgent: "bg-amber-50 dark:bg-amber-950/20", legal: "bg-red-50 dark:bg-red-950/20" };
+  const handleClear = () => {
+    setNarrative("");
+    setState("");
+    setAccidentType("auto");
+    setDamageLocation("");
+    setPoliceReport("");
+    setAdditionalContext("");
+    setResult(null);
+    setError(null);
+  };
 
   return (
-    <WhipLayout>
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#ff6221]/10 flex items-center justify-center">
-            <GitFork className="w-5 h-5 text-[#ff6221]" />
+    <div className="max-w-3xl mx-auto p-6 space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold mb-1">Fault Decision Tool</h1>
+        <p className="text-muted-foreground text-sm">Describe what happened. The tool reads the narrative, asks follow-up questions, and determines fault.</p>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex gap-3">
+        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          All AI-generated output is a starting point only. Always apply your own judgment before acting on any result. This tool does not replace adjuster review.
+        </p>
+      </div>
+
+      {/* Step 1 */}
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">1</span>
+          Step 1 — What happened?
+          <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded uppercase tracking-wide text-muted-foreground">Start Here</span>
+        </h2>
+        <div>
+          <label className="text-sm font-medium mb-1 block">In the driver's own words — what happened?</label>
+          <Textarea
+            value={narrative}
+            onChange={e => setNarrative(e.target.value)}
+            placeholder="Describe the accident in the driver's own words..."
+            className="min-h-[120px]"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium mb-1 block">State of Loss</label>
+            <Select value={state} onValueChange={setState}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                {STATES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div>
-            <h1 className="text-xl font-bold">Fault Decision Tool</h1>
-            <p className="text-sm text-muted-foreground">Determine liability exposure and recovery eligibility based on state law and fault allocation</p>
+            <label className="text-sm font-medium mb-1 block">Accident Type</label>
+            <Select value={accidentType} onValueChange={setAccidentType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCIDENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-
-        <Card className="border-border/50">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Claim Inputs</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs">State</Label>
-                <Select value={state} onValueChange={setState}>
-                  <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Scenario</Label>
-                <Select value={scenario} onValueChange={handleScenarioChange}>
-                  <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{SCENARIOS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs">Whip Driver Fault %</Label>
-                <input type="range" min={0} max={100} step={5} value={whipFaultPct}
-                  onChange={(e) => setWhipFaultPct(Number(e.target.value))}
-                  className="w-full mt-2 accent-[#ff6221]" />
-                <p className="text-center text-sm font-bold mt-1">{whipFaultPct}%</p>
-              </div>
-              <div>
-                <Label className="text-xs">Claimant Fault %</Label>
-                <input type="range" min={0} max={100} step={5} value={claimantFaultPct}
-                  onChange={(e) => setClaimantFaultPct(Number(e.target.value))}
-                  className="w-full mt-2 accent-[#ff6221]" />
-                <p className="text-center text-sm font-bold mt-1">{claimantFaultPct}%</p>
-              </div>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: "Legal Action Filed", value: isLegal, set: setIsLegal },
-                { label: "DUI Involved", value: isDUI, set: setIsDUI },
-                { label: "Period 0 (App Off)", value: isPeriod0, set: setIsPeriod0 },
-                { label: "Period 1 (Contingent)", value: isPeriod1, set: setIsPeriod1 },
-              ].map(({ label, value, set }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <Switch checked={value} onCheckedChange={set} />
-                  <Label className="text-xs">{label}</Label>
-                </div>
-              ))}
-            </div>
-            <Button className="w-full bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2" onClick={handleAnalyze}>
-              <GitFork className="w-4 h-4" /> Analyze Fault
-            </Button>
-          </CardContent>
-        </Card>
-
-        {result && (
-          <Card className={`border-2 ${urgencyColors[result.urgency]} ${urgencyBg[result.urgency]}`}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Decision</CardTitle>
-                <div className="flex items-center gap-2">
-                  {result.urgency === "legal" && <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-0">🚨 Legal — Escalate</Badge>}
-                  {result.urgency === "urgent" && <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-0">⚠ Urgent</Badge>}
-                  {result.canRecover
-                    ? <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0"><CheckCircle2 className="w-3 h-3 mr-1" />Claimant Can Recover</Badge>
-                    : <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-0">Deny / No Recovery</Badge>}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm">{result.recommendation}</p>
-              {result.notes.length > 0 && (
-                <div className="space-y-1.5">
-                  {result.notes.map((note, i) => (
-                    <div key={i} className="flex gap-2 text-xs text-muted-foreground">
-                      <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
-                      {note}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => setResult(null)}>
-                <RefreshCw className="w-3 h-3" /> Reset
-              </Button>
-            </CardContent>
-          </Card>
-        )}
       </div>
-    </WhipLayout>
+
+      {/* Step 3 — Evidence */}
+      <div className="space-y-4">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">3</span>
+          Step 3 — Evidence
+        </h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Damage on Whip Vehicle</label>
+            <Select value={damageLocation} onValueChange={setDamageLocation}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DAMAGE_LOCATIONS.map(d => <SelectItem key={d.value || "none"} value={d.value || "none"}>{d.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Police Report</label>
+            <Select value={policeReport} onValueChange={setPoliceReport}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
+              <SelectContent>
+                {POLICE_REPORT_OPTIONS.map(p => <SelectItem key={p.value || "none"} value={p.value || "none"}>{p.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-1 block">Additional context</label>
+          <Textarea
+            value={additionalContext}
+            onChange={e => setAdditionalContext(e.target.value)}
+            placeholder="Any additional context, flags, or coverage issues..."
+            className="min-h-[80px]"
+          />
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <Button onClick={handleSubmit} disabled={loading} className="flex-1">
+          {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Analyzing...</> : "Get Determination"}
+        </Button>
+        <Button variant="outline" onClick={handleClear}>
+          <RotateCcw className="h-4 w-4 mr-2" />Clear
+        </Button>
+      </div>
+
+      {result && (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="bg-muted/40 px-4 py-2 text-sm font-semibold">Fault Determination</div>
+          <div className="px-4 py-4 text-sm whitespace-pre-wrap">{result}</div>
+        </div>
+      )}
+    </div>
   );
 }

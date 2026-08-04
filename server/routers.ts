@@ -9,6 +9,7 @@ import { reportsRouter } from "./routers/reports";
 import { lossIntakeRouter } from "./routers/lossIntake";
 import { docgenRouter } from "./routers/docgen";
 import { mailBotRouter } from "./routers/mailBot";
+import { kbRouter } from "./routers/kb";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -74,6 +75,8 @@ export const appRouter = router({
   lossIntake: lossIntakeRouter,
   docgen: docgenRouter,
   mailBot: mailBotRouter,
+  lou: louRouter,
+  kb: kbRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -704,3 +707,4 @@ export const appRouter = router({
   }),
 });
 export type AppRouter = typeof appRouter;
+import { louRouter } from "./routers/lou";

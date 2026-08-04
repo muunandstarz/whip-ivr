@@ -145,3 +145,15 @@
 - [x] KB: Knowledge Base — client/src/pages/kb/KnowledgeBase.tsx
 - [x] App.tsx routes added for all new pages (MailBot, ProRataCalc, 5 KB pages)
 - [x] WhipLayout nav updated: Mail Bot in ADMIN_NAV_ITEMS; all KB pages in KB_NAV_ITEMS and HANDLER_KB_NAV_ITEMS
+
+## Phase 6 — Fixes & Enhancements (Aug 3, 2026)
+- [ ] Mail Bot: admin-only access gate in MailBot.tsx UI (redirect non-admins)
+- [ ] Mail Bot: listAssignments — allow assigned handler to see their own items (remove adminOnly gate, filter by user's name/slackId for non-admins)
+- [ ] Doc Gen: My Documents — show list of saved docs (not a generator)
+- [ ] Doc Gen: Shared With Me — show list of docs shared with user (not a generator)
+- [ ] LOU Calculator: rebuild as exact match of LOU Calculator reference app (estimate upload Step 1, fleet utilization table, PDF output)
+- [ ] Pro-Rata Calc: replace with full PD/BI calculator from attached HTML spec (state selection, multi-claimant, negligence doctrine, letter gen, Snapsheet copy)
+- [ ] KB: fix all 5 pages to use exact CKB content (not generated content)
+- [ ] Markets & Policy: add Drivewhip Terms of Service and Glossary section
+- [ ] Mail Bot: add Total Loss Documents category (Daniel Giono primary, OB Subro secondary, General RR third)
+- [ ] Mail Bot: add Subrogation Documents category (outbound subro-related docs primary, General RR secondary)

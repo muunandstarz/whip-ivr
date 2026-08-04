@@ -100,3 +100,5 @@ function App() {
 }
 
 export default App;
+import LouCalculator from "./pages/LouCalculator";
+      <Route path="/lou-calculator" component={LouCalculator} />

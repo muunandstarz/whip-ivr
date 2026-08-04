@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import WhipLayout from "@/components/WhipLayout";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -431,6 +433,30 @@ function AssignmentRow({ assignment: a, statusColor, onUpdate }: {
 
 // ─── Agent Rules ───────────────────────────────────────────────────────────────
 function AgentRules() {
+  const CATEGORY_ROUTING = [
+    {
+      role: "total_loss",
+      label: "Total Loss Documents",
+      color: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+      description: "TL settlement packets, total loss letters, salvage docs, diminished value",
+      priority: [
+        { order: 1, label: "Priority", name: "Daniel Giono", note: "Primary handler for all TL docs" },
+        { order: 2, label: "Secondary", name: "OB Subro Team", note: "Overflow when Giono is at cap or OOO" },
+        { order: 3, label: "Third", name: "General Round-Robin", note: "Fallback when both above unavailable" },
+      ],
+    },
+    {
+      role: "subro_docs",
+      label: "Subrogation Documents",
+      color: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+      description: "Outbound subro demands, recovery letters, adverse carrier correspondence, subro packets",
+      priority: [
+        { order: 1, label: "Primary", name: "OB Subro Team", note: "All outbound subro-related documents" },
+        { order: 2, label: "Secondary", name: "General Round-Robin", note: "Fallback when OB Subro is at cap or OOO" },
+      ],
+    },
+  ];
+
   const utils = trpc.useUtils();
   const { data: agents, isLoading } = trpc.mailBot.listAgents.useQuery();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -438,7 +464,7 @@ function AgentRules() {
     name: "", slackId: "", role: "general_roundrobin", dailyCap: 3, isActive: true, roundRobinOrder: 0, isOverflowTarget: false,
   });
   const [showAdd, setShowAdd] = useState(false);
-  const [newAgent, setNewAgent] = useState({ name: "", slackId: "", role: "general_roundrobin" as const, dailyCap: 3, isActive: true, roundRobinOrder: 0, isOverflowTarget: false });
+  const [newAgent, setNewAgent] = useState({ name: "", slackId: "", role: "general_roundrobin" as "legal" | "lor_roundrobin" | "bi_injury" | "pd" | "general_roundrobin" | "total_loss" | "subro_docs", dailyCap: 3, isActive: true, roundRobinOrder: 0, isOverflowTarget: false });
 
   const updateMutation = trpc.mailBot.updateAgent.useMutation({
     onSuccess: () => { toast.success("Agent updated"); utils.mailBot.listAgents.invalidate(); setEditingId(null); },
@@ -477,6 +503,32 @@ function AgentRules() {
         <Button size="sm" className="gap-2 bg-[#ff6221] hover:bg-[#e5541a] text-white" onClick={() => setShowAdd(true)}>
           <Plus className="w-4 h-4" /> Add Agent
         </Button>
+      </div>
+      {/* Category Routing Rules */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {CATEGORY_ROUTING.map((cat) => (
+          <Card key={cat.role} className="border-border/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cat.color}`}>{cat.label}</span>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">{cat.description}</p>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {cat.priority.map((p) => (
+                  <div key={p.order} className="flex items-start gap-3 text-xs">
+                    <span className="w-16 shrink-0 font-semibold text-muted-foreground">{p.label}</span>
+                    <div>
+                      <span className="font-medium">{p.name}</span>
+                      <span className="text-muted-foreground ml-2">— {p.note}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {showAdd && (
@@ -536,7 +588,7 @@ function AgentRules() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-1" onClick={() => updateMutation.mutate({ id: agent.id, ...editForm, role: editForm.role as "legal" | "lor_roundrobin" | "bi_injury" | "pd" | "general_roundrobin" })}><Save className="w-3 h-3" /> Save</Button>
+                    <Button size="sm" className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-1" onClick={() => updateMutation.mutate({ id: agent.id, ...editForm, role: editForm.role as "legal" | "lor_roundrobin" | "bi_injury" | "pd" | "general_roundrobin" | "total_loss" | "subro_docs" })}><Save className="w-3 h-3" /> Save</Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}><X className="w-3 h-3" /> Cancel</Button>
                   </div>
                 </div>
@@ -770,6 +822,10 @@ function ScheduleController() {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function MailBot() {
+  return <AdminGate><MailBotInner /></AdminGate>;
+}
+
+function MailBotInner() {
   const [subPage, setSubPage] = useState<SubPage>("control");
 
   const subNav: { id: SubPage; label: string; icon: React.ElementType }[] = [
@@ -821,4 +877,29 @@ export default function MailBot() {
       </div>
     </WhipLayout>
   );
+}
+// ─── Admin Gate ───────────────────────────────────────────────────────────────
+function AdminGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const [, navigate] = useLocation();
+  if (loading) return (
+    <WhipLayout>
+      <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Loading…</div>
+    </WhipLayout>
+  );
+  if (!user || user.role !== "admin") {
+    return (
+      <WhipLayout>
+        <div className="max-w-md mx-auto mt-20 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold">Admin Access Required</h2>
+          <p className="text-sm text-muted-foreground">The Mail / Fax Bot dashboard is restricted to administrators. Contact your team lead if you need access.</p>
+          <Button variant="outline" onClick={() => navigate("/")}>Back to Dashboard</Button>
+        </div>
+      </WhipLayout>
+    );
+  }
+  return <>{children}</>;
 }

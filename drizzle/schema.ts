@@ -559,7 +559,7 @@ export const mailBotAgents = mysqlTable("mail_bot_agents", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
   slackId: varchar("slack_id", { length: 64 }).notNull(),
-  role: mysqlEnum("role", ["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin"]).notNull(),
+  role: mysqlEnum("role", ["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin", "total_loss", "subro_docs"]).notNull(),
   dailyCap: int("daily_cap").default(3).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   roundRobinOrder: int("round_robin_order").default(0).notNull(),
@@ -625,3 +625,39 @@ export const mailBotRuns = mysqlTable("mail_bot_runs", {
   durationMs: int("duration_ms"),
 });
 export type MailBotRun = typeof mailBotRuns.$inferSelect;
+
+// ─── Loss of Use Calculator ───────────────────────────────────────────────────
+/** Saved LOU calculation sessions */
+export const louCalcs = mysqlTable("lou_calcs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // Claim info (parsed from estimate or entered manually)
+  whipClaimNo: varchar("whipClaimNo", { length: 64 }),
+  adverseClaimNo: varchar("adverseClaimNo", { length: 64 }),
+  dol: varchar("dol", { length: 32 }),
+  adverseCarrier: varchar("adverseCarrier", { length: 128 }),
+  vehicle: varchar("vehicle", { length: 128 }),
+  vin: varchar("vin", { length: 32 }),
+  memberDriver: varchar("memberDriver", { length: 128 }),
+  registeredOwner: varchar("registeredOwner", { length: 128 }),
+  vehicleStatus: varchar("vehicleStatus", { length: 64 }),
+  vehicleClass: varchar("vehicleClass", { length: 32 }),
+  // Repair period
+  repairFacility: varchar("repairFacility", { length: 128 }),
+  roNumber: varchar("roNumber", { length: 64 }),
+  dropOff: varchar("dropOff", { length: 32 }),
+  pickUp: varchar("pickUp", { length: 32 }),
+  totalDays: int("totalDays"),
+  daysClaimed: int("daysClaimed"),
+  // Calculation
+  dailyRate: int("dailyRate"),
+  totalLou: int("totalLou"),
+  // Utilization log (JSON array of daily entries)
+  utilizationLog: text("utilizationLog"),
+  // Uploaded estimate file key
+  estimateFileKey: varchar("estimateFileKey", { length: 512 }),
+  estimateFileUrl: varchar("estimateFileUrl", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LouCalc = typeof louCalcs.$inferSelect;

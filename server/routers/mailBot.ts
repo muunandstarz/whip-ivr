@@ -57,7 +57,7 @@ export const mailBotRouter = router({
       id: z.number(),
       name: z.string().optional(),
       slackId: z.string().optional(),
-      role: z.enum(["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin"]).optional(),
+      role: z.enum(["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin", "total_loss", "subro_docs"]).optional(),
       dailyCap: z.number().int().min(0).max(999).optional(),
       isActive: z.boolean().optional(),
       roundRobinOrder: z.number().int().optional(),
@@ -76,7 +76,7 @@ export const mailBotRouter = router({
     .input(z.object({
       name: z.string(),
       slackId: z.string(),
-      role: z.enum(["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin"]),
+      role: z.enum(["legal", "lor_roundrobin", "bi_injury", "pd", "general_roundrobin", "total_loss", "subro_docs"]),
       dailyCap: z.number().int().min(0).max(999).default(3),
       isActive: z.boolean().default(true),
       roundRobinOrder: z.number().int().default(0),

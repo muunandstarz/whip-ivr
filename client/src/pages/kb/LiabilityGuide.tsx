@@ -1,317 +1,189 @@
 import { useState } from "react";
-import WhipLayout from "@/components/WhipLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Scale, Search, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 
-interface Section {
-  id: string;
-  title: string;
-  badge?: string;
-  badgeColor?: string;
-  content: React.ReactNode;
-}
-
-function Accordion({ title, badge, badgeColor, children }: { title: string; badge?: string; badgeColor?: string; children: React.ReactNode }) {
+function Accordion({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden mb-2">
       <button
+        className="w-full flex items-center justify-between px-4 py-3 bg-muted/40 hover:bg-muted/70 text-left font-medium transition-colors"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
       >
-        <div className="flex items-center gap-3">
-          {open ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
-          <span className="font-medium text-sm">{title}</span>
-          {badge && <Badge className={`text-xs border-0 ${badgeColor ?? "bg-muted text-muted-foreground"}`}>{badge}</Badge>}
-        </div>
+        <span>{icon && <span className="mr-2">{icon}</span>}{title}</span>
+        {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
       </button>
-      {open && <div className="px-4 pb-4 pt-1 border-t border-border/30 text-sm space-y-3">{children}</div>}
-    </div>
-  );
-}
-
-function RuleRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-3 py-1.5 border-b border-border/20 last:border-0">
-      <span className="text-muted-foreground w-48 shrink-0 text-xs">{label}</span>
-      <span className="text-sm">{value}</span>
+      {open && <div className="px-4 py-3 text-sm space-y-2 bg-background">{children}</div>}
     </div>
   );
 }
 
 export default function LiabilityGuide() {
-  const [search, setSearch] = useState("");
-
-  const sections: Section[] = [
-    {
-      id: "negligence",
-      title: "Negligence Standards by State",
-      badge: "Core",
-      badgeColor: "bg-primary/10 text-primary",
-      content: (
-        <div className="space-y-3">
-          <p className="text-muted-foreground text-xs">The negligence standard determines how fault is apportioned and whether a claimant can recover damages.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-muted/40"><th className="text-left px-3 py-2">State</th><th className="text-left px-3 py-2">Standard</th><th className="text-left px-3 py-2">Rule</th></tr></thead>
-              <tbody>
-                {[
-                  ["MD", "Contributory Negligence", "Any fault by claimant bars recovery entirely. Strict — even 1% fault = $0 recovery."],
-                  ["VA", "Contributory Negligence", "Same as MD. Claimant must be 0% at fault to recover."],
-                  ["DC", "Contributory Negligence", "Same strict bar as MD/VA."],
-                  ["FL", "Modified Comparative (Pure)", "As of 3/24/2023: claimant can recover only if ≤50% at fault. Prior: pure comparative (any % recoverable)."],
-                  ["PA", "Modified Comparative (51%)", "Claimant recovers if <51% at fault. Recovery reduced by their % fault."],
-                  ["IL", "Modified Comparative (51%)", "Same as PA — claimant barred if ≥51% at fault."],
-                  ["GA", "Modified Comparative (50%)", "Claimant barred if ≥50% at fault. Recovers if <50%."],
-                  ["MA", "Modified Comparative (51%)", "Claimant barred if ≥51% at fault."],
-                  ["TX", "Modified Comparative (51%)", "Claimant barred if >50% at fault."],
-                  ["NC", "Contributory Negligence", "Strict bar — any claimant fault = no recovery."],
-                  ["NJ", "Modified Comparative (51%)", "Claimant barred if >50% at fault."],
-                  ["NY", "Pure Comparative", "Claimant can recover regardless of fault %, recovery reduced proportionally."],
-                  ["OH", "Modified Comparative (51%)", "Claimant barred if >50% at fault."],
-                ].map(([state, std, rule]) => (
-                  <tr key={state} className="border-b border-border/20 hover:bg-muted/20">
-                    <td className="px-3 py-2 font-bold text-primary">{state}</td>
-                    <td className="px-3 py-2 font-medium">{std}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{rule}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "rideshare",
-      title: "Rideshare / TNC Liability Periods",
-      badge: "Whip-Specific",
-      badgeColor: "bg-[#ff6221]/10 text-[#ff6221]",
-      content: (
-        <div className="space-y-3">
-          <p className="text-muted-foreground text-xs">Whip operates as a TNC (Transportation Network Company). Coverage and liability depend on which period the driver was in at the time of the incident.</p>
-          <div className="space-y-2">
-            {[
-              { period: "Period 0", label: "App Off", desc: "Driver's personal auto policy applies. Whip has no coverage obligation.", color: "bg-muted/40" },
-              { period: "Period 1", label: "App On, No Ride Accepted", desc: "Contingent liability coverage: $50k/$100k BI, $25k PD. Applies only if driver's personal policy denies the claim.", color: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40" },
-              { period: "Period 2", label: "Ride Accepted, En Route to Pickup", desc: "Full Klutch commercial policy applies. $1M CSL BI/PD. Whip is primary.", color: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/40" },
-              { period: "Period 3", label: "Passenger On Board", desc: "Full Klutch commercial policy applies. $1M CSL BI/PD. Whip is primary.", color: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/40" },
-            ].map(({ period, label, desc, color }) => (
-              <div key={period} className={`p-3 rounded-lg border ${color}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-bold text-sm">{period}</span>
-                  <span className="text-xs text-muted-foreground">— {label}</span>
-                </div>
-                <p className="text-xs">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "fault-standards",
-      title: "Common Fault Scenarios",
-      badge: "Reference",
-      badgeColor: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-      content: (
-        <div className="space-y-3">
-          <div className="space-y-2">
-            {[
-              { scenario: "Rear-end collision", rule: "Striking driver presumed 100% at fault in most states. Exceptions: sudden stop, brake-check, or claimant cut off driver with insufficient following distance." },
-              { scenario: "Left-turn collision", rule: "Turning driver presumed at fault. Exception: oncoming driver ran red light or was speeding excessively." },
-              { scenario: "Lane change / merge", rule: "Merging driver presumed at fault. Exception: other driver was in blind spot and accelerated to block." },
-              { scenario: "Intersection (no signal)", rule: "Right-of-way rules apply. Driver entering from stop sign yields to driver on through road." },
-              { scenario: "Backing out of parking space", rule: "Backing driver presumed at fault. Exception: other driver was speeding through parking lot." },
-              { scenario: "Dooring (cyclist)", rule: "Opening door into traffic — door-opener is at fault in most jurisdictions." },
-              { scenario: "Pedestrian in crosswalk", rule: "Driver at fault if pedestrian had right of way. Shared fault if pedestrian jaywalked (comparative states)." },
-              { scenario: "DUI / impaired driver", rule: "Impaired driver is at fault. Punitive damages may apply. Notify legal immediately." },
-            ].map(({ scenario, rule }) => (
-              <div key={scenario} className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                <p className="font-medium text-sm mb-1">{scenario}</p>
-                <p className="text-xs text-muted-foreground">{rule}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "damages",
-      title: "Damages: Types and Caps",
-      badge: "Reference",
-      badgeColor: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-      content: (
-        <div className="space-y-3">
-          <div className="grid md:grid-cols-2 gap-3">
-            {[
-              { type: "Special Damages (Economic)", items: ["Medical bills (past & future)", "Lost wages / lost earning capacity", "Property damage / diminished value", "Rental expenses", "Out-of-pocket costs"] },
-              { type: "General Damages (Non-Economic)", items: ["Pain and suffering", "Emotional distress", "Loss of consortium", "Loss of enjoyment of life", "Disfigurement / scarring"] },
-            ].map(({ type, items }) => (
-              <div key={type} className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                <p className="font-semibold text-sm mb-2">{type}</p>
-                <ul className="space-y-1">
-                  {items.map(i => <li key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-primary mt-0.5">•</span>{i}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40">
-            <div className="flex gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-amber-800 dark:text-amber-400">Punitive Damages</p>
-                <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">Awarded in cases of gross negligence, DUI, or intentional conduct. Escalate to legal immediately if punitive damages are alleged.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "statutes",
-      title: "Statutes of Limitations by State",
-      badge: "Deadlines",
-      badgeColor: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-      content: (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Time limits for filing a lawsuit after an accident. Missing the SOL bars the claim entirely.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-muted/40"><th className="text-left px-3 py-2">State</th><th className="text-left px-3 py-2">BI / Personal Injury</th><th className="text-left px-3 py-2">PD</th><th className="text-left px-3 py-2">Notes</th></tr></thead>
-              <tbody>
-                {[
-                  ["MD", "3 years", "3 years", "Runs from date of accident"],
-                  ["VA", "2 years", "5 years", ""],
-                  ["DC", "3 years", "3 years", ""],
-                  ["FL", "2 years", "4 years", "Changed from 4→2 yrs for BI in 2023"],
-                  ["PA", "2 years", "2 years", ""],
-                  ["IL", "2 years", "5 years", ""],
-                  ["GA", "2 years", "4 years", ""],
-                  ["MA", "3 years", "3 years", ""],
-                  ["TX", "2 years", "2 years", ""],
-                  ["NC", "3 years", "3 years", ""],
-                  ["NJ", "2 years", "6 years", ""],
-                  ["NY", "3 years", "3 years", ""],
-                  ["OH", "2 years", "2 years", ""],
-                ].map(([state, bi, pd, notes]) => (
-                  <tr key={state} className="border-b border-border/20 hover:bg-muted/20">
-                    <td className="px-3 py-2 font-bold text-primary">{state}</td>
-                    <td className="px-3 py-2">{bi}</td>
-                    <td className="px-3 py-2">{pd}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{notes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "pip",
-      title: "PIP / No-Fault States",
-      badge: "Coverage",
-      badgeColor: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-      content: (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">In no-fault states, each party's own insurer pays their medical bills regardless of fault (up to PIP limits). BI claims are restricted.</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-muted/40"><th className="text-left px-3 py-2">State</th><th className="text-left px-3 py-2">No-Fault?</th><th className="text-left px-3 py-2">PIP Minimum</th><th className="text-left px-3 py-2">BI Threshold to Sue</th></tr></thead>
-              <tbody>
-                {[
-                  ["FL", "Yes", "$10,000", "Permanent injury, significant scarring, or death"],
-                  ["NY", "Yes", "$50,000", "Serious injury threshold (fracture, significant limitation, etc.)"],
-                  ["NJ", "Yes", "$15,000", "Verbal threshold (elected) or $0 threshold (tort option)"],
-                  ["PA", "Yes (limited)", "$5,000", "Limited tort: serious injury only. Full tort: no threshold."],
-                  ["MA", "Yes", "$8,000", "Medical bills >$2,000 or serious injury"],
-                  ["MD", "No", "N/A", "Fault-based — no PIP threshold"],
-                  ["VA", "No", "N/A", "Fault-based"],
-                  ["IL", "No", "N/A", "Fault-based"],
-                  ["GA", "No", "N/A", "Fault-based"],
-                  ["TX", "No", "N/A", "Fault-based"],
-                ].map(([state, nf, pip, threshold]) => (
-                  <tr key={state} className="border-b border-border/20 hover:bg-muted/20">
-                    <td className="px-3 py-2 font-bold text-primary">{state}</td>
-                    <td className="px-3 py-2">{nf === "Yes" ? <span className="text-amber-600 font-medium">Yes</span> : <span className="text-muted-foreground">No</span>}</td>
-                    <td className="px-3 py-2">{pip}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{threshold}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "coverage-defenses",
-      title: "Coverage Defenses & Exclusions",
-      badge: "Defenses",
-      badgeColor: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-      content: (
-        <div className="space-y-2">
-          {[
-            { defense: "Permissive Use Denial", desc: "Driver was not authorized to use the vehicle. Requires documentation that driver was explicitly excluded or that use was outside scope of permission." },
-            { defense: "Excluded Driver", desc: "Named exclusion on the policy. Verify the exclusion endorsement is on file and the excluded driver was operating the vehicle." },
-            { defense: "Non-Covered Vehicle", desc: "Vehicle was not listed on the policy or was added after the loss date. Verify VIN against policy schedule." },
-            { defense: "Policy Lapse / Non-Payment", desc: "Policy was cancelled for non-payment prior to the loss. Verify cancellation effective date and any reinstatement." },
-            { defense: "Intentional Act", desc: "Loss was the result of an intentional act by the insured. Not covered under standard auto policy." },
-            { defense: "Criminal Act", desc: "Driver was engaged in a felony at the time of the loss. Coverage may be excluded depending on policy language." },
-            { defense: "Outside TNC Period", desc: "For Whip claims — driver was in Period 0 (app off). Personal policy is primary; Whip has no obligation." },
-            { defense: "Misrepresentation", desc: "Material misrepresentation on the application (e.g., wrong address, undisclosed drivers). May void the policy ab initio." },
-          ].map(({ defense, desc }) => (
-            <div key={defense} className="p-3 rounded-lg bg-muted/30 border border-border/30">
-              <p className="font-semibold text-sm text-destructive mb-1">{defense}</p>
-              <p className="text-xs text-muted-foreground">{desc}</p>
-            </div>
-          ))}
-        </div>
-      ),
-    },
-  ];
-
-  const filtered = search
-    ? sections.filter(s => s.title.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase()))
-    : sections;
-
   return (
-    <WhipLayout>
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Scale className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">Liability Guide</h1>
-            <p className="text-sm text-muted-foreground">Negligence standards, fault scenarios, coverage periods, and state-specific rules</p>
-          </div>
-        </div>
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold mb-1">Liability Reference Guide</h1>
+        <p className="text-muted-foreground text-sm">Scenario-based fault guide for claims processors. Click any scenario to expand.</p>
+      </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search sections…"
-            className="pl-9 h-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex gap-3">
+        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          <strong>Important:</strong> This guide is a reference tool to assist in determining liability — not a substitute for professional judgment. Every accident is different. Use this as a starting point, not a final answer. When facts are unclear or the situation is complex, seek guidance from a senior team member.
+        </p>
+      </div>
 
-        {/* Sections */}
-        <div className="space-y-3">
-          {filtered.map((section) => (
-            <Accordion key={section.id} title={section.title} badge={section.badge} badgeColor={section.badgeColor}>
-              {section.content}
-            </Accordion>
+      {/* Always Do This First */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+          <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded uppercase tracking-wide">Before Any Determination</span>
+          Always Do This First
+        </h2>
+        <ol className="space-y-3">
+          {[
+            { n: 1, text: <><strong>Pull the location on Google Maps.</strong> Confirm the location is real, the road layout matches the story, and any traffic controls described actually exist there.</> },
+            { n: 2, text: <><strong>Read the full driver statement first.</strong> Note what the driver says happened, what they leave out, and whether the account is clear and consistent. A vague narrative is itself a flag.</> },
+            { n: 3, text: <><strong>Match the damage photos to the story.</strong> If the driver says they were hit from behind, damage should be on the rear. If photos and story don't match — stop and flag it.</> },
+            { n: 4, text: <><strong>Verify date, time, and location together.</strong> A highway accident at a location that is a residential side street doesn't make sense. Confirm the road type on Maps.</> },
+            { n: 5, text: <><strong>Check for flags on the intake form.</strong> Review the CSA intake form's fraud/coverage section. If any flags were checked — note them before making any determination.</> },
+          ].map(({ n, text }) => (
+            <li key={n} className="flex gap-3">
+              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm font-bold flex items-center justify-center">{n}</span>
+              <p className="text-sm pt-0.5">{text}</p>
+            </li>
           ))}
+        </ol>
+      </div>
+
+      {/* Fault Scenarios */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Fault Scenarios</h2>
+        <div className="space-y-1">
+          <Accordion title="Rear-End Collision" icon="💥">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">One vehicle drives into the back of the vehicle in front</p>
+            <p><strong>General Rule:</strong> The following driver is presumed at fault. Rear-end collisions carry a strong presumption of negligence against the driver who struck from behind.</p>
+            <p><strong>Exceptions / Defenses:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Sudden stop with no warning (brake-check)</li>
+              <li>Mechanical failure (brake failure, not driver negligence)</li>
+              <li>Third vehicle pushed our vehicle into the one ahead</li>
+              <li>Lead vehicle reversed unexpectedly</li>
+            </ul>
+            <p><strong>Key evidence:</strong> Damage location (front of following vehicle, rear of lead vehicle), police report, dashcam, witness statements.</p>
+            <p><strong>MD/VA note:</strong> Even 1% fault on our driver = no recovery under contributory negligence. Document thoroughly.</p>
+          </Accordion>
+
+          <Accordion title="Merging / Lane Change" icon="↘️">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">A vehicle moves from one lane into another and makes contact</p>
+            <p><strong>General Rule:</strong> The merging driver has the duty to yield to traffic in the target lane. Fault typically falls on the vehicle that changed lanes.</p>
+            <p><strong>Exceptions / Defenses:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Other driver accelerated to block the merge</li>
+              <li>Merge was completed and lane was clear — other driver drifted</li>
+              <li>Disputed which vehicle was in which lane</li>
+            </ul>
+            <p><strong>Key evidence:</strong> Damage location (side of merging vehicle, front corner of other vehicle), dashcam, witness statements, police report.</p>
+          </Accordion>
+
+          <Accordion title="Backing / Reversing" icon="🔄">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">A vehicle reverses and strikes something or someone</p>
+            <p><strong>General Rule:</strong> The reversing driver bears the duty to ensure the path is clear. Fault is typically assigned to the reversing vehicle.</p>
+            <p><strong>Exceptions / Defenses:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Other vehicle entered the path after reversing had begun</li>
+              <li>Obstructed sightlines (parked vehicles, structures)</li>
+              <li>Other driver was speeding through a parking lot</li>
+            </ul>
+            <p><strong>Key evidence:</strong> Rear damage on reversing vehicle, damage to front of other vehicle, parking lot camera footage if available.</p>
+          </Accordion>
+
+          <Accordion title="Left Turn / Intersection" icon="↰">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">A vehicle turns left and is hit by oncoming traffic</p>
+            <p><strong>General Rule:</strong> The turning vehicle must yield to oncoming traffic. Fault typically falls on the vehicle making the left turn.</p>
+            <p><strong>Exceptions / Defenses:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Oncoming vehicle ran a red light or stop sign</li>
+              <li>Oncoming vehicle was speeding (turn was safe at legal speed)</li>
+              <li>Protected left turn — green arrow was in effect</li>
+              <li>Oncoming vehicle came from unexpected direction</li>
+            </ul>
+            <p><strong>Key evidence:</strong> Traffic signal status, police report, dashcam, damage pattern (front of turning vehicle, front/side of oncoming).</p>
+          </Accordion>
+
+          <Accordion title="T-Bone / Broadside" icon="➕">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">The front of one vehicle hits the side of another at an intersection</p>
+            <p><strong>General Rule:</strong> Fault depends on right-of-way. The vehicle that failed to yield or ran a control device is typically at fault.</p>
+            <p><strong>Key questions:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Which vehicle had the green light or right-of-way?</li>
+              <li>Was there a stop sign or yield sign?</li>
+              <li>Did either driver run a red light?</li>
+              <li>Was the intersection controlled or uncontrolled?</li>
+            </ul>
+            <p><strong>Key evidence:</strong> Traffic signal data, police report, witness statements, dashcam, damage pattern (front of striking vehicle, side of struck vehicle).</p>
+          </Accordion>
+
+          <Accordion title="Sideswipe" icon="↔️">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">Two vehicles traveling side-by-side make scraping contact</p>
+            <p><strong>General Rule:</strong> Fault depends on which vehicle drifted or failed to maintain its lane. Often disputed — both vehicles may share fault.</p>
+            <p><strong>Key questions:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Which vehicle was in its lane and which drifted?</li>
+              <li>Was either vehicle merging at the time?</li>
+              <li>Was there a construction zone or lane reduction?</li>
+            </ul>
+            <p><strong>Key evidence:</strong> Damage location on both vehicles (driver side vs. passenger side), dashcam, witness statements, police report.</p>
+          </Accordion>
+
+          <Accordion title="Parking Lot / Dooring" icon="🅿️">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">Collision in a parking lot, or a car door opened into a moving vehicle</p>
+            <p><strong>Parking Lot:</strong> Vehicles in the travel lane generally have right-of-way over vehicles exiting spaces. The vehicle backing out typically bears fault.</p>
+            <p><strong>Dooring:</strong> The person opening the door into traffic is at fault. They have a duty to check for passing vehicles before opening.</p>
+            <p><strong>Key evidence:</strong> Parking lot camera, damage location, witness statements. Note: police rarely respond to parking lot accidents — get witness info.</p>
+          </Accordion>
+
+          <Accordion title="Single Vehicle" icon="🌳">
+            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-2">Only the Whip vehicle was involved</p>
+            <p><strong>General Rule:</strong> Single-vehicle accidents are typically the driver's fault unless an external factor caused the loss.</p>
+            <p><strong>Possible defenses / exceptions:</strong></p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Road hazard (pothole, debris, unmarked construction)</li>
+              <li>Animal in the road</li>
+              <li>Mechanical failure (not driver-caused)</li>
+              <li>Hit-and-run by unidentified vehicle</li>
+              <li>Weather / road condition (ice, flooding)</li>
+            </ul>
+            <p><strong>Coverage note:</strong> Single-vehicle accidents may trigger collision coverage. Check TNC period via Argyle — if P1/P2/P3, TNC coverage rules apply.</p>
+          </Accordion>
         </div>
       </div>
-    </WhipLayout>
+
+      {/* Comparative / Contributory Negligence */}
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Comparative / Contributory Negligence — State Rules</h2>
+        <p className="text-xs font-mono uppercase tracking-wide text-muted-foreground mb-3">Whip Operating States</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="border border-red-200 dark:border-red-900 rounded-lg p-4 bg-red-50/50 dark:bg-red-950/20">
+            <h3 className="font-semibold text-red-700 dark:text-red-400 mb-2">Pure Contributory — MD &amp; VA</h3>
+            <p className="text-sm">If our driver is found to be <strong>even 1% at fault</strong>, our driver cannot recover any damages — regardless of how much more at fault the other driver was. This makes thorough documentation especially important in MD and VA claims.</p>
+          </div>
+          <div className="border border-blue-200 dark:border-blue-900 rounded-lg p-4 bg-blue-50/50 dark:bg-blue-950/20">
+            <h3 className="font-semibold text-blue-700 dark:text-blue-400 mb-2">Pure Comparative — FL</h3>
+            <p className="text-sm">Fault is assigned as a percentage. Recovery is reduced by that percentage — but never fully eliminated. Even if our driver is 80% at fault, they can still recover 20%. Every percentage point of fault matters.</p>
+          </div>
+          <div className="border border-green-200 dark:border-green-900 rounded-lg p-4 bg-green-50/50 dark:bg-green-950/20">
+            <h3 className="font-semibold text-green-700 dark:text-green-400 mb-2">Modified Comparative — 50% Bar (GA)</h3>
+            <p className="text-sm">Our driver can recover as long as they are <strong>49% or less at fault</strong>. If 50% or more responsible — no recovery. If eligible, recovery is reduced proportionally.</p>
+          </div>
+          <div className="border border-purple-200 dark:border-purple-900 rounded-lg p-4 bg-purple-50/50 dark:bg-purple-950/20">
+            <h3 className="font-semibold text-purple-700 dark:text-purple-400 mb-2">Modified Comparative — 51% Bar (IL, MA, PA)</h3>
+            <p className="text-sm">Our driver can recover as long as they are <strong>50% or less at fault</strong>. If 51% or more — no recovery. Gives slightly more room than the 50% bar states.</p>
+          </div>
+        </div>
+        <div className="mt-4 bg-muted/40 rounded-lg p-4">
+          <p className="text-sm"><strong>Example — Same accident, different outcomes ($10,000 damages, our driver 30% at fault):</strong><br />
+          MD/VA: recover $0 (contributory). FL: recover $7,000 (70% of $10K). GA/IL/MA/PA: recover $7,000 (under the bar, reduced proportionally).</p>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,236 +1,253 @@
 import { useState } from "react";
-import WhipLayout from "@/components/WhipLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { AlertTriangle, ChevronDown, ChevronRight, ArrowRight, Phone, Mail, FileText } from "lucide-react";
+import { AlertTriangle, CheckSquare, Square, ChevronDown, ChevronRight } from "lucide-react";
 
-function Accordion({ title, badge, badgeColor, children }: { title: string; badge?: string; badgeColor?: string; children: React.ReactNode }) {
+function Accordion({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors">
-        <div className="flex items-center gap-3">
-          {open ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
-          <span className="font-medium text-sm">{title}</span>
-          {badge && <Badge className={`text-xs border-0 ${badgeColor ?? "bg-muted text-muted-foreground"}`}>{badge}</Badge>}
-        </div>
+    <div className="border border-border rounded-lg overflow-hidden mb-2">
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 bg-muted/40 hover:bg-muted/70 text-left font-medium transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        <span>{title}</span>
+        {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
       </button>
-      {open && <div className="px-4 pb-4 pt-1 border-t border-border/30 text-sm space-y-3">{children}</div>}
+      {open && <div className="px-4 py-3 text-sm space-y-2 bg-background">{children}</div>}
     </div>
   );
 }
 
-const DENIAL_TYPES = [
-  "Coverage Denial — Period 0",
-  "Coverage Denial — Excluded Driver",
-  "Coverage Denial — Non-Covered Vehicle",
-  "Coverage Denial — Policy Lapse",
-  "Liability Denial — Contributory Negligence",
-  "Liability Denial — No Fault Found",
-  "Liability Denial — Claimant Over Fault Threshold",
-  "Medical Denial — Unrelated Treatment",
-  "Medical Denial — Treatment Excessive / Not Reasonable",
-  "PD Denial — ACV Dispute",
-  "PD Denial — Pre-Existing Damage",
-  "Total Loss Dispute",
-  "Diminished Value Dispute",
+const CHECKLIST_REQUIRED = [
+  "Recorded statement from the insured driver",
+  "Confirmed date and time of loss",
+  "Rideshare status at time of loss (Period 0 / 1 / 2 / 3)",
+  "Photos — Whip vehicle damage",
+  "Photos — third-party vehicle (if available)",
+  "Written denial from the third-party carrier",
+  "Statements from all involved parties",
+];
+const CHECKLIST_OBTAIN = [
+  "Police report (required if one was filed)",
+  "Witness statements",
+];
+const CHECKLIST_OPTIONAL = [
+  "Scene photos",
+  "Dashcam or telematics data",
+  "Driver prior claim history",
+  "Vehicle inspection or repair estimate",
 ];
 
-const ESCALATION_PATHS: Record<string, { path: string; steps: string[]; contacts: string[]; urgency: "normal" | "urgent" | "legal" }> = {
-  "Coverage Denial — Period 0": {
-    path: "Coverage Review → Jasmine",
-    urgency: "normal",
-    steps: [
-      "Pull trip log from Whip platform to confirm Period 0 status at time of loss.",
-      "Issue coverage denial letter citing Period 0 — no TNC coverage obligation.",
-      "Direct claimant to driver's personal auto insurer.",
-      "If claimant disputes Period 0 status, escalate to Jasmine with trip log evidence.",
-    ],
-    contacts: ["Jasmine (coverage disputes)", "Legal if lawsuit filed"],
-  },
-  "Coverage Denial — Excluded Driver": {
-    path: "Policy Review → Jasmine",
-    urgency: "normal",
-    steps: [
-      "Confirm exclusion endorsement is on file and signed.",
-      "Verify the excluded driver was the operator at time of loss (police report, witness statements).",
-      "Issue denial letter citing excluded driver endorsement.",
-      "If claimant argues driver was not excluded, escalate to Jasmine.",
-    ],
-    contacts: ["Jasmine (policy coverage)", "Klutch underwriting if endorsement unclear"],
-  },
-  "Liability Denial — Contributory Negligence": {
-    path: "Liability Review → Jayla",
-    urgency: "normal",
-    steps: [
-      "Document all evidence of claimant's fault (police report, photos, witness statements).",
-      "Confirm state uses contributory negligence (MD, VA, DC, NC).",
-      "Issue denial letter citing contributory negligence bar.",
-      "If claimant files suit, route immediately to Jasmine/legal.",
-    ],
-    contacts: ["Jayla (liability evaluation)", "Jasmine if lawsuit filed"],
-  },
-  "Medical Denial — Treatment Excessive / Not Reasonable": {
-    path: "Medical Review → Jayla",
-    urgency: "normal",
-    steps: [
-      "Request all medical records and bills.",
-      "Compare treatment to injury mechanism (low-speed impact vs. extensive treatment).",
-      "Request IME (Independent Medical Examination) if treatment appears disproportionate.",
-      "Issue partial denial or reduction letter with medical rationale.",
-      "If claimant disputes, offer to review additional records before final denial.",
-    ],
-    contacts: ["Jayla (BI medical review)", "IME vendor if needed"],
-  },
-  "Total Loss Dispute": {
-    path: "PD Review → Giovanni",
-    urgency: "urgent",
-    steps: [
-      "Obtain CCC One or comparable ACV report.",
-      "Provide claimant with written ACV determination and comparable vehicles.",
-      "If claimant disputes ACV, request their comparable vehicles (must be same year/make/model/trim/mileage range).",
-      "Negotiate within reasonable range — document all communications.",
-      "If no resolution, advise claimant of appraisal clause rights (if applicable in state).",
-    ],
-    contacts: ["Giovanni (PD/total loss)", "Jasmine if legal action threatened"],
-  },
-};
-
 export default function DeniedClaimEscalation() {
-  const [denialType, setDenialType] = useState("");
-  const [notes, setNotes] = useState("");
-  const escalation = ESCALATION_PATHS[denialType];
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const toggle = (item: string) => setChecked(prev => {
+    const next = new Set(prev);
+    next.has(item) ? next.delete(item) : next.add(item);
+    return next;
+  });
 
   return (
-    <WhipLayout>
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold mb-1">Denied Claim Escalation</h1>
+        <p className="text-muted-foreground text-sm">Process framework for pursuing recovery on claims denied by third-party carriers where our driver is confirmed not at fault.</p>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex gap-3">
+        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          <strong>Why this process exists:</strong> When a third-party carrier denies a legitimate claim, Whip has legal standing to pursue recovery. This is not automatic — it requires documentation, a supervisor decision, and a sequenced approach. Skipping steps wastes time and weakens the position. Every escalation must be approved before it happens. Whip is not a member of ARB.
+        </p>
+      </div>
+
+      {/* Threshold Gates */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Threshold Gates</h2>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="border border-border rounded-lg p-4 bg-muted/20">
+            <div className="text-xs font-mono uppercase tracking-wide text-muted-foreground mb-1">Auto-Close</div>
+            <div className="text-lg font-bold mb-1">Under $3,000</div>
+            <p className="text-sm text-muted-foreground">Cost of legal pursuit exceeds recovery. Close the file and absorb the loss.</p>
           </div>
-          <div>
-            <h1 className="text-xl font-bold">Denied Claim Escalation</h1>
-            <p className="text-sm text-muted-foreground">Escalation paths, required steps, and contacts for denied or disputed claims</p>
+          <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50/50 dark:bg-amber-950/20">
+            <div className="text-xs font-mono uppercase tracking-wide text-amber-600 mb-1">Weigh Recovery Odds</div>
+            <div className="text-lg font-bold mb-1">$3,000 – $10,000</div>
+            <p className="text-sm text-muted-foreground">Escalation appropriate. Full checklist + roundtable required before any action.</p>
           </div>
-        </div>
-
-        {/* Quick lookup */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Quick Escalation Lookup</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-xs">Denial / Dispute Type</Label>
-              <Select value={denialType} onValueChange={setDenialType}>
-                <SelectTrigger className="h-9 mt-1"><SelectValue placeholder="Select denial type…" /></SelectTrigger>
-                <SelectContent>{DENIAL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            {escalation && (
-              <div className={`p-4 rounded-lg border-2 space-y-4 ${escalation.urgency === "legal" ? "border-red-500 bg-red-50 dark:bg-red-950/20" : escalation.urgency === "urgent" ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20" : "border-primary/30 bg-primary/5"}`}>
-                <div className="flex items-center gap-2">
-                  <ArrowRight className="w-4 h-4 text-[#ff6221]" />
-                  <span className="font-semibold text-sm">{escalation.path}</span>
-                  {escalation.urgency !== "normal" && (
-                    <Badge className={`text-xs border-0 ${escalation.urgency === "legal" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
-                      {escalation.urgency === "legal" ? "🚨 Legal" : "⚠ Urgent"}
-                    </Badge>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Required Steps</p>
-                  {escalation.steps.map((step, i) => (
-                    <div key={i} className="flex gap-3 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center shrink-0 font-bold mt-0.5">{i + 1}</span>
-                      {step}
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contacts</p>
-                  {escalation.contacts.map((c, i) => (
-                    <div key={i} className="flex gap-2 text-xs text-muted-foreground">
-                      <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />{c}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Reference sections */}
-        <div className="space-y-3">
-          <Accordion title="General Escalation Matrix" badge="Reference" badgeColor="bg-primary/10 text-primary">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead><tr className="bg-muted/40"><th className="text-left px-3 py-2">Denial Type</th><th className="text-left px-3 py-2">Primary Handler</th><th className="text-left px-3 py-2">Escalate To</th><th className="text-left px-3 py-2">Timeline</th></tr></thead>
-                <tbody>
-                  {[
-                    ["Coverage (Period 0, Exclusion, Lapse)", "Jasmine", "Legal if suit filed", "Acknowledge within 10 days"],
-                    ["Liability (Contributory, No Fault)", "Jayla", "Jasmine if suit filed", "Deny within 30 days of investigation"],
-                    ["BI / Medical Disputes", "Jayla", "Jasmine if suit filed", "Respond within 15 days of demand"],
-                    ["PD / Total Loss Disputes", "Giovanni", "Jasmine if legal action", "Resolve within 30 days"],
-                    ["Legal / Lawsuit Filed", "Jasmine", "Outside counsel", "Respond to suit within SOL / answer deadline"],
-                    ["Regulatory / AG Complaint", "Jasmine", "Legal + management", "Respond within state-mandated timeframe"],
-                  ].map(([type, primary, escalate, timeline]) => (
-                    <tr key={type} className="border-b border-border/20 hover:bg-muted/20">
-                      <td className="px-3 py-2 font-medium">{type}</td>
-                      <td className="px-3 py-2">{primary}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{escalate}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{timeline}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Accordion>
-
-          <Accordion title="State Regulatory Denial Requirements" badge="Compliance" badgeColor="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-            <p className="text-xs text-muted-foreground mb-2">States have specific requirements for denial letters — missing these can result in bad faith claims.</p>
-            <div className="space-y-2">
-              {[
-                { state: "MD", req: "Written denial required within 30 days of proof of loss. Must cite specific policy provision. Must include appeal rights." },
-                { state: "VA", req: "Written denial within 45 days. Must cite policy provision and factual basis." },
-                { state: "FL", req: "Written denial within 90 days of proof of loss. Must include specific coverage provision cited." },
-                { state: "PA", req: "Written denial within 15 business days of proof of loss." },
-                { state: "IL", req: "Written denial within 30 days. Must include reason and policy provision." },
-                { state: "GA", req: "Written denial within 15 days of proof of loss." },
-                { state: "TX", req: "Written denial within 15 business days of receiving all items." },
-                { state: "NY", req: "Written denial within 30 days. Failure to timely deny may waive coverage defenses." },
-              ].map(({ state, req }) => (
-                <div key={state} className="flex gap-3 p-2 rounded bg-muted/30">
-                  <span className="font-bold text-primary w-8 shrink-0">{state}</span>
-                  <span className="text-xs text-muted-foreground">{req}</span>
-                </div>
-              ))}
-            </div>
-          </Accordion>
-
-          <Accordion title="Bad Faith Triggers — What to Avoid" badge="Critical" badgeColor="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
-            <div className="space-y-2">
-              {[
-                "Failing to acknowledge a claim within the state-mandated timeframe",
-                "Denying a claim without a reasonable investigation",
-                "Misrepresenting policy provisions to the claimant",
-                "Offering unreasonably low settlements to force acceptance",
-                "Failing to promptly settle when liability is reasonably clear",
-                "Delaying payment after a settlement agreement is reached",
-                "Threatening litigation to discourage a claimant from pursuing a valid claim",
-                "Failing to explain the basis for a denial in writing",
-              ].map((item, i) => (
-                <div key={i} className="flex gap-2 text-xs">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-                  {item}
-                </div>
-              ))}
-            </div>
-          </Accordion>
+          <div className="border border-green-200 dark:border-green-800 rounded-lg p-4 bg-green-50/50 dark:bg-green-950/20">
+            <div className="text-xs font-mono uppercase tracking-wide text-green-600 mb-1">Full Escalation Eligible</div>
+            <div className="text-lg font-bold mb-1">$10,000+</div>
+            <p className="text-sm text-muted-foreground">Legal involvement clearly justified including total loss claims. Proceed through full pathway.</p>
+          </div>
         </div>
       </div>
-    </WhipLayout>
+
+      {/* Decision Matrix */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Decision Matrix</h2>
+        <p className="text-sm text-muted-foreground mb-3">All conditions in a row must be true to trigger that action.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
+            <thead>
+              <tr className="bg-muted/60">
+                <th className="text-left px-3 py-2 font-semibold">Claim Value</th>
+                <th className="text-left px-3 py-2 font-semibold">Docs Complete?</th>
+                <th className="text-left px-3 py-2 font-semibold">Liability Defensible?</th>
+                <th className="text-left px-3 py-2 font-semibold">Carrier Response</th>
+                <th className="text-left px-3 py-2 font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["Under $3,000", "Any", "Any", "Any", "Auto-Close"],
+                ["$3,000+", "Missing required items", "N/A", "N/A", "Hold — Get Missing Docs"],
+                ["$3,000+", "All required present", "Needs review", "Denied", "Roundtable — Supervisor Required"],
+                ["$3,000+", "All required present", "Confirmed defensible", "Denied", "Email — Liability Stance (Template 1)"],
+                ["$3,000+", "All required present", "Confirmed defensible", "No response or continued denial", "File DOI Complaint (selective) + Email Template 2"],
+                ["$3,000+", "All required present", "Confirmed defensible", "DOI filed — still no resolution", "Notice of Litigation (Template 3)"],
+                ["$3,000+", "All required present", "Confirmed defensible", "No response to notice by deadline", "Retain Counsel (Template 4)"],
+              ].map((row, i) => (
+                <tr key={i} className="border-t border-border hover:bg-muted/20">
+                  {row.map((cell, j) => (
+                    <td key={j} className={`px-3 py-2 ${j === 4 ? "font-medium text-primary" : ""}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pre-Escalation Checklist */}
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Pre-Escalation Checklist</h2>
+        <p className="text-sm text-muted-foreground mb-3">Every required item must be confirmed before the claim goes to roundtable. Missing items = place on hold.</p>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold mb-2 uppercase tracking-wide text-muted-foreground">Required Before Roundtable</h3>
+            <div className="space-y-2">
+              {CHECKLIST_REQUIRED.map(item => (
+                <button key={item} onClick={() => toggle(item)} className="w-full flex items-center gap-3 text-left text-sm hover:bg-muted/30 rounded px-2 py-1 transition-colors">
+                  {checked.has(item) ? <CheckSquare className="h-4 w-4 text-green-500 shrink-0" /> : <Square className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <span className={checked.has(item) ? "line-through text-muted-foreground" : ""}>{item}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold mb-2 uppercase tracking-wide text-muted-foreground">Obtain If Available</h3>
+            <div className="space-y-2">
+              {CHECKLIST_OBTAIN.map(item => (
+                <button key={item} onClick={() => toggle(item)} className="w-full flex items-center gap-3 text-left text-sm hover:bg-muted/30 rounded px-2 py-1 transition-colors">
+                  {checked.has(item) ? <CheckSquare className="h-4 w-4 text-green-500 shrink-0" /> : <Square className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <span className={checked.has(item) ? "line-through text-muted-foreground" : ""}>{item}</span>
+                </button>
+              ))}
+              {CHECKLIST_OPTIONAL.map(item => (
+                <button key={item} onClick={() => toggle(item)} className="w-full flex items-center gap-3 text-left text-sm hover:bg-muted/30 rounded px-2 py-1 transition-colors">
+                  {checked.has(item) ? <CheckSquare className="h-4 w-4 text-green-500 shrink-0" /> : <Square className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <span className={checked.has(item) ? "line-through text-muted-foreground" : ""}>{item} <span className="text-xs text-muted-foreground ml-1">OPTIONAL</span></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step-by-Step Workflow */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Step-by-Step Workflow</h2>
+        <Accordion title="Carrier Denies Liability">
+          <ol className="space-y-2">
+            {[
+              "Within 5 business days — review denial thoroughly. Compare to police report and evidence.",
+              "Identify weaknesses or unsupported conclusions in the denial.",
+              "If denial lacks merit: send written rebuttal citing specific evidence. 10-day response deadline.",
+              "If denial stands: evaluate cost-benefit of litigation. Issue Notice of Intent to File Suit OR close if not economically viable — document either way.",
+            ].map((step, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                <p>{step}</p>
+              </li>
+            ))}
+          </ol>
+        </Accordion>
+        <Accordion title="Carrier Makes Low Offer">
+          <ol className="space-y-2">
+            {[
+              "Within 5 business days — evaluate liability strength. Calculate recovery vs. risk.",
+              "Determine counter strategy.",
+              "If offer is materially low: send structured counteroffer. Reinforce liability position and evidence. Set 10-day deadline.",
+              "If negotiations stall: escalate to DOI complaint or litigation notice.",
+            ].map((step, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                <p>{step}</p>
+              </li>
+            ))}
+          </ol>
+        </Accordion>
+        <Accordion title="Carrier Ignores Demand">
+          <p>Follow the strict cadence — non-response does not pause the file. Day 7 → 21 → 30 → 45 escalation action.</p>
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-3 mt-2">
+            <p className="text-amber-800 dark:text-amber-200 text-xs">After Day 45 with no response: file DOI complaint, issue Notice of Intent to File Suit, or prepare litigation referral package. Document whichever action is taken.</p>
+          </div>
+        </Accordion>
+      </div>
+
+      {/* DOI Complaint Links */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">DOI Complaint Links</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {[
+            { state: "Maryland", url: "https://www.insurance.maryland.gov/Pages/consumer/fileacomplaint.aspx" },
+            { state: "Georgia", url: "https://oci.georgia.gov/file-complaint" },
+            { state: "Illinois", url: "https://insurance.illinois.gov/Pages/Complaints.aspx" },
+            { state: "Pennsylvania", url: "https://www.insurance.pa.gov/Consumers/Pages/FilingAComplaint.aspx" },
+            { state: "Florida", url: "https://www.myfloridacfo.com/division/consumers/filing-a-complaint" },
+            { state: "Virginia", url: "https://www.scc.virginia.gov/pages/Received-a-Notice-from-Your-Insurance-Company" },
+          ].map(({ state, url }) => (
+            <a key={state} href={url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-between px-3 py-2 border border-border rounded-lg hover:bg-muted/40 transition-colors text-sm font-medium">
+              {state} <span className="text-muted-foreground text-xs">↗</span>
+            </a>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">Log DOI filing in the claim after submission.</p>
+      </div>
+
+      {/* Litigation & Suit Referral */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Litigation &amp; Suit Referral</h2>
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold mb-2">Before Filing Suit — Evaluate:</h3>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              <li>Total recovery amount — is it worth it?</li>
+              <li>Strength of evidence</li>
+              <li>Filing costs versus expected recovery</li>
+              <li>Collectability of judgment</li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold mb-2">Pre-Suit Requirement:</h3>
+            <p className="text-sm">Issue a formal Notice of Intent to File Suit with 10–14 day deadline. If no resolution → send suit referral package to outside counsel.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold mb-2">Suit Referral Package Must Include:</h3>
+            <ol className="list-decimal pl-5 space-y-1 text-sm">
+              <li>Full demand package (liability analysis, police report, photos, estimate/invoice, proof of payment)</li>
+              <li>Clear written liability summary (date/time/location, factual accident summary, legal theory)</li>
+              <li>Summary of all contact attempts with adverse carrier</li>
+              <li>Copies of all communications to/from adverse carrier</li>
+              <li>Copy of denial letter or documentation of non-response</li>
+              <li>Statute of limitations reviewed and confirmed</li>
+            </ol>
+          </div>
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+            <p className="text-sm text-amber-800 dark:text-amber-200">The referral summary must be concise, organized, and litigation-ready.</p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
