@@ -644,6 +644,7 @@ function BlankLetterheadTab() {
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Letter_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -695,7 +696,8 @@ function BlankLetterheadTab() {
         filename={`Whip_Letter_${form.claimNumber || "Draft"}.pdf`}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -772,6 +774,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Contact_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -819,7 +822,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -888,6 +892,7 @@ Whip Claims Management`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_FailedContact_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -939,7 +944,8 @@ Whip Claims Management`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -1016,6 +1022,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_StorageMitigation_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1067,7 +1074,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -1603,6 +1611,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_CoveragePosition_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1666,7 +1675,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -1718,6 +1728,7 @@ function DenialTab() {
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Denial_${claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1774,7 +1785,8 @@ function DenialTab() {
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -1860,6 +1872,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_DamageDenial_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1905,7 +1918,8 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -2011,6 +2025,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_ROR_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2066,7 +2081,8 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -2187,6 +2203,7 @@ function ReleaseBITab() {
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2287,7 +2304,8 @@ function ReleaseBITab() {
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -2403,6 +2421,7 @@ function ReleasePDTab() {
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2496,7 +2515,8 @@ function ReleasePDTab() {
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -2621,6 +2641,7 @@ function TLSettlementTab() {
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2714,7 +2735,8 @@ function TLSettlementTab() {
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -3048,6 +3070,7 @@ function CarrierRebuttalTab() {
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_Rebuttal_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="space-y-4">
@@ -3217,7 +3240,8 @@ function CarrierRebuttalTab() {
           onDownload={handleDownload}
         
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
       </div>
     </div>
   );
@@ -3346,6 +3370,7 @@ claims@drivewhip.com`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_PaymentReceipt_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -3402,7 +3427,8 @@ claims@drivewhip.com`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -3618,6 +3644,7 @@ Whip Claims Management`;
     addLetterFooter(doc);
     downloadPDF(doc, `${selectedProvider.id === "local" || selectedProvider.id === "other" ? (form.customProviderName || "Towing") : selectedProvider.name}_Invoice_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="space-y-4">
@@ -3752,7 +3779,8 @@ Whip Claims Management`;
             onDownload={handleDownload}
           
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
         </div>
       </div>
     </div>
@@ -3921,6 +3949,7 @@ Whip Claims Management`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `pip-exhaustion-${state}-${form.claimNo || "claim"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   const STATE_CHIPS: { id: "fl" | "pa" | "va"; label: string; sub: string }[] = [
     { id: "fl", label: "Florida", sub: "§627.736" },
@@ -4020,7 +4049,8 @@ Whip Claims Management`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -4126,6 +4156,7 @@ Whip Claims Management`;
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_LimitedLiability_BI_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -4207,7 +4238,8 @@ Whip Claims Management`;
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}
-      />
+      
+        onPreview={handlePreviewOnly}/>
     </div>
   );
 }
@@ -4569,6 +4601,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
   };
+  const handlePreviewOnly = () => { handleDownload(); };
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -4739,7 +4772,8 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
           onDownload={handleDownload}
           filename={`Whip_LOU_${claimNumber || "Draft"}.pdf`}
           pdfUrl={previewPdfUrl}
-        />
+        
+        onPreview={handlePreviewOnly}/>
       )}
     </div>
   );

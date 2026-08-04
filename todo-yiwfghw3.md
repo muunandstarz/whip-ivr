@@ -209,3 +209,5 @@
 - [x] Restrict COI and dec page state selectors to Whip operating markets only (MD, VA, PA, FL, IL, GA, MA, TX)
 - [x] Pre-fill COI/dec page state from member's originating market via URL param
 - [x] Update stateOfCoverage derivation in db.ts to add TX, NJ, NC market mappings
+- [x] Restrict COI and dec page state options to Whip operating markets only (MD, VA, FL, GA, IL, MA, PA, TX), pre-filled from member's originating market state
+- [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
