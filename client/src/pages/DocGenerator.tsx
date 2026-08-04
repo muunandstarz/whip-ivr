@@ -4203,7 +4203,7 @@ const STANDARD_LOU_RATES = [
   { label: "Custom / Enter manually", rate: "" },
 ];
 
-function LOUCalculatorTab() {
+function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
   // Claim info
   const [claimNumber, setClaimNumber] = useState("");
   const [adverseClaimNo, setAdverseClaimNo] = useState("");
@@ -4292,6 +4292,8 @@ function LOUCalculatorTab() {
     setPushedToDemand(true);
     toast.success("LOU amount pushed to Subrogation Demand tab");
     setTimeout(() => setPushedToDemand(false), 4000);
+    // Navigate to subro-demand tab
+    if (onNavigate) onNavigate("subro-demand");
   };
 
   const handleDownload = () => {
@@ -6496,7 +6498,7 @@ export default function DocGenerator() {
       case "urgently-invoice": return <UrgentlyInvoiceTab />;
       case "pip-exhaustion": return <PIPExhaustionTab />;
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
-      case "lou-calculator": return <LOUCalculatorTab />;
+      case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} />;
       case "pip-bill-review": return <MedicalBillsReviewTab />;
       case "coi-whip": return <WhipCOITab />;
       case "coi-klutch": return <KlutchCOITab />;

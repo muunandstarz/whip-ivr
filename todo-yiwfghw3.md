@@ -160,14 +160,14 @@
 - [x] Mail Bot: add Subrogation Documents category (outbound subro-related docs primary, General RR secondary)
 
 ## Phase 7 — LOU Calculator DocGen Integration & Mail Bot Roster (Aug 4, 2026)
-- [ ] LOU Calculator: add parseDocument procedure to lou.ts router (base64 → AI field extraction)
-- [ ] LOU Calculator: fix getMarketPricing to accept optional marketCode filter
-- [ ] LOU Calculator: replace LOUCalculatorTab in DocGenerator with exact reference Home.tsx implementation
-- [ ] LOU Calculator: PDF print output matches sample exactly (print window approach)
-- [ ] LOU Calculator: Push to Demand Letter writes sessionStorage + navigates to subro-demand tab
-- [ ] Remove standalone /lou-calculator route from App.tsx
-- [ ] Remove LOU Calculator from KB_NAV_ITEMS and HANDLER_KB_NAV_ITEMS in WhipLayout.tsx
-- [ ] Add LOU Calculator back to DocGen NAV_GROUPS Subrogation section
+- [x] LOU Calculator: add parseDocument procedure to lou.ts router (base64 → AI field extraction)
+- [x] LOU Calculator: fix getMarketPricing to accept optional marketCode filter
+- [x] LOU Calculator: replace LOUCalculatorTab in DocGenerator with exact reference Home.tsx implementation
+- [x] LOU Calculator: PDF print output matches sample exactly (print window approach)
+- [x] LOU Calculator: Push to Demand Letter writes sessionStorage + navigates to subro-demand tab
+- [x] Remove standalone /lou-calculator route from App.tsx (redirect added)
+- [x] Remove LOU Calculator from KB_NAV_ITEMS and HANDLER_KB_NAV_ITEMS in WhipLayout.tsx
+- [x] Add LOU Calculator back to DocGen NAV_GROUPS Subrogation section
 - [x] Mail Bot: seed Daniel Giono (slackId=D0B1BTBBJP9, role=total_loss) and Tim Chan (slackId=D0B22AZ6QB0, role=subro_docs)
 - [x] Remove standalone LOU Calculator from WhipLayout sidebar nav
 - [x] Add Diminished Value Calc entry in DocGen Subrogation section (opens dvcalc-unkzbfqd.manus.space/agent-login in new tab)
