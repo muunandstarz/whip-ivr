@@ -2719,7 +2719,7 @@ function TLSettlementTab() {
 }
 
 // ─── Tab: Subro Demand Letter ─────────────────────────────────────────────────
-function SubroDemandTab() {
+function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
   const [form, setForm] = useState({
     carrier: "",
     adjusterName: "",
@@ -2826,7 +2826,7 @@ Respectfully,
 Whip Claims Management
 (855) 906-5949  |  claims@drivewhip.com`;
 
-  const handleDownload = () => {
+  const buildSubroDoc = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc, "SUBROGATION DEMAND");
@@ -2836,12 +2836,44 @@ Whip Claims Management
     y = wrapText(doc, preview, 14, y, W - 28, 5);
     addSOLNotice(doc);
     addLetterFooter(doc);
+    return doc;
+  };
+  const handlePreview = () => {
+    const doc = buildSubroDoc();
+    setPreviewPdfUrl(getPDFDataUrl(doc));
+  };
+  const handleDownload = () => {
+    const doc = buildSubroDoc();
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_SubroDemand_${form.ourClaim || "Draft"}.pdf`);
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div className="space-y-4">
+      {/* Quick Links card */}
+      <div className="rounded-lg border border-border bg-card/50 px-4 py-3 flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quick Links</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => onNavigate?.("lou-calculator")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#171b31] hover:bg-[#1e2340] text-white transition-colors border border-[#171b31]/20"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+            LOU Calculator
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("dv-calculator")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#ff6221] hover:bg-[#e5541a] text-white transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
+            DV Calculator
+          </button>
+        </div>
+        <span className="text-xs text-muted-foreground ml-auto hidden sm:block">Enter calculated amounts in the fields below</span>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div>
         <Panel title="Claim Information" tag="REQUIRED">
           <Grid3>
@@ -2900,10 +2932,11 @@ Whip Claims Management
       <PreviewPanel
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
+        onPreview={handlePreview}
         onDownload={handleDownload}
-      
         pdfUrl={previewPdfUrl}
       />
+    </div>
     </div>
   );
 }
@@ -6517,7 +6550,7 @@ export default function DocGenerator() {
       case "release-bi": return <ReleaseBITab />;
       case "release-pd": return <ReleasePDTab />;
       case "tl-settlement": return <TLSettlementTab />;
-      case "subro-demand": return <SubroDemandTab />;
+      case "subro-demand": return <SubroDemandTab onNavigate={setActiveTab} />;
       case "carrier-rebuttal": return <CarrierRebuttalTab />;
       case "payment-receipt": return <PaymentReceiptTab />;
       case "urgently-invoice": return <UrgentlyInvoiceTab />;
