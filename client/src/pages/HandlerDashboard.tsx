@@ -20,6 +20,7 @@ import {
   PhoneCall,
   Bell,
   RefreshCw,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -144,6 +145,60 @@ function CalledBackButton({
       <CheckCircle2 className="w-3 h-3" />
       {calledBack.isPending ? "Logging…" : "Mark Called Back"}
     </Button>
+  );
+}
+
+function ReassignSelect({
+  intakeId,
+  handlers,
+  onSuccess,
+}: {
+  intakeId: number;
+  handlers: Array<{ id: number; name: string; role: string | null }>;
+  onSuccess: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const updateMutation = trpc.intake.update.useMutation({
+    onSuccess: () => {
+      toast.success("Reassigned successfully");
+      utils.intake.list.invalidate();
+      onSuccess();
+    },
+    onError: () => toast.error("Failed to reassign"),
+  });
+
+  const processors = handlers.filter((h) => h.role === "processor");
+  const regularHandlers = handlers.filter((h) => h.role !== "processor" && h.role !== null);
+
+  return (
+    <select
+      className="h-7 text-xs border border-border rounded px-1.5 bg-background text-foreground cursor-pointer"
+      defaultValue=""
+      onChange={(e) => {
+        if (!e.target.value) return;
+        updateMutation.mutate({ id: intakeId, handlerName: e.target.value });
+        e.target.value = "";
+      }}
+      disabled={updateMutation.isPending}
+    >
+      <option value="">Reassign…</option>
+      {processors.length > 0 && (
+        <optgroup label="── Processors ──">
+          {processors.map((h) => (
+            <option key={h.id} value={h.name}>
+              {h.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      <optgroup label="── Handlers ──">
+        {regularHandlers.map((h) => (
+          <option key={h.id} value={h.name}>
+            {h.name}
+          </option>
+        ))}
+      </optgroup>
+    </select>
   );
 }
 
@@ -621,7 +676,7 @@ export default function HandlerDashboard() {
                       )}
 
                       {/* Row 4: actions */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <CalledBackButton
                           intakeId={record.id}
                           handlerName={effectiveName}
@@ -632,6 +687,14 @@ export default function HandlerDashboard() {
                             View <ChevronRight className="w-3 h-3" />
                           </Button>
                         </Link>
+                        <div className="flex items-center gap-1">
+                          <UserCheck className="w-3 h-3 text-muted-foreground" />
+                          <ReassignSelect
+                            intakeId={record.id}
+                            handlers={handlersList ?? []}
+                            onSuccess={() => setRefreshKey((k) => k + 1)}
+                          />
+                        </div>
                       </div>
                     </div>
                   );

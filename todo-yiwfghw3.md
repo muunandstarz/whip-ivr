@@ -211,3 +211,30 @@
 - [x] Update stateOfCoverage derivation in db.ts to add TX, NJ, NC market mappings
 - [x] Restrict COI and dec page state options to Whip operating markets only (MD, VA, FL, GA, IL, MA, PA, TX), pre-filled from member's originating market state
 - [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
+- [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
+- [ ] Add reassign dropdown to handler dashboard callback queue items
+- [ ] Add expandable call reason + quick reassign to intake records page (without going into view page)
+- [ ] Add processors to reassign/round-robin dropdown for file-a-claim calls
+- [ ] Route file-a-claim calls to processors automatically
+- [ ] Reassign existing file-a-claim intakes to processors via round-robin
+
+## Session 2026-08-05 Tasks
+- [x] Add reassign dropdown to handler dashboard callback queue items
+- [x] Add expandable call reason + quick reassign to intake records page (without going into view page)
+- [x] Add processors (MJ/Daryl) to reassign/round-robin dropdown for file-a-claim calls
+- [x] Route file-a-claim calls to processors automatically
+- [x] Reassign existing open file-a-claim intakes to processors via round-robin
+- [ ] LOU Calculator: persist state to sessionStorage so navigating away and back restores all fields
+- [ ] LOU Calculator: fix print document format to match reference (doc-header, doc-section-title, doc-util-table CSS classes, utilization data per-day)
+- [ ] Subro Demand: add VIN decoder button (NHTSA API) to auto-fill Year/Make/Model/Trim
+- [ ] Subro Demand: change attachments from free text to multi-select checkboxes
+- [ ] Subro Demand: add handler dropdown (Tim Chan + Daniel Giono first) to letter
+- [ ] Subro Demand: fix PDF generation to use structured sections not wrapText(preview)
+- [ ] Carrier Rebuttal: add separate upload slots for our estimate, image report, and carrier rebuttal
+- [ ] Tow Bill: add Dark Angel Towing (Chicago) from KB TOW_PARTNERS
+- [ ] Handler dropdown: add to all letter tabs that currently have a free-text handler/adjuster name field
+- [ ] COI: make KlutchCOI state selectable (MD, GA, VA, PA, MA, IL, FL, TX)
+- [ ] DocGen: remove cert-of-coverage tab (redundant)
+- [ ] DocGen: sync Empower denial templates from original KB
+- [ ] DocGen: remove carrier/subrogee from BI release, fix preview
+- [ ] TL Settlement: rename from Felsenburg, match reference letter format exactly

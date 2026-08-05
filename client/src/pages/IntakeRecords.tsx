@@ -1,3 +1,4 @@
+import React from "react";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
@@ -146,6 +147,10 @@ export default function IntakeRecords() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | "urgent" | "high" | "normal">(initPriority);
   const [dateFrom, setDateFrom] = useState(initDateFrom);
   const [dateTo, setDateTo] = useState(initDateTo);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Full handlers list for reassign dropdown (available to all users)
+  const { data: allHandlersList } = trpc.handlers.list.useQuery();
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -423,7 +428,8 @@ export default function IntakeRecords() {
                             const cfg = CALLER_TYPE_CONFIG[record.callerType ?? 'unknown'] ?? CALLER_TYPE_CONFIG.unknown;
                             const Icon = cfg.icon;
                             return (
-                              <tr key={String(record.id)} className="hover:bg-muted/20 transition-colors">
+                              <React.Fragment key={String(record.id)}>
+                              <tr className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
                                     <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.color}`}>
@@ -432,6 +438,7 @@ export default function IntakeRecords() {
                                     <div>
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         <span className="font-medium text-foreground">{record.callerName || "—"}</span>
+                                        {expandedId === record.id ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground opacity-40" />}
                                         {record.priority === "urgent" && (
                                           <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 px-1.5 py-0.5 rounded-full leading-none">URGENT</span>
                                         )}
@@ -565,6 +572,48 @@ export default function IntakeRecords() {
                                   </div>
                                 </td>
                               </tr>
+                              {expandedId === record.id && (
+                                <tr className="bg-muted/10">
+                                  <td colSpan={9} className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex flex-col gap-2">
+                                      {record.message && (
+                                        <div>
+                                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Call Reason / Message</span>
+                                          <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{record.message}</p>
+                                        </div>
+                                      )}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Quick Reassign:</span>
+                                        <select
+                                          className="h-7 text-xs border border-border rounded px-1.5 bg-background text-foreground cursor-pointer"
+                                          defaultValue=""
+                                          onChange={(e) => {
+                                            if (!e.target.value) return;
+                                            updateMutation.mutate({ id: record.id, handlerName: e.target.value });
+                                            e.target.value = "";
+                                          }}
+                                          disabled={updateMutation.isPending}
+                                        >
+                                          <option value="">Select handler…</option>
+                                          {(allHandlersList ?? []).filter((h) => h.role === "processor").length > 0 && (
+                                            <optgroup label="── Processors ──">
+                                              {(allHandlersList ?? []).filter((h) => h.role === "processor").map((h) => (
+                                                <option key={h.id} value={h.name}>{h.name}</option>
+                                              ))}
+                                            </optgroup>
+                                          )}
+                                          <optgroup label="── Handlers ──">
+                                            {(allHandlersList ?? []).filter((h) => h.role !== "processor").map((h) => (
+                                              <option key={h.id} value={h.name}>{h.name}</option>
+                                            ))}
+                                          </optgroup>
+                                        </select>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                              </React.Fragment>
                             );
                           })}
                         </tbody>

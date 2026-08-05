@@ -104,6 +104,8 @@ const SPAM_REGEX     = /\b(fema\.gov|irs\.gov|social security|medicare|press 1 t
 
 // Accident/new-loss detection — flag when a member is REPORTING an incident
 const ACCIDENT_REPORT_REGEX = /\b(reporting (a|an|the) (accident|loss|crash|collision)|just had an accident|was in an accident|got hit|rear.?ended|side.?swiped|totaled|total loss|vehicle was struck|car was hit|accident report|filing a claim for|backed into|made wrong turn|another driver|other driver|driver hit|driver ran)\b/i;
+// File-a-claim detection — member/claimant explicitly requesting to open a new claim (→ processors MJ/Daryl)
+const FILE_A_CLAIM_REGEX = /\b(file (a |an )?(new )?claim|open (a |an )?(new )?claim|start (a |an )?(new )?claim|report (a |an )?(new )?(accident|loss|claim)|new claim|first time calling|haven'?t (filed|reported)|need to (file|report|open)|want to (file|report|open)|calling to (file|report|open)|would like to (file|report|open)|trying to (file|report|open))\b/i;
 
 /**
  * Determine handler assignment using this priority order:
@@ -155,6 +157,8 @@ function resolveHandler(
   // PD / 3rd-party property damage → Carlito / Catherine (inbound subro team)
   if (PD_REGEX.test(text)) return nextInboundSubroHandler();
   if (callerType === "carrier")          return nextFirstPartyHandler(); // carriers default to first-party team
+  // Members/claimants wanting to FILE A NEW CLAIM → processors (MJ / Daryl round-robin)
+  if ((callerType === "member" || callerType === "claimant") && FILE_A_CLAIM_REGEX.test(text)) return nextTriageHandler();
   if (callerType === "member" || callerType === "claimant") return nextFirstPartyHandler();
 
   // 4. Unknown / no info → triage

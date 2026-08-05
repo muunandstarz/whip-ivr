@@ -67,7 +67,6 @@ type DocGenTab =
   | "claimant-contact"
   | "failed-contact"
   | "storage-mitigation"
-  | "cert-of-coverage"
   | "coverage-tnc"
   | "denial"
   | "damage-denial"
@@ -107,7 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Coverage",
     items: [
-      { id: "cert-of-coverage", label: "Certificate of Coverage", icon: Shield },
+
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
       { id: "coi-whip", label: "Metrocars Leasing Corp COI", icon: Shield },
       { id: "coi-klutch", label: "Klutch COI", icon: Shield },
@@ -312,15 +311,19 @@ const DENIAL_TEMPLATES: Record<
     label: "Empower Denial — Member (Unauthorized Platform Use)",
     hint: "Use when the vehicle was used on an unauthorized platform (Empower, etc.) not covered under the membership.",
     fields: ["recipient", "claimant", "dol", "platform", "adjuster"],
-    build: (f) =>
-      `Hello ${f.recipient || "[Member Name]"},\n\nWe are writing in connection with the above-referenced claim arising from the incident on ${f.dol || "[Date of Loss]"}.\n\nOur investigation has determined that at the time of loss, the vehicle was being operated in connection with ${f.platform || "[Empower/Unauthorized Platform]"}, a transportation network company that is not authorized under your Vehicle Membership Agreement with Whip/Metrocars Leasing Corp.\n\nPer the terms of your membership agreement, coverage is not available for losses occurring while the vehicle is being used in connection with unauthorized third-party platforms or services. Accordingly, we are unable to extend coverage for this claim.\n\nIf you believe this determination is in error, please provide documentation demonstrating the vehicle was not engaged in unauthorized platform activity at the time of loss.\n\nRegards,\n${f.adjuster || "[Adjuster Name]"}\nWhip Claims Management`,
+    build: (f) => {
+      const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      return `${today}\n\n${f.recipient || "[Member Name]"}\n\nRe: Claim Number: [Claim #] / Date of Loss: ${f.dol || "[Date of Loss]"} / Vehicle: [Vehicle Info]\n\nDear ${f.recipient || "[Member Name]"},\n\nWe are writing in connection with the above-referenced claim arising from the incident on ${f.dol || "[Date of Loss]"}.\n\nOur investigation has determined that at the time of loss, the vehicle was being operated in connection with ${f.platform || "[Empower/Unauthorized Platform]"}, a transportation network company (TNC) that is not authorized under your Vehicle Membership Agreement with Whip/Metrocars Leasing Corp.\n\nThe Empower platform operates outside the scope of the authorized TNC platforms covered under your membership agreement. Per the terms of your membership agreement, coverage is not available for losses occurring while the vehicle is being used in connection with unauthorized third-party platforms or services. Accordingly, we are unable to extend coverage for this claim.\n\nIf you believe this determination is in error, please provide documentation demonstrating the vehicle was not engaged in unauthorized platform activity at the time of loss. You may also wish to contact ${f.platform || "[Empower/Unauthorized Platform]"} directly regarding any coverage they may provide for incidents occurring during platform activity.\n\nSincerely,\n${f.adjuster || "[Handler Name]"}\nWhip Claims Management`;
+    },
   },
   empower_claimant: {
     label: "Empower Denial — Claimant (Unauthorized Platform Use)",
     hint: "Use when a third-party claimant is seeking coverage and the vehicle was on an unauthorized platform.",
     fields: ["recipient", "dol", "platform", "adjuster"],
-    build: (f) =>
-      `Dear ${f.recipient || "[Claimant/Carrier/Counsel]"},\n\nWe have completed our review of the coverage available for the above-referenced claim arising from the incident on ${f.dol || "[Date of Loss]"}.\n\nOur investigation has determined that at the time of loss, the vehicle was being operated in connection with ${f.platform || "[Empower/Unauthorized Platform]"}, a transportation network company that is not authorized under the applicable Vehicle Membership Agreement. Per the terms of the membership agreement, coverage is not available for losses occurring while the vehicle is being used in connection with unauthorized third-party platforms or services.\n\nAccordingly, we are unable to extend coverage for this claim.\n\nIf you believe this determination is in error, please provide documentation demonstrating the vehicle was not engaged in unauthorized platform activity at the time of loss.\n\nRegards,\n${f.adjuster || "[Adjuster Name]"}\nWhip Claims Management`,
+    build: (f) => {
+      const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      return `${today}\n\n${f.recipient || "[Claimant/Carrier/Counsel]"}\n\nRe: Claim Number: [Claim #] / Date of Loss: ${f.dol || "[Date of Loss]"} / Vehicle: [Vehicle Info]\n\nDear ${f.recipient || "[Claimant/Carrier/Counsel]"},\n\nWe have completed our review of the coverage available for the above-referenced claim arising from the incident on ${f.dol || "[Date of Loss]"}.\n\nOur investigation has determined that at the time of loss, the vehicle was being operated in connection with ${f.platform || "[Empower/Unauthorized Platform]"}, a transportation network company (TNC) that is not authorized under the applicable Vehicle Membership Agreement with Whip/Metrocars Leasing Corp. The Empower platform operates outside the scope of authorized TNC platforms covered under the membership agreement.\n\nPer the terms of the membership agreement, coverage is not available for losses occurring while the vehicle is being used in connection with unauthorized third-party platforms or services. Accordingly, we are unable to extend coverage for this claim.\n\nIf you believe this determination is in error, please provide documentation demonstrating the vehicle was not engaged in unauthorized platform activity at the time of loss. You may also wish to direct your inquiry to ${f.platform || "[Empower/Unauthorized Platform]"} directly regarding any coverage they may provide for incidents occurring during platform activity.\n\nSincerely,\n${f.adjuster || "[Handler Name]"}\nWhip Claims Management`;
+    },
   },
 };
 
@@ -1488,9 +1491,13 @@ COMP: INCLUDED`;
             <Field label="Policy Number" id="coc-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
-              <div className="flex items-center gap-3 p-2.5 rounded-md bg-muted/50 border border-border">
-                <span className="text-sm font-semibold text-foreground">{form.stateOfCoverage}</span>
-                <span className="text-xs text-foreground/60">Locked to member&apos;s home market</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"].map((s) => (
+                  <button key={s} type="button" onClick={() => set("stateOfCoverage")(s)}
+                    className={`px-2.5 py-0.5 rounded text-xs font-semibold border transition-colors ${form.stateOfCoverage === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}>
+                    {s}
+                  </button>
+                ))}
               </div>
               <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
             </div>
@@ -2127,38 +2134,29 @@ function ReleaseBITab() {
   const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
   const releaseText = [
-    "RELEASE OF ALL CLAIMS – BODILY INJURY",
+    "GENERAL RELEASE OF ALL CLAIMS – BODILY INJURY",
     "",
-    `Date: ${today}`,
+    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${form.claimantName || "[Claimant Full Name]"}${minorLine} ("Claimant"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident"), and from any and all other claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
     "",
-    `Claimant: ${form.claimantName || "[Claimant Name]"}${minorLine}`,
-    `Claim Number: ${form.claimNumber || "[Claim Number]"}`,
-    `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`,
-    `Vehicle: ${form.vehicle || "[Vehicle]"}`,
-    `Settlement Amount: $${form.settlementAmount || "[Amount]"}`,
-    `State: ${form.state}`,
+    "This Release is intended to operate as a full, complete, and final settlement of all bodily injury claims and all other claims of any kind that Claimant has or may have against the Releasees as of the date of execution, including but not limited to past and future medical expenses, hospital, physician, therapy, and diagnostic services, pain and suffering, emotional distress, loss of earnings or earning capacity, loss of consortium, and any and all other damages of any kind, whether currently known or that may later be discovered. Claimant expressly waives any rights or benefits under any statute or common law principle that would otherwise limit the effect of this Release to claims known to exist at the time of execution.",
     "",
-    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${form.claimantName || "[Claimant Full Name]"}${minorLine} ("Claimant"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, on account of, or in any way arising out of, bodily injuries sustained by Claimant as a result of the motor vehicle incident that occurred on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident").`,
-    "",
-    "This Release is limited to bodily injury claims arising from the Incident referenced above and includes, but is not limited to, past and future medical expenses, hospital, physician, therapy, and diagnostic services, pain and suffering, emotional distress, loss of earnings or earning capacity, and any other bodily injury damages arising from the Incident. This Release does not apply to property damage claims, claims unrelated to the Date of Loss referenced above, claims of any party not signing this Release, or claims arising from any event occurring after the date of this Release.",
-    "",
-    "Claimant represents and warrants that all medical bills, liens, subrogation interests, and reimbursement claims, including but not limited to those of health insurers, Medicare, Medicaid, ERISA plans, hospitals, and medical providers related to the Incident, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid medical balances, liens, or reimbursement rights arising from the Incident.",
+    "Claimant represents and warrants that all medical bills, liens, subrogation interests, and reimbursement claims, including but not limited to those of health insurers, Medicare, Medicaid, ERISA plans, hospitals, and medical providers related to the Incident, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid medical balances, liens, or reimbursement rights arising from the Incident or otherwise.",
     "",
     "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
     "",
-    minorBlock + `Claimant acknowledges that this Release resolves only the bodily injury claims arising from the Incident referenced above, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.`,
+    minorBlock + `Claimant acknowledges that this is a general release intended to resolve all claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.`,
     "",
     `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}.`,
     "",
     "IN WITNESS WHEREOF, Claimant has executed this Release on the date set forth below.",
-    `Claimant Signature: _________________________________`,
     "",
-    `Printed Name: _________________________________`,
-    `Date: _________________________________`,
+    `Claimant Signature: ________________________________`,
+    `Printed Name: ________________________________`,
+    `Date: ________________________________`,
     "",
-    `Witness Signature: _________________________________`,
-    `Printed Name: _________________________________`,
-    `Date: _________________________________`,
+    `Witness Signature: ________________________________`,
+    `Printed Name: ________________________________`,
+    `Date: ________________________________`,
     minorSig,
   ].join("\n");
 
@@ -2254,18 +2252,6 @@ function ReleaseBITab() {
                 <Field label="Guardian / Parent Name" id="rbi-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
               </div>
             )}
-            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-              <Checkbox checked={form.isCarrierPayee} onCheckedChange={(v) => set("isCarrierPayee")(!!v)} />
-              <div>
-                <div className="text-xs font-semibold">Carrier / Subrogation Payee</div>
-                <div className="text-xs text-muted-foreground">Payment issued to carrier, not claimant directly</div>
-              </div>
-            </label>
-            {form.isCarrierPayee && (
-              <div className="ml-7">
-                <Field label="Carrier Name" id="rbi-carrier" value={form.carrierName} onChange={set("carrierName")} placeholder="e.g. GEICO" />
-              </div>
-            )}
           </div>
         </Panel>
         <Panel title="Handler Info">
@@ -2351,32 +2337,29 @@ function ReleasePDTab() {
   const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
   const releaseText = [
-    "RELEASE OF ALL CLAIMS — PROPERTY DAMAGE",
+    "GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE",
     "",
-    `Date: ${today}`,
+    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${form.claimantName || "[Claimant Full Name]"}${minorLine} ("Claimant"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident"), and from any and all other property damage claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
     "",
-    `Claimant: ${form.claimantName || "[Claimant Name]"}${minorLine}`,
-    `Claim Number: ${form.claimNumber || "[Claim Number]"}`,
-    `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`,
-    `Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}`,
-    `Settlement Amount: $${form.settlementAmount || "[Amount]"}`,
-    `State: ${form.state}`,
+    "This Release is intended to operate as a full, complete, and final settlement of all property damage claims that Claimant has or may have against the Releasees as of the date of execution, including but not limited to vehicle repair costs, total loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any and all other property-related damages of any kind, whether currently known or that may later be discovered. Claimant expressly waives any rights or benefits under any statute or common law principle that would otherwise limit the effect of this Release to claims known to exist at the time of execution.",
     "",
-    `In consideration of the payment of ${form.settlementAmount ? "$" + form.settlementAmount : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all property damage claims, repair costs, diminished value, loss of use, and any other damages of any kind.`,
+    "Claimant represents and warrants that all liens, subrogation interests, and reimbursement claims related to the property at issue, including but not limited to those of insurers, lienholders, and finance companies, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid balances, liens, or reimbursement rights arising from the Incident or otherwise.",
     "",
-    "This Release is intended to be a full and final settlement of all property damage claims arising from the above-referenced incident. No title transfer is required. The Releasor acknowledges that this settlement is a compromise of a disputed claim and does not constitute an admission of liability by any of the Released Parties.",
+    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
     "",
-    minorBlock + "The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.",
+    minorBlock + "Claimant acknowledges that this is a general release intended to resolve all property damage claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.",
     "",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}.`,
     "",
-    `Claimant Signature: _________________________________`,
+    "IN WITNESS WHEREOF, Claimant has executed this Release on the date set forth below.",
     "",
-    `Printed Name: _________________________________`,
-    `Date: _________________________________`,
+    `Claimant Signature: ________________________________`,
+    `Printed Name: ________________________________`,
+    `Date: ________________________________`,
     "",
-    `Witness Signature: _________________________________`,
-    `Printed Name: _________________________________`,
-    `Date: _________________________________`,
+    `Witness Signature: ________________________________`,
+    `Printed Name: ________________________________`,
+    `Date: ________________________________`,
     minorSig,
   ].join("\n");
 
@@ -2463,18 +2446,6 @@ function ReleasePDTab() {
             {form.isMinor && (
               <div className="ml-7">
                 <Field label="Guardian / Parent Name" id="rpd-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
-              </div>
-            )}
-            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-              <Checkbox checked={form.isCarrierPayee} onCheckedChange={(v) => set("isCarrierPayee")(!!v)} />
-              <div>
-                <div className="text-xs font-semibold">Carrier / Subrogation Payee</div>
-                <div className="text-xs text-muted-foreground">Payment issued to carrier, not claimant directly</div>
-              </div>
-            </label>
-            {form.isCarrierPayee && (
-              <div className="ml-7">
-                <Field label="Carrier Name" id="rpd-carrier" value={form.carrierName} onChange={set("carrierName")} placeholder="e.g. GEICO" />
               </div>
             )}
           </div>
@@ -2619,7 +2590,7 @@ function TLSettlementTab() {
         additionalNotes: form.additionalNotes,
       });
       setAiLetter(result.letter);
-      toast.success("Felsenburg letter generated");
+      toast.success("TL Settlement letter generated");
     } catch (e: unknown) {
       toast.error((e as Error).message || "AI error");
     } finally {
@@ -2630,13 +2601,79 @@ function TLSettlementTab() {
   const handleDownload = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    let y = 14; // No letterhead on releases
+    let y = addWhipLetterhead(doc, "TOTAL LOSS SETTLEMENT OFFER", `Claim #: ${form.claimNumber || "[Claim Number]"}  |  Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`);
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    const textToRender = aiLetter || preview;
-    y = wrapText(doc, textToRender, 14, y, W - 28, 5);
-    addSOLNotice(doc);
+    if (aiLetter) {
+      y = wrapText(doc, aiLetter, 14, y, W - 28, 5);
+    } else {
+      const todayStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      y = wrapText(doc, todayStr, 14, y, W - 28, 5); y += 4;
+      y = wrapText(doc, `Claimant: ${form.claimantName || "[Claimant Name]"}`, 14, y, W - 28, 5);
+      y = wrapText(doc, `Claim No.: ${form.claimNumber || "[Claim Number]"}`, 14, y, W - 28, 5);
+      y = wrapText(doc, `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`, 14, y, W - 28, 5);
+      if (form.vehicle) y = wrapText(doc, `Vehicle: ${form.vehicle}${form.vin ? ` | VIN: ${form.vin}` : ""}`, 14, y, W - 28, 5);
+      if (form.market) y = wrapText(doc, `Market: ${form.market}`, 14, y, W - 28, 5);
+      y += 4;
+      const firstName = form.claimantName.split(/[\s,]+/)[0] || form.claimantName || "[Claimant]";
+      y = wrapText(doc, "Re: Total Loss Settlement Offer", 14, y, W - 28, 5); y += 4;
+      y = wrapText(doc, `Dear ${firstName},`, 14, y, W - 28, 5); y += 4;
+      y = wrapText(doc, `Following our investigation of the above-referenced claim, the ${form.vehicle || "vehicle"} has been determined to be a total loss. After review of the vehicle's condition, applicable market data, and comparable valuations, Metro Cars Leasing Corp. has calculated your net settlement as follows:`, 14, y, W - 28, 5); y += 5;
+      doc.setFont("helvetica", "bold");
+      y = wrapText(doc, "Description / Amount", 14, y, W - 28, 5); y += 1;
+      doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
+      doc.line(14, y, W - 14, y); y += 3;
+      doc.setFont("helvetica", "normal");
+      const rightX = W - 14;
+      const acvAmt = parseFloat(form.acv) || 0;
+      doc.text("ACV / Gross Settlement Amount:", 14, y);
+      doc.text(`$${acvAmt.toFixed(2)}`, rightX, y, { align: "right" }); y += 5;
+      if (form.priorPayment && parseFloat(form.priorPayment) > 0) {
+        doc.text("Less: Prior Payment to Claimant:", 14, y);
+        doc.text(`($${parseFloat(form.priorPayment).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
+      }
+      if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) {
+        doc.text(`Less: Loan Payoff — ${form.lienHolder} (Lienholder):`, 14, y);
+        doc.text(`($${parseFloat(form.lienPayoff).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
+      }
+      if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) {
+        doc.text("Less: Storage — Reasonable & Customary Amount Allowed:", 14, y);
+        doc.text(`($${parseFloat(form.storageDeducted).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
+      }
+      for (const d of otherDeductions) {
+        if (d.label && d.amount && parseFloat(d.amount) > 0) {
+          doc.text(`Less: ${d.label}:`, 14, y);
+          doc.text(`($${parseFloat(d.amount).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
+        }
+      }
+      doc.line(14, y, W - 14, y); y += 3;
+      doc.setFont("helvetica", "bold");
+      doc.text("Net Amount Payable to Claimant:", 14, y);
+      doc.text(`$${netAmount}`, rightX, y, { align: "right" }); y += 6;
+      doc.setFont("helvetica", "normal");
+      y = wrapText(doc, "Payment will be issued as follows:", 14, y, W - 28, 5); y += 2;
+      if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) {
+        y = wrapText(doc, `• Loan payoff of $${parseFloat(form.lienPayoff).toFixed(2)} payable directly to ${form.lienHolder} in satisfaction of the outstanding lien.`, 14, y, W - 28, 5);
+      }
+      y = wrapText(doc, `• Net proceeds of $${netAmount} payable directly to ${form.claimantName || "[Claimant]"}.`, 14, y, W - 28, 5); y += 4;
+      y = wrapText(doc, "We hereby tender the above amount in full and final resolution of all property damage claims arising from this loss.", 14, y, W - 28, 5); y += 4;
+      if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) {
+        y = wrapText(doc, "Please note that the storage deduction reflected above represents the portion of billed storage fees that exceeded a reasonable and customary rate and was therefore disallowed. Only reasonable and customary storage charges have been considered in this settlement.", 14, y, W - 28, 5); y += 4;
+      }
+      if (form.rentalCutoffDate) {
+        const rentalDisplay = new Date(form.rentalCutoffDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+        y = wrapText(doc, `Rental reimbursement is a separate matter and will be reviewed upon receipt of invoice. Charges incurred through ${rentalDisplay} will be considered; any amounts beyond that date are subject to further review.`, 14, y, W - 28, 5); y += 4;
+      }
+      y = wrapText(doc, "To accept this settlement, please contact our office at your earliest convenience. Payment will be issued promptly upon confirmation of acceptance.", 14, y, W - 28, 5); y += 4;
+      y = wrapText(doc, "If you have any questions, please do not hesitate to contact the undersigned.", 14, y, W - 28, 5); y += 6;
+      y = wrapText(doc, "Sincerely,", 14, y, W - 28, 5); y += 8;
+      doc.setFont("helvetica", "bold");
+      y = wrapText(doc, form.adjusterName || "[Handler Name]", 14, y, W - 28, 5);
+      doc.setFont("helvetica", "normal");
+      y = wrapText(doc, "Claims Adjuster | Metro Cars Leasing Corp. — Claims Management", 14, y, W - 28, 5);
+      wrapText(doc, "claims@drivewhip.com", 14, y, W - 28, 5);
+    }
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
     downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
@@ -2664,7 +2701,7 @@ function TLSettlementTab() {
             </div>
           </>} />
         </Panel>
-        <Panel title="Settlement Breakdown (Felsenburg Format)">
+        <Panel title="Settlement Breakdown">
           <div className="space-y-3">
             <Field label="ACV / Gross Settlement ($)" id="tls-acv" value={form.acv} onChange={set("acv")} placeholder="e.g. 18500.00" />
             <Field label="Less: Prior Payment to Claimant ($)" id="tls-prior" value={form.priorPayment} onChange={set("priorPayment")} placeholder="e.g. 0.00" />
@@ -2707,10 +2744,10 @@ function TLSettlementTab() {
           </div>
         </Panel>
         <Panel title="AI Letter Generation" tag="AI">
-          <p className="text-xs text-muted-foreground mb-3">Generate a professional Felsenburg-format total loss settlement letter with the breakdown above.</p>
+          <p className="text-xs text-muted-foreground mb-3">Generate a professional total loss settlement letter with the breakdown above.</p>
           <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 mb-3" onClick={handleGenerateLetter} disabled={aiLoading}>
             {aiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-            {aiLoading ? "Generating..." : "✨ Generate Felsenburg Letter"}
+            {aiLoading ? "Generating..." : "✨ Generate TL Settlement Letter"}
           </Button>
           {aiLetter && (
             <div className="border border-border rounded-md overflow-hidden">
@@ -5569,9 +5606,20 @@ function WhipCOITab({ initialState = "MD" }: { initialState?: string }) {
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div className="space-y-4">
         <Panel title="State of Coverage (Member&apos;s Home Market)">
-          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 border border-border">
-            <span className="text-sm font-semibold text-foreground">{state}</span>
-            <span className="text-xs text-foreground/60">Member&apos;s home market — state is locked to the originating market</span>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Pre-filled from member&apos;s originating market. Select to override if needed.</p>
+            <div className="flex flex-wrap gap-1.5">
+              {["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setState(s)}
+                  className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${state === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         </Panel>
         <Panel title="Certificate Information" tag="REQUIRED">
@@ -5814,9 +5862,20 @@ function KlutchCOITab({ initialState = "MD" }: { initialState?: string }) {
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div className="space-y-4">
         <Panel title="State of Coverage (Member&apos;s Home Market)">
-          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 border border-border">
-            <span className="text-sm font-semibold text-foreground">{state}</span>
-            <span className="text-xs text-foreground/60">Member&apos;s home market — state is locked to the originating market</span>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Pre-filled from member&apos;s originating market. Select to override if needed.</p>
+            <div className="flex flex-wrap gap-1.5">
+              {["MD", "GA", "VA", "PA", "MA", "IL", "FL", "TX"].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setState(s)}
+                  className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${state === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         </Panel>
 
@@ -6202,11 +6261,15 @@ VIN: ${form.vin || "[VIN]"}`;
               <Field label="Date of Loss" id="mdp-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
               <div>
                 <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
-              <div className="flex items-center gap-3 p-2.5 rounded-md bg-muted/50 border border-border">
-                <span className="text-sm font-semibold text-foreground">{form.stateOfCoverage}</span>
-                <span className="text-xs text-foreground/60">Locked to member&apos;s home market</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"].map((s) => (
+                  <button key={s} type="button" onClick={() => set("stateOfCoverage")(s)}
+                    className={`px-2.5 py-0.5 rounded text-xs font-semibold border transition-colors ${form.stateOfCoverage === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}>
+                    {s}
+                  </button>
+                ))}
               </div>
-              <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location</p>
+              <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
               </div>
             </Grid3>
           </div>
@@ -6519,9 +6582,13 @@ VIN: ${form.vin || "[VIN]"}`;
             <Field label="Policy Number" id="kdp-pol" value={form.policyNumber} onChange={set("policyNumber")} placeholder={form.stateOfCoverage + "000S0137"} />
             <div>
               <label className="block text-xs font-medium text-foreground/70 mb-1">State of Coverage</label>
-              <div className="flex items-center gap-3 p-2.5 rounded-md bg-muted/50 border border-border">
-                <span className="text-sm font-semibold text-foreground">{form.stateOfCoverage}</span>
-                <span className="text-xs text-foreground/60">Locked to member&apos;s home market</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"].map((s) => (
+                  <button key={s} type="button" onClick={() => set("stateOfCoverage")(s)}
+                    className={`px-2.5 py-0.5 rounded text-xs font-semibold border transition-colors ${form.stateOfCoverage === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}>
+                    {s}
+                  </button>
+                ))}
               </div>
               <p className="text-[10px] text-amber-600 mt-1">Coverage is based on member&apos;s home market, not accident location.</p>
             </div>
@@ -6652,7 +6719,7 @@ export default function DocGenerator() {
   const initialTab = (() => {
     const params = new URLSearchParams(search);
     const t = params.get("tab");
-    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","cert-of-coverage","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch","dv-calculator"];
+    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch","dv-calculator"];
     return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
   })();
   const initialMemberState = (() => {
@@ -6728,7 +6795,7 @@ export default function DocGenerator() {
       case "claimant-contact": return <ClaimantContactTab />;
       case "failed-contact": return <FailedContactTab />;
       case "storage-mitigation": return <StorageMitigationTab />;
-      case "cert-of-coverage": return <CertOfCoverageTab initialState={initialMemberState} />;
+
       case "coverage-tnc": return <CoverageTNCTab />;
       case "denial": return <DenialTab />;
       case "damage-denial": return <DamageDenialTab />;
