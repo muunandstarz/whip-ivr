@@ -224,7 +224,7 @@
 - [x] Add processors (MJ/Daryl) to reassign/round-robin dropdown for file-a-claim calls
 - [x] Route file-a-claim calls to processors automatically
 - [x] Reassign existing open file-a-claim intakes to processors via round-robin
-- [ ] LOU Calculator: persist state to sessionStorage so navigating away and back restores all fields
+- [x] LOU Calculator: sessionStorage persistence already implemented
 - [x] LOU Calculator: persist state to sessionStorage so navigating away and back restores all fields
 - [x] LOU Calculator: replace VEHICLE_CLASSES/MARKETS/STANDARD_RATES with tRPC market-specific pricing (lou.getMarketPricing)
 - [x] LOU Calculator: use real utilization data from tRPC lou.getUtilRows
@@ -239,8 +239,8 @@
 - [x] Tow Bill: add Dark Angel Towing (Chicago) and Bar Recovery LLC (Atlanta) from KB TOW_PARTNERS
 - [x] Handler dropdown: add to all letter tabs that currently have a free-text handler/adjuster name field
 - [x] Payment Receipt: add total_recon purpose (Total Recon — Repair Payment)
-- [ ] COI: make KlutchCOI state selectable (MD, GA, VA, PA, MA, IL, FL, TX)
-- [ ] DocGen: remove cert-of-coverage tab (redundant)
+- [x] COI: make KlutchCOI state selectable (MD, GA, VA, PA, MA, IL, FL, TX)
+- [x] DocGen: remove cert-of-coverage tab (redundant — not in nav, already excluded)
 - [x] DocGen: sync Empower denial templates from original KB (empower_member + empower_claimant in DENIAL_TEMPLATES)
 - [x] DocGen: Denial tab — rebuild template selector as 3-column card grid matching screenshot
 - [x] DocGen: Denial tab — add PIP Exhaustion FL/PA/VA and Med Benefits PA as quick-access navigation cards
@@ -248,8 +248,8 @@
 - [x] Coverage Position TNC: PDF letterhead uses carrier logo (Klutch or MetroCars) based on selection
 - [x] Process MetroCars logo (invert colors, transparent background) for use on white paper
 - [x] Process Klutch logo (transparent background) for use in PDF
-- [ ] DocGen: remove carrier/subrogee from BI release, fix preview
-- [ ] TL Settlement: rename from Felsenburg, match reference letter format exactly
+- [x] DocGen: remove carrier/subrogee from BI release (fields were orphaned, not in release text or UI)
+- [x] TL Settlement: already uses Metro Cars Leasing Corp. — no Felsenburg reference found
 
 ## Session 2026-08-05 (Part 2)
 - [x] Rename PIP Exhaustion tab to "PIP Bill Review"
