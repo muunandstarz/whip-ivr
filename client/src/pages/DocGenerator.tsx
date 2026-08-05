@@ -5935,13 +5935,18 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
   const isKlutch = insurer === "klutch";
 
-  // Auto-generate cert number on mount and when insurer changes
-  // Format: KLT + 4 random digits (Klutch) or MD-00S + 4 random digits (Metrocars)
+  // Auto-generate cert number on mount and when insurer/state changes
+  // Klutch: KIS + 4 random digits (e.g. KIS3847)
+  // Metrocars: [state]000S0137 + 2-4 random digits (e.g. MD000S013712)
   React.useEffect(() => {
-    const prefix = isKlutch ? "KLT" : "MD-00S";
-    const num = Math.floor(1000 + Math.random() * 9000);
-    setForm(p => ({ ...p, certNumber: `${prefix}${num}` }));
-  }, [insurer]);
+    if (isKlutch) {
+      const num = Math.floor(1000 + Math.random() * 9000);
+      setForm(p => ({ ...p, certNumber: `KIS${num}` }));
+    } else {
+      const num = Math.floor(10 + Math.random() * 990);
+      setForm(p => ({ ...p, certNumber: `${state}000S0137${num}` }));
+    }
+  }, [insurer, state]);
 
   const fmtDate = (d: string) => {
     if (!d) return "—";
@@ -5964,19 +5969,24 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     let y = 8;
 
     // ── HEADER ──────────────────────────────────────────────────────────────
+    // Left column: logo (constrained to left ~35% to avoid title overlap)
     if (isKlutch) {
-      // Klutch: logo top-left
-      try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y, 36, 14); } catch {}
+      // Klutch logo: 26x10mm (proportional, not stretched)
+      try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 26, 10); } catch {}
     } else {
-      // Metrocars: org name top-left
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(0, 0, 0);
-      doc.text("METROCARS LEASING CORP", lm, y + 5);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(80, 80, 80);
-      doc.text("Whip Claims Management", lm, y + 9.5);
+      // Metrocars: MCL logo (inverted, white on dark)
+      try {
+        doc.addImage(MCL_LOGO_B64, "PNG", lm, y + 1, 30, 10);
+      } catch {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text("METROCARS LEASING CORP", lm, y + 5, { maxWidth: 42 });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(80, 80, 80);
+        doc.text("Whip Claims Management", lm, y + 9.5);
+      }
     }
 
     // Center: CERTIFICATE OF COVERAGE
@@ -6170,7 +6180,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
     // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
-    const cols = { insr: 8, addl: 8, subr: 8, type: 55, pol: 25, eff: 18, exp: 18 };
+    const cols = { insr: 8, addl: 7, subr: 7, type: 62, pol: 22, eff: 17, exp: 17 };
     const limW = textW - cols.insr - cols.addl - cols.subr - cols.type - cols.pol - cols.eff - cols.exp;
     const rowH = 8;
     const hdrH = 6;
@@ -6203,8 +6213,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     const policyNo = form.certNumber || "—";
     const effDate = fmtDate(form.effectiveDate);
     const expDate = fmtDate(form.expirationDate);
-    const checkMark = additionalInsured ? "☑" : "☐";
-    const subrMark = waiverOfSubrogation ? "☑" : "☐";
+    const checkMark = additionalInsured ? "[X]" : "[ ]";
+    const subrMark = waiverOfSubrogation ? "[X]" : "[ ]";
 
     const coverageRows = [
       {
@@ -6267,7 +6277,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
       doc.text(row.insr, lm + cols.insr / 2, y + rH / 2 + 1, { align: "center" });
       // ADDL INSD checkbox
-      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
       doc.text(checkMark, lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
       // SUBR WVD checkbox
       doc.text(subrMark, lm + cols.insr + cols.addl + cols.subr / 2, y + rH / 2 + 1.5, { align: "center" });
@@ -6450,7 +6461,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
               <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid3>
             <Grid2>
-              <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KLT-XXXX" : "MD-00S0137"} />
+              <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KIS0000" : `${state}000S0137XX`} />
               <Field label="Revision Number" id="coi-rev" value={form.revisionNumber} onChange={set("revisionNumber")} placeholder="e.g. 0" />
             </Grid2>
           </Panel>
@@ -6726,19 +6737,22 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setLineWidth(0.2);
     doc.line(lm, y, lm + mainW, y);
     y += 3;
+    // Fixed column positions for coverage table
+    const covLimX = lm + mainW * 0.52;
+    const covDedX = lm + mainW * 0.68;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(23, 27, 49);
     doc.text("Coverages", lm, y);
-    doc.text("Limits", lm + mainW * 0.55, y);
-    doc.text("Deductible", lm + mainW * 0.72, y);
+    doc.text("Limits", covLimX, y);
+    doc.text("Deductible", covDedX, y);
     doc.text("Premium", lm + mainW, y, { align: "right" });
     y += 2;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text("What Klutch pays", lm + mainW * 0.55, y);
-    doc.text("What you pay", lm + mainW * 0.72, y);
+    doc.text("What Klutch pays", covLimX, y);
+    doc.text("What you pay", covDedX, y);
     doc.text("Cost for 6-month policy period", lm + mainW, y, { align: "right" });
     y += 3;
     doc.line(lm, y, lm + mainW, y);
@@ -6759,8 +6773,8 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(0, 0, 0);
-      doc.text(limits, lm + mainW * 0.55, y);
-      doc.text(deductible, lm + mainW * 0.72, y);
+      doc.text(limits, covLimX, y);
+      doc.text(deductible, covDedX, y);
       if (premium) {
         doc.setFont("helvetica", "bold");
         doc.text(premium, lm + mainW, y, { align: "right" });
@@ -6876,8 +6890,8 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.text("Any operator not named above or not authorized under the Membership Agreement", lm, y);
 
     // ── SIDEBAR (Page 1) ────────────────────────────────────────────────────
-    let sy = 27 + 22 + 4 + 7 + 6 + 3 + 5 + 3 + 4; // align with "What does my policy cover?"
-    sy = 60; // approximate start
+    // Sidebar starts at the same y as "What does my policy cover?" heading
+    let sy = 32; // below header divider + small gap
 
     const sideBox = (title: string, lines: string[], gray = false) => {
       const lineH = 4;
@@ -7146,7 +7160,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.text("Date Issued", lm + 70, y + 14);
 
     // ── SIDEBAR PAGE 2 ──────────────────────────────────────────────────────
-    sy = 60;
+    sy = 32;
     // Vehicle Summary box
     doc.setFillColor(23, 27, 49);
     doc.rect(sideX, sy, sideW, 8, "F");
