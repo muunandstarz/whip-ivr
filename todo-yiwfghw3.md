@@ -232,13 +232,21 @@
 - [x] Subro Demand: add VIN decoder button (NHTSA API) to auto-fill Year/Make/Model/Trim
 - [x] Subro Demand: change attachments from free text to multi-select checkboxes
 - [x] Subro Demand: add handler dropdown (Tim Chan + Daniel Giono first) to letter
-- [ ] Subro Demand: fix PDF generation to use structured sections not wrapText(preview)
+- [x] Subro Demand: fix PDF generation to use structured sections not wrapText(preview)
+- [x] Subro Demand: add editable opening paragraph textarea (free-text override of default language)
+- [x] Subro Demand: add Storage field to damage itemization
 - [x] Carrier Rebuttal: add separate upload slots for our estimate, image report, and carrier rebuttal
 - [x] Tow Bill: add Dark Angel Towing (Chicago) and Bar Recovery LLC (Atlanta) from KB TOW_PARTNERS
 - [x] Handler dropdown: add to all letter tabs that currently have a free-text handler/adjuster name field
 - [x] Payment Receipt: add total_recon purpose (Total Recon — Repair Payment)
 - [ ] COI: make KlutchCOI state selectable (MD, GA, VA, PA, MA, IL, FL, TX)
 - [ ] DocGen: remove cert-of-coverage tab (redundant)
-- [ ] DocGen: sync Empower denial templates from original KB
+- [x] DocGen: sync Empower denial templates from original KB (empower_member + empower_claimant in DENIAL_TEMPLATES)
+- [x] DocGen: Denial tab — rebuild template selector as 3-column card grid matching screenshot
+- [x] DocGen: Denial tab — add PIP Exhaustion FL/PA/VA and Med Benefits PA as quick-access navigation cards
+- [x] Coverage Position TNC: add Klutch/Metrocars carrier selector with logo buttons
+- [x] Coverage Position TNC: PDF letterhead uses carrier logo (Klutch or MetroCars) based on selection
+- [x] Process MetroCars logo (invert colors, transparent background) for use on white paper
+- [x] Process Klutch logo (transparent background) for use in PDF
 - [ ] DocGen: remove carrier/subrogee from BI release, fix preview
 - [ ] TL Settlement: rename from Felsenburg, match reference letter format exactly
