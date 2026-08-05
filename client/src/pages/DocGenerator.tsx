@@ -5935,9 +5935,12 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
   const isKlutch = insurer === "klutch";
 
-  // Cert number is user-entered; clear when switching insurer to avoid confusion
+  // Auto-generate cert number on mount and when insurer changes
+  // Format: KLT + 4 random digits (Klutch) or MD-00S + 4 random digits (Metrocars)
   React.useEffect(() => {
-    setForm(p => ({ ...p, certNumber: "" }));
+    const prefix = isKlutch ? "KLT" : "MD-00S";
+    const num = Math.floor(1000 + Math.random() * 9000);
+    setForm(p => ({ ...p, certNumber: `${prefix}${num}` }));
   }, [insurer]);
 
   const fmtDate = (d: string) => {
