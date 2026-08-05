@@ -225,14 +225,18 @@
 - [x] Route file-a-claim calls to processors automatically
 - [x] Reassign existing open file-a-claim intakes to processors via round-robin
 - [ ] LOU Calculator: persist state to sessionStorage so navigating away and back restores all fields
-- [ ] LOU Calculator: fix print document format to match reference (doc-header, doc-section-title, doc-util-table CSS classes, utilization data per-day)
-- [ ] Subro Demand: add VIN decoder button (NHTSA API) to auto-fill Year/Make/Model/Trim
-- [ ] Subro Demand: change attachments from free text to multi-select checkboxes
-- [ ] Subro Demand: add handler dropdown (Tim Chan + Daniel Giono first) to letter
+- [x] LOU Calculator: persist state to sessionStorage so navigating away and back restores all fields
+- [x] LOU Calculator: replace VEHICLE_CLASSES/MARKETS/STANDARD_RATES with tRPC market-specific pricing (lou.getMarketPricing)
+- [x] LOU Calculator: use real utilization data from tRPC lou.getUtilRows
+- [x] LOU Calculator: add VIN decoder button to auto-fill Year/Make/Model/Trim
+- [x] Subro Demand: add VIN decoder button (NHTSA API) to auto-fill Year/Make/Model/Trim
+- [x] Subro Demand: change attachments from free text to multi-select checkboxes
+- [x] Subro Demand: add handler dropdown (Tim Chan + Daniel Giono first) to letter
 - [ ] Subro Demand: fix PDF generation to use structured sections not wrapText(preview)
-- [ ] Carrier Rebuttal: add separate upload slots for our estimate, image report, and carrier rebuttal
-- [ ] Tow Bill: add Dark Angel Towing (Chicago) from KB TOW_PARTNERS
-- [ ] Handler dropdown: add to all letter tabs that currently have a free-text handler/adjuster name field
+- [x] Carrier Rebuttal: add separate upload slots for our estimate, image report, and carrier rebuttal
+- [x] Tow Bill: add Dark Angel Towing (Chicago) and Bar Recovery LLC (Atlanta) from KB TOW_PARTNERS
+- [x] Handler dropdown: add to all letter tabs that currently have a free-text handler/adjuster name field
+- [x] Payment Receipt: add total_recon purpose (Total Recon — Repair Payment)
 - [ ] COI: make KlutchCOI state selectable (MD, GA, VA, PA, MA, IL, FL, TX)
 - [ ] DocGen: remove cert-of-coverage tab (redundant)
 - [ ] DocGen: sync Empower denial templates from original KB

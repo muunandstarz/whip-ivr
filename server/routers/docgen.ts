@@ -73,15 +73,36 @@ export const docgenRouter = router({
       accidentType: z.string().optional(),
       lineItems: z.array(z.object({ item: z.string(), ours: z.number(), theirs: z.number(), reason: z.string().optional() })),
       carrierDocUrl: z.string().optional(),
+      ourEstimateUrl: z.string().optional(),
+      ourImageReportUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, accidentType, lineItems, carrierDocUrl } = input;
+      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, accidentType, lineItems, carrierDocUrl, ourEstimateUrl, ourImageReportUrl } = input;
       const totalOurs = lineItems.reduce((s, r) => s + r.ours, 0);
       const totalTheirs = lineItems.reduce((s, r) => s + r.theirs, 0);
       const gap = totalOurs - totalTheirs;
       const lines = lineItems.filter(r => r.ours - r.theirs > 0).map(r => `- ${r.item}: We claim $${r.ours.toFixed(2)}, carrier offered $${r.theirs.toFixed(2)} (gap: $${(r.ours - r.theirs).toFixed(2)})${r.reason ? ` — Carrier reason: ${r.reason}` : ""}`).join("\n");
-      const prompt = `You are a senior insurance claims attorney for Whip Claims Management / DriveWhip, a commercial rideshare fleet operator. Write a complete formal carrier rebuttal letter.\n\nCLAIM DETAILS:\n- Claim #: ${claimNumber}${theirClaimNumber ? `\n- Their Claim #: ${theirClaimNumber}` : ""}\n- Vehicle: ${vehicle}\n- Date of Loss: ${dateOfLoss}\n- Adverse Carrier / Adjuster: ${carrier} / ${adjuster}${accidentType ? `\n- Accident Type: ${accidentType}` : ""}\n- Total we claim: $${totalOurs.toFixed(2)}\n- Carrier offered: $${totalTheirs.toFixed(2)}\n- Gap: $${gap.toFixed(2)}\n\nDISPUTED LINE ITEMS:\n${lines}\n\nWrite a complete formal rebuttal that opens with our address (Whip Claims Management, P.O. Box 10622, Rockville, MD 20849), cites I-CAR MRC standards/OEM procedures/state insurance code for each disputed item, demands full payment of $${gap.toFixed(2)} within 30 days, and closes with a professional signature block. FOR SETTLEMENT PURPOSES ONLY. Output only the letter.`;
-      const result = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
+      const promptText = `You are a senior insurance claims attorney for Whip Claims Management / DriveWhip, a commercial rideshare fleet operator. Write a complete formal carrier rebuttal letter.\n\nCLAIM DETAILS:\n- Claim #: ${claimNumber}${theirClaimNumber ? `\n- Their Claim #: ${theirClaimNumber}` : ""}\n- Vehicle: ${vehicle}\n- Date of Loss: ${dateOfLoss}\n- Adverse Carrier / Adjuster: ${carrier} / ${adjuster}${accidentType ? `\n- Accident Type: ${accidentType}` : ""}\n- Total we claim: $${totalOurs.toFixed(2)}\n- Carrier offered: $${totalTheirs.toFixed(2)}\n- Gap: $${gap.toFixed(2)}\n\nDISPUTED LINE ITEMS:\n${lines}\n\nWrite a complete formal rebuttal that opens with our address (Whip Claims Management, P.O. Box 10622, Rockville, MD 20849), cites I-CAR MRC standards/OEM procedures/state insurance code for each disputed item, demands full payment of $${gap.toFixed(2)} within 30 days, and closes with a professional signature block. FOR SETTLEMENT PURPOSES ONLY. Output only the letter.`;
+      const hasAttachments = ourEstimateUrl || ourImageReportUrl || carrierDocUrl;
+      let result;
+      if (hasAttachments) {
+        const userContent: Array<any> = [{ type: "text", text: promptText }];
+        if (ourEstimateUrl) {
+          userContent.push({ type: "text", text: "Our repair estimate (attached):" });
+          userContent.push({ type: "file_url", file_url: { url: ourEstimateUrl, mime_type: "application/pdf" } });
+        }
+        if (ourImageReportUrl) {
+          userContent.push({ type: "text", text: "Our vehicle image/damage report (attached):" });
+          userContent.push({ type: "file_url", file_url: { url: ourImageReportUrl, mime_type: "application/pdf" } });
+        }
+        if (carrierDocUrl) {
+          userContent.push({ type: "text", text: "Carrier's rebuttal/denial document (attached):" });
+          userContent.push({ type: "file_url", file_url: { url: carrierDocUrl, mime_type: "application/pdf" } });
+        }
+        result = await invokeLLM({ messages: [{ role: "user", content: userContent as any }] });
+      } else {
+        result = await invokeLLM({ messages: [{ role: "user", content: promptText }] });
+      }
       const letter = extractText(result);
       if (!letter) throw new Error("AI returned empty response");
       return { letter };

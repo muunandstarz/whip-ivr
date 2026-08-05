@@ -363,6 +363,47 @@ function Field({
   );
 }
 
+// ─── Shared: Handler Select Dropdown ─────────────────────────────────────────
+// Priority handlers shown first; rest sorted alphabetically
+const PRIORITY_HANDLERS = ["Tim Chan", "Daniel Giono"];
+function HandlerSelect({
+  value,
+  onChange,
+  label = "Handler Name",
+  id = "handler-select",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label?: string;
+  id?: string;
+}) {
+  const { data: handlers } = trpc.handlers.list.useQuery(undefined, { staleTime: 60_000 });
+  const sorted = React.useMemo(() => {
+    if (!handlers) return PRIORITY_HANDLERS.map(n => ({ name: n }));
+    const priority = PRIORITY_HANDLERS.map(n => handlers.find(h => h.name === n)).filter(Boolean) as typeof handlers;
+    const rest = handlers.filter(h => !PRIORITY_HANDLERS.includes(h.name)).sort((a, b) => a.name.localeCompare(b.name));
+    return [...priority, ...rest];
+  }, [handlers]);
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs font-semibold text-foreground/80">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-8 text-sm"><SelectValue placeholder="Select handler…" /></SelectTrigger>
+        <SelectContent>
+          {sorted.map((h, i) => (
+            <React.Fragment key={h.name}>
+              {i === PRIORITY_HANDLERS.length && sorted.length > PRIORITY_HANDLERS.length && (
+                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-t border-border mt-1 pt-1">All Handlers</div>
+              )}
+              <SelectItem value={h.name}>{h.name}</SelectItem>
+            </React.Fragment>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function TextareaField({
   label,
   id,
@@ -813,7 +854,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         </Panel>
         <Panel title="Handler Info">
           <Grid3>
-            <Field label="Handler Name" id="cc-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="cc-handler" />
             <Field label="Handler Phone" id="cc-phone" value={form.adjusterPhone} onChange={set("adjusterPhone")} placeholder="(xxx) xxx-xxxx" />
             <Field label="Handler Email" id="cc-email" value={form.adjusterEmail} onChange={set("adjusterEmail")} placeholder="handler@drivewhip.com" />
           </Grid3>
@@ -935,7 +976,7 @@ Whip Claims Management`;
         </Panel>
         <Panel title="Handler Info">
           <Grid3>
-            <Field label="Handler Name" id="fc-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="fc-handler" />
             <Field label="Handler Phone" id="fc-phone" value={form.adjusterPhone} onChange={set("adjusterPhone")} placeholder="(xxx) xxx-xxxx" />
             <Field label="Handler Email" id="fc-email" value={form.adjusterEmail} onChange={set("adjusterEmail")} placeholder="handler@drivewhip.com" />
           </Grid3>
@@ -1065,7 +1106,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         </Panel>
         <Panel title="Handler Info">
           <Grid3>
-            <Field label="Handler Name" id="sm-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="sm-handler" />
             <Field label="Handler Phone" id="sm-hphone" value={form.adjusterPhone} onChange={set("adjusterPhone")} placeholder="(xxx) xxx-xxxx" />
             <Field label="Handler Email" id="sm-hemail" value={form.adjusterEmail} onChange={set("adjusterEmail")} placeholder="handler@drivewhip.com" />
           </Grid3>
@@ -1521,7 +1562,7 @@ COMP: INCLUDED`;
           <Grid3>
             <Field label="Member Name" id="coc-member" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
             <Field label="Requested By" id="coc-reqby" value={form.requestedBy} onChange={set("requestedBy")} placeholder="e.g. State Farm Insurance" />
-            <Field label="Handler Name" id="coc-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="coc-handler" />
           </Grid3>
         </Panel>
         <Panel title="Vehicle">
@@ -1670,7 +1711,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         </Panel>
         <Panel title="Handler Info">
           <Grid3>
-            <Field label="Handler Name" id="tnc-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="tnc-handler" />
             <Field label="Handler Phone" id="tnc-phone" value={form.adjusterPhone} onChange={set("adjusterPhone")} placeholder="(xxx) xxx-xxxx" />
             <Field label="Handler Email" id="tnc-email" value={form.adjusterEmail} onChange={set("adjusterEmail")} placeholder="handler@drivewhip.com" />
           </Grid3>
@@ -1913,7 +1954,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
         </Panel>
         <Panel title="Handler Info">
           <Grid3>
-            <Field label="Handler Name" id="dd-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="dd-handler" />
             <Field label="Handler Phone" id="dd-phone" value={form.adjusterPhone} onChange={set("adjusterPhone")} placeholder="(xxx) xxx-xxxx" />
             <Field label="Handler Email" id="dd-email" value={form.adjusterEmail} onChange={set("adjusterEmail")} placeholder="handler@drivewhip.com" />
           </Grid3>
@@ -2076,7 +2117,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
         </Panel>
         <Panel title="Handler Info">
           <Grid3>
-            <Field label="Handler Name" id="ror-handler" value={form.handlerName} onChange={set("handlerName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.handlerName} onChange={set("handlerName")} label="Handler Name" id="ror-handler" />
             <Field label="Handler Phone" id="ror-phone" value={form.handlerPhone} onChange={set("handlerPhone")} placeholder="(xxx) xxx-xxxx" />
             <Field label="Handler Email" id="ror-email" value={form.handlerEmail} onChange={set("handlerEmail")} placeholder="handler@drivewhip.com" />
           </Grid3>
@@ -2256,7 +2297,7 @@ function ReleaseBITab() {
         </Panel>
         <Panel title="Handler Info">
           <Grid2>
-            <Field label="Handler Name" id="rbi-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="rbi-handler" />
             <Field label="Recipient Email" id="rbi-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="attorney@lawfirm.com" />
           </Grid2>
         </Panel>
@@ -2452,7 +2493,7 @@ function ReleasePDTab() {
         </Panel>
         <Panel title="Handler Info">
           <Grid2>
-            <Field label="Handler Name" id="rpd-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="rpd-handler" />
             <Field label="Recipient Email" id="rpd-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="claimant@email.com" />
           </Grid2>
         </Panel>
@@ -2737,7 +2778,7 @@ function TLSettlementTab() {
         <Panel title="Additional Details">
           <Grid2 children={<>
             <Field label="Rental Cutoff Date" id="tls-rental" value={form.rentalCutoffDate} onChange={set("rentalCutoffDate")} type="date" />
-            <Field label="Handler Name" id="tls-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="tls-handler" />
           </>} />
           <div className="mt-3">
             <Field label="Additional Notes" id="tls-notes" value={form.additionalNotes} onChange={set("additionalNotes")} placeholder="Any additional context for the letter..." />
@@ -2799,6 +2840,51 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
     valuation: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [handlerName, setHandlerName] = useState("");
+  const [vinDecoding, setVinDecoding] = useState(false);
+  // Attachment checkboxes
+  const ATTACHMENT_OPTIONS = [
+    "Estimate",
+    "Image Report",
+    "Police Report",
+    "Total Loss Valuation",
+    "Medical Records",
+    "Rental Invoice",
+    "Tow Invoice",
+    "Recorded Statement",
+  ];
+  const [selectedAttachments, setSelectedAttachments] = useState<string[]>(["Estimate", "Image Report", "Police Report"]);
+  const toggleAttachment = (att: string) => {
+    setSelectedAttachments(prev =>
+      prev.includes(att) ? prev.filter(a => a !== att) : [...prev, att]
+    );
+  };
+  const attachmentsText = selectedAttachments.join(", ");
+  const decodeVin = async () => {
+    const vin = form.vin.trim();
+    if (vin.length !== 17) { toast.error("VIN must be exactly 17 characters"); return; }
+    setVinDecoding(true);
+    try {
+      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`);
+      const data = await res.json() as { Results: Array<{ Variable: string; Value: string | null }> };
+      const get = (v: string) => data.Results.find(r => r.Variable === v)?.Value || "";
+      const year = get("Model Year");
+      const make = get("Make");
+      const model = get("Model");
+      const trim = get("Trim");
+      const ymmt = [year, make, model, trim].filter(Boolean).join(" ");
+      if (ymmt) {
+        setForm(p => ({ ...p, vehicle: ymmt }));
+        toast.success(`Decoded: ${ymmt}`);
+      } else {
+        toast.error("Could not decode VIN — check the number and try again");
+      }
+    } catch {
+      toast.error("VIN decode failed — check your connection");
+    } finally {
+      setVinDecoding(false);
+    }
+  };
 
   // Pre-fill LOU amount when navigated from LOU Calculator
   useEffect(() => {
@@ -2870,19 +2956,14 @@ ${form.lou ? `Rental Reimbursement             $${form.lou}` : ""}
 Total Subrogation Demand         $${total}
 
 ENCLOSURES
-${form.attachments || "Estimate, Image Report, Police Report"}
-
+${attachmentsText || "Estimate, Image Report, Police Report"}
 DEMAND FOR PAYMENT
 Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
-
 This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
-
 PAYMENT INSTRUCTIONS
 Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.
-
 Respectfully,
-
-
+${handlerName || ""}
 Whip Claims Management
 (855) 906-5949  |  claims@drivewhip.com`;
 
@@ -2948,7 +3029,30 @@ Whip Claims Management
           </>} />
           <Grid3 children={<>
             <Field label="Vehicle (Year/Make/Model)" id="sd-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Tesla Model 3" />
-            <Field label="VIN" id="sd-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-foreground/80">VIN</Label>
+              <div className="flex gap-1.5">
+                <Input
+                  id="sd-vin"
+                  value={form.vin}
+                  onChange={(e) => set("vin")(e.target.value.toUpperCase())}
+                  placeholder="17-character VIN"
+                  maxLength={17}
+                  className="text-sm h-8 font-mono flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2 text-xs border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 whitespace-nowrap"
+                  onClick={decodeVin}
+                  disabled={vinDecoding || form.vin.length !== 17}
+                  title="Decode VIN to get Year/Make/Model"
+                >
+                  {vinDecoding ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                  <span className="ml-1">Decode</span>
+                </Button>
+              </div>
+            </div>
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Response Deadline</Label>
               <Select value={form.deadline} onValueChange={set("deadline")}>
@@ -2985,7 +3089,27 @@ Whip Claims Management
             <div className="text-xs font-mono font-bold text-[#ff6221]">TOTAL DEMAND: ${total}</div>
           </div>
           <div className="mt-3">
-            <Field label="Attachments" id="sd-attachments" value={form.attachments} onChange={set("attachments")} placeholder="e.g. Estimate, Image Report, Police Report" />
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-foreground/80">Attachments (select all that apply)</Label>
+              <div className="grid grid-cols-2 gap-1.5 mt-1">
+                {ATTACHMENT_OPTIONS.map(att => (
+                  <label key={att} className="flex items-center gap-2 cursor-pointer select-none">
+                    <Checkbox
+                      checked={selectedAttachments.includes(att)}
+                      onCheckedChange={() => toggleAttachment(att)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className="text-xs text-foreground/80">{att}</span>
+                  </label>
+                ))}
+              </div>
+              {selectedAttachments.length > 0 && (
+                <p className="text-[10px] text-muted-foreground mt-1">Will print: {attachmentsText}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-3">
+            <HandlerSelect value={handlerName} onChange={setHandlerName} label="Handler / Signatory" id="sd-handler" />
           </div>
         </Panel>
       </div>
@@ -3028,6 +3152,8 @@ function CarrierRebuttalTab() {
   const [polishLoading, setPolishLoading] = useState(false);
   const [carrierDoc, setCarrierDoc] = useState<File | null>(null);
   const [docUploading, setDocUploading] = useState(false);
+  const [ourEstimateDoc, setOurEstimateDoc] = useState<File | null>(null);
+  const [ourImageReportDoc, setOurImageReportDoc] = useState<File | null>(null);
   const generateMutation = trpc.docgen.generateRebuttal.useMutation();
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
 
@@ -3126,55 +3252,79 @@ function CarrierRebuttalTab() {
       </Panel>
 
       <Panel title="Carrier Document Upload (Optional)">
-        <p className="text-xs text-muted-foreground mb-3">Upload the carrier's estimate, denial letter, or valuation report to let AI extract disputed items automatically.</p>
-        <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-[#ff6221]/40 transition-colors">
-          <input
-            type="file"
-            id="cr-doc-upload"
-            accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"
-            className="hidden"
-            onChange={(e) => setCarrierDoc(e.target.files?.[0] || null)}
-          />
-          <label htmlFor="cr-doc-upload" className="cursor-pointer">
-            {carrierDoc ? (
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="w-4 h-4 text-[#ff6221]" />
-                <span className="text-xs font-medium text-[#ff6221]">{carrierDoc.name}</span>
-                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground" onClick={(e) => { e.preventDefault(); setCarrierDoc(null); }}>
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-            ) : (
-              <div>
-                <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Drop carrier document here or <span className="text-[#ff6221]">browse</span></p>
-                <p className="text-xs text-muted-foreground/60 mt-0.5">PDF, DOCX, PNG, JPG (Max 50MB)</p>
-              </div>
-            )}
-          </label>
+        <p className="text-xs text-muted-foreground mb-3">Upload documents to let AI analyze and build the rebuttal. All three are optional — upload what you have.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Our Estimate */}
+          {[
+            { label: "Our Estimate", id: "cr-our-estimate", file: ourEstimateDoc, setFile: setOurEstimateDoc, color: "#22c55e" },
+            { label: "Our Image Report", id: "cr-our-images", file: ourImageReportDoc, setFile: setOurImageReportDoc, color: "#3b82f6" },
+            { label: "Carrier's Rebuttal / Denial", id: "cr-carrier-doc", file: carrierDoc, setFile: setCarrierDoc, color: "#ff6221" },
+          ].map(({ label, id, file, setFile, color }) => (
+            <div key={id} className="border-2 border-dashed border-border rounded-lg p-3 text-center hover:border-[#ff6221]/40 transition-colors">
+              <input
+                type="file"
+                id={id}
+                accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"
+                className="hidden"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+              <label htmlFor={id} className="cursor-pointer">
+                {file ? (
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color }} />
+                    <span className="text-xs font-medium truncate max-w-[120px]" style={{ color }}>{file.name}</span>
+                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground" onClick={(e) => { e.preventDefault(); setFile(null); }}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+                    <p className="text-[11px] font-semibold text-foreground/70">{label}</p>
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">PDF, DOCX, PNG, JPG</p>
+                  </div>
+                )}
+              </label>
+            </div>
+          ))}
         </div>
-        {carrierDoc && (
+        {(ourEstimateDoc || ourImageReportDoc || carrierDoc) && (
           <Button
             size="sm"
-            className="mt-2 gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white"
+            className="mt-3 gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white w-full"
             disabled={docUploading || aiLoading}
             onClick={async () => {
+              if (!form.claimNumber || !form.vehicle || !form.carrier) {
+                toast.error("Fill in Claim #, Vehicle, and Carrier first");
+                return;
+              }
               setDocUploading(true);
               try {
-                const fd = new FormData();
-                fd.append("file", carrierDoc);
-                const res = await fetch("/api/upload/document", { method: "POST", body: fd });
-                if (!res.ok) throw new Error("Upload failed");
-                const { url } = await res.json() as { url: string };
+                const uploadFile = async (file: File | null): Promise<string | undefined> => {
+                  if (!file) return undefined;
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  const res = await fetch("/api/upload/document", { method: "POST", body: fd });
+                  if (!res.ok) throw new Error(`Upload failed: ${file.name}`);
+                  const { url } = await res.json() as { url: string };
+                  return url;
+                };
+                const [ourEstimateUrl, ourImageReportUrl, carrierDocUrl] = await Promise.all([
+                  uploadFile(ourEstimateDoc),
+                  uploadFile(ourImageReportDoc),
+                  uploadFile(carrierDoc),
+                ]);
                 setDocUploading(false);
                 setAiLoading(true);
                 const result = await generateMutation.mutateAsync({
                   ...form,
                   lineItems: lineItems.map((r) => ({ item: r.item, ours: parseFloat(r.ours) || 0, theirs: parseFloat(r.theirs) || 0, reason: r.reason })),
-                  carrierDocUrl: url,
+                  ourEstimateUrl,
+                  ourImageReportUrl,
+                  carrierDocUrl,
                 });
                 setDraft(result.letter);
-                toast.success("Rebuttal generated from uploaded document");
+                toast.success("Rebuttal generated from uploaded documents");
               } catch (e: unknown) {
                 toast.error((e as Error).message || "Upload or generation failed");
               } finally {
@@ -3184,7 +3334,7 @@ function CarrierRebuttalTab() {
             }}
           >
             {(docUploading || aiLoading) ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {docUploading ? "Uploading..." : aiLoading ? "Analyzing..." : "Upload & Generate Rebuttal"}
+            {docUploading ? "Uploading documents..." : aiLoading ? "Analyzing & generating..." : "Upload All & Generate Rebuttal"}
           </Button>
         )}
       </Panel>
@@ -3311,6 +3461,7 @@ function PaymentReceiptTab() {
     rental: "Rental Reimbursement",
     towing: "Towing & Storage",
     medical: "Medical Expense Reimbursement",
+    total_recon: "Total Recon — Repair Payment",
     other: "Other",
   };
 
@@ -3482,6 +3633,8 @@ const TOWING_PROVIDERS = [
   { id: "agero", name: "Agero", logo: "AGERO", color: "#003087", address: "Agero, Inc. | 400 Rivers Edge Dr, Medford, MA 02155", phone: "1-800-541-2262" },
   { id: "aaa", name: "AAA", logo: "AAA", color: "#003087", address: "AAA | 1000 AAA Drive, Heathrow, FL 32746", phone: "1-800-222-4357" },
   { id: "copart", name: "Copart", logo: "COPART", color: "#e31837", address: "Copart, Inc. | 14185 Dallas Pkwy, Dallas, TX 75254", phone: "1-800-998-7886" },
+  { id: "dark-angel", name: "Dark Angel Towing", logo: "DARK ANGEL", color: "#1a1a2e", address: "Dark Angel Towing | Chicago, IL", phone: "(312) 623-2900" },
+  { id: "bar-recovery", name: "Bar Recovery LLC", logo: "BAR RECOVERY", color: "#2d6a4f", address: "Bar Recovery LLC | Atlanta, GA", phone: "barrecoveryllc@gmail.com" },
   { id: "local", name: "Local Tow Company", logo: "LOCAL", color: "#555555", address: "", phone: "" },
   { id: "other", name: "Other Provider", logo: "OTHER", color: "#888888", address: "", phone: "" },
 ];
@@ -4076,7 +4229,7 @@ Whip Claims Management`;
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 mt-3">
-          <Field label="Handler Name" id="pip-adjuster" value={form.adjuster} onChange={set("adjuster")} placeholder="Handler name" />
+          <HandlerSelect value={form.adjuster} onChange={set("adjuster")} label="Handler Name" id="pip-adjuster" />
           <Field label="Contact Info" id="pip-contact" value={form.contactInfo} onChange={set("contactInfo")} placeholder="Phone or email" />
         </div>
       </Panel>
@@ -4238,7 +4391,7 @@ Whip Claims Management`;
         </Panel>
         <Panel title="Handler Info">
           <Grid2>
-            <Field label="Handler Name" id="llbi-handler" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. Jane Smith" />
+            <HandlerSelect value={form.adjusterName} onChange={set("adjusterName")} label="Handler Name" id="llbi-handler" />
             <Field label="Recipient Email" id="llbi-email" value={form.recipientEmail} onChange={set("recipientEmail")} placeholder="attorney@lawfirm.com" />
           </Grid2>
         </Panel>
@@ -4319,8 +4472,8 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
   const [memberDriver, setMemberDriver] = useState("");
   const [registeredOwner, setRegisteredOwner] = useState("");
   const [vehicleStatus, setVehicleStatus] = useState("Actively leased / Revenue-generating");
-  const [vehicleClass, setVehicleClass] = useState("Midsize Sedan");
-  const [market, setMarket] = useState("Washington DC (Rockville)");
+  const [vehicleClass, setVehicleClass] = useState("");
+  const [marketCode, setMarketCode] = useState("DC");
   // Repair period
   const [repairFacility, setRepairFacility] = useState("");
   const [roNumber, setRoNumber] = useState("");
@@ -4329,32 +4482,86 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
   // LOU calculation
   const [dailyRate, setDailyRate] = useState("");
   const [customRate, setCustomRate] = useState("");
-  const [handlerName, setHandlerName] = useState("");
+  const [louHandlerName, setLouHandlerName] = useState("");
   const [handlerTitle, setHandlerTitle] = useState("Claims Resolution Specialist");
   // Push to demand
   const [pushedToDemand, setPushedToDemand] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [vinDecoding, setVinDecoding] = useState(false);
 
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
-  const VEHICLE_CLASSES = ["Economy Sedan","Compact Sedan","Midsize Sedan","Full-Size Sedan","Luxury Sedan","SUV (Compact)","SUV (Midsize)","SUV (Full-Size)","Minivan","Pickup Truck","Van/Cargo"];
-  const MARKETS = [
-    "Washington DC (Rockville)","Washington DC (Glen Burnie)","Northern Virginia","Philadelphia, PA",
-    "Baltimore, MD","Miami, FL","Orlando, FL","Atlanta, GA","Chicago, IL","Boston, MA","Other"
-  ];
-  const STANDARD_RATES: Record<string, string> = {
-    "Economy Sedan": "30.00","Compact Sedan": "35.00","Midsize Sedan": "53.57",
-    "Full-Size Sedan": "60.00","Luxury Sedan": "85.00","SUV (Compact)": "55.00",
-    "SUV (Midsize)": "65.00","SUV (Full-Size)": "75.00","Minivan": "70.00",
-    "Pickup Truck": "60.00","Van/Cargo": "80.00"
-  };
-
-  // Auto-set standard rate when vehicle class changes
+  // ── tRPC market pricing ──
+  const { data: allMarkets } = trpc.lou.getMarketPricing.useQuery(undefined, { staleTime: 300_000 });
+  const markets = Array.isArray(allMarkets) ? allMarkets : [];
+  const currentMarket = markets.find(m => m.code === marketCode) || markets[0];
+  const marketName = currentMarket?.name || marketCode;
+  const vehicleOptions = currentMarket?.vehicles || [];
+  // ── tRPC utilization rows ──
+  const { data: utilRowsData } = trpc.lou.getUtilRows.useQuery(
+    { marketCode, dropOff: dropOffDate, pickUp: pickUpDate },
+    { enabled: !!(dropOffDate && pickUpDate && dropOffDate < pickUpDate), staleTime: 300_000 }
+  );
+  const utilRows = utilRowsData || [];
+  // ── sessionStorage persistence: restore on mount ──
   useEffect(() => {
-    if (vehicleClass && STANDARD_RATES[vehicleClass]) {
-      setDailyRate(STANDARD_RATES[vehicleClass]);
+    const saved = sessionStorage.getItem("lou_calc_state");
+    if (saved) {
+      try {
+        const s = JSON.parse(saved);
+        if (s.claimNumber) setClaimNumber(s.claimNumber);
+        if (s.adverseClaimNo) setAdverseClaimNo(s.adverseClaimNo);
+        if (s.dateOfLoss) setDateOfLoss(s.dateOfLoss);
+        if (s.adverseCarrier) setAdverseCarrier(s.adverseCarrier);
+        if (s.adjuster) setAdjuster(s.adjuster);
+        if (s.ymm) setYmm(s.ymm);
+        if (s.vin) setVin(s.vin);
+        if (s.memberDriver) setMemberDriver(s.memberDriver);
+        if (s.registeredOwner) setRegisteredOwner(s.registeredOwner);
+        if (s.vehicleStatus) setVehicleStatus(s.vehicleStatus);
+        if (s.vehicleClass) setVehicleClass(s.vehicleClass);
+        if (s.marketCode) setMarketCode(s.marketCode);
+        if (s.repairFacility) setRepairFacility(s.repairFacility);
+        if (s.roNumber) setRoNumber(s.roNumber);
+        if (s.dropOffDate) setDropOffDate(s.dropOffDate);
+        if (s.pickUpDate) setPickUpDate(s.pickUpDate);
+        if (s.dailyRate) setDailyRate(s.dailyRate);
+        if (s.customRate) setCustomRate(s.customRate);
+        if (s.louHandlerName) setLouHandlerName(s.louHandlerName);
+        if (s.handlerTitle) setHandlerTitle(s.handlerTitle);
+      } catch { /* ignore */ }
     }
-  }, [vehicleClass]);
+  }, []);
+  // ── sessionStorage persistence: save on change ──
+  useEffect(() => {
+    sessionStorage.setItem("lou_calc_state", JSON.stringify({
+      claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster,
+      ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode,
+      repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate,
+      louHandlerName, handlerTitle,
+    }));
+  }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle]);
+  // Auto-set rate when vehicle model changes
+  useEffect(() => {
+    if (vehicleClass && vehicleOptions.length > 0) {
+      const found = vehicleOptions.find(v => v.model === vehicleClass);
+      if (found) setDailyRate(found.dailyRate.toFixed(2));
+    }
+  }, [vehicleClass, marketCode]);
+  const decodeVinLou = async () => {
+    if (vin.length !== 17) { toast.error("VIN must be exactly 17 characters"); return; }
+    setVinDecoding(true);
+    try {
+      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`);
+      const data = await res.json() as { Results: Array<{ Variable: string; Value: string | null }> };
+      const get = (v: string) => data.Results.find(r => r.Variable === v)?.Value || "";
+      const year = get("Model Year"); const make = get("Make"); const model = get("Model"); const trim = get("Trim");
+      const ymmt = [year, make, model, trim].filter(Boolean).join(" ");
+      if (ymmt) { setYmm(ymmt); toast.success(`Decoded: ${ymmt}`); }
+      else toast.error("Could not decode VIN");
+    } catch { toast.error("VIN decode failed"); }
+    finally { setVinDecoding(false); }
+  };
 
   // Calculate days
   const calcDays = () => {
@@ -4367,21 +4574,31 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
   const effectiveRate = parseFloat(customRate || dailyRate || "0");
   const louTotal = (days * effectiveRate).toFixed(2);
 
-  // Generate utilization rows (one per day in repair period)
+  // Build utilization rows for display (use real data if available, else generate stubs)
   const getUtilizationRows = () => {
+    if (utilRows.length > 0) {
+      return utilRows.map(r => ({
+        date: new Date(r.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        location: marketName,
+        vehicleClass: vehicleClass || "Vehicle",
+        fleetCount: r.fleet || 0,
+        rentCount: r.rented || 0,
+        utilization: r.fleet > 0 ? `${((r.rented / r.fleet) * 100).toFixed(1)}%` : (r.utilization ? `${(r.utilization * 100).toFixed(1)}%` : "—"),
+      }));
+    }
     if (!dropOffDate || !pickUpDate || days <= 0) return [];
-    const rows = [];
+    const rows: Array<{date: string; location: string; vehicleClass: string; fleetCount: number; rentCount: number; utilization: string}> = [];
     const start = new Date(dropOffDate);
     for (let i = 0; i < days; i++) {
       const d = new Date(start);
       d.setDate(d.getDate() + i);
       rows.push({
         date: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        location: market,
-        vehicleClass,
-        fleetCount: 767,
-        rentCount: 749,
-        utilization: "98%"
+        location: marketName,
+        vehicleClass: vehicleClass || "Vehicle",
+        fleetCount: 0,
+        rentCount: 0,
+        utilization: "—",
       });
     }
     return rows;
@@ -4495,7 +4712,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     y += 4;
 
     // Utilization methodology note
-    const methodNote = `The table below reflects the fleet utilization rate for ${vehicleClass} class vehicles at the ${market} market/location where the vehicle was in active service, for each day the vehicle was out of service for repair as a result of this loss. Utilization data reflects the ratio of rented vehicles to the total available fleet at that location. The available fleet excludes vehicles in repair, awaiting reconditioning, or pending auction — consistent with industry-standard utilization methodology used by major rental companies.`;
+    const methodNote = `The table below reflects the fleet utilization rate for ${vehicleClass} class vehicles at the ${marketName} market/location where the vehicle was in active service, for each day the vehicle was out of service for repair as a result of this loss. Utilization data reflects the ratio of rented vehicles to the total available fleet at that location. The available fleet excludes vehicles in repair, awaiting reconditioning, or pending auction — consistent with industry-standard utilization methodology used by major rental companies.`;
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -4573,7 +4790,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     doc.setFontSize(7);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(100, 100, 100);
-    doc.text(`Rate basis: ${ymm || "Vehicle"} — Whip Standard Rate, ${market} market ($${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day)`, 14, y);
+    doc.text(`Rate basis: ${ymm || "Vehicle"} — Whip Standard Rate, ${marketName} market ($${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day)`, 14, y);
     y += 8;
 
     // Total box
@@ -4603,7 +4820,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     doc.text(legal1Lines, 14, y);
     y += legal1Lines.length * 4 + 4;
 
-    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"}, and is actively leased to a Whip member as a revenue-generating fleet asset. The vehicle was unavailable for service during the repair period described above, resulting in direct economic loss equal to the contracted daily lease rate multiplied by the number of days out of service. The fleet utilization data above — showing ${utilRows[0]?.utilization || "98%"} average utilization during the repair period — confirms that a replacement vehicle would have been rented but for this loss.`;
+    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"}, and is actively leased to a Whip member as a revenue-generating fleet asset. The vehicle was unavailable for service during the repair period described above, resulting in direct economic loss equal to the contracted daily lease rate multiplied by the number of days out of service. The fleet utilization data above — showing ${getUtilizationRows()[0]?.utilization || "98%"} average utilization during the repair period — confirms that a replacement vehicle would have been rented but for this loss.`;
     const legal2Lines = doc.splitTextToSize(legalText2, W - 28);
     doc.text(legal2Lines, 14, y);
     y += legal2Lines.length * 4 + 4;
@@ -4626,7 +4843,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     doc.text("Whip Claims Management", 14, y);
     y += 5;
     doc.setFont("helvetica", "normal");
-    if (handlerName) { doc.text(handlerName, 14, y); y += 5; }
+    if (louHandlerName) { doc.text(louHandlerName, 14, y); y += 5; }
     doc.text(handlerTitle, 14, y);
     y += 5;
     doc.text("(855) 906-5949  |  claims@drivewhip.com", 14, y);
@@ -4657,7 +4874,30 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
       <Panel title="Vehicle Information">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Year / Make / Model" id="lou-ymm" value={ymm} onChange={setYmm} placeholder="e.g. TOYOTA CAMRY LE 2023" required />
-          <Field label="VIN" id="lou-vin" value={vin} onChange={setVin} placeholder="17-character VIN" />
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold text-foreground/80">VIN</Label>
+            <div className="flex gap-1.5">
+              <Input
+                id="lou-vin"
+                value={vin}
+                onChange={(e) => setVin(e.target.value.toUpperCase())}
+                placeholder="17-character VIN"
+                maxLength={17}
+                className="text-sm h-8 font-mono flex-1"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2 text-xs border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 whitespace-nowrap"
+                onClick={decodeVinLou}
+                disabled={vinDecoding || vin.length !== 17}
+                title="Decode VIN to get Year/Make/Model"
+              >
+                {vinDecoding ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                <span className="ml-1">Decode</span>
+              </Button>
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3 mt-3">
           <Field label="Member / Driver" id="lou-driver" value={memberDriver} onChange={setMemberDriver} placeholder="First Last" />
@@ -4676,14 +4916,14 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
           <div>
             <label className="block text-xs font-medium text-foreground/70 mb-1">Vehicle Class</label>
             <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={vehicleClass} onChange={e => setVehicleClass(e.target.value)}>
-              {VEHICLE_CLASSES.map(c => <option key={c}>{c}</option>)}
+              {vehicleOptions.map(v => <option key={v.model} value={v.model}>{v.model} — ${v.dailyRate.toFixed(2)}/day</option>)}
             </select>
           </div>
         </div>
         <div className="mt-3">
           <label className="block text-xs font-medium text-foreground/70 mb-1">Market / Location</label>
-          <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={market} onChange={e => setMarket(e.target.value)}>
-            {MARKETS.map(m => <option key={m}>{m}</option>)}
+          <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={marketCode} onChange={e => setMarketCode(e.target.value)}>
+            {markets.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
           </select>
         </div>
       </Panel>
@@ -4711,8 +4951,8 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
             <label className="block text-xs font-medium text-foreground/70 mb-1">Whip Standard Rate</label>
             <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={dailyRate} onChange={e => setDailyRate(e.target.value)}>
               <option value="">— Select rate —</option>
-              {VEHICLE_CLASSES.map(c => (
-                <option key={c} value={STANDARD_RATES[c] || ""}>{c} — ${STANDARD_RATES[c] || "?"}/day</option>
+              {vehicleOptions.map(v => (
+                <option key={v.model} value={v.dailyRate.toFixed(2)}>{v.model} — ${v.dailyRate.toFixed(2)}/day</option>
               ))}
             </select>
           </div>
@@ -4720,14 +4960,14 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
         </div>
         {(dailyRate || customRate) && (
           <div className="mt-3 p-2 rounded-md bg-muted/30 text-xs text-muted-foreground">
-            Rate basis: {ymm || vehicleClass} — Whip Standard Rate, {market} market (${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = ${effectiveRate.toFixed(2)}/day)
+            Rate basis: {ymm || vehicleClass} — Whip Standard Rate, {marketName} market (${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = ${effectiveRate.toFixed(2)}/day)
           </div>
         )}
       </Panel>
 
       <Panel title="Handler">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Handler Name" id="lou-handler" value={handlerName} onChange={setHandlerName} placeholder="First Last" />
+          <HandlerSelect value={louHandlerName} onChange={setLouHandlerName} label="Handler Name" id="lou-handler" />
           <Field label="Title" id="lou-title" value={handlerTitle} onChange={setHandlerTitle} placeholder="e.g. Claims Resolution Specialist" />
         </div>
       </Panel>
@@ -4739,7 +4979,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
             <div className="text-xs text-[#ff6221]/70 font-medium uppercase tracking-wider">Total LOU / Rental Reimbursement</div>
             <div className="text-3xl font-bold text-[#ff6221]">${louTotal}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              {days} days × ${effectiveRate.toFixed(2)}/day · {vehicleClass} · {market}
+              {days} days × ${effectiveRate.toFixed(2)}/day · {vehicleClass} · {marketName}
             </div>
           </div>
           <div className="flex flex-col gap-2">
