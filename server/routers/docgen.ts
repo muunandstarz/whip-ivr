@@ -202,17 +202,30 @@ export const docgenRouter = router({
   analyzeMedicalDemand: protectedProcedure
     .input(z.object({
       demandFileUrl: z.string().min(1),
-      vehiclePhoto1Url: z.string().optional(),
-      vehiclePhoto2Url: z.string().optional(),
+      medicalRecordsUrl: z.string().optional(),
+      insuredVehiclePhotosUrl: z.string().optional(),
+      claimantVehiclePhotosUrl: z.string().optional(),
+      insuredVehicleEstimateUrl: z.string().optional(),
+      claimantVehicleEstimateUrl: z.string().optional(),
+      pipApplicationUrl: z.string().optional(),
       state: z.string().min(1),
       dateOfLoss: z.string().optional(),
       impactType: z.string().optional(),
       injuryDescription: z.string().optional(),
       factsOfLoss: z.string().optional(),
       coverageType: z.enum(["pip", "bi", "umbi", "all"]).default("all"),
+      liabilityPercent: z.number().min(0).max(100).optional(),
+      claimNumber: z.string().optional(),
+      claimantName: z.string().optional(),
+      vehicleDescription: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { demandFileUrl, vehiclePhoto1Url, vehiclePhoto2Url, state, dateOfLoss, impactType, injuryDescription, factsOfLoss, coverageType } = input;
+      const {
+        demandFileUrl, medicalRecordsUrl, insuredVehiclePhotosUrl, claimantVehiclePhotosUrl,
+        insuredVehicleEstimateUrl, claimantVehicleEstimateUrl, pipApplicationUrl,
+        state, dateOfLoss, impactType, injuryDescription, factsOfLoss, coverageType,
+        liabilityPercent, claimNumber, claimantName, vehicleDescription,
+      } = input;
 
       const systemPrompt = `You are a senior claims adjuster and medical billing expert at Whip Claims Management / Metro Cars Leasing Corp. You specialize in analyzing medical demand packages, evaluating CPT codes for medical necessity and causation, and determining applicable insurance coverage exposures.
 
@@ -220,101 +233,151 @@ Your analysis must be thorough, objective, and defensible. You apply state-speci
 
       const userContent: Array<{type: string; text?: string; image_url?: {url: string; detail?: string}; file_url?: {url: string; mime_type?: string}}> = [];
 
+      // Build state-specific PIP rules
+      const STATE_PIP_RULES: Record<string, { limit: number; pct: number; feeSchedule: string; statute: string; hasPIP: boolean }> = {
+        PA: { limit: 5000, pct: 100, feeSchedule: "Act 6 fee schedule (75 Pa.C.S. § 1797)", statute: "75 Pa.C.S. §§ 1701–1799.7", hasPIP: true },
+        FL: { limit: 10000, pct: 80, feeSchedule: "200% of Medicare fee schedule (§ 627.736(5)(a)1)", statute: "Fla. Stat. § 627.736", hasPIP: true },
+        MD: { limit: 2500, pct: 100, feeSchedule: "No fee schedule — 'reasonable' standard (§ 19-505)", statute: "Md. Code Ann., Ins. § 19-505", hasPIP: true },
+        MA: { limit: 8000, pct: 80, feeSchedule: "WC fee schedule (114.3 CMR 40.00); first $2,000 paid 100%", statute: "M.G.L. c. 90 § 34M", hasPIP: true },
+        NJ: { limit: 15000, pct: 100, feeSchedule: "NJ fee schedule (N.J.A.C. 11:3-29)", statute: "N.J.S.A. 39:6A-4", hasPIP: true },
+        NY: { limit: 50000, pct: 80, feeSchedule: "NY No-Fault fee schedule (11 NYCRR Part 68)", statute: "N.Y. Ins. Law § 5102", hasPIP: true },
+        MI: { limit: 500000, pct: 100, feeSchedule: "Prevailing charge schedule (MCL 500.3157)", statute: "MCL 500.3101 et seq.", hasPIP: true },
+        VA: { limit: 0, pct: 0, feeSchedule: "N/A — no mandatory PIP", statute: "N/A", hasPIP: false },
+        GA: { limit: 0, pct: 0, feeSchedule: "N/A — no mandatory PIP", statute: "N/A", hasPIP: false },
+        IL: { limit: 0, pct: 0, feeSchedule: "N/A — no mandatory PIP", statute: "N/A", hasPIP: false },
+        TX: { limit: 0, pct: 0, feeSchedule: "N/A — no mandatory PIP", statute: "N/A", hasPIP: false },
+        DC: { limit: 50000, pct: 100, feeSchedule: "Reasonable and customary", statute: "D.C. Code § 31-2404", hasPIP: true },
+      };
+      const pipRules = STATE_PIP_RULES[state.toUpperCase()] ?? { limit: 0, pct: 0, feeSchedule: "N/A", statute: "N/A", hasPIP: false };
+      const liabilityAdj = liabilityPercent != null ? liabilityPercent / 100 : 1.0;
+
       userContent.push({
         type: "text",
         text: `Analyze this medical demand package for a ${state} claim.
 
 CLAIM DETAILS:
+${claimNumber ? `- Claim #: ${claimNumber}` : ""}
+${claimantName ? `- Claimant: ${claimantName}` : ""}
+${vehicleDescription ? `- Vehicle: ${vehicleDescription}` : ""}
 - State: ${state}
 - Date of Loss: ${dateOfLoss || "Not provided"}
 - Impact Type / Mechanism of Loss: ${impactType || "Not specified"}
 - Reported Injuries: ${injuryDescription || "Not specified"}
 - Facts of Loss: ${factsOfLoss || "Not provided"}
 - Coverage Focus: ${coverageType === "all" ? "PIP, BI, and UMBI" : coverageType.toUpperCase()}
+- Liability Assessment: ${liabilityPercent != null ? `${liabilityPercent}% (our liability)` : "Not determined"}
 
 STATE COVERAGE REQUIREMENTS FOR ${state}:
 ${getStateCoverageInfo(state)}
 
-Please analyze the attached demand package and provide:
+PIP RULES FOR ${state}:
+${pipRules.hasPIP
+  ? `- PIP Limit: $${pipRules.limit.toLocaleString()}\n- Reimbursement Rate: ${pipRules.pct}%\n- Fee Schedule: ${pipRules.feeSchedule}\n- Statute: ${pipRules.statute}`
+  : `- ${state} does NOT have mandatory PIP/no-fault coverage. All injury claims proceed on a tort/BI basis.`}
+
+UPLOADED DOCUMENTS: See attached files below (demand package, medical records if provided, vehicle photos/estimates, PIP application if provided).
+
+Please analyze ALL uploaded documents and provide:
 
 1. BILL EXTRACTION: List every medical bill/treatment entry found with:
    - Provider name
    - Date of service
-   - CPT code(s) and description
+   - CPT, ICD-10, HCPCS, or other billing codes and description
    - Billed amount
    - APPLICABLE or NOT APPLICABLE determination
-   - Reason for determination (causation, medical necessity, state fee schedule)
+   - Reason for determination (causation, medical necessity, state fee schedule, duplication)
+   - For PIP states: allowed amount after fee schedule / percentage reduction
 
-2. CPT CODE ANALYSIS: For each unique CPT code:
+2. DIAGNOSIS & INJURY ANALYSIS:
+   - All ICD-10 diagnoses found
+   - Injury timeline and progression
+   - Treatment gaps (>30 days between visits)
+   - Whether treatment is consistent with mechanism of loss
+   - Red flags: unbundling, upcoding, duplicate billing, unrelated treatment
+
+3. CPT CODE ANALYSIS: For each unique CPT code:
    - Is it consistent with the reported mechanism of loss?
    - Is it medically necessary given the injury description?
    - Any red flags (unbundling, upcoding, duplicate billing)?
 
-3. MECHANISM OF LOSS ASSESSMENT: Based on the impact type and facts:
+4. MECHANISM OF LOSS ASSESSMENT: Based on the impact type, facts, and vehicle damage:
    - What injuries are reasonably expected from this type of collision?
    - Which treatments are causally related vs. unrelated?
+   - Does the vehicle damage support the claimed injury severity?
 
-4. COVERAGE EXPOSURE CALCULATION:
-   - PIP exposure (if applicable in ${state}): $X
+5. PIP COMPENSABILITY (${pipRules.hasPIP ? `${state} — $${pipRules.limit.toLocaleString()} limit, ${pipRules.pct}% reimbursement` : `N/A — ${state} has no mandatory PIP`}):
+${pipRules.hasPIP
+  ? `   - For each bill: calculate allowed amount = billed × ${pipRules.pct}% (subject to fee schedule)\n   - Track running PIP balance against $${pipRules.limit.toLocaleString()} limit\n   - Flag bills that exceed the limit (exhaustion point)\n   - Total PIP payable: $X\n   - PIP remaining after payment: $X`
+  : `   - N/A for ${state}`}
+
+6. BI SETTLEMENT VALUATION (${liabilityPercent != null ? `${liabilityPercent}% liability` : "liability TBD"}):
+   - Special damages (medical): $X total applicable
+   - General damages estimate (pain & suffering): $X (based on injury severity, treatment duration, jurisdiction)
+   - Gross settlement range: $X – $X
+   - Liability-adjusted range (${liabilityPercent != null ? `${liabilityPercent}%` : "100%"}): $X – $X
+   - Recommended opening offer: $X
+   - Recommended authority: $X
+   - Rationale: [explain the valuation factors]
+
+7. COVERAGE EXPOSURE SUMMARY:
+   - PIP exposure: $X
    - BI exposure: $X
    - UMBI exposure (if applicable): $X
    - Total applicable medical: $X
-   - Total not applicable: $X
+   - Total not applicable / disputed: $X
 
-5. EXPERT SUMMARY: A written expert summary (3-5 paragraphs) suitable for the claim file explaining:
+8. EXPERT SUMMARY: A written expert summary (3-5 paragraphs) suitable for the claim file explaining:
    - Overall assessment of the demand
    - Key findings and red flags
    - Recommended position and rationale
    - Applicable vs. not applicable treatment breakdown
 
-6. RESPONSE LETTER: Draft a professional response letter to the claimant/attorney addressing the demand, citing specific findings.
+9. RESPONSE LETTER: Draft a professional response letter to the claimant/attorney addressing the demand, citing specific findings.
 
 Format your response as structured JSON matching this schema:
 {
-  "bills": [{"provider": string, "date": string, "cptCode": string, "description": string, "amount": number, "applicable": boolean, "reason": string}],
+  "bills": [{"provider": string, "date": string, "cptCode": string, "description": string, "amount": number, "allowedAmount": number, "applicable": boolean, "reason": string}],
+  "diagnoses": [{"code": string, "description": string, "causallyRelated": boolean}],
+  "treatmentTimeline": [{"date": string, "provider": string, "treatment": string}],
+  "treatmentGaps": [{"from": string, "to": string, "days": number}],
   "cptAnalysis": [{"code": string, "description": string, "applicable": boolean, "redFlags": string[]}],
   "mechanismAssessment": string,
   "pipExposure": number,
+  "pipAllowed": number,
+  "pipRemaining": number,
   "biExposure": number,
   "umbiExposure": number,
   "totalApplicable": number,
   "totalNotApplicable": number,
+  "biSettlementLow": number,
+  "biSettlementHigh": number,
+  "biOpeningOffer": number,
+  "biAuthority": number,
+  "biRationale": string,
   "expertSummary": string,
   "responseLetter": string,
   "redFlags": string[]
 }`
       });
 
-      // Add the demand PDF as a file
-      userContent.push({
-        type: "file_url",
-        file_url: {
-          url: demandFileUrl,
-          mime_type: "application/pdf"
+      // Helper to add a named document
+      const addDoc = (label: string, url: string, isImage = false) => {
+        userContent.push({ type: "text", text: `--- ${label} ---` } as any);
+        if (isImage) {
+          userContent.push({ type: "image_url", image_url: { url, detail: "high" } } as any);
+        } else {
+          userContent.push({ type: "file_url", file_url: { url, mime_type: "application/pdf" } } as any);
         }
-      } as any);
+      };
 
-      // Add vehicle photos if provided
-      if (vehiclePhoto1Url) {
-        userContent.push({
-          type: "text",
-          text: "Vehicle 1 (Whip/insured vehicle) photo:"
-        });
-        userContent.push({
-          type: "image_url",
-          image_url: { url: vehiclePhoto1Url, detail: "high" }
-        } as any);
-      }
-      if (vehiclePhoto2Url) {
-        userContent.push({
-          type: "text",
-          text: "Vehicle 2 (claimant/third-party vehicle) photo:"
-        });
-        userContent.push({
-          type: "image_url",
-          image_url: { url: vehiclePhoto2Url, detail: "high" }
-        } as any);
-      }
+      // Always add the demand package
+      addDoc("DEMAND PACKAGE (primary document)", demandFileUrl);
+      if (medicalRecordsUrl) addDoc("MEDICAL RECORDS", medicalRecordsUrl);
+      if (insuredVehiclePhotosUrl) addDoc("INSURED VEHICLE DAMAGE PHOTOS", insuredVehiclePhotosUrl, true);
+      if (claimantVehiclePhotosUrl) addDoc("CLAIMANT VEHICLE DAMAGE PHOTOS", claimantVehiclePhotosUrl, true);
+      if (insuredVehicleEstimateUrl) addDoc("INSURED VEHICLE REPAIR ESTIMATE", insuredVehicleEstimateUrl);
+      if (claimantVehicleEstimateUrl) addDoc("CLAIMANT VEHICLE REPAIR ESTIMATE", claimantVehicleEstimateUrl);
+      if (pipApplicationUrl) addDoc("PIP APPLICATION", pipApplicationUrl);
 
       const result = await invokeLLM({
         messages: [
@@ -326,19 +389,29 @@ Format your response as structured JSON matching this schema:
           schema: {
             type: "object",
             properties: {
-              bills: { type: "array", items: { type: "object", properties: { provider: {type:"string"}, date: {type:"string"}, cptCode: {type:"string"}, description: {type:"string"}, amount: {type:"number"}, applicable: {type:"boolean"}, reason: {type:"string"} }, required: ["provider","date","cptCode","description","amount","applicable","reason"] } },
+              bills: { type: "array", items: { type: "object", properties: { provider: {type:"string"}, date: {type:"string"}, cptCode: {type:"string"}, description: {type:"string"}, amount: {type:"number"}, allowedAmount: {type:"number"}, applicable: {type:"boolean"}, reason: {type:"string"} }, required: ["provider","date","cptCode","description","amount","allowedAmount","applicable","reason"] } },
+              diagnoses: { type: "array", items: { type: "object", properties: { code: {type:"string"}, description: {type:"string"}, causallyRelated: {type:"boolean"} }, required: ["code","description","causallyRelated"] } },
+              treatmentTimeline: { type: "array", items: { type: "object", properties: { date: {type:"string"}, provider: {type:"string"}, treatment: {type:"string"} }, required: ["date","provider","treatment"] } },
+              treatmentGaps: { type: "array", items: { type: "object", properties: { from: {type:"string"}, to: {type:"string"}, days: {type:"number"} }, required: ["from","to","days"] } },
               cptAnalysis: { type: "array", items: { type: "object", properties: { code: {type:"string"}, description: {type:"string"}, applicable: {type:"boolean"}, redFlags: {type:"array", items:{type:"string"}} }, required: ["code","description","applicable","redFlags"] } },
               mechanismAssessment: { type: "string" },
               pipExposure: { type: "number" },
+              pipAllowed: { type: "number" },
+              pipRemaining: { type: "number" },
               biExposure: { type: "number" },
               umbiExposure: { type: "number" },
               totalApplicable: { type: "number" },
               totalNotApplicable: { type: "number" },
+              biSettlementLow: { type: "number" },
+              biSettlementHigh: { type: "number" },
+              biOpeningOffer: { type: "number" },
+              biAuthority: { type: "number" },
+              biRationale: { type: "string" },
               expertSummary: { type: "string" },
               responseLetter: { type: "string" },
               redFlags: { type: "array", items: { type: "string" } }
             },
-            required: ["bills","cptAnalysis","mechanismAssessment","pipExposure","biExposure","umbiExposure","totalApplicable","totalNotApplicable","expertSummary","responseLetter","redFlags"]
+            required: ["bills","diagnoses","treatmentTimeline","treatmentGaps","cptAnalysis","mechanismAssessment","pipExposure","pipAllowed","pipRemaining","biExposure","umbiExposure","totalApplicable","totalNotApplicable","biSettlementLow","biSettlementHigh","biOpeningOffer","biAuthority","biRationale","expertSummary","responseLetter","redFlags"]
           }
         }
       });
