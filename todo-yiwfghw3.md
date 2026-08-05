@@ -261,3 +261,12 @@
 - [x] Fix LOU Calculator section headers to navy
 - [x] Fix Payment Receipt amount color to navy
 - [x] Fix COI additional insured/waiver checkmarks to navy
+
+## Session 2026-08-05 (Part 3 - COI Rebuild)
+- [x] Rebuild unified COI form builder with insurer selector (Klutch vs Metrocars)
+- [x] Klutch COI PDF matches approved form exactly (logo, disclaimer, coverage table with dashes, cert holder = Metrocars, Klutch footer)
+- [x] Metrocars COI PDF matches approved form exactly (org header, self-insured disclaimer, dollar limits per state, cert holder = Whip Claims Management, Metrocars footer)
+- [x] Insurer toggle with date guidance (Klutch = April 2026+, Metrocars = pre-April 2026)
+- [x] State selector with 11 states (MD/VA/FL/GA/IL/MA/PA/TX/NJ/NY/DC)
+- [x] Coverage options: Additional Insured, Waiver of Subrogation, UM Rejected, PIP Waived
+- [x] Consolidated nav: single "Certificate of Coverage" entry instead of two separate tabs

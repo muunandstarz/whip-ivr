@@ -108,8 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
 
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
-      { id: "coi-whip", label: "Metrocars Leasing Corp COI", icon: Shield },
-      { id: "coi-klutch", label: "Klutch COI", icon: Shield },
+      { id: "coi-whip", label: "Certificate of Coverage", icon: Shield },
       { id: "dec-page-whip", label: "Metrocars Dec Page", icon: FileText },
       { id: "dec-page-klutch", label: "Klutch Dec Page", icon: FileText },
     ],
@@ -5885,784 +5884,651 @@ const KLUTCH_STATE_RULES: Record<string, {
   NC: { biLimits: "$30,000 / $60,000", pdLimit: "$25,000", um: true, umLimit: "$30,000 / $60,000", uim: true, uimLimit: "$30,000 / $60,000", pip: false, pipLimit: "" },
   SC: { biLimits: "$25,000 / $50,000", pdLimit: "$25,000", um: true, umLimit: "$25,000 / $50,000", uim: true, uimLimit: "$25,000 / $50,000", pip: false, pipLimit: "" },
 };
-// ─── Tab: Whip COI ─────────────────────────────────────────────────────────────
-function WhipCOITab({ initialState = "MD" }: { initialState?: string }) {
-  const [state, setState] = useState(initialState || "MD");
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-  const [pipElection, setPipElection] = useState<"full" | "limited" | "waived">("full");
-  const [umRejected, setUmRejected] = useState(false);
-  const [form, setForm] = useState({
-    namedInsured: "",
-    dateIssued: new Date().toISOString().slice(0, 10),
-    vehicleYear: "",
-    vehicleMake: "",
-    vehicleModel: "",
-    vin: "",
-    effectiveDate: "",
-    expirationDate: "",
-    holderName: "",
-    holderAddress: "",
-  });
-  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }));
-  const rules = KLUTCH_STATE_RULES[state] || KLUTCH_STATE_RULES["MD"];
-  const STATES = Object.keys(KLUTCH_STATE_RULES);
-  const CERT_NUMBERS: Record<string, string> = {
-    MD: "MD-00S0137", VA: "VA-00S0214", FL: "FL-00S0088", GA: "GA-00S0312",
-    IL: "IL-00S0155", MA: "MA-00S0201", PA: "PA-00S0099", TX: "TX-00S0177",
-  };
-  const certNo = CERT_NUMBERS[state] || `${state}-00S0001`;
-  const STATE_AUTHORITY: Record<string, string> = {
-    MD: "Issued by the Maryland Motor Vehicle Administration",
-    VA: "Issued by the Virginia DMV", FL: "Issued by the Florida DHSMV",
-    GA: "Issued by the Georgia DDS", IL: "Issued by the Illinois SOS",
-    MA: "Issued by the Massachusetts RMV", PA: "Issued by the Pennsylvania PennDOT",
-    TX: "Issued by the Texas DPS",
-  };
-  const STATE_FULL: Record<string, string> = {
-    MD: "Maryland", VA: "Virginia", FL: "Florida", GA: "Georgia",
-    IL: "Illinois", MA: "Massachusetts", PA: "Pennsylvania", TX: "Texas",
-  };
-  const PIP_OPTIONS = [
-    { value: "full" as const, label: "Full PIP \u2014 $2,500 (Default)" },
-    { value: "limited" as const, label: "Limited PIP \u2014 Member Election" },
-    { value: "waived" as const, label: "PIP Waived \u2014 Member Election" },
-  ];
+// ─── Tab: Certificate of Coverage (Unified) ──────────────────────────────────
+// State rules for both Metrocars (self-insured) and Klutch (insurer)
+const COI_STATE_RULES: Record<string, {
+  biPP: string; biPO: string; pdLimit: string;
+  umPP: string; umPO: string;
+  uimPP: string; uimPO: string;
+  pip: boolean; pipLimit: string;
+  umRejectable: boolean;
+  statute: string; authority: string;
+}> = {
+  MD: { biPP: "$30,000", biPO: "$60,000", pdLimit: "$15,000", umPP: "$30,000", umPO: "$60,000", uimPP: "$30,000", uimPO: "$60,000", pip: true, pipLimit: "$2,500", umRejectable: false, statute: "Maryland Transportation Article § 17-103", authority: "Maryland Motor Vehicle Administration" },
+  VA: { biPP: "$30,000", biPO: "$60,000", pdLimit: "$20,000", umPP: "$30,000", umPO: "$60,000", uimPP: "$30,000", uimPO: "$60,000", pip: false, pipLimit: "", umRejectable: true, statute: "Virginia Code § 46.2-472", authority: "Virginia Department of Motor Vehicles" },
+  FL: { biPP: "$10,000", biPO: "$20,000", pdLimit: "$10,000", umPP: "$10,000", umPO: "$20,000", uimPP: "", uimPO: "", pip: true, pipLimit: "$10,000", umRejectable: true, statute: "Florida Statute § 627.733", authority: "Florida Department of Highway Safety and Motor Vehicles" },
+  GA: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$25,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: false, pipLimit: "", umRejectable: true, statute: "Georgia Code § 33-34-4", authority: "Georgia Department of Revenue" },
+  IL: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$20,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: false, pipLimit: "", umRejectable: true, statute: "625 ILCS 5/7-601", authority: "Illinois Secretary of State" },
+  MA: { biPP: "$20,000", biPO: "$40,000", pdLimit: "$5,000", umPP: "$20,000", umPO: "$40,000", uimPP: "$20,000", uimPO: "$40,000", pip: true, pipLimit: "$8,000", umRejectable: false, statute: "M.G.L. c. 90 § 34A", authority: "Massachusetts Registry of Motor Vehicles" },
+  PA: { biPP: "$15,000", biPO: "$30,000", pdLimit: "$5,000", umPP: "$15,000", umPO: "$30,000", uimPP: "$15,000", uimPO: "$30,000", pip: true, pipLimit: "$5,000", umRejectable: true, statute: "75 Pa.C.S. § 1701", authority: "Pennsylvania Department of Transportation" },
+  TX: { biPP: "$30,000", biPO: "$60,000", pdLimit: "$25,000", umPP: "$30,000", umPO: "$60,000", uimPP: "$30,000", uimPO: "$60,000", pip: false, pipLimit: "", umRejectable: true, statute: "Texas Transportation Code § 601.051", authority: "Texas Department of Public Safety" },
+  NJ: { biPP: "$15,000", biPO: "$30,000", pdLimit: "$5,000", umPP: "$15,000", umPO: "$30,000", uimPP: "$15,000", uimPO: "$30,000", pip: true, pipLimit: "$15,000", umRejectable: false, statute: "N.J.S.A. § 39:6B-1", authority: "New Jersey Motor Vehicle Commission" },
+  NY: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$10,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: true, pipLimit: "$50,000", umRejectable: false, statute: "NY Insurance Law § 3420", authority: "New York DMV" },
+  DC: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$10,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: true, pipLimit: "$50,000", umRejectable: false, statute: "D.C. Code § 31-2406", authority: "DC Department of Motor Vehicles" },
+};
 
-  const buildDoc = () => {
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
-    const W = doc.internal.pageSize.getWidth();
-    const H = doc.internal.pageSize.getHeight();
-    const M = 10;
+const COI_STATES = ["MD","VA","FL","GA","IL","MA","PA","TX","NJ","NY","DC"];
 
-    // Title block
-    doc.setFillColor(23, 27, 49);
-    doc.rect(0, 0, W, 22, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13);
-    doc.setFont("helvetica", "bold");
-    doc.text("METROCARS LEASING CORP", M, 9);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.text("CERTIFICATE OF COVERAGE", M, 14);
-    doc.setFontSize(7);
-    doc.text("DATE (MM/DD/YYYY)", W - M, 7, { align: "right" });
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    const issuedDate = form.dateIssued ? new Date(form.dateIssued + "T12:00:00").toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US");
-    doc.text(issuedDate, W - M, 12, { align: "right" });
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(STATE_AUTHORITY[state] || "", W / 2, 19, { align: "center" });
-    doc.text("Whip Claims Management", M, 19);
-    doc.text(`CERTIFICATE NO.  ${certNo}`, W - M, 19, { align: "right" });
-
-    let y = 26;
-
-    // Disclaimer
-    doc.setDrawColor(180, 180, 180);
-    doc.setFillColor(250, 250, 250);
-    doc.rect(M, y, W - M * 2, 14, "FD");
-    doc.setFontSize(5.8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 30, 30);
-    doc.text(`THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO ${state === "MD" ? "MARYLAND TRANSPORTATION ARTICLE \u00a7 17-103" : "APPLICABLE STATE LAW"}. IT DOES NOT AFFIRMATIVELY OR`, M + 2, y + 4);
-    doc.text("NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE SELF-INSURANCE PROGRAM. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND", M + 2, y + 7.5);
-    doc.text("EXCLUSIONS OF THE PROGRAM.", M + 2, y + 11);
-    y += 17;
-
-    doc.setFontSize(5.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 30, 30);
-    doc.text("IMPORTANT:", M, y + 3);
-    doc.setFont("helvetica", "normal");
-    doc.text("If coverage under this certificate is extended to an ADDITIONAL INSURED, applicable endorsement provisions apply. If SUBROGATION IS WAIVED, certain conditions may", M + 14, y + 3);
-    doc.text("require an endorsement. This certificate does not confer rights to the certificate holder beyond those provided by the self-insurance program.", M, y + 6.5);
-    y += 10;
-
-    // Producer / Insurer grid
-    const gridY = y;
-    const col1W = 55; const col2W = 35; const col3W = W - M * 2 - col1W - col2W;
-    doc.setDrawColor(180, 180, 180);
-    doc.setFillColor(248, 249, 252);
-    doc.rect(M, gridY, col1W, 32, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(M, gridY, col1W, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.text("PRODUCER", M + 2, gridY + 3.5);
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    let py = gridY + 8;
-    doc.setFont("helvetica", "bold");
-    doc.text("Metrocars Leasing Corp", M + 2, py); py += 4;
-    doc.setFont("helvetica", "normal");
-    doc.text("Whip Claims Management", M + 2, py); py += 4;
-    doc.text("P.O. Box 10622", M + 2, py); py += 4;
-    doc.text("Rockville, MD 20850", M + 2, py); py += 4;
-    doc.text("(855) 906-5949", M + 2, py); py += 4;
-    doc.text("claims@drivewhip.com", M + 2, py);
-
-    const cx = M + col1W;
-    doc.setFillColor(248, 249, 252);
-    doc.rect(cx, gridY, col2W, 32, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(cx, gridY, col2W, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.text("CONTACT NAME", cx + 2, gridY + 3.5);
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    let cy2 = gridY + 8;
-    doc.text("Whip Claims Management", cx + 2, cy2); cy2 += 4;
-    doc.setFontSize(6);
-    doc.text("PHONE", cx + 2, cy2); cy2 += 3;
-    doc.setFontSize(6.5);
-    doc.text("(855) 906-5949", cx + 2, cy2); cy2 += 4;
-    doc.setFontSize(6);
-    doc.text("FAX", cx + 2, cy2); cy2 += 3;
-    doc.setFontSize(6.5);
-    doc.text("N/A", cx + 2, cy2); cy2 += 4;
-    doc.setFontSize(6);
-    doc.text("E-MAIL ADDRESS", cx + 2, cy2); cy2 += 3;
-    doc.setFontSize(6.5);
-    doc.text("claims@drivewhip.com", cx + 2, cy2);
-
-    const ix = cx + col2W;
-    doc.setFillColor(248, 249, 252);
-    doc.rect(ix, gridY, col3W, 32, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(ix, gridY, col3W, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.text("INSURER(S) AFFORDING COVERAGE", ix + 2, gridY + 3.5);
-    doc.setFontSize(5.5);
-    doc.text(`CERT. NO.  ${certNo}`, ix + col3W - 2, gridY + 3.5, { align: "right" });
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    const insurers = [["INSURER A:", `${state} MVA / Self-Insured`], ["INSURER B:", ""], ["INSURER C:", ""], ["INSURER D:", ""], ["INSURER E:", ""], ["INSURER F:", ""]];
-    let iy2 = gridY + 8;
-    for (const [lbl, val] of insurers) { doc.setFont("helvetica", "bold"); doc.text(lbl, ix + 2, iy2); doc.setFont("helvetica", "normal"); doc.text(val, ix + 18, iy2); iy2 += 4; }
-    y = gridY + 35;
-
-    // Insured / coverage period band
-    doc.setFillColor(248, 249, 252);
-    doc.setDrawColor(180, 180, 180);
-    doc.rect(M, y, W - M * 2, 22, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(M, y, 5, 22, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(5.5);
-    doc.setFont("helvetica", "bold");
-    doc.text("INSURED", M + 1, y + 11, { angle: 90 });
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text((form.namedInsured || "MEMBER NAME").toUpperCase(), M + 7, y + 6);
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "normal");
-    doc.text("Metrocars Leasing Corp / Whip Claims Management", M + 7, y + 11);
-    doc.text(`Vehicle: ${form.vehicleYear} ${form.vehicleMake} ${form.vehicleModel}${form.vin ? " \u00b7 VIN: " + form.vin : ""}`, M + 7, y + 16);
-    doc.setFontSize(6);
-    doc.text("STATE OF LOSS", M + 7, y + 20.5);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text(STATE_FULL[state] || state, M + 30, y + 20.5);
-    const cpX = W / 2 + 10;
-    doc.setFillColor(23, 27, 49);
-    doc.rect(cpX - 2, y, 5, 22, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(5.5);
-    doc.setFont("helvetica", "bold");
-    doc.text("COVERAGE PERIOD", cpX - 1, y + 11, { angle: 90 });
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    const effDate = form.effectiveDate ? new Date(form.effectiveDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "\u2014";
-    const expDate = form.expirationDate ? new Date(form.expirationDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "\u2014";
-    doc.text(`${effDate} \u2014 ${expDate}`, cpX + 4, y + 8);
-    doc.setFontSize(6.5);
-    doc.text("claims@drivewhip.com", cpX + 4, y + 14);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Cert. No. ${certNo}`, cpX + 4, y + 19);
-    y += 25;
-
-    // Coverages header
-    doc.setFillColor(23, 27, 49);
-    doc.rect(M, y, W - M * 2, 6, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "bold");
-    doc.text("COVERAGES", M + 2, y + 4);
-    doc.setFontSize(6);
-    doc.text(`CERTIFICATE NUMBER: ${certNo}`, W / 2, y + 4, { align: "center" });
-    doc.text("REVISION NUMBER:", W - M - 2, y + 4, { align: "right" });
-    y += 8;
-
-    doc.setFontSize(5.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(30, 30, 30);
-    for (const line of [
-      "THIS IS TO CERTIFY THAT THE COVERAGES OF SELF-INSURANCE LISTED BELOW HAVE BEEN ISSUED TO THE INSURED NAMED ABOVE FOR THE COVERAGE PERIOD INDICATED.",
-      "NOTWITHSTANDING ANY REQUIREMENT, TERM OR CONDITION OF ANY CONTRACT OR OTHER DOCUMENT WITH RESPECT TO WHICH THIS CERTIFICATE MAY BE ISSUED OR MAY",
-      "PERTAIN, THE COVERAGE AFFORDED IS SUBJECT TO ALL TERMS, EXCLUSIONS, AND CONDITIONS. LIMITS SHOWN MAY HAVE BEEN REDUCED BY PAID CLAIMS.",
-    ]) { doc.text(line, M, y); y += 3.5; }
-    y += 2;
-
-    // Table header
-    doc.setFillColor(200, 203, 215);
-    doc.rect(M, y, W - M * 2, 6, "F");
-    doc.setDrawColor(160, 160, 160);
-    doc.rect(M, y, W - M * 2, 6);
-    doc.setFontSize(5.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(20, 20, 20);
-    const colX = [M + 2, M + 12, M + 18, M + 65, M + 85, M + 100, M + 120];
-    doc.text("INSR\nLTR", colX[0], y + 2.5);
-    doc.text("ADDL\nINSD", colX[1], y + 2.5);
-    doc.text("SUBR\nWVD", colX[2], y + 2.5);
-    doc.text("TYPE OF INSURANCE", colX[3], y + 4);
-    doc.text("POLICY NUMBER", colX[4], y + 4);
-    doc.text("POLICY EFF\n(MM/DD/YYYY)", colX[5], y + 2.5);
-    doc.text("POLICY EXP\n(MM/DD/YYYY)", colX[6], y + 2.5);
-    doc.text("LIMITS", W - M - 2, y + 4, { align: "right" });
-    y += 7;
-
-    const effShort = form.effectiveDate ? new Date(form.effectiveDate + "T12:00:00").toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" }) : "\u2014";
-    const expShort = form.expirationDate ? new Date(form.expirationDate + "T12:00:00").toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" }) : "\u2014";
-
-    type CovRow = { insr: string; type: string; limit1Label: string; limit1: string; note?: string };
-    const coverageRows: CovRow[] = [
-      { insr: "BI", type: "BODILY INJURY LIABILITY", limit1Label: "PER PERSON", limit1: rules.biLimits.split("/")[0]?.trim() || "$30,000" },
-      { insr: "PD", type: "PROPERTY DAMAGE LIABILITY", limit1Label: "PER OCCURRENCE", limit1: rules.pdLimit },
-      ...(rules.um ? [{ insr: "UM", type: "UNINSURED MOTORIST (UM)", limit1Label: "PER PERSON", limit1: rules.umLimit.split("/")[0]?.trim() || "$30,000", note: (state === "GA" && umRejected) ? "MEMBER REJECTED \u2014 O.C.G.A. \u00a7 33-7-11" : undefined }] : []),
-      ...(rules.uim ? [{ insr: "UIM", type: "UNDERINSURED MOTORIST (UIM)", limit1Label: "PER PERSON", limit1: rules.uimLimit.split("/")[0]?.trim() || "$30,000" }] : []),
-      ...(rules.pip ? [{ insr: "PIP", type: "PERSONAL INJURY PROTECTION (PIP)", limit1Label: "PER PERSON \u2014 STATUTORY MIN", limit1: state === "MD" ? (pipElection === "waived" ? "WAIVED \u2014 MEMBER ELECTION" : pipElection === "limited" ? "LIMITED \u2014 MEMBER ELECTION" : "$2,500") : rules.pipLimit }] : []),
-      { insr: "COMP", type: "PHYSICAL DAMAGE \u2014 COMPREHENSIVE", limit1Label: "SUBJECT TO MEMBER AGREEMENT", limit1: "INCLUDED" },
-    ];
-
-    for (const row of coverageRows) {
-      const rowH = row.note ? 10 : 8;
-      doc.setFillColor(250, 250, 250);
-      doc.setDrawColor(200, 200, 200);
-      doc.rect(M, y, W - M * 2, rowH, "FD");
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(23, 27, 49);
-      doc.text(row.insr, colX[0], y + 4.5);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(30, 30, 30);
-      doc.text(row.type, colX[3], y + 4.5);
-      doc.text(certNo, colX[4], y + 4.5);
-      doc.text(effShort, colX[5], y + 4.5);
-      doc.text(expShort, colX[6], y + 4.5);
-      doc.setFontSize(6);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(100, 100, 100);
-      doc.text(row.limit1Label, W - M - 2, y + 3, { align: "right" });
-      doc.setTextColor(23, 27, 49);
-      doc.text(row.limit1, W - M - 2, y + 6.5, { align: "right" });
-      if (row.note) {
-        doc.setFontSize(5.5);
-        doc.setFont("helvetica", "italic");
-        doc.setTextColor(180, 60, 0);
-        doc.text(row.note, colX[3], y + 8.5);
-      }
-      y += rowH;
-    }
-    y += 4;
-
-    // Description of operations
-    const descH = 28;
-    doc.setFillColor(248, 249, 252);
-    doc.setDrawColor(180, 180, 180);
-    doc.rect(M, y, W - M * 2, descH, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(M, y, W - M * 2, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.text("DESCRIPTION OF OPERATIONS / LOCATIONS / VEHICLES / SPECIAL CONDITIONS", M + 2, y + 3.5);
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    const ops = [
-      "1. Coverage applies to the vehicle identified above while operated by the named member under an active Membership Agreement with Metrocars Leasing Corp.",
-      `2. Metrocars Leasing Corp is self-insured pursuant to Certificate No. ${certNo} issued by the ${(STATE_AUTHORITY[state] || "").replace("Issued by the ", "") || "applicable state authority"}.`,
-      "3. During any TNC period in which Uber/Lyft coverage is primary, this certificate provides contingent coverage only to the extent not covered by the TNC carrier.",
-      state === "MD" ? "4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per Maryland Transportation Article." : state === "GA" && umRejected ? "4. Member has executed a written rejection of UM/UIM coverage pursuant to O.C.G.A. \u00a7 33-7-11." : "4. Unauthorized/unlisted operator exclusion applies. Coverage subject to all terms and conditions of the Member Agreement.",
-    ];
-    let oy = y + 8;
-    for (const line of ops) { doc.text(line, M + 2, oy, { maxWidth: W - M * 2 - 4 }); oy += 5; }
-    y += descH + 3;
-
-    // Certificate holder / cancellation
-    const holderW = (W - M * 2) * 0.45;
-    const cancelW = (W - M * 2) * 0.55;
-    const bottomH = 28;
-    doc.setFillColor(248, 249, 252);
-    doc.setDrawColor(180, 180, 180);
-    doc.rect(M, y, holderW, bottomH, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(M, y, holderW, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.text("CERTIFICATE HOLDER", M + 2, y + 3.5);
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.text(form.holderName || "Whip Claims Management / Metrocars Leasing Corp", M + 2, y + 10);
-    if (form.holderAddress) {
-      doc.setFontSize(6.5);
-      doc.text(form.holderAddress, M + 2, y + 15);
-    } else {
-      doc.setFontSize(6.5);
-      doc.text("P.O. Box 10622", M + 2, y + 15);
-      doc.text("Rockville, MD 20850", M + 2, y + 19);
-      doc.text("(855) 906-5949 | claims@drivewhip.com", M + 2, y + 23);
-    }
-    const cancelX = M + holderW;
-    doc.setFillColor(248, 249, 252);
-    doc.rect(cancelX, y, cancelW, bottomH, "FD");
-    doc.setFillColor(23, 27, 49);
-    doc.rect(cancelX, y, cancelW, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.text("CANCELLATION", cancelX + 2, y + 3.5);
-    doc.setTextColor(30, 30, 30);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.text(`SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE ${state} STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.`, cancelX + 2, y + 9, { maxWidth: cancelW - 4 });
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "bold");
-    doc.text("AUTHORIZED REPRESENTATIVE", cancelX + 2, y + 24);
-    y += bottomH + 3;
-
-    // Footer
-    doc.setFillColor(23, 27, 49);
-    doc.rect(0, H - 10, W, 10, "F");
-    doc.setTextColor(200, 200, 210);
-    doc.setFontSize(5.5);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Metrocars Leasing Corp \u00b7 Whip Claims Management \u00b7 ${certNo} \u00b7 P.O. Box 10622, Rockville MD 20850 \u00b7 (855) 906-5949 \u00b7 claims@drivewhip.com`, W / 2, H - 5.5, { align: "center" });
-    doc.setFontSize(5);
-    doc.text("\u00a9 Whip Claims Management 2025", W / 2, H - 2, { align: "center" });
-    return doc;
-  };
-
-  const handlePreview = () => { const doc = buildDoc(); setPreviewPdfUrl(getPDFDataUrl(doc)); };
-  const handleDownload = () => {
-    const doc = buildDoc();
-    setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Metrocars_COI_${(form.namedInsured || "Member").split(" ").pop()}_${state}_${form.effectiveDate?.replace(/-/g, "") || "Draft"}.pdf`);
-  };
-
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <div className="space-y-4">
-        <Panel title="State of Coverage (Member&apos;s Home Market)">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Pre-filled from member&apos;s originating market. Select to override if needed.</p>
-            <div className="flex flex-wrap gap-1.5">
-              {["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setState(s)}
-                  className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${state === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        </Panel>
-        <Panel title="Certificate Information" tag="REQUIRED">
-          <Field label="Named Insured" id="mcoi-name" value={form.namedInsured} onChange={set("namedInsured")} placeholder="First Last" required />
-          <div className="mt-2">
-            <Field label="Date Issued" id="mcoi-date-issued" value={form.dateIssued} onChange={set("dateIssued")} type="date" required />
-          </div>
-          <Grid3>
-            <Field label="Vehicle Year" id="mcoi-yr" value={form.vehicleYear} onChange={set("vehicleYear")} placeholder="2023" />
-            <Field label="Make" id="mcoi-make" value={form.vehicleMake} onChange={set("vehicleMake")} placeholder="Tesla" />
-          </Grid3>
-          <div className="mt-2">
-            <Field label="Model" id="mcoi-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Model 3" />
-          </div>
-          <div className="mt-2">
-            <Field label="VIN" id="mcoi-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
-          </div>
-          <div className="mt-2">
-            <Field label="Coverage Effective Date" id="mcoi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" required />
-          </div>
-          <div className="mt-2">
-            <Field label="Coverage Expiration Date" id="mcoi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" required />
-          </div>
-        </Panel>
-        {state === "MD" && (
-          <Panel title="PIP Election (Maryland)">
-            <div className="space-y-1">
-              {[
-                { value: "full" as const, label: "Full PIP \u2014 $2,500 (Default)" },
-                { value: "limited" as const, label: "Limited PIP \u2014 Member Election" },
-                { value: "waived" as const, label: "PIP Waived \u2014 Member Election" },
-              ].map(opt => (
-                <button key={opt.value} type="button" onClick={() => setPipElection(opt.value)}
-                  className={`w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors flex items-center gap-2 ${pipElection === opt.value ? "bg-[#ff6221] text-white font-medium" : "bg-muted text-foreground hover:bg-muted/80"}`}>
-                  {pipElection === opt.value && <span>&#10003;</span>}
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">MD requires PIP at statutory minimum ($2,500) unless member elects Limited or Waived coverage in writing.</p>
-          </Panel>
-        )}
-        {state === "GA" && (
-          <Panel title="UM Coverage Election (Georgia)">
-            <div className="flex items-start gap-3 p-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30">
-              <input type="checkbox" id="mcoi-um-rej" checked={umRejected} onChange={e => setUmRejected(e.target.checked)} className="h-4 w-4 mt-0.5 accent-[#ff6221]" />
-              <div>
-                <label htmlFor="mcoi-um-rej" className="text-sm font-medium text-amber-800 dark:text-amber-300 cursor-pointer">Member rejected UM/UIM coverage</label>
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">O.C.G.A. \u00a7 33-7-11 \u2014 written rejection on file</p>
-              </div>
-            </div>
-          </Panel>
-        )}
-        <Panel title="Certificate Holder (Optional)">
-          <Field label="Certificate Holder Name" id="mcoi-holder" value={form.holderName} onChange={set("holderName")} placeholder="Defaults to Whip Claims Management" />
-          <div className="mt-2">
-            <label className="block text-[10px] font-semibold uppercase tracking-wide text-foreground/60 mb-1">Certificate Holder Address (Optional)</label>
-            <textarea className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[72px]" placeholder={"123 Main St\nCity, State ZIP"} value={form.holderAddress} onChange={e => set("holderAddress")(e.target.value)} />
-          </div>
-        </Panel>
-      </div>
-      <PreviewPanel
-        text={`METROCARS LEASING CORP \u2014 CERTIFICATE OF COVERAGE\nCert No: ${certNo}\nNamed Insured: ${form.namedInsured || "\u2014"}\nVehicle: ${form.vehicleYear} ${form.vehicleMake} ${form.vehicleModel}\nVIN: ${form.vin || "\u2014"}\nState: ${state}\nCoverage: ${form.effectiveDate || "\u2014"} \u2014 ${form.expirationDate || "\u2014"}`}
-        onCopy={() => { navigator.clipboard.writeText(`Metrocars Leasing Corp COI \u2014 ${form.namedInsured} \u2014 ${state} \u2014 ${certNo}`); toast.success("Copied"); }}
-        onPreview={handlePreview}
-        onDownload={handleDownload}
-        pdfUrl={previewPdfUrl}
-      />
-    </div>
-  );
-}
-
-function KlutchCOITab({ initialState = "MD" }: { initialState?: string }) {
-  const [state, setState] = useState(initialState || "MD");
-  const [form, setForm] = useState({
-    memberName: "",
-    memberAddress: "",
-    memberCity: "",
-    memberState: "",
-    memberZip: "",
+function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
+  const [insurer, setInsurer] = React.useState<"klutch" | "metrocars">("klutch");
+  const [state, setState] = React.useState(initialState || "MD");
+  const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
+  const [additionalInsured, setAdditionalInsured] = React.useState(false);
+  const [waiverOfSubrogation, setWaiverOfSubrogation] = React.useState(false);
+  const [umRejected, setUmRejected] = React.useState(false);
+  const [pipWaived, setPipWaived] = React.useState(false);
+  const [form, setForm] = React.useState({
+    namedOperator: "",
     vehicleYear: "",
     vehicleMake: "",
     vehicleModel: "",
     vin: "",
     plateNumber: "",
-    weeklyRate: "",
-    certDate: "",
     effectiveDate: "",
     expirationDate: "",
-    policyNumber: "KLT-AUTO-" + new Date().getFullYear(),
-    holderName: "",
-    holderAddress: "",
-    holderCity: "",
-    holderState: "",
-    holderZip: "",
-    additionalInsured: false,
-    waiverOfSubrogation: false,
+    certDate: new Date().toISOString().slice(0, 10),
+    certNumber: "",
+    revisionNumber: "",
     specialProvisions: "",
   });
+  const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
 
-  const set = (k: keyof typeof form) => (v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
-  const rules = KLUTCH_STATE_RULES[state] || KLUTCH_STATE_RULES["MD"];
-  const STATES = Object.keys(KLUTCH_STATE_RULES);
+  const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
+  const isKlutch = insurer === "klutch";
+
+  // Auto-generate cert number based on insurer
+  React.useEffect(() => {
+    if (!form.certNumber) {
+      const prefix = isKlutch ? "KLT" : "MD-00S";
+      const num = Math.floor(1000 + Math.random() * 9000);
+      setForm(p => ({ ...p, certNumber: `${prefix}${num}` }));
+    }
+  }, [insurer]);
+
+  const fmtDate = (d: string) => {
+    if (!d) return "—";
+    const [y, m, day] = d.split("-");
+    return `${m}/${day}/${y}`;
+  };
+  const fmtDateLong = (d: string) => {
+    if (!d) return "—";
+    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const [y, m, day] = d.split("-");
+    return `${months[parseInt(m)-1]} ${parseInt(day)}, ${y}`;
+  };
 
   const handleDownload = () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
+    const lm = 12, rm = W - 12;
+    const textW = rm - lm;
+    let y = 8;
 
-    // Header bar
-    doc.setFillColor(23, 27, 49);
-    doc.rect(0, 0, W, 18, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
+    // ── HEADER ──────────────────────────────────────────────────────────────
+    if (isKlutch) {
+      // Klutch: logo top-left
+      try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y, 36, 14); } catch {}
+    } else {
+      // Metrocars: org name top-left
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text("METROCARS LEASING CORP", lm, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(80, 80, 80);
+      doc.text("Whip Claims Management", lm, y + 9.5);
+    }
+
+    // Center: CERTIFICATE OF COVERAGE
     doc.setFont("helvetica", "bold");
-    doc.text("KLUTCH", 10, 12);
-    doc.setFontSize(8);
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text("CERTIFICATE OF COVERAGE", W / 2, y + 6, { align: "center" });
     doc.setFont("helvetica", "normal");
-    doc.text("CERTIFICATE OF COVERAGE", 10, 16.5);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text("CERTIFICATE OF AUTOMOBILE INSURANCE", W / 2, 11, { align: "center" });
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    const subtitle = isKlutch
+      ? "Issued by Klutch Insurance Company\nPursuant to Maryland Transportation Article § 17-103"
+      : "Issued by the Maryland Motor Vehicle Administration\nPursuant to Maryland Transportation Article § 17-103";
+    doc.text(subtitle, W / 2, y + 11, { align: "center" });
+
+    // Right: Date + Cert No
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.text(`State: ${state}  |  Policy: ${form.policyNumber}  |  Date: ${form.certDate || new Date().toLocaleDateString()}`, W / 2, 15.5, { align: "center" });
-
-    // Two-column layout
-    const col1 = 8;
-    const col2 = W / 2 + 4;
-    const colW = W / 2 - 12;
-    let y = 24;
-
-    // Box helper
-    const box = (title: string, x: number, startY: number, h: number) => {
-      doc.setDrawColor(200, 200, 200);
-      doc.setFillColor(248, 249, 252);
-      doc.roundedRect(x, startY, colW, h, 1.5, 1.5, "FD");
-      doc.setFillColor(23, 27, 49);
-      doc.rect(x, startY, colW, 5, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "bold");
-      doc.text(title, x + 2, startY + 3.5);
-      doc.setTextColor(40, 40, 40);
-      doc.setFont("helvetica", "normal");
-      return startY + 7;
-    };
-
-    const row = (label: string, value: string, x: number, rowY: number) => {
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(100, 100, 100);
-      doc.text(label.toUpperCase(), x + 2, rowY);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(20, 20, 20);
-      doc.text(value || "—", x + 2, rowY + 3.5);
-      return rowY + 7;
-    };
-
-    // Left column
-    let ly = box("INSURED MEMBER", col1, y, 38);
-    ly = row("Name", form.memberName, col1, ly);
-    ly = row("Address", `${form.memberAddress}, ${form.memberCity}, ${form.memberState} ${form.memberZip}`, col1, ly);
-    ly = row("Insurer", "Klutch Insurance Group", col1, ly);
-    ly = row("Policy Number", form.policyNumber, col1, ly);
-
-    ly = y + 42;
-    ly = box("COVERED VEHICLE", col1, ly, 38);
-    ly = row("Vehicle", `${form.vehicleYear} ${form.vehicleMake} ${form.vehicleModel}`, col1, ly);
-    ly = row("VIN", form.vin, col1, ly);
-    ly = row("Plate", form.plateNumber, col1, ly);
-    ly = row("Weekly Rate", form.weeklyRate ? `$${form.weeklyRate}/week` : "—", col1, ly);
-
-    ly = y + 84;
-    ly = box("POLICY PERIOD", col1, ly, 20);
-    ly = row("Effective Date", form.effectiveDate, col1, ly);
-    ly = row("Expiration Date", form.expirationDate, col1, ly);
-
-    // Right column — coverage
-    let ry = box("COVERAGE LIMITS", col2, y, 80);
-    const coverageRows = [
-      ["Bodily Injury Liability", rules.biLimits],
-      ["Property Damage Liability", rules.pdLimit],
-      ...(rules.pip ? [["Personal Injury Protection (PIP)", rules.pipLimit]] : []),
-      ...(rules.um ? [["Uninsured Motorist", rules.umLimit]] : []),
-      ...(rules.uim ? [["Underinsured Motorist", rules.uimLimit]] : []),
-    ];
-    for (const [label, value] of coverageRows) {
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text(label, col2 + 2, ry);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(23, 27, 49);
-      doc.text(value, col2 + colW - 2, ry, { align: "right" });
-      doc.setDrawColor(220, 220, 220);
-      doc.line(col2 + 2, ry + 1.5, col2 + colW - 2, ry + 1.5);
-      ry += 7;
-    }
-
-    ry = y + 84;
-    ry = box("CERTIFICATE HOLDER", col2, ry, 30);
-    ry = row("Name", form.holderName, col2, ry);
-    ry = row("Address", `${form.holderAddress}${form.holderCity ? ", " + form.holderCity : ""}${form.holderState ? ", " + form.holderState : ""} ${form.holderZip}`, col2, ry);
-    if (form.additionalInsured) {
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(23, 27, 49);
-      doc.text("✓ ADDITIONAL INSURED", col2 + 2, ry);
-      ry += 4;
-    }
-    if (form.waiverOfSubrogation) {
-      doc.setFontSize(6.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(23, 27, 49);
-      doc.text("✓ WAIVER OF SUBROGATION", col2 + 2, ry);
-      ry += 4;
-    }
-
-    // Footer
-    doc.setFillColor(245, 245, 248);
-    doc.rect(0, H - 18, W, 18, "F");
-    doc.setDrawColor(200, 200, 200);
-    doc.line(0, H - 18, W, H - 18);
-    doc.setFontSize(6);
     doc.setTextColor(100, 100, 100);
-    doc.setFont("helvetica", "italic");
-    doc.text(
-      "This certificate is issued as a matter of information only and confers no rights upon the certificate holder. This certificate does not amend, extend, or alter the coverage afforded by the policies below.",
-      W / 2, H - 13, { align: "center", maxWidth: W - 20 }
-    );
+    doc.text("DATE (MM/DD/YYYY)", rm, y + 3, { align: "right" });
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(23, 27, 49);
-    doc.text("Klutch Insurance Group  |  Authorized Representative", W / 2, H - 6, { align: "center" });
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text(fmtDate(form.certDate) || new Date().toLocaleDateString("en-US"), rm, y + 7, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("CERTIFICATE NO.", rm, y + 11, { align: "right" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text(form.certNumber || "—", rm, y + 15, { align: "right" });
 
-    downloadPDF(doc, `Klutch_COI_${form.memberName.replace(/\s+/g, "_") || "Member"}_${state}.pdf`);
+    y += 20;
+    // Header bottom border
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.8);
+    doc.line(lm, y, rm, y);
+    y += 4;
+
+    // ── DISCLAIMER BOX ──────────────────────────────────────────────────────
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.6);
+    doc.rect(lm, y, textW, 12);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(0, 0, 0);
+    const disclaimerText = isKlutch
+      ? "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE POLICY ISSUED BY KLUTCH INSURANCE COMPANY. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE POLICY."
+      : "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE SELF-INSURANCE PROGRAM. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE PROGRAM.";
+    doc.text(disclaimerText, lm + 2, y + 4, { maxWidth: textW - 4 });
+    y += 14;
+
+    // ── IMPORTANT BOX ───────────────────────────────────────────────────────
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.3);
+    doc.rect(lm, y, textW, 10);
+    doc.setFontSize(6.5);
+    doc.setTextColor(60, 60, 60);
+    const importantText = `IMPORTANT: If coverage under this certificate is extended to an ADDITIONAL INSURED, applicable endorsement provisions apply. If SUBROGATION IS WAIVED, certain conditions may require an endorsement. This certificate does not confer rights to the certificate holder beyond those provided by the ${isKlutch ? "policy issued by Klutch Insurance Company" : "self-insurance program"}.`;
+    doc.text(importantText, lm + 2, y + 3.5, { maxWidth: textW - 4 });
+    y += 12;
+
+    // ── PRODUCER / CONTACT / INSURER GRID ───────────────────────────────────
+    const col1W = textW * 0.35;
+    const col2W = textW * 0.30;
+    const col3W = textW * 0.35;
+    const gridH = 22;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.rect(lm, y, textW, gridH);
+    doc.line(lm + col1W, y, lm + col1W, y + gridH);
+    doc.line(lm + col1W + col2W, y, lm + col1W + col2W, y + gridH);
+
+    // Col 1: Producer
+    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("PRODUCER / CARRIER", lm + 2, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
+    if (isKlutch) {
+      doc.text("Klutch Insurance Company", lm + 2, y + 7);
+      doc.text("P.O. Box 10622", lm + 2, y + 10.5);
+      doc.text("Rockville, MD 20850", lm + 2, y + 14);
+      doc.text("(855) 906-5949", lm + 2, y + 17.5);
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("CERT. NO:", lm + 2, y + 21);
+      doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", lm + 14, y + 21);
+    } else {
+      doc.text("Metrocars Leasing Corp", lm + 2, y + 7);
+      doc.text("Whip Claims Management", lm + 2, y + 10.5);
+      doc.text("P.O. Box 10622", lm + 2, y + 14);
+      doc.text("Rockville, MD 20850", lm + 2, y + 17.5);
+      doc.text("(855) 906-5949", lm + 2, y + 21);
+    }
+
+    // Col 2: Contact
+    const c2x = lm + col1W + 2;
+    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("CONTACT", c2x, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
+    if (isKlutch) {
+      doc.text("PHONE: (855) 906-5949", c2x, y + 7);
+      doc.text("FAX: N/A", c2x, y + 10.5);
+      doc.text("EMAIL: claims@klutchinsurance.com", c2x, y + 14);
+    } else {
+      doc.text("Whip Claims Management", c2x, y + 7);
+      doc.text("PHONE: (855) 906-5949", c2x, y + 10.5);
+      doc.text("FAX: —", c2x, y + 14);
+      doc.text("EMAIL: claims@drivewhip.com", c2x, y + 17.5);
+    }
+
+    // Col 3: Insurer
+    const c3x = lm + col1W + col2W + 2;
+    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("INSURER(S) AFFORDING COVERAGE", c3x, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
+    if (isKlutch) {
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("INSURER A:", c3x, y + 7);
+      doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
+      doc.text("Klutch Insurance Company", c3x + 14, y + 7);
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("CERT. NO:", c3x, y + 10.5);
+      doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", c3x + 14, y + 10.5);
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("INSURER B:", c3x, y + 14);
+      doc.text("INSURER C:", c3x, y + 17.5);
+      doc.text("INSURER D:", c3x, y + 21);
+    } else {
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("INSURER A:", c3x, y + 7);
+      doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
+      doc.text("Maryland MVA / Self-Insured", c3x + 14, y + 7);
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("CERT. NO:", c3x, y + 10.5);
+      doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", c3x + 14, y + 10.5);
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("INSURER B:", c3x, y + 14);
+      doc.text("INSURER C:", c3x, y + 17.5);
+      doc.text("INSURER D:", c3x, y + 21);
+    }
+    y += gridH + 3;
+
+    // ── INSURED SECTION ─────────────────────────────────────────────────────
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    const insuredH = 22;
+    doc.rect(lm, y, textW, insuredH);
+    // Left cell: insured name
+    doc.line(lm + textW * 0.5, y, lm + textW * 0.5, y + insuredH);
+    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("INSURED", lm + 2, y + 3.5);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(0, 0, 0);
+    doc.text(isKlutch ? "METROCARS LEASING CORP" : (form.namedOperator || "—").toUpperCase(), lm + 2, y + 9);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+    if (isKlutch) {
+      doc.text(`Named Operator / Lessee: ${form.namedOperator || "—"}`, lm + 2, y + 13.5);
+    } else {
+      doc.text("Metrocars Leasing Corp / Whip Claims Management", lm + 2, y + 13.5);
+    }
+    const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
+    doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17.5);
+    if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 21);
+
+    // Right cell: coverage period + state
+    const rx = lm + textW * 0.5 + 2;
+    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("COVERAGE PERIOD", rx, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    const periodStr = (form.effectiveDate && form.expirationDate)
+      ? `${fmtDateLong(form.effectiveDate)} — ${fmtDateLong(form.expirationDate)}`
+      : "—";
+    doc.text(periodStr, rx, y + 8);
+    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("STATE OF LOSS", rx, y + 13.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    doc.text(state, rx, y + 18);
+    y += insuredH + 3;
+
+    // ── COVERAGES HEADER ────────────────────────────────────────────────────
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+    doc.text("COVERAGES", lm, y + 4);
+    doc.text(`CERTIFICATE NUMBER: ${form.certNumber || "—"}`, lm + 50, y + 4);
+    doc.text(`REVISION NUMBER: ${form.revisionNumber || "—"}`, rm, y + 4, { align: "right" });
+    y += 7;
+
+    // Preamble
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(60, 60, 60);
+    const preamble = `THIS IS TO CERTIFY THAT THE COVERAGES LISTED BELOW HAVE BEEN ISSUED TO THE INSURED NAMED ABOVE FOR THE COVERAGE PERIOD INDICATED. NOTWITHSTANDING ANY REQUIREMENT, TERM OR CONDITION OF ANY CONTRACT OR OTHER DOCUMENT WITH RESPECT TO WHICH THIS CERTIFICATE MAY BE ISSUED OR MAY PERTAIN, THE COVERAGE AFFORDED IS SUBJECT TO ALL TERMS, EXCLUSIONS AND CONDITIONS OF THE POLICY. LIMITS SHOWN MAY HAVE BEEN REDUCED BY PAID CLAIMS.`;
+    doc.text(preamble, lm, y, { maxWidth: textW });
+    y += 8;
+
+    // ── COVERAGE TABLE ───────────────────────────────────────────────────────
+    // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
+    const cols = { insr: 8, addl: 8, subr: 8, type: 55, pol: 25, eff: 18, exp: 18 };
+    const limW = textW - cols.insr - cols.addl - cols.subr - cols.type - cols.pol - cols.eff - cols.exp;
+    const rowH = 8;
+    const hdrH = 6;
+
+    // Table header
+    doc.setFillColor(240, 240, 240);
+    doc.rect(lm, y, textW, hdrH, "F");
+    doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.3);
+    doc.rect(lm, y, textW, hdrH);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(0, 0, 0);
+    let cx = lm;
+    const hdrLabels = [
+      { w: cols.insr, t: "INSR\nLTR" },
+      { w: cols.addl, t: "ADDL\nINSD" },
+      { w: cols.subr, t: "SUBR\nWVD" },
+      { w: cols.type, t: "TYPE OF INSURANCE" },
+      { w: cols.pol, t: "POLICY NUMBER" },
+      { w: cols.eff, t: "POLICY EFF\n(MM/DD/YYYY)" },
+      { w: cols.exp, t: "POLICY EXP\n(MM/DD/YYYY)" },
+      { w: limW, t: "LIMITS" },
+    ];
+    for (const h of hdrLabels) {
+      doc.text(h.t, cx + h.w / 2, y + 2.5, { align: "center", maxWidth: h.w - 1 });
+      cx += h.w;
+      if (cx < lm + textW) doc.line(cx, y, cx, y + hdrH);
+    }
+    y += hdrH;
+
+    // Coverage rows
+    const policyNo = form.certNumber || "—";
+    const effDate = fmtDate(form.effectiveDate);
+    const expDate = fmtDate(form.expirationDate);
+    const checkMark = additionalInsured ? "☑" : "☐";
+    const subrMark = waiverOfSubrogation ? "☑" : "☐";
+
+    const coverageRows = [
+      {
+        insr: "BI", type: "BODILY INJURY LIABILITY",
+        limits: isKlutch
+          ? "PER PERSON —\nPER OCCURRENCE —"
+          : `PER PERSON  ${rules.biPP}\nPER OCCURRENCE  ${rules.biPO}`,
+      },
+      {
+        insr: "PD", type: "PROPERTY DAMAGE LIABILITY",
+        limits: isKlutch
+          ? "PER OCCURRENCE —"
+          : `PER OCCURRENCE  ${rules.pdLimit}`,
+      },
+      {
+        insr: "UM", type: "UNINSURED MOTORIST (UM)",
+        limits: umRejected
+          ? "REJECTED BY NAMED INSURED"
+          : isKlutch
+            ? "PER PERSON —\nPER OCCURRENCE —"
+            : `PER PERSON  ${rules.umPP}\nPER OCCURRENCE  ${rules.umPO}`,
+      },
+      {
+        insr: "UIM", type: "UNDERINSURED MOTORIST (UIM)",
+        limits: isKlutch
+          ? "PER PERSON —\nPER OCCURRENCE —"
+          : (rules.uimPP ? `PER PERSON  ${rules.uimPP}\nPER OCCURRENCE  ${rules.uimPO}` : "NOT APPLICABLE"),
+      },
+      {
+        insr: "PIP", type: "PERSONAL INJURY PROTECTION (PIP)",
+        limits: !rules.pip
+          ? "NOT REQUIRED IN THIS STATE"
+          : pipWaived
+            ? "WAIVED BY NAMED INSURED"
+            : isKlutch
+              ? "PER PERSON — STATUTORY MIN"
+              : `PER PERSON — STATUTORY MIN  ${rules.pipLimit}`,
+      },
+      {
+        insr: "COL", type: "PHYSICAL DAMAGE — COLLISION",
+        limits: "SUBJECT TO MEMBER AGREEMENT\nINCLUDED",
+      },
+      {
+        insr: "COMP", type: "PHYSICAL DAMAGE — COMPREHENSIVE",
+        limits: "SUBJECT TO MEMBER AGREEMENT\nINCLUDED",
+      },
+    ];
+
+    for (const row of coverageRows) {
+      const lines = row.limits.split("\n");
+      const rH = Math.max(rowH, lines.length * 4.5 + 2);
+      doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.2);
+      doc.rect(lm, y, textW, rH);
+      cx = lm;
+      for (const col of [cols.insr, cols.addl, cols.subr, cols.type, cols.pol, cols.eff, cols.exp, limW]) {
+        cx += col;
+        if (cx < lm + textW) doc.line(cx, y, cx, y + rH);
+      }
+      // INSR LTR
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+      doc.text(row.insr, lm + cols.insr / 2, y + rH / 2 + 1, { align: "center" });
+      // ADDL INSD checkbox
+      doc.setFontSize(9);
+      doc.text(checkMark, lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
+      // SUBR WVD checkbox
+      doc.text(subrMark, lm + cols.insr + cols.addl + cols.subr / 2, y + rH / 2 + 1.5, { align: "center" });
+      // Type
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
+      const typeX = lm + cols.insr + cols.addl + cols.subr + 2;
+      doc.text(row.type, typeX, y + rH / 2 + 1);
+      // Policy No
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+      const polX = lm + cols.insr + cols.addl + cols.subr + cols.type + 2;
+      doc.text(policyNo, polX, y + rH / 2 + 1);
+      // Eff / Exp dates
+      const effX = polX + cols.pol;
+      doc.text(effDate, effX + cols.eff / 2, y + rH / 2 + 1, { align: "center" });
+      const expX = effX + cols.eff;
+      doc.text(expDate, expX + cols.exp / 2, y + rH / 2 + 1, { align: "center" });
+      // Limits
+      const limX = expX + cols.exp + 2;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+      for (let li = 0; li < lines.length; li++) {
+        doc.text(lines[li], limX, y + 3.5 + li * 4.5);
+      }
+      y += rH;
+    }
+    y += 3;
+
+    // ── DESCRIPTION OF OPERATIONS ────────────────────────────────────────────
+    doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.3);
+    const descH = 24;
+    doc.rect(lm, y, textW, descH);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
+    doc.text("DESCRIPTION OF OPERATIONS / LOCATIONS / VEHICLES / SPECIAL CONDITIONS", lm + 2, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+    const desc1 = isKlutch
+      ? `1. This certificate is issued by Klutch Insurance Company to Metrocars Leasing Corp (named insured/vehicle owner). Coverage applies to the vehicle identified above when operated by the named operator under an active Membership Agreement.`
+      : `1. Coverage applies to the vehicle identified above while operated by the named member under an active Membership Agreement with Metrocars Leasing Corp.`;
+    const desc2 = isKlutch
+      ? `2. Certificate No. ${form.certNumber || "—"} issued pursuant to Maryland Transportation Article § 17-103.`
+      : `2. Metrocars Leasing Corp is self-insured pursuant to Certificate No. ${form.certNumber || "—"} issued by the Maryland Motor Vehicle Administration.`;
+    const desc3 = `3. During any TNC period in which Uber/Lyft coverage is primary, this certificate provides contingent coverage only to the extent not covered by the TNC carrier.`;
+    const desc4 = `4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per applicable state law.`;
+    doc.text(desc1, lm + 2, y + 7.5, { maxWidth: textW - 4 });
+    doc.text(desc2, lm + 2, y + 12, { maxWidth: textW - 4 });
+    doc.text(desc3, lm + 2, y + 16.5, { maxWidth: textW - 4 });
+    doc.text(desc4, lm + 2, y + 21, { maxWidth: textW - 4 });
+    y += descH + 3;
+
+    // ── BOTTOM GRID: CERT HOLDER + CANCELLATION ──────────────────────────────
+    const botH = 28;
+    doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.3);
+    doc.rect(lm, y, textW, botH);
+    doc.line(lm + textW * 0.4, y, lm + textW * 0.4, y + botH);
+    // Cert Holder
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
+    doc.text("CERTIFICATE HOLDER", lm + 2, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
+    if (isKlutch) {
+      doc.text("Metrocars Leasing Corp", lm + 2, y + 8);
+      doc.text("P.O. Box 10622", lm + 2, y + 12.5);
+      doc.text("Rockville, MD 20850", lm + 2, y + 17);
+    } else {
+      doc.text("Whip Claims Management / Metrocars Leasing Corp", lm + 2, y + 8);
+      doc.text("P.O. Box 10622", lm + 2, y + 12.5);
+      doc.text("Rockville, MD 20850", lm + 2, y + 17);
+      doc.text("(855) 906-5949  |  claims@drivewhip.com", lm + 2, y + 21.5);
+    }
+    // Cancellation
+    const cx2 = lm + textW * 0.4 + 2;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
+    doc.text("CANCELLATION", cx2, y + 3.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+    const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";
+    doc.text(cancelText, cx2, y + 8, { maxWidth: textW * 0.6 - 4 });
+    doc.setFont("helvetica", "italic"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+    const sigLine = isKlutch ? "Authorized Representative, Klutch Insurance Company" : "Authorized Representative";
+    doc.text(sigLine, cx2, y + 25);
+    y += botH + 3;
+
+    // ── FOOTER ───────────────────────────────────────────────────────────────
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
+    doc.line(lm, y, rm, y);
+    y += 3;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+    if (isKlutch) {
+      doc.text(`Klutch Insurance Company  ·  ${form.certNumber || "—"}  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949  ·  © Klutch Insurance Company ${new Date().getFullYear()}`, W / 2, y, { align: "center" });
+    } else {
+      doc.text(`Metrocars Leasing Corp  ·  Whip Claims Management  ·  ${form.certNumber || "—"}  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949  ·  claims@drivewhip.com  ·  © Whip Claims Management ${new Date().getFullYear()}`, W / 2, y, { align: "center" });
+    }
+
+    setPreviewPdfUrl(getPDFDataUrl(doc));
+    downloadPDF(doc, `COI_${isKlutch ? "Klutch" : "Metrocars"}_${form.certNumber || "Draft"}_${form.namedOperator || "Operator"}.pdf`);
   };
 
+  const handlePreviewOnly = () => { handleDownload(); };
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <div className="space-y-4">
-        <Panel title="State of Coverage (Member&apos;s Home Market)">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Pre-filled from member&apos;s originating market. Select to override if needed.</p>
+    <div className="space-y-6">
+      {/* Insurer Toggle */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Shield className="w-4 h-4 text-[#ff6221]" />
+          <span className="text-sm font-semibold text-foreground">Issuing Carrier</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setInsurer("klutch")}
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${insurer === "klutch" ? "border-[#171b31] bg-[#171b31]/5" : "border-border hover:border-[#171b31]/40"}`}
+          >
+            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "klutch" ? "border-[#171b31]" : "border-border"}`}>
+              {insurer === "klutch" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">Klutch Insurance Company</div>
+              <div className="text-xs text-muted-foreground">Coverage start date April 2026 or later</div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setInsurer("metrocars")}
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${insurer === "metrocars" ? "border-[#171b31] bg-[#171b31]/5" : "border-border hover:border-[#171b31]/40"}`}
+          >
+            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "metrocars" ? "border-[#171b31]" : "border-border"}`}>
+              {insurer === "metrocars" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">Metrocars Leasing Corp</div>
+              <div className="text-xs text-muted-foreground">Coverage start date prior to April 2026</div>
+            </div>
+          </button>
+        </div>
+        <div className={`mt-2 text-xs rounded px-2 py-1 ${isKlutch ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"}`}>
+          {isKlutch
+            ? "Klutch Insurance Company — Insurer of record. Certificate issued pursuant to Maryland Transportation Article § 17-103."
+            : "Metrocars Leasing Corp — Self-insured pursuant to Maryland MVA Certificate. Use for losses occurring prior to April 2026."}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          {/* State */}
+          <Panel title="State of Coverage">
             <div className="flex flex-wrap gap-1.5">
-              {["MD", "GA", "VA", "PA", "MA", "IL", "FL", "TX"].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setState(s)}
-                  className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${state === s ? "bg-[#ff6221] text-white border-[#ff6221]" : "bg-muted text-foreground border-border hover:border-[#ff6221]/50"}`}
-                >
+              {COI_STATES.map(s => (
+                <button key={s} type="button" onClick={() => setState(s)}
+                  className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${state === s ? "bg-[#171b31] text-white border-[#171b31]" : "bg-muted text-foreground border-border hover:border-[#171b31]/40"}`}>
                   {s}
                 </button>
               ))}
             </div>
-          </div>
-        </Panel>
-
-        <Panel title="Member Information">
-          <Field label="Member Name" id="kcoi-name" value={form.memberName} onChange={set("memberName")} placeholder="First Last" required />
-          <div className="mt-2">
-            <Field label="Address" id="kcoi-addr" value={form.memberAddress} onChange={set("memberAddress")} placeholder="Street address" />
-          </div>
-          <Grid3 children={<>
-            <Field label="City" id="kcoi-city" value={form.memberCity} onChange={set("memberCity")} placeholder="City" />
-            <Field label="State" id="kcoi-mstate" value={form.memberState} onChange={set("memberState")} placeholder="e.g. MD" />
-            <Field label="ZIP" id="kcoi-zip" value={form.memberZip} onChange={set("memberZip")} placeholder="e.g. 20850" />
-          </>} />
-        </Panel>
-
-        <Panel title="Covered Vehicle">
-          <Grid3 children={<>
-            <Field label="Year" id="kcoi-yr" value={form.vehicleYear} onChange={set("vehicleYear")} placeholder="2024" />
-            <Field label="Make" id="kcoi-make" value={form.vehicleMake} onChange={set("vehicleMake")} placeholder="Toyota" />
-            <Field label="Model" id="kcoi-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Camry" />
-          </>} />
-          <Grid2 children={<>
-            <Field label="VIN" id="kcoi-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
-            <Field label="Plate Number" id="kcoi-plate" value={form.plateNumber} onChange={set("plateNumber")} placeholder="e.g. ABC1234" />
-          </>} />
-          <div className="mt-2">
-            <Field label="Weekly Rate ($)" id="kcoi-rate" value={form.weeklyRate} onChange={set("weeklyRate")} placeholder="e.g. 350" />
-          </div>
-        </Panel>
-
-        <Panel title="Policy Period">
-          <Grid3 children={<>
-            <Field label="Certificate Date" id="kcoi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
-            <Field label="Effective Date" id="kcoi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
-            <Field label="Expiration Date" id="kcoi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
-          </>} />
-        </Panel>
-
-        <Panel title="Certificate Holder">
-          <Field label="Holder Name" id="kcoi-holder" value={form.holderName} onChange={set("holderName")} placeholder="e.g. Toyota Financial Services" />
-          <div className="mt-2">
-            <Field label="Address" id="kcoi-haddr" value={form.holderAddress} onChange={set("holderAddress")} placeholder="Street address" />
-          </div>
-          <Grid3 children={<>
-            <Field label="City" id="kcoi-hcity" value={form.holderCity} onChange={set("holderCity")} placeholder="City" />
-            <Field label="State" id="kcoi-hstate" value={form.holderState} onChange={set("holderState")} placeholder="e.g. MD" />
-            <Field label="ZIP" id="kcoi-hzip" value={form.holderZip} onChange={set("holderZip")} placeholder="e.g. 20850" />
-          </>} />
-          <div className="mt-3 space-y-2">
-            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-              <Checkbox checked={form.additionalInsured} onCheckedChange={(v) => set("additionalInsured")(!!v)} />
-              <div className="text-xs font-semibold">Additional Insured</div>
-            </label>
-            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-              <Checkbox checked={form.waiverOfSubrogation} onCheckedChange={(v) => set("waiverOfSubrogation")(!!v)} />
-              <div className="text-xs font-semibold">Waiver of Subrogation</div>
-            </label>
-          </div>
-        </Panel>
-      </div>
-
-      <div className="space-y-4">
-        {/* Coverage Preview */}
-        <div className="rounded-xl border border-border overflow-hidden">
-          <div className="bg-[#171b31] text-white px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-bold">KLUTCH</p>
-              <p className="text-xs opacity-70">Certificate of Coverage — {state}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs opacity-70">Policy</p>
-              <p className="text-xs font-mono">{form.policyNumber}</p>
-            </div>
-          </div>
-          <div className="p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Member</p>
-                <p className="font-medium">{form.memberName || "—"}</p>
-                <p className="text-muted-foreground">{form.memberAddress || "—"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Vehicle</p>
-                <p className="font-medium">{[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}</p>
-                <p className="text-muted-foreground font-mono text-[10px]">{form.vin || "VIN not entered"}</p>
-              </div>
-            </div>
-            <div className="border-t border-border pt-3">
-              <p className="text-muted-foreground font-semibold uppercase text-[10px] mb-2">Coverage Limits — {state}</p>
-              <div className="space-y-1.5">
-                {[
-                  ["Bodily Injury", rules.biLimits],
-                  ["Property Damage", rules.pdLimit],
-                  ...(rules.pip ? [["PIP", rules.pipLimit]] : []),
-                  ...(rules.um ? [["Uninsured Motorist", rules.umLimit]] : []),
-                  ...(rules.uim ? [["Underinsured Motorist", rules.uimLimit]] : []),
-                ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className="font-semibold text-[#ff6221]">{value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {form.holderName && (
-              <div className="border-t border-border pt-3 text-xs">
-                <p className="text-muted-foreground font-semibold uppercase text-[10px] mb-1">Certificate Holder</p>
-                <p className="font-medium">{form.holderName}</p>
-                {form.additionalInsured && <p className="text-amber-600 font-medium text-[10px]">✓ Additional Insured</p>}
-                {form.waiverOfSubrogation && <p className="text-amber-600 font-medium text-[10px]">✓ Waiver of Subrogation</p>}
+            {rules && (
+              <div className="mt-2 text-xs text-muted-foreground bg-muted/30 rounded p-2">
+                <span className="font-semibold">BI:</span> {rules.biPP}/{rules.biPO} &nbsp;·&nbsp;
+                <span className="font-semibold">PD:</span> {rules.pdLimit} &nbsp;·&nbsp;
+                <span className="font-semibold">UM:</span> {rules.umPP}/{rules.umPO}
+                {rules.pip && <> &nbsp;·&nbsp; <span className="font-semibold">PIP:</span> {rules.pipLimit}</>}
               </div>
             )}
-          </div>
+          </Panel>
+
+          {/* Named Operator & Vehicle */}
+          <Panel title="Named Operator / Member">
+            <Field label="Named Operator (Member Name)" id="coi-operator" value={form.namedOperator} onChange={set("namedOperator")} placeholder="First Last" required />
+            <Grid3>
+              <Field label="Vehicle Year" id="coi-yr" value={form.vehicleYear} onChange={set("vehicleYear")} placeholder="2024" />
+              <Field label="Make" id="coi-make" value={form.vehicleMake} onChange={set("vehicleMake")} placeholder="Toyota" />
+              <Field label="Model" id="coi-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Camry" />
+            </Grid3>
+            <Grid2>
+              <Field label="VIN" id="coi-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+              <Field label="Plate Number" id="coi-plate" value={form.plateNumber} onChange={set("plateNumber")} placeholder="e.g. ABC1234" />
+            </Grid2>
+          </Panel>
+
+          {/* Policy Period */}
+          <Panel title="Coverage Period">
+            <Grid3>
+              <Field label="Certificate Date" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
+              <Field label="Effective Date" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
+              <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+            </Grid3>
+            <Grid2>
+              <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KLT-XXXX" : "MD-00S0137"} />
+              <Field label="Revision Number" id="coi-rev" value={form.revisionNumber} onChange={set("revisionNumber")} placeholder="e.g. 0" />
+            </Grid2>
+          </Panel>
+
+          {/* Coverage Options */}
+          <Panel title="Coverage Options">
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                <Checkbox checked={additionalInsured} onCheckedChange={(v) => setAdditionalInsured(!!v)} />
+                <div>
+                  <div className="text-xs font-semibold">Additional Insured</div>
+                  <div className="text-xs text-muted-foreground">Marks ADDL INSD checkbox on all coverage rows</div>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                <Checkbox checked={waiverOfSubrogation} onCheckedChange={(v) => setWaiverOfSubrogation(!!v)} />
+                <div>
+                  <div className="text-xs font-semibold">Waiver of Subrogation</div>
+                  <div className="text-xs text-muted-foreground">Marks SUBR WVD checkbox on all coverage rows</div>
+                </div>
+              </label>
+              {rules.umRejectable && (
+                <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                  <Checkbox checked={umRejected} onCheckedChange={(v) => setUmRejected(!!v)} />
+                  <div>
+                    <div className="text-xs font-semibold">UM Rejected by Named Insured</div>
+                    <div className="text-xs text-muted-foreground">Shows "REJECTED BY NAMED INSURED" in UM row</div>
+                  </div>
+                </label>
+              )}
+              {rules.pip && (
+                <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                  <Checkbox checked={pipWaived} onCheckedChange={(v) => setPipWaived(!!v)} />
+                  <div>
+                    <div className="text-xs font-semibold">PIP Waived by Named Insured</div>
+                    <div className="text-xs text-muted-foreground">Shows "WAIVED BY NAMED INSURED" in PIP row</div>
+                  </div>
+                </label>
+              )}
+            </div>
+          </Panel>
         </div>
 
-        <Button className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white" onClick={handleDownload}>
-          <Download className="w-4 h-4" /> Download Klutch COI (PDF)
-        </Button>
-        <p className="text-xs text-muted-foreground italic text-center">Prints in portrait COI format with state-specific coverage limits auto-populated.</p>
+        <PreviewPanel
+          text={[
+            `CERTIFICATE OF COVERAGE`,
+            `Issuing Carrier: ${isKlutch ? "Klutch Insurance Company" : "Metrocars Leasing Corp (Self-Insured)"}`,
+            `Certificate No.: ${form.certNumber || "—"}`,
+            `Date: ${form.certDate ? new Date(form.certDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
+            ``,
+            `Named Operator: ${form.namedOperator || "—"}`,
+            `Vehicle: ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}`,
+            `VIN: ${form.vin || "—"}`,
+            `Coverage Period: ${form.effectiveDate && form.expirationDate ? `${new Date(form.effectiveDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ${new Date(form.expirationDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : "—"}`,
+            `State of Loss: ${state}`,
+            ``,
+            `COVERAGES:`,
+            `BI: ${isKlutch ? "Per policy" : `${rules.biPP} / ${rules.biPO}`}`,
+            `PD: ${isKlutch ? "Per policy" : rules.pdLimit}`,
+            `UM: ${umRejected ? "REJECTED" : (isKlutch ? "Per policy" : `${rules.umPP} / ${rules.umPO}`)}`,
+            `UIM: ${isKlutch ? "Per policy" : (rules.uimPP || "N/A")}`,
+            `PIP: ${!rules.pip ? "N/A" : pipWaived ? "WAIVED" : (isKlutch ? "Statutory Min" : rules.pipLimit)}`,
+            `COL: Subject to Member Agreement`,
+            `COMP: Subject to Member Agreement`,
+          ].join("\n")}
+          onCopy={() => { toast.success("Copied"); }}
+          onDownload={handleDownload}
+          pdfUrl={previewPdfUrl}
+          onPreview={handlePreviewOnly}
+        />
       </div>
     </div>
   );
 }
 
-// ─── Tab: Metrocars Dec Page ──────────────────────────────────────────────────
+
 function MetrocarsDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const [form, setForm] = useState({
     memberName: "",
@@ -7473,8 +7339,8 @@ export default function DocGenerator() {
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} />;
       case "pip-bill-review": return <MedicalBillReviewTab />;
-      case "coi-whip": return <WhipCOITab initialState={initialMemberState} />;
-      case "coi-klutch": return <KlutchCOITab initialState={initialMemberState} />;
+      case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
+      case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "dec-page-whip": return <MetrocarsDecPageTab initialState={initialMemberState} />;
       case "dec-page-klutch": return <KlutchDecPageTab initialState={initialMemberState} />;
       case "dv-calculator": return <DVCalculatorTab />;
