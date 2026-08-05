@@ -653,10 +653,10 @@ function BlankLetterheadTab() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, today, 14, y, W - 28, 5);
+    y = wrapText(doc, today, 14, y, W - 28, 6.5);
     y += 6;
-    if (form.recipient) y = wrapText(doc, form.recipient, 14, y, W - 28, 5);
-    if (form.recipientAddress) y = wrapText(doc, form.recipientAddress, 14, y, W - 28, 5);
+    if (form.recipient) y = wrapText(doc, form.recipient, 14, y, W - 28, 6.5);
+    if (form.recipientAddress) y = wrapText(doc, form.recipientAddress, 14, y, W - 28, 6.5);
     y += 4;
     y = wrapText(
       doc,
@@ -669,13 +669,13 @@ function BlankLetterheadTab() {
     if (form.subject) {
       y += 3;
       doc.setFont("helvetica", "italic");
-      y = wrapText(doc, form.subject, 14, y, W - 28, 5);
+      y = wrapText(doc, form.subject, 14, y, W - 28, 6.5);
       doc.setFont("helvetica", "normal");
     }
     y += 6;
-    y = wrapText(doc, `Dear ${form.recipient || "[Recipient]"},`, 14, y, W - 28, 5);
+    y = wrapText(doc, `Dear ${form.recipient || "[Recipient]"},`, 14, y, W - 28, 6.5);
     y += 4;
-    y = wrapText(doc, form.body || "[Letter body]", 14, y, W - 28, 5);
+    y = wrapText(doc, form.body || "[Letter body]", 14, y, W - 28, 6.5);
     y += 8;
     doc.text("Sincerely,", 14, y);
     y += 10;
@@ -811,7 +811,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, 14, y, W - 28, 5);
+    y = wrapText(doc, preview, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -929,7 +929,7 @@ Whip Claims Management`;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, 14, y, W - 28, 5);
+    y = wrapText(doc, preview, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1059,7 +1059,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, 14, y, W - 28, 5);
+    y = wrapText(doc, preview, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1671,22 +1671,13 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
       doc.text("(855) 906-5949  |  claims@drivewhip.com", rm, y + 15, { align: "right" });
     }
     y += 28;
-    doc.setDrawColor(23, 27, 49); doc.setLineWidth(0.5); doc.line(lm, y, rm, y);
+    // Single thin grey divider only (no thick navy line, no second title header)
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3); doc.line(lm, y, rm, y);
     y += 8;
 
-    // ── Document title ──
-    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(23, 27, 49);
-    doc.text("COVERAGE POSITION — TNC PRIMARY", W / 2, y, { align: "center" });
-    y += 5;
-    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100);
-    doc.text(`Claim #${form.claimNumber || "[Claim Number]"}`, W / 2, y, { align: "center" });
-    y += 8;
-    doc.setDrawColor(200, 200, 200); doc.line(lm, y, rm, y);
-    y += 8;
-
-    // ── Body ──
+    // ── Body ── (1.5 line spacing = 9pt * 1.5 = ~6.75mm, use 6.5)
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, lm, y, tw, 5);
+    y = wrapText(doc, preview, lm, y, tw, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1826,7 +1817,7 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     const body = template?.build({ ...fields, dol: fields.dol || dateOfLoss }) || "";
-    y = wrapText(doc, body, 14, y, W - 28, 5);
+    y = wrapText(doc, body, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2009,7 +2000,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, 14, y, W - 28, 5);
+    y = wrapText(doc, preview, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2162,7 +2153,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, 14, y, W - 28, 5);
+    y = wrapText(doc, preview, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2331,7 +2322,7 @@ function ReleaseBITab() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, releaseText, 14, y, W - 28, 5);
+    y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
     addSOLNotice(doc, form.state);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2534,7 +2525,7 @@ function ReleasePDTab() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, releaseText, 14, y, W - 28, 5);
+    y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
     addSOLNotice(doc, form.state);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2742,22 +2733,22 @@ function TLSettlementTab() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     if (aiLetter) {
-      y = wrapText(doc, aiLetter, 14, y, W - 28, 5);
+      y = wrapText(doc, aiLetter, 14, y, W - 28, 6.5);
     } else {
       const todayStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-      y = wrapText(doc, todayStr, 14, y, W - 28, 5); y += 4;
-      y = wrapText(doc, `Claimant: ${form.claimantName || "[Claimant Name]"}`, 14, y, W - 28, 5);
-      y = wrapText(doc, `Claim No.: ${form.claimNumber || "[Claim Number]"}`, 14, y, W - 28, 5);
-      y = wrapText(doc, `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`, 14, y, W - 28, 5);
-      if (form.vehicle) y = wrapText(doc, `Vehicle: ${form.vehicle}${form.vin ? ` | VIN: ${form.vin}` : ""}`, 14, y, W - 28, 5);
-      if (form.market) y = wrapText(doc, `Market: ${form.market}`, 14, y, W - 28, 5);
+      y = wrapText(doc, todayStr, 14, y, W - 28, 6.5); y += 4;
+      y = wrapText(doc, `Claimant: ${form.claimantName || "[Claimant Name]"}`, 14, y, W - 28, 6.5);
+      y = wrapText(doc, `Claim No.: ${form.claimNumber || "[Claim Number]"}`, 14, y, W - 28, 6.5);
+      y = wrapText(doc, `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`, 14, y, W - 28, 6.5);
+      if (form.vehicle) y = wrapText(doc, `Vehicle: ${form.vehicle}${form.vin ? ` | VIN: ${form.vin}` : ""}`, 14, y, W - 28, 6.5);
+      if (form.market) y = wrapText(doc, `Market: ${form.market}`, 14, y, W - 28, 6.5);
       y += 4;
       const firstName = form.claimantName.split(/[\s,]+/)[0] || form.claimantName || "[Claimant]";
-      y = wrapText(doc, "Re: Total Loss Settlement Offer", 14, y, W - 28, 5); y += 4;
-      y = wrapText(doc, `Dear ${firstName},`, 14, y, W - 28, 5); y += 4;
-      y = wrapText(doc, `Following our investigation of the above-referenced claim, the ${form.vehicle || "vehicle"} has been determined to be a total loss. After review of the vehicle's condition, applicable market data, and comparable valuations, Metro Cars Leasing Corp. has calculated your net settlement as follows:`, 14, y, W - 28, 5); y += 5;
+      y = wrapText(doc, "Re: Total Loss Settlement Offer", 14, y, W - 28, 6.5); y += 4;
+      y = wrapText(doc, `Dear ${firstName},`, 14, y, W - 28, 6.5); y += 4;
+      y = wrapText(doc, `Following our investigation of the above-referenced claim, the ${form.vehicle || "vehicle"} has been determined to be a total loss. After review of the vehicle's condition, applicable market data, and comparable valuations, Metro Cars Leasing Corp. has calculated your net settlement as follows:`, 14, y, W - 28, 6.5); y += 5;
       doc.setFont("helvetica", "bold");
-      y = wrapText(doc, "Description / Amount", 14, y, W - 28, 5); y += 1;
+      y = wrapText(doc, "Description / Amount", 14, y, W - 28, 6.5); y += 1;
       doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
       doc.line(14, y, W - 14, y); y += 3;
       doc.setFont("helvetica", "normal");
@@ -2788,27 +2779,27 @@ function TLSettlementTab() {
       doc.text("Net Amount Payable to Claimant:", 14, y);
       doc.text(`$${netAmount}`, rightX, y, { align: "right" }); y += 6;
       doc.setFont("helvetica", "normal");
-      y = wrapText(doc, "Payment will be issued as follows:", 14, y, W - 28, 5); y += 2;
+      y = wrapText(doc, "Payment will be issued as follows:", 14, y, W - 28, 6.5); y += 2;
       if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) {
-        y = wrapText(doc, `• Loan payoff of $${parseFloat(form.lienPayoff).toFixed(2)} payable directly to ${form.lienHolder} in satisfaction of the outstanding lien.`, 14, y, W - 28, 5);
+        y = wrapText(doc, `• Loan payoff of $${parseFloat(form.lienPayoff).toFixed(2)} payable directly to ${form.lienHolder} in satisfaction of the outstanding lien.`, 14, y, W - 28, 6.5);
       }
-      y = wrapText(doc, `• Net proceeds of $${netAmount} payable directly to ${form.claimantName || "[Claimant]"}.`, 14, y, W - 28, 5); y += 4;
-      y = wrapText(doc, "We hereby tender the above amount in full and final resolution of all property damage claims arising from this loss.", 14, y, W - 28, 5); y += 4;
+      y = wrapText(doc, `• Net proceeds of $${netAmount} payable directly to ${form.claimantName || "[Claimant]"}.`, 14, y, W - 28, 6.5); y += 4;
+      y = wrapText(doc, "We hereby tender the above amount in full and final resolution of all property damage claims arising from this loss.", 14, y, W - 28, 6.5); y += 4;
       if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) {
-        y = wrapText(doc, "Please note that the storage deduction reflected above represents the portion of billed storage fees that exceeded a reasonable and customary rate and was therefore disallowed. Only reasonable and customary storage charges have been considered in this settlement.", 14, y, W - 28, 5); y += 4;
+        y = wrapText(doc, "Please note that the storage deduction reflected above represents the portion of billed storage fees that exceeded a reasonable and customary rate and was therefore disallowed. Only reasonable and customary storage charges have been considered in this settlement.", 14, y, W - 28, 6.5); y += 4;
       }
       if (form.rentalCutoffDate) {
         const rentalDisplay = new Date(form.rentalCutoffDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-        y = wrapText(doc, `Rental reimbursement is a separate matter and will be reviewed upon receipt of invoice. Charges incurred through ${rentalDisplay} will be considered; any amounts beyond that date are subject to further review.`, 14, y, W - 28, 5); y += 4;
+        y = wrapText(doc, `Rental reimbursement is a separate matter and will be reviewed upon receipt of invoice. Charges incurred through ${rentalDisplay} will be considered; any amounts beyond that date are subject to further review.`, 14, y, W - 28, 6.5); y += 4;
       }
-      y = wrapText(doc, "To accept this settlement, please contact our office at your earliest convenience. Payment will be issued promptly upon confirmation of acceptance.", 14, y, W - 28, 5); y += 4;
-      y = wrapText(doc, "If you have any questions, please do not hesitate to contact the undersigned.", 14, y, W - 28, 5); y += 6;
-      y = wrapText(doc, "Sincerely,", 14, y, W - 28, 5); y += 8;
+      y = wrapText(doc, "To accept this settlement, please contact our office at your earliest convenience. Payment will be issued promptly upon confirmation of acceptance.", 14, y, W - 28, 6.5); y += 4;
+      y = wrapText(doc, "If you have any questions, please do not hesitate to contact the undersigned.", 14, y, W - 28, 6.5); y += 6;
+      y = wrapText(doc, "Sincerely,", 14, y, W - 28, 6.5); y += 8;
       doc.setFont("helvetica", "bold");
-      y = wrapText(doc, form.adjusterName || "[Handler Name]", 14, y, W - 28, 5);
+      y = wrapText(doc, form.adjusterName || "[Handler Name]", 14, y, W - 28, 6.5);
       doc.setFont("helvetica", "normal");
-      y = wrapText(doc, "Claims Adjuster | Metro Cars Leasing Corp. — Claims Management", 14, y, W - 28, 5);
-      wrapText(doc, "claims@drivewhip.com", 14, y, W - 28, 5);
+      y = wrapText(doc, "Claims Adjuster | Metro Cars Leasing Corp. — Claims Management", 14, y, W - 28, 6.5);
+      wrapText(doc, "claims@drivewhip.com", 14, y, W - 28, 6.5);
     }
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -3462,7 +3453,7 @@ function CarrierRebuttalTab() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, draft || "(No draft yet)", 14, y, W - 28, 5);
+    y = wrapText(doc, draft || "(No draft yet)", 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -3779,9 +3770,9 @@ claims@drivewhip.com`;
 
     // Disclaimer
     const disclaimer = "This document confirms that the above payment has been issued by Whip Claims Management / Metrocars Leasing Corp in connection with the referenced claim. This payment is issued in full and final settlement of the above-referenced claim and does not constitute an admission of liability.";
-    y = wrapText(doc, disclaimer, 14, y, W - 28, 5);
+    y = wrapText(doc, disclaimer, 14, y, W - 28, 6.5);
     y += 6;
-    if (form.notes) { y = wrapText(doc, `Notes: ${form.notes}`, 14, y, W - 28, 5); y += 4; }
+    if (form.notes) { y = wrapText(doc, `Notes: ${form.notes}`, 14, y, W - 28, 6.5); y += 4; }
 
     doc.setFont("helvetica", "bold");
     doc.text(`Authorized By: ${form.adjusterName || "[Adjuster Name]"}`, 14, y); y += 5;
@@ -4019,8 +4010,8 @@ Whip Claims Management`;
     doc.setFont("helvetica", "bold");
     doc.text("TOW DETAILS", 14, y); y += 5;
     doc.setFont("helvetica", "normal");
-    y = wrapText(doc, `Pickup: ${form.pickupAddress || "[Pickup]"}`, 14, y, W - 28, 5);
-    y = wrapText(doc, `Dropoff: ${form.dropoffAddress || "[Dropoff]"}`, 14, y, W - 28, 5);
+    y = wrapText(doc, `Pickup: ${form.pickupAddress || "[Pickup]"}`, 14, y, W - 28, 6.5);
+    y = wrapText(doc, `Dropoff: ${form.dropoffAddress || "[Dropoff]"}`, 14, y, W - 28, 6.5);
     if (form.towDriver) { doc.text(`Driver: ${form.towDriver}`, 14, y); y += 5; }
     if (providerPhone) { doc.text(`Phone: ${providerPhone}`, 14, y); y += 5; }
     y += 3;
@@ -4062,7 +4053,7 @@ Whip Claims Management`;
     doc.setFontSize(9);
     doc.setTextColor(60, 60, 60);
     doc.setFont("helvetica", "normal");
-    if (form.notes) { y = wrapText(doc, `Notes: ${form.notes}`, 14, y, W - 28, 5); y += 4; }
+    if (form.notes) { y = wrapText(doc, `Notes: ${form.notes}`, 14, y, W - 28, 6.5); y += 4; }
     doc.text(`Authorized By: ${form.adjusterName || "[Adjuster Name]"}`, 14, y);
 
     addSOLNotice(doc);
@@ -4579,7 +4570,7 @@ Whip Claims Management`;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, releaseText, 14, y, W - 28, 5);
+    y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
     addSOLNotice(doc, "Georgia");
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -5972,7 +5963,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // Left column: logo (constrained to left ~35% to avoid title overlap)
     if (isKlutch) {
       // Klutch logo: 26x10mm (proportional, not stretched)
-      try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 26, 10); } catch {}
+      // Klutch logo: wider than tall (logo is landscape ~2.1:1 ratio)
+      try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 32, 12); } catch {}
     } else {
       // Metrocars: MCL logo (inverted, white on dark)
       try {
@@ -6075,10 +6067,13 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", lm + 14, y + 21);
     } else {
       doc.text("Metrocars Leasing Corp", lm + 2, y + 7);
-      doc.text("Whip Claims Management", lm + 2, y + 10.5);
-      doc.text("P.O. Box 10622", lm + 2, y + 14);
-      doc.text("Rockville, MD 20850", lm + 2, y + 17.5);
-      doc.text("(855) 906-5949", lm + 2, y + 21);
+      doc.text("P.O. Box 10622", lm + 2, y + 10.5);
+      doc.text("Rockville, MD 20850", lm + 2, y + 14);
+      doc.text("(855) 906-5949", lm + 2, y + 17.5);
+      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+      doc.text("CERT. NO:", lm + 2, y + 21);
+      doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
+      doc.text(form.certNumber || "—", lm + 14, y + 21);
     }
 
     // Col 2: Contact
@@ -6088,13 +6083,12 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
     if (isKlutch) {
       doc.text("PHONE: (855) 906-5949", c2x, y + 7);
-      doc.text("FAX: N/A", c2x, y + 10.5);
+      doc.text("FAX: 877-890-0531", c2x, y + 10.5);
       doc.text("EMAIL: claims@klutchinsurance.com", c2x, y + 14);
     } else {
-      doc.text("Whip Claims Management", c2x, y + 7);
-      doc.text("PHONE: (855) 906-5949", c2x, y + 10.5);
-      doc.text("FAX: —", c2x, y + 14);
-      doc.text("EMAIL: claims@drivewhip.com", c2x, y + 17.5);
+      doc.text("PHONE: (855) 906-5949", c2x, y + 7);
+      doc.text("FAX: 877-890-0531", c2x, y + 10.5);
+      doc.text("EMAIL: claims@drivewhip.com", c2x, y + 14);
     }
 
     // Col 3: Insurer
@@ -6138,14 +6132,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.line(lm + textW * 0.5, y, lm + textW * 0.5, y + insuredH);
     doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
     doc.text("INSURED", lm + 2, y + 3.5);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(0, 0, 0);
-    doc.text(isKlutch ? "METROCARS LEASING CORP" : (form.namedOperator || "—").toUpperCase(), lm + 2, y + 9);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-    if (isKlutch) {
-      doc.text(`Named Operator / Lessee: ${form.namedOperator || "—"}`, lm + 2, y + 13.5);
-    } else {
-      doc.text("Metrocars Leasing Corp / Whip Claims Management", lm + 2, y + 13.5);
-    }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0, 0, 0);
+    doc.text("METROCARS LEASING CORP", lm + 2, y + 8);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+    // Second insured: named operator/member
+    doc.text(`${form.namedOperator || "—"}`, lm + 2, y + 13);
     const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
     doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17.5);
     if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 21);
@@ -6170,7 +6161,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.text("COVERAGES", lm, y + 4);
     doc.text(`CERTIFICATE NUMBER: ${form.certNumber || "—"}`, lm + 50, y + 4);
     doc.text(`REVISION NUMBER: ${form.revisionNumber || "—"}`, rm, y + 4, { align: "right" });
-    y += 7;
+    y += 9;  // extra spacing before table
 
     // Preamble
     doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(60, 60, 60);
@@ -6180,7 +6171,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
     // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
-    const cols = { insr: 8, addl: 7, subr: 7, type: 62, pol: 22, eff: 17, exp: 17 };
+    // Column widths: total = textW (186mm on letter). Give type more room, tighten others
+    const cols = { insr: 7, addl: 6, subr: 6, type: 58, pol: 28, eff: 16, exp: 16 };
     const limW = textW - cols.insr - cols.addl - cols.subr - cols.type - cols.pol - cols.eff - cols.exp;
     const rowH = 8;
     const hdrH = 6;
@@ -6320,10 +6312,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       : `2. Metrocars Leasing Corp is self-insured pursuant to Certificate No. ${form.certNumber || "—"} issued by the Maryland Motor Vehicle Administration.`;
     const desc3 = `3. During any TNC period in which Uber/Lyft coverage is primary, this certificate provides contingent coverage only to the extent not covered by the TNC carrier.`;
     const desc4 = `4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per applicable state law.`;
-    doc.text(desc1, lm + 2, y + 7.5, { maxWidth: textW - 4 });
-    doc.text(desc2, lm + 2, y + 12, { maxWidth: textW - 4 });
-    doc.text(desc3, lm + 2, y + 16.5, { maxWidth: textW - 4 });
-    doc.text(desc4, lm + 2, y + 21, { maxWidth: textW - 4 });
+    // Increase description box height and add more spacing between items
+    doc.text(desc1, lm + 2, y + 6.5, { maxWidth: textW - 4 });
+    doc.text(desc2, lm + 2, y + 12.5, { maxWidth: textW - 4 });
+    doc.text(desc3, lm + 2, y + 18, { maxWidth: textW - 4 });
+    doc.text(desc4, lm + 2, y + 23, { maxWidth: textW - 4 });
     y += descH + 3;
 
     // ── BOTTOM GRID: CERT HOLDER + CANCELLATION ──────────────────────────────
@@ -6340,10 +6333,9 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       doc.text("P.O. Box 10622", lm + 2, y + 12.5);
       doc.text("Rockville, MD 20850", lm + 2, y + 17);
     } else {
-      doc.text("Whip Claims Management / Metrocars Leasing Corp", lm + 2, y + 8);
+      doc.text("Metrocars Leasing Corp", lm + 2, y + 8);
       doc.text("P.O. Box 10622", lm + 2, y + 12.5);
       doc.text("Rockville, MD 20850", lm + 2, y + 17);
-      doc.text("(855) 906-5949  |  claims@drivewhip.com", lm + 2, y + 21.5);
     }
     // Cancellation
     const cx2 = lm + textW * 0.4 + 2;
