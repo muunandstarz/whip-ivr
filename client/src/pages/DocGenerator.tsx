@@ -5907,7 +5907,7 @@ const COI_STATE_RULES: Record<string, {
   DC: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$10,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: true, pipLimit: "$50,000", umRejectable: false, statute: "D.C. Code § 31-2406", authority: "DC Department of Motor Vehicles" },
 };
 
-const COI_STATES = ["MD","VA","FL","GA","IL","MA","PA","TX","NJ","NY","DC"];
+const COI_STATES = ["MD","VA","FL","GA","IL","MA","PA","TX"];
 
 function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [insurer, setInsurer] = React.useState<"klutch" | "metrocars">("klutch");
