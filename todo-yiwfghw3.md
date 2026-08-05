@@ -250,3 +250,14 @@
 - [x] Process Klutch logo (transparent background) for use in PDF
 - [ ] DocGen: remove carrier/subrogee from BI release, fix preview
 - [ ] TL Settlement: rename from Felsenburg, match reference letter format exactly
+
+## Session 2026-08-05 (Part 2)
+- [x] Rename PIP Exhaustion tab to "PIP Bill Review"
+- [x] Add Massachusetts (c.90 §34M) to PIP Bill Review states
+- [x] Implement full PIP Bill Review: multi-file upload, AI HCFA-1500 extraction, fee schedule review (PA/FL/MD/MA), line-by-line results, EOR PDF generation
+- [x] Add extractPIPBills tRPC procedure for AI HCFA-1500 extraction
+- [x] Fix orange overuse in all PDF letterheads (title now navy, only logo remains orange)
+- [x] Reduce Whip logo size by 20% (36x24 → 29x19) on all letterhead
+- [x] Fix LOU Calculator section headers to navy
+- [x] Fix Payment Receipt amount color to navy
+- [x] Fix COI additional insured/waiver checkmarks to navy

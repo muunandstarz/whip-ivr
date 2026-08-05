@@ -546,4 +546,48 @@ Format as JSON: { payments: [{date, provider, amount, serviceType}], totalPaid: 
     .query(async ({ input }) => {
       return lookupClaimForDocgen(input.claimNumber);
     }),
+  extractPIPBills: protectedProcedure
+    .input(z.object({ fileUrl: z.string().url(), state: z.enum(["PA", "FL", "MD", "MA"]) }))
+    .mutation(async ({ input }) => {
+      const prompt = `You are a medical billing extraction specialist. Extract all line items from this HCFA-1500 health insurance claim form.
+
+CRITICAL RULES:
+1. Each row in Box 24 is a SEPARATE line item. Do NOT combine rows.
+2. If the same CPT appears on multiple dates, output a separate line for EACH date.
+3. ALWAYS read dollar amounts in Box 24F. Never return null for billed amounts.
+4. Read units in Box 24G. Each row's units stand alone.
+5. If the document contains MULTIPLE bills, include ALL line items from ALL bills.
+
+Return ONLY valid JSON in this exact schema:
+{
+  "lines": [
+    {
+      "provider": "string (provider name from box 33)",
+      "dos": "YYYY-MM-DD (box 24A From date for THIS row)",
+      "pos": "string (place of service from box 24B)",
+      "cpt": "string (CPT code from box 24D)",
+      "modifier": "string (modifiers from box 24D, empty if none)",
+      "units": number (from box 24G for THIS row),
+      "billed": number (dollars from box 24F for THIS row, no dollar sign)
+    }
+  ]
+}
+Return JSON only. No preamble, no markdown.`;
+      const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: input.fileUrl } },
+      ];
+      const result = await invokeLLM({
+        messages: [{ role: "user", content: userContent as any }],
+        max_tokens: 4000,
+      });
+      try {
+        const text = extractText(result);
+        const clean = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+        const parsed = JSON.parse(clean) as { lines: Array<{ provider: string; dos: string; pos: string; cpt: string; modifier: string; units: number; billed: number }> };
+        return { lines: parsed.lines || [] };
+      } catch {
+        return { lines: [] };
+      }
+    }),
 });

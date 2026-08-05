@@ -145,8 +145,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Medical Review",
     items: [
-      { id: "pip-exhaustion", label: "PIP Exhaustion (FL/PA/VA)", icon: AlertTriangle },
-      { id: "pip-bill-review", label: "Medical Bills Review", icon: FileText },
+      { id: "pip-exhaustion", label: "PIP Bill Review", icon: AlertTriangle },
+      { id: "pip-bill-review", label: "PIP Bill Review", icon: FileText },
     ],
   },
 
@@ -163,9 +163,9 @@ const MCL_LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAigAAAC8CAYAAABSZVX5AABX20lEQVR4nO
 
 function addWhipLetterhead(doc: jsPDF, title: string, subtitle?: string) {
   const W = doc.internal.pageSize.getWidth();
-  // Logo — left side, top
+  // Logo — left side, top (20% smaller: 36x24 -> 29x19)
   try {
-    doc.addImage("data:image/png;base64," + WHIP_LOGO_B64, "PNG", 14, 6, 36, 24);
+    doc.addImage("data:image/png;base64," + WHIP_LOGO_B64, "PNG", 14, 6, 29, 19);
   } catch (_e) {
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
@@ -175,7 +175,7 @@ function addWhipLetterhead(doc: jsPDF, title: string, subtitle?: string) {
   // Company info — right side
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(0, 0, 0);
+  doc.setTextColor(23, 27, 49);
   doc.text("Whip Claims Management", W - 14, 10, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -187,12 +187,12 @@ function addWhipLetterhead(doc: jsPDF, title: string, subtitle?: string) {
   doc.setLineWidth(0.4);
   doc.line(14, 28, W - 14, 28);
   doc.setLineWidth(0.2);
-  // Document title below rule
+  // Document title below rule — navy, not orange
   let y = 36;
   if (title) {
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(...WHIP_ORANGE);
+    doc.setTextColor(23, 27, 49);
     doc.text(title, 14, y);
     y += 6;
   }
@@ -3770,7 +3770,7 @@ claims@drivewhip.com`;
     doc.text(`Purpose: ${purposeLabels[form.paymentPurpose] || form.paymentPurpose}`, 14, y); y += 5;
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(...WHIP_ORANGE);
+    doc.setTextColor(23, 27, 49);
     doc.text(`$${form.paymentAmount || "0.00"}`, 14, y); y += 7;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
@@ -4216,7 +4216,7 @@ Whip Claims Management`;
 
 // ─── PIP Exhaustion Tab ───────────────────────────────────────────────────────
 function PIPExhaustionTab() {
-  const [state, setState] = useState<"fl" | "pa" | "va">("fl");
+  const [state, setState] = useState<"fl" | "pa" | "va" | "ma">("fl");
   const [form, setForm] = useState({
     recipient: "",
     claimNo: "",
@@ -4358,7 +4358,7 @@ Whip Claims Management`;
 
   const handleDownload = () => {
     const doc = new jsPDF();
-    const stateLabel = state === "fl" ? "Florida" : state === "pa" ? "Pennsylvania" : "Virginia";
+    const stateLabel = state === "fl" ? "Florida" : state === "pa" ? "Pennsylvania" : state === "ma" ? "Massachusetts" : "Virginia";
     let y = addWhipLetterhead(doc, `PIP Exhaustion Notice — ${stateLabel}`, `Claim #${form.claimNo || "[CLAIM NUMBER]"}`);
     const W = doc.internal.pageSize.getWidth();
     doc.setFontSize(9.5);
@@ -4378,10 +4378,11 @@ Whip Claims Management`;
   };
   const handlePreviewOnly = () => { handleDownload(); };
 
-  const STATE_CHIPS: { id: "fl" | "pa" | "va"; label: string; sub: string }[] = [
+  const STATE_CHIPS: { id: "fl" | "pa" | "va" | "ma"; label: string; sub: string }[] = [
     { id: "fl", label: "Florida", sub: "§627.736" },
     { id: "pa", label: "Pennsylvania", sub: "First-party medical" },
     { id: "va", label: "Virginia", sub: "Add-on PIP" },
+    { id: "ma", label: "Massachusetts", sub: "c.90 §34M" },
   ];
 
   return (
@@ -4411,6 +4412,9 @@ Whip Claims Management`;
         )}
         {state === "va" && (
           <p className="mt-2 text-xs text-[#ff6221]/80 italic">Use when Virginia add-on PIP is exhausted. No subrogation. No impact on third-party rights.</p>
+        )}
+        {state === "ma" && (
+          <p className="mt-2 text-xs text-[#ff6221]/80 italic">Use when Massachusetts PIP ($8,000) is exhausted. M.G.L. c. 90 §34M. Workers&apos; Comp fee schedule. COB applies above $2,000 when claimant has health insurance.</p>
         )}
       </Panel>
       <Panel title="PIP Document Upload (Optional — Auto-fills Fields)" tag="AI">
@@ -4904,10 +4908,10 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     // Repair Period section
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(255, 98, 33);
+    doc.setTextColor(23, 27, 49);
     doc.text("REPAIR PERIOD", 14, y);
     y += 2;
-    doc.setDrawColor(255, 98, 33);
+    doc.setDrawColor(23, 27, 49);
     doc.setLineWidth(0.5);
     doc.line(14, y, W - 14, y);
     doc.setLineWidth(0.2);
@@ -4939,10 +4943,10 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     // Fleet Utilization Log section
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(255, 98, 33);
+    doc.setTextColor(23, 27, 49);
     doc.text("FLEET UTILIZATION LOG", 14, y);
     y += 2;
-    doc.setDrawColor(255, 98, 33);
+    doc.setDrawColor(23, 27, 49);
     doc.setLineWidth(0.5);
     doc.line(14, y, W - 14, y);
     doc.setLineWidth(0.2);
@@ -5006,10 +5010,10 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     // LOU Breakdown section
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(255, 98, 33);
+    doc.setTextColor(23, 27, 49);
     doc.text("LOSS OF USE / RENTAL CALCULATION", 14, y);
     y += 2;
-    doc.setDrawColor(255, 98, 33);
+    doc.setDrawColor(23, 27, 49);
     doc.setLineWidth(0.5);
     doc.line(14, y, W - 14, y);
     doc.setLineWidth(0.2);
@@ -5037,7 +5041,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);
-    doc.setTextColor(255, 98, 33);
+    doc.setTextColor(23, 27, 49);
     doc.setFontSize(11);
     doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
     y += 16;
@@ -5293,392 +5297,590 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
   );
 }
 
-// ─── Tab: Medical Bills Review ────────────────────────────────────────────────
-function MedicalBillsReviewTab() {
-  const [state, setState] = useState("MD");
-  const [dateOfLoss, setDateOfLoss] = useState("");
-  const [impactType, setImpactType] = useState("");
-  const [injuryDescription, setInjuryDescription] = useState("");
-  const [factsOfLoss, setFactsOfLoss] = useState("");
-  const [coverageType, setCoverageType] = useState<"pip" | "bi" | "umbi" | "all">("all");
-  const [demandFile, setDemandFile] = useState<File | null>(null);
-  const [demandFileName, setDemandFileName] = useState("");
-  const [vehiclePhoto1, setVehiclePhoto1] = useState<File | null>(null);
-  const [vehiclePhoto2, setVehiclePhoto2] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [analysis, setAnalysis] = useState<{
-    bills: Array<{provider: string; date: string; cptCode: string; description: string; amount: number; applicable: boolean; reason: string}>;
-    cptAnalysis: Array<{code: string; description: string; applicable: boolean; redFlags: string[]}>;
-    mechanismAssessment: string;
-    pipExposure: number;
-    biExposure: number;
-    umbiExposure: number;
-    totalApplicable: number;
-    totalNotApplicable: number;
-    expertSummary: string;
-    responseLetter: string;
-    redFlags: string[];
-  } | null>(null);
-  const [activeResultTab, setActiveResultTab] = useState<"bills" | "summary" | "letter">("bills");
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState<"report" | "letter">("report");
+// ─── Tab: PIP Bill Review ──────────────────────────────────────────────────────
+// Fee schedule reviewer: upload HCFA-1500 bills, AI extracts data,
+// compare against state fee schedule, generate EOR/payment letters.
+// States: PA (Act 6 / 110% Medicare), FL (§627.736 / 80% of 200% Medicare),
+//         MD (§19-505 / reasonableness), MA (c.90 §34M / WC fee schedule)
 
-  const analyzeMutation = trpc.docgen.analyzeMedicalDemand.useMutation();
+// ── Fee Schedule Data ─────────────────────────────────────────────────────────
+const PIP_RATES_PA: Record<string, { name: string; [key: string]: number | string }> = {
+  '98940': { '01': 32.45, '99': 30.10, name: 'Chiro manipulation, 1-2 regions' },
+  '98941': { '01': 47.32, '99': 43.95, name: 'Chiro manipulation, 3-4 regions' },
+  '98942': { '01': 61.20, '99': 56.80, name: 'Chiro manipulation, 5 regions' },
+  '98943': { '01': 26.40, '99': 24.55, name: 'Chiro manipulation, extraspinal' },
+  '97010': { '01': 0,     '99': 0,     name: 'Hot/cold packs (bundled)' },
+  '97012': { '01': 16.20, '99': 15.05, name: 'Mechanical traction' },
+  '97014': { '01': 14.30, '99': 13.30, name: 'Electrical stim, unattended' },
+  '97110': { '01': 32.50, '99': 30.15, name: 'Therapeutic exercise (15 min)' },
+  '97112': { '01': 36.70, '99': 34.05, name: 'Neuromuscular reeducation (15 min)' },
+  '97124': { '01': 28.60, '99': 26.55, name: 'Massage therapy (15 min)' },
+  '97140': { '01': 30.80, '99': 28.60, name: 'Manual therapy (15 min)' },
+  '97530': { '01': 39.45, '99': 36.60, name: 'Therapeutic activities (15 min)' },
+  '97161': { '01': 88.70, '99': 82.30, name: 'PT eval, low complexity' },
+  '97162': { '01': 88.70, '99': 82.30, name: 'PT eval, moderate complexity' },
+  '97163': { '01': 88.70, '99': 82.30, name: 'PT eval, high complexity' },
+  '99202': { '01': 77.20, '99': 71.65, name: 'Office visit, new pt, low' },
+  '99203': { '01': 117.10, '99': 108.70, name: 'Office visit, new pt, mod' },
+  '99204': { '01': 174.80, '99': 162.20, name: 'Office visit, new pt, high' },
+  '99213': { '01': 97.00, '99': 90.05, name: 'Office visit, est pt, mod' },
+  '99214': { '01': 137.50, '99': 127.65, name: 'Office visit, est pt, mod-high' },
+  '72040': { '01': 38.45, '99': 35.70, name: 'X-ray cervical, 2-3 views' },
+  '72100': { '01': 41.10, '99': 38.15, name: 'X-ray lumbar, 2-3 views' },
+  '72141': { '01': 247.55, '99': 229.75, name: 'MRI cervical w/o contrast' },
+  '72148': { '01': 242.45, '99': 225.00, name: 'MRI lumbar w/o contrast' },
+};
+const PIP_RATES_FL: Record<string, { name: string; [key: string]: number | string }> = {
+  '98940': { 'MIA': 33.50, 'JAX': 31.10, 'REST': 31.45, name: 'Chiro manipulation, 1-2 regions' },
+  '98941': { 'MIA': 48.90, 'JAX': 45.35, 'REST': 45.85, name: 'Chiro manipulation, 3-4 regions' },
+  '98942': { 'MIA': 63.30, 'JAX': 58.70, 'REST': 59.35, name: 'Chiro manipulation, 5 regions' },
+  '97010': { 'MIA': 0,     'JAX': 0,     'REST': 0,     name: 'Hot/cold packs (bundled)' },
+  '97014': { 'MIA': 14.75, 'JAX': 13.70, 'REST': 13.85, name: 'Electrical stim, unattended' },
+  '97110': { 'MIA': 33.50, 'JAX': 31.10, 'REST': 31.45, name: 'Therapeutic exercise (15 min)' },
+  '97112': { 'MIA': 37.90, 'JAX': 35.15, 'REST': 35.55, name: 'Neuromuscular reeducation (15 min)' },
+  '97140': { 'MIA': 31.75, 'JAX': 29.45, 'REST': 29.80, name: 'Manual therapy (15 min)' },
+  '97530': { 'MIA': 40.70, 'JAX': 37.75, 'REST': 38.15, name: 'Therapeutic activities (15 min)' },
+  '97161': { 'MIA': 91.45, 'JAX': 84.80, 'REST': 85.75, name: 'PT eval, low complexity' },
+  '97162': { 'MIA': 91.45, 'JAX': 84.80, 'REST': 85.75, name: 'PT eval, moderate complexity' },
+  '97163': { 'MIA': 91.45, 'JAX': 84.80, 'REST': 85.75, name: 'PT eval, high complexity' },
+  '99203': { 'MIA': 114.30, 'JAX': 106.05, 'REST': 107.20, name: 'Office visit, new pt, mod' },
+  '99204': { 'MIA': 170.50, 'JAX': 158.15, 'REST': 159.95, name: 'Office visit, new pt, high' },
+  '99213': { 'MIA': 94.75, 'JAX': 87.90, 'REST': 88.85, name: 'Office visit, est pt, mod' },
+  '99214': { 'MIA': 134.25, 'JAX': 124.55, 'REST': 125.90, name: 'Office visit, est pt, mod-high' },
+  '72141': { 'MIA': 241.55, 'JAX': 224.05, 'REST': 226.60, name: 'MRI cervical w/o contrast' },
+  '72148': { 'MIA': 236.55, 'JAX': 219.40, 'REST': 221.85, name: 'MRI lumbar w/o contrast' },
+};
+const PIP_RATES_MA: Record<string, { name: string; [key: string]: number | string }> = {
+  '98940': { 'STATE': 38.50, name: 'Chiro manipulation, 1-2 regions' },
+  '98941': { 'STATE': 56.20, name: 'Chiro manipulation, 3-4 regions' },
+  '98942': { 'STATE': 72.80, name: 'Chiro manipulation, 5 regions' },
+  '97010': { 'STATE': 0,     name: 'Hot/cold packs (bundled)' },
+  '97014': { 'STATE': 17.00, name: 'Electrical stim, unattended' },
+  '97110': { 'STATE': 38.30, name: 'Therapeutic exercise (15 min)' },
+  '97112': { 'STATE': 43.30, name: 'Neuromuscular reeducation (15 min)' },
+  '97124': { 'STATE': 33.80, name: 'Massage therapy (15 min)' },
+  '97140': { 'STATE': 36.30, name: 'Manual therapy (15 min)' },
+  '97530': { 'STATE': 46.50, name: 'Therapeutic activities (15 min)' },
+  '97161': { 'STATE': 104.85, name: 'PT eval, low complexity' },
+  '97162': { 'STATE': 104.85, name: 'PT eval, moderate complexity' },
+  '97163': { 'STATE': 104.85, name: 'PT eval, high complexity' },
+  '99203': { 'STATE': 128.40, name: 'Office visit, new pt, mod' },
+  '99204': { 'STATE': 191.50, name: 'Office visit, new pt, high' },
+  '99213': { 'STATE': 112.20, name: 'Office visit, est pt, mod' },
+  '99214': { 'STATE': 159.10, name: 'Office visit, est pt, mod-high' },
+  '72141': { 'STATE': 286.00, name: 'MRI cervical w/o contrast' },
+  '72148': { 'STATE': 280.15, name: 'MRI lumbar w/o contrast' },
+};
+const PIP_RATES_MD: Record<string, { name: string; [key: string]: number | string }> = {
+  '98940': { '01': 33.10, 'REST': 31.15, name: 'Chiro manipulation, 1-2 regions' },
+  '98941': { '01': 48.30, 'REST': 45.40, name: 'Chiro manipulation, 3-4 regions' },
+  '98942': { '01': 62.50, 'REST': 58.75, name: 'Chiro manipulation, 5 regions' },
+  '97010': { '01': 0,     'REST': 0,     name: 'Hot/cold packs (bundled)' },
+  '97014': { '01': 14.60, 'REST': 13.75, name: 'Electrical stim, unattended' },
+  '97110': { '01': 32.90, 'REST': 30.95, name: 'Therapeutic exercise (15 min)' },
+  '97140': { '01': 31.15, 'REST': 29.30, name: 'Manual therapy (15 min)' },
+  '97530': { '01': 39.95, 'REST': 37.55, name: 'Therapeutic activities (15 min)' },
+  '97161': { '01': 89.95, 'REST': 84.65, name: 'PT eval, low complexity' },
+  '99203': { '01': 111.55, 'REST': 104.95, name: 'Office visit, new pt, mod' },
+  '99213': { '01': 92.30, 'REST': 86.85, name: 'Office visit, est pt, mod' },
+  '99214': { '01': 130.85, 'REST': 123.10, name: 'Office visit, est pt, mod-high' },
+  '72141': { '01': 235.40, 'REST': 221.45, name: 'MRI cervical w/o contrast' },
+  '72148': { '01': 230.65, 'REST': 217.00, name: 'MRI lumbar w/o contrast' },
+};
 
-  const STATES = ["MD","DC","VA","FL","GA","IL","MA","PA","NJ","TX","NY","NC","DE","OH"];
-  const IMPACT_TYPES = ["Rear-end (low speed)", "Rear-end (moderate)", "Rear-end (high speed)", "Side impact (T-bone)", "Head-on", "Sideswipe", "Hit pedestrian", "Single vehicle", "Parking lot"];
+type PIPState = 'PA' | 'FL' | 'MD' | 'MA';
+type PIPLocality = string;
+interface PIPBillLine {
+  provider: string;
+  dos: string;
+  pos: string;
+  cpt: string;
+  modifier: string;
+  units: number;
+  billed: number;
+  codeName: string;
+  medicareRate: number | null;
+  cap: number | null;
+  allowed: number;
+  status: 'allowed' | 'partial' | 'denied' | 'bundled';
+  reason: string;
+}
+interface PIPReviewResult {
+  lines: PIPBillLine[];
+  totalBilled: number;
+  totalAllowed: number;
+  totalReduced: number;
+  pipRemaining: number;
+  flags: Array<{ severity: 'info' | 'warn' | 'severe'; title: string; detail: string }>;
+}
 
-  const uploadFile = async (file: File): Promise<string> => {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/upload/document", { method: "POST", body: fd });
-    if (!res.ok) throw new Error("Upload failed");
-    const data = await res.json() as { url: string };
-    return data.url;
+function PIPBillReviewTab() {
+  const [pipState, setPipState] = useState<PIPState>('PA');
+  const [locality, setLocality] = useState('01');
+  const [claimNumber, setClaimNumber] = useState('');
+  const [memberName, setMemberName] = useState('');
+  const [dateOfLoss, setDateOfLoss] = useState('');
+  const [pipLimit, setPipLimit] = useState('5000.00');
+  const [pipUsed, setPipUsed] = useState('0.00');
+  const [emcStatus, setEmcStatus] = useState<'yes' | 'no' | 'unknown'>('yes');
+  const [cobStatus, setCobStatus] = useState<'none' | 'primary'>('none');
+  const [files, setFiles] = useState<File[]>([]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState(0);
+  const [extractStatus, setExtractStatus] = useState('');
+  const [billLines, setBillLines] = useState<Array<{
+    provider: string; dos: string; pos: string; cpt: string;
+    modifier: string; units: number; billed: number;
+  }>>([]);
+  const [reviewing, setReviewing] = useState(false);
+  const [result, setResult] = useState<PIPReviewResult | null>(null);
+  const [activeTab, setActiveTab] = useState<'setup' | 'bills' | 'results'>('setup');
+  const [handlerName, setHandlerName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const STATE_CONFIG = {
+    PA: { name: 'Pennsylvania', statute: 'Act 6 (110% Medicare)', pipDefault: '5000.00', localities: [{ value: '01', label: '01 — Philadelphia' }, { value: '99', label: '99 — Rest of PA' }], multiplier: 1.10, chargeMethod: 'act6' as const },
+    FL: { name: 'Florida', statute: 'Fla. Stat. §627.736 (80% of 200% Medicare)', pipDefault: '10000.00', localities: [{ value: 'MIA', label: 'MIA — Miami / S. Florida' }, { value: 'JAX', label: 'JAX — N. Florida' }, { value: 'REST', label: 'REST — Rest of FL' }], multiplier: 2.00, chargeMethod: 'fl_hybrid' as const },
+    MD: { name: 'Maryland', statute: 'Md. Ins. §19-505 (Reasonableness)', pipDefault: '2500.00', localities: [{ value: '01', label: '01 — Baltimore metro' }, { value: 'REST', label: 'REST — Rest of MD' }], multiplier: 2.5, chargeMethod: 'reasonable' as const },
+    MA: { name: 'Massachusetts', statute: 'M.G.L. c.90 §34M (WC Fee Schedule)', pipDefault: '8000.00', localities: [{ value: 'STATE', label: 'STATE — Massachusetts (statewide)' }], multiplier: 1.00, chargeMethod: 'wc_schedule' as const },
   };
 
-  const handleAnalyze = async () => {
-    if (!demandFile) {
-      toast.error("Please upload a demand package PDF first");
-      return;
+  const getRates = (s: PIPState) => ({ PA: PIP_RATES_PA, FL: PIP_RATES_FL, MD: PIP_RATES_MD, MA: PIP_RATES_MA }[s]);
+
+  const getMedicareRate = (cpt: string, loc: string, s: PIPState): number | null => {
+    const rates = getRates(s);
+    const entry = rates[cpt];
+    if (!entry) return null;
+    const v = entry[loc] ?? entry['REST'] ?? entry['99'];
+    if (typeof v === 'number') return v;
+    return null;
+  };
+
+  const reviewLine = (line: typeof billLines[0]): PIPBillLine => {
+    const cfg = STATE_CONFIG[pipState];
+    const medicareRate = getMedicareRate(line.cpt, locality, pipState);
+    const rates = getRates(pipState);
+    const codeName = rates[line.cpt]?.name || '';
+    const units = Math.max(1, line.units);
+    const billed = line.billed;
+    // Bundled check
+    const ALWAYS_BUNDLED = ['97010'];
+    if (ALWAYS_BUNDLED.includes(line.cpt)) {
+      return { ...line, codeName, medicareRate: 0, cap: 0, allowed: 0, status: 'bundled', reason: 'Always bundled — not separately payable.' };
     }
-    setUploading(true);
-    try {
-      const demandUrl = await uploadFile(demandFile);
-      let photo1Url: string | undefined;
-      let photo2Url: string | undefined;
-      if (vehiclePhoto1) photo1Url = await uploadFile(vehiclePhoto1);
-      if (vehiclePhoto2) photo2Url = await uploadFile(vehiclePhoto2);
-      setUploading(false);
-      toast.info("Analyzing demand package — this may take 30–60 seconds for large files...");
-      const result = await analyzeMutation.mutateAsync({
-        demandFileUrl: demandUrl,
-        vehiclePhoto1Url: photo1Url,
-        vehiclePhoto2Url: photo2Url,
-        state,
-        dateOfLoss,
-        impactType,
-        injuryDescription,
-        factsOfLoss,
-        coverageType,
-      });
-      if (result.analysis) {
-        setAnalysis(result.analysis as typeof analysis);
-        toast.success("Analysis complete");
+    if (medicareRate === null) {
+      return { ...line, codeName, medicareRate: null, cap: null, allowed: billed, status: 'allowed', reason: 'CPT not in fee schedule — paid as billed (manual review recommended).' };
+    }
+    if (medicareRate === 0) {
+      return { ...line, codeName, medicareRate: 0, cap: 0, allowed: 0, status: 'bundled', reason: 'Bundled service — not separately payable.' };
+    }
+    let allowed = billed;
+    let cap: number | null = null;
+    let status: PIPBillLine['status'] = 'allowed';
+    let reason = '';
+    if (cfg.chargeMethod === 'act6') {
+      cap = Math.round(medicareRate * cfg.multiplier * units * 100) / 100;
+      if (billed <= cap) { allowed = billed; status = 'allowed'; reason = `Within Act 6 cap (110% Medicare × ${units} unit${units>1?'s':''})`; }
+      else { allowed = cap; status = 'partial'; reason = `Reduced to Act 6 cap (110% × $${medicareRate.toFixed(2)}/unit × ${units}). Reduction: $${(billed-cap).toFixed(2)}.`; }
+    } else if (cfg.chargeMethod === 'fl_hybrid') {
+      const schedule = medicareRate * cfg.multiplier * units;
+      const lesser = Math.min(billed, schedule);
+      cap = Math.round(lesser * 0.80 * 100) / 100;
+      allowed = cap;
+      status = 'partial';
+      reason = billed <= schedule
+        ? `FL PIP pays 80% of billed ($${billed.toFixed(2)} × 80%). 20% coinsurance. Reduction: $${(billed-cap).toFixed(2)}.`
+        : `FL PIP pays 80% of 200% Medicare schedule ($${schedule.toFixed(2)}). Reduction: $${(billed-cap).toFixed(2)}.`;
+    } else if (cfg.chargeMethod === 'wc_schedule') {
+      cap = Math.round(medicareRate * units * 100) / 100;
+      if (billed <= cap) { allowed = billed; status = 'allowed'; reason = `Within MA WC schedule (114.3 CMR 40.00) × ${units} unit${units>1?'s':''}`; }
+      else { allowed = cap; status = 'partial'; reason = `Reduced to MA WC schedule ($${medicareRate.toFixed(2)}/unit × ${units}). Reduction: $${(billed-cap).toFixed(2)}.`; }
+    } else if (cfg.chargeMethod === 'reasonable') {
+      const threshold = medicareRate * cfg.multiplier * units;
+      if (billed > threshold) { allowed = Math.round(threshold * 100) / 100; cap = allowed; status = 'partial'; reason = `Potentially unreasonable: billed $${billed.toFixed(2)} exceeds 250% Medicare ($${threshold.toFixed(2)}). Subject to manual review per §19-505.`; }
+      else { allowed = billed; cap = billed; status = 'allowed'; reason = `Paid as billed (within reasonableness benchmark). MD has no fee schedule.`; }
+    }
+    return { ...line, codeName, medicareRate, cap, allowed, status, reason };
+  };
+
+  const runReview = () => {
+    if (!billLines.length) { toast.error('No bill lines to review'); return; }
+    setReviewing(true);
+    const cfg = STATE_CONFIG[pipState];
+    const pipLimitNum = parseFloat(pipLimit.replace(/[^0-9.]/g, '')) || parseFloat(cfg.pipDefault);
+    const pipUsedNum = parseFloat(pipUsed.replace(/[^0-9.]/g, '')) || 0;
+    let remaining = pipLimitNum - pipUsedNum;
+    const reviewed = billLines.map(reviewLine);
+    // Apply PIP exhaustion
+    reviewed.forEach(l => {
+      if (l.status === 'bundled' || l.status === 'denied') return;
+      if (remaining <= 0) {
+        l.allowed = 0; l.status = 'denied'; l.reason = (l.reason ? l.reason + ' ' : '') + `PIP limit exhausted ($${pipLimitNum.toFixed(2)} cap reached).`;
+      } else if (l.allowed > remaining) {
+        const orig = l.allowed;
+        l.allowed = Math.round(remaining * 100) / 100;
+        l.status = 'partial'; l.reason = (l.reason ? l.reason + ' ' : '') + `PIP partial: only $${l.allowed.toFixed(2)} remaining of $${pipLimitNum.toFixed(2)} limit.`;
+        remaining = 0;
       } else {
-        toast.error("Analysis returned no structured data");
+        remaining -= l.allowed;
       }
-    } catch (e: unknown) {
-      setUploading(false);
-      toast.error((e as Error).message || "Analysis failed");
-    }
+    });
+    const totalBilled = reviewed.reduce((s, l) => s + l.billed, 0);
+    const totalAllowed = reviewed.reduce((s, l) => s + l.allowed, 0);
+    const flags: PIPReviewResult['flags'] = [];
+    if (remaining <= 0) flags.push({ severity: 'severe', title: 'PIP limit exhausted', detail: `Of $${totalBilled.toFixed(2)} billed, only $${totalAllowed.toFixed(2)} payable under PIP. Send exhaustion notice to remaining providers.` });
+    if (pipState === 'FL' && emcStatus === 'no') flags.push({ severity: 'warn', title: 'EMC not established — PIP capped at $2,500', detail: 'Without Emergency Medical Condition determination, FL PIP is limited to $2,500. Verify EMC status with treating provider.' });
+    if (pipState === 'MA' && cobStatus === 'primary') flags.push({ severity: 'info', title: 'COB applies above $2,000 (MA)', detail: 'Per M.G.L. c.90 §34M, PIP is secondary above $2,000 when claimant has health insurance. Tender excess to health insurer.' });
+    setResult({ lines: reviewed, totalBilled, totalAllowed, totalReduced: totalBilled - totalAllowed, pipRemaining: Math.max(0, remaining), flags });
+    setActiveTab('results');
+    setReviewing(false);
+    toast.success('Review complete');
   };
 
-  const handleDownloadReport = () => {
-    if (!analysis) return;
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "MEDICAL DEMAND ANALYSIS REPORT", `State: ${state} | Coverage: ${coverageType.toUpperCase()} | DOL: ${dateOfLoss || "N/A"}`);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
+  const handleFiles = (newFiles: FileList | null) => {
+    if (!newFiles) return;
+    setFiles(prev => [...prev, ...Array.from(newFiles)]);
+  };
 
+  const extractBills = async () => {
+    if (!files.length) { toast.error('Upload at least one bill first'); return; }
+    setExtracting(true);
+    setExtractProgress(0);
+    setExtractStatus('Extracting bill data...');
+    const allLines: typeof billLines = [];
+    for (let i = 0; i < files.length; i++) {
+      setExtractProgress(Math.round((i / files.length) * 100));
+      setExtractStatus(`Processing ${files[i].name} (${i+1}/${files.length})...`);
+      try {
+        const fd = new FormData();
+        fd.append('file', files[i]);
+        const res = await fetch('/api/upload/document', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('Upload failed');
+        const { url } = await res.json() as { url: string };
+        const extractRes = await fetch('/api/trpc/docgen.extractPIPBills', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ json: { fileUrl: url, state: pipState } })
+        });
+        if (extractRes.ok) {
+          const data = await extractRes.json() as { result?: { data?: { json?: { lines?: typeof billLines } } } };
+          const extracted = data?.result?.data?.json?.lines || [];
+          allLines.push(...extracted);
+        }
+      } catch (e) {
+        toast.error(`Failed to extract ${files[i].name}: ${(e as Error).message}`);
+      }
+    }
+    setBillLines(allLines);
+    setExtractProgress(100);
+    setExtractStatus(`Extracted ${allLines.length} line items from ${files.length} file${files.length>1?'s':''}`);
+    setExtracting(false);
+    if (allLines.length > 0) { setActiveTab('bills'); toast.success(`Extracted ${allLines.length} bill lines`); }
+    else toast.error('No bill lines extracted — check file format');
+  };
+
+  const downloadEOR = () => {
+    if (!result) return;
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+    const m = 50;
+    let y = addWhipLetterhead(doc, 'EXPLANATION OF REVIEW', `Claim #${claimNumber || '[Claim #]'} | ${memberName || '[Member]'} | DOL: ${dateOfLoss || '[DOL]'}`);
+    y += 10;
     // Summary box
-    doc.setFillColor(245, 245, 245);
-    doc.roundedRect(14, y, W - 28, 22, 2, 2, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text(`Total Applicable: $${analysis.totalApplicable.toFixed(2)}`, 18, y + 7);
-    doc.text(`Total Not Applicable: $${analysis.totalNotApplicable.toFixed(2)}`, 18, y + 13);
-    doc.text(`PIP Exposure: $${analysis.pipExposure.toFixed(2)}`, 80, y + 7);
-    doc.text(`BI Exposure: $${analysis.biExposure.toFixed(2)}`, 80, y + 13);
-    doc.text(`UMBI Exposure: $${analysis.umbiExposure.toFixed(2)}`, 140, y + 7);
-    y += 28;
-
-    // Bills table
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("BILL-BY-BILL ANALYSIS", 14, y);
-    y += 6;
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "bold");
-    doc.setFillColor(23, 27, 49);
-    doc.setTextColor(255, 255, 255);
-    doc.rect(14, y - 4, W - 28, 6, "F");
-    doc.text("Provider", 16, y);
-    doc.text("Date", 60, y);
-    doc.text("CPT", 82, y);
-    doc.text("Amount", 100, y);
-    doc.text("Status", 120, y);
-    doc.text("Reason", 140, y);
-    y += 4;
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    for (const bill of analysis.bills) {
-      if (y > 260) { doc.addPage(); y = 20; }
-      if (bill.applicable) { doc.setFillColor(240, 255, 240); } else { doc.setFillColor(255, 240, 240); }
-      doc.rect(14, y - 3, W - 28, 5.5, "F");
-      doc.text(bill.provider.substring(0, 20), 16, y);
-      doc.text(bill.date, 60, y);
-      doc.text(bill.cptCode, 82, y);
-      doc.text(`$${bill.amount.toFixed(2)}`, 100, y);
-      if (bill.applicable) { doc.setTextColor(0, 120, 0); } else { doc.setTextColor(180, 0, 0); }
-      doc.text(bill.applicable ? "APPLICABLE" : "NOT APPLICABLE", 120, y);
-      doc.setTextColor(40, 40, 40);
-      doc.text(bill.reason.substring(0, 35), 140, y);
-      y += 6;
-    }
-
-    y += 6;
-    if (y > 230) { doc.addPage(); y = 20; }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("EXPERT SUMMARY", 14, y);
-    y += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    y = wrapText(doc, analysis.expertSummary, 14, y, W - 28, 4.5);
-
-    addSOLNotice(doc, state);
+    doc.setFillColor(245, 244, 240);
+    doc.rect(m, y, W - 2*m, 36, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(23, 27, 49);
+    doc.text(`Total Billed: $${result.totalBilled.toFixed(2)}`, m + 8, y + 13);
+    doc.text(`Total Allowed: $${result.totalAllowed.toFixed(2)}`, m + 180, y + 13);
+    doc.text(`PIP Limit: $${pipLimit}`, m + 360, y + 13);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80);
+    doc.text(`Reduction: $${result.totalReduced.toFixed(2)} (${result.totalBilled > 0 ? ((result.totalReduced/result.totalBilled)*100).toFixed(1) : 0}%)`, m + 8, y + 26);
+    doc.text(`PIP Remaining: $${result.pipRemaining.toFixed(2)}`, m + 180, y + 26);
+    y += 46;
+    // Table header
+    const cols = [
+      { x: m+5, w: 50, label: 'DOS' }, { x: m+55, w: 45, label: 'CPT' },
+      { x: m+100, w: 30, label: 'UNITS' }, { x: m+130, w: 55, label: 'BILLED', align: 'right' as const },
+      { x: m+185, w: 55, label: 'ALLOWED', align: 'right' as const }, { x: m+240, w: 45, label: 'STATUS' },
+      { x: m+285, w: W - m - (m+285) - 5, label: 'REASON' }
+    ];
+    const drawHeader = () => {
+      doc.setFillColor(23, 27, 49); doc.rect(m, y, W - 2*m, 16, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+      cols.forEach(c => doc.text(c.label, c.align === 'right' ? c.x + c.w - 5 : c.x, y + 11, c.align ? { align: c.align } : {}));
+      y += 16; doc.setTextColor(40); doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    };
+    drawHeader();
+    result.lines.forEach((l, idx) => {
+      if (y > H - m - 30) { doc.addPage(); y = addWhipLetterhead(doc, 'EXPLANATION OF REVIEW (cont.)', ''); drawHeader(); }
+      if (idx % 2 === 0) { doc.setFillColor(248, 247, 243); doc.rect(m, y, W - 2*m, 22, 'F'); }
+      doc.setTextColor(40);
+      doc.text(l.dos || '-', cols[0].x, y + 10);
+      doc.setFont('helvetica', 'bold'); doc.text(l.cpt || '-', cols[1].x, y + 10); doc.setFont('helvetica', 'normal');
+      doc.text(String(l.units), cols[2].x, y + 10);
+      doc.text(`$${l.billed.toFixed(2)}`, cols[3].x + cols[3].w - 5, y + 10, { align: 'right' });
+      const sc = l.status === 'allowed' ? [26,127,60] : l.status === 'partial' ? [200,127,0] : [179,38,30];
+      doc.setTextColor(sc[0], sc[1], sc[2]); doc.setFont('helvetica', 'bold');
+      doc.text(`$${l.allowed.toFixed(2)}`, cols[4].x + cols[4].w - 5, y + 10, { align: 'right' });
+      doc.text(l.status.toUpperCase(), cols[5].x, y + 10);
+      doc.setTextColor(40); doc.setFont('helvetica', 'normal');
+      const reasonLines = doc.splitTextToSize(l.reason, cols[6].w);
+      doc.text(reasonLines[0] || '', cols[6].x, y + 10);
+      y += 22;
+    });
+    // Signature
+    y += 10;
+    if (y > H - m - 50) { doc.addPage(); y = m + 20; }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(40);
+    doc.text('Respectfully,', m, y); y += 20;
+    if (handlerName) { doc.setFont('helvetica', 'bold'); doc.text(handlerName, m, y); y += 12; doc.setFont('helvetica', 'normal'); }
+    doc.text('Whip Claims Management', m, y);
     addLetterFooter(doc);
-    const reportUrl = getPDFDataUrl(doc);
-    setPreviewPdfUrl(reportUrl);
-    setPreviewMode("report");
-    setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_MedicalAnalysis_${state}_${dateOfLoss || "Draft"}.pdf`);
+    downloadPDF(doc, `EOR_${claimNumber || 'claim'}_${pipState}.pdf`);
   };
 
-  const handleDownloadLetter = () => {
-    if (!analysis) return;
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "MEDICAL DEMAND RESPONSE LETTER", `State: ${state} | Claim DOL: ${dateOfLoss || "N/A"}`);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, analysis.responseLetter, 14, y, W - 28, 5);
-    addSOLNotice(doc, state);
-    addLetterFooter(doc);
-    const letterUrl = getPDFDataUrl(doc);
-    setPreviewPdfUrl(letterUrl);
-    setPreviewMode("letter");
-    setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_DemandResponse_${state}_${dateOfLoss || "Draft"}.pdf`);
-  };
-
-  const totalBilled = analysis?.bills.reduce((s, b) => s + b.amount, 0) ?? 0;
-  const isLoading = uploading || analyzeMutation.isPending;
+  const cfg = STATE_CONFIG[pipState];
+  const byProvider = result ? result.lines.reduce((acc, l) => {
+    const k = l.provider || 'Unknown';
+    if (!acc[k]) acc[k] = { billed: 0, allowed: 0, lines: 0 };
+    acc[k].billed += l.billed; acc[k].allowed += l.allowed; acc[k].lines += 1;
+    return acc;
+  }, {} as Record<string, { billed: number; allowed: number; lines: number }>) : {};
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <div className="space-y-4">
-        <Panel title="Claim Context">
-          <div className="mb-3">
-            <Label className="text-xs font-semibold mb-1.5 block">State of Loss</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {STATES.map((s) => (
-                <button key={s} onClick={() => setState(s)}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${state === s ? "bg-[#ff6221] text-white" : "bg-muted text-foreground/60 hover:bg-muted/80 hover:text-foreground"}`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Grid2 children={<>
-            <Field label="Date of Loss" id="mbr-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
-            <div>
-              <Label className="text-xs font-semibold mb-1.5 block">Coverage Focus</Label>
-              <Select value={coverageType} onValueChange={(v) => setCoverageType(v as typeof coverageType)}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All (PIP + BI + UMBI)</SelectItem>
-                  <SelectItem value="pip">PIP Only</SelectItem>
-                  <SelectItem value="bi">BI Only</SelectItem>
-                  <SelectItem value="umbi">UMBI Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </>} />
-          <div className="mt-3">
-            <Label className="text-xs font-semibold mb-1.5 block">Impact Type / Mechanism of Loss</Label>
-            <Select value={impactType} onValueChange={setImpactType}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select impact type..." /></SelectTrigger>
-              <SelectContent>
-                {IMPACT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-3">
-            <Label className="text-xs font-semibold mb-1.5 block">Reported Injuries</Label>
-            <Input className="h-8 text-xs" placeholder="e.g. cervical strain, lumbar sprain, headaches" value={injuryDescription} onChange={e => setInjuryDescription(e.target.value)} />
-          </div>
-          <div className="mt-3">
-            <Label className="text-xs font-semibold mb-1.5 block">Facts of Loss</Label>
-            <Textarea className="text-xs h-20 resize-none" placeholder="Brief narrative of the accident..." value={factsOfLoss} onChange={e => setFactsOfLoss(e.target.value)} />
-          </div>
-        </Panel>
-
-        <Panel title="Demand Package Upload" tag="REQUIRED">
-          <label className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 border-dashed transition-colors ${demandFile ? "border-[#ff6221]/60 bg-[#ff6221]/5" : "border-border hover:border-[#ff6221]/40"}`}>
-            <Upload className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold">{demandFile ? demandFileName : "Upload Medical Demand Package (PDF)"}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{demandFile ? `${(demandFile.size / 1024 / 1024).toFixed(1)} MB — ready to analyze` : "Up to 200 pages, 50MB max"}</p>
-            </div>
-            <input type="file" className="hidden" accept=".pdf,.PDF" onChange={e => {
-              const f = e.target.files?.[0];
-              if (f) { setDemandFile(f); setDemandFileName(f.name); }
-            }} />
-          </label>
-        </Panel>
-
-        <Panel title="Vehicle Photos (Optional — improves mechanism analysis)">
-          <div className="grid grid-cols-2 gap-3">
-            <label className={`flex flex-col items-center gap-2 cursor-pointer p-3 rounded-lg border-2 border-dashed transition-colors ${vehiclePhoto1 ? "border-[#ff6221]/60 bg-[#ff6221]/5" : "border-border hover:border-[#ff6221]/40"}`}>
-              <Upload className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs text-center font-medium">{vehiclePhoto1 ? vehiclePhoto1.name.substring(0, 20) + "..." : "Whip Vehicle Photo"}</span>
-              <input type="file" className="hidden" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) setVehiclePhoto1(f); }} />
-            </label>
-            <label className={`flex flex-col items-center gap-2 cursor-pointer p-3 rounded-lg border-2 border-dashed transition-colors ${vehiclePhoto2 ? "border-[#ff6221]/60 bg-[#ff6221]/5" : "border-border hover:border-[#ff6221]/40"}`}>
-              <Upload className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs text-center font-medium">{vehiclePhoto2 ? vehiclePhoto2.name.substring(0, 20) + "..." : "Claimant Vehicle Photo"}</span>
-              <input type="file" className="hidden" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) setVehiclePhoto2(f); }} />
-            </label>
-          </div>
-        </Panel>
-
-        <Button
-          className="w-full gap-2 bg-[#ff6221] hover:bg-[#ff6221]/90 text-white h-11"
-          onClick={handleAnalyze}
-          disabled={isLoading || !demandFile}
-        >
-          {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-          {uploading ? "Uploading files..." : analyzeMutation.isPending ? "Analyzing demand package..." : "✨ Run AI Medical Demand Analysis"}
-        </Button>
+    <div className="space-y-4 max-w-4xl">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-border pb-0">
+        {(['setup', 'bills', 'results'] as const).map(t => (
+          <button key={t} onClick={() => setActiveTab(t)}
+            className={`px-4 py-2 text-xs font-semibold capitalize rounded-t-md transition-colors ${activeTab === t ? 'bg-background border border-b-background border-border text-foreground -mb-px' : 'text-muted-foreground hover:text-foreground'}`}>
+            {t === 'setup' ? '① Setup' : t === 'bills' ? `② Bills ${billLines.length > 0 ? `(${billLines.length})` : ''}` : `③ Results ${result ? `(${result.lines.length})` : ''}`}
+          </button>
+        ))}
       </div>
 
-      <div>
-        {analysis ? (
-          <div className="space-y-4">
-            {/* Exposure Summary */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
-                <p className="text-xs text-muted-foreground">Applicable Medical</p>
-                <p className="text-lg font-bold text-green-700 dark:text-green-400">${analysis.totalApplicable.toFixed(2)}</p>
+      {activeTab === 'setup' && (
+        <div className="space-y-4">
+          <Panel title="Claim Information" tag="REQUIRED">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">State</Label>
+                <Select value={pipState} onValueChange={(v) => { setPipState(v as PIPState); setPipLimit(STATE_CONFIG[v as PIPState].pipDefault); setLocality(STATE_CONFIG[v as PIPState].localities[0].value); }}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PA">Pennsylvania (Act 6)</SelectItem>
+                    <SelectItem value="FL">Florida (§627.736)</SelectItem>
+                    <SelectItem value="MD">Maryland (§19-505)</SelectItem>
+                    <SelectItem value="MA">Massachusetts (c.90 §34M)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
-                <p className="text-xs text-muted-foreground">Not Applicable</p>
-                <p className="text-lg font-bold text-red-700 dark:text-red-400">${analysis.totalNotApplicable.toFixed(2)}</p>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Locality</Label>
+                <Select value={locality} onValueChange={setLocality}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {cfg.localities.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                <p className="text-xs text-muted-foreground">Total Billed</p>
-                <p className="text-lg font-bold text-blue-700 dark:text-blue-400">${totalBilled.toFixed(2)}</p>
-              </div>
-              <div className="p-3 rounded-xl bg-muted/40 border border-border">
-                <p className="text-xs text-muted-foreground">BI Exposure</p>
-                <p className="text-lg font-bold">${analysis.biExposure.toFixed(2)}</p>
-              </div>
-            </div>
-
-            {/* Red Flags */}
-            {analysis.redFlags.length > 0 && (
-              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Red Flags ({analysis.redFlags.length})</span>
+              <Field label="Claim Number" id="pbr-claim" value={claimNumber} onChange={setClaimNumber} placeholder="e.g. WH-2026-XXXX" />
+              <Field label="Member Name" id="pbr-member" value={memberName} onChange={setMemberName} placeholder="Last, First" />
+              <Field label="Date of Loss" id="pbr-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
+              <Field label="PIP Limit ($)" id="pbr-limit" value={pipLimit} onChange={setPipLimit} placeholder={cfg.pipDefault} />
+              <Field label="PIP Used to Date ($)" id="pbr-used" value={pipUsed} onChange={setPipUsed} placeholder="0.00" />
+              {pipState === 'FL' && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">EMC Determination</Label>
+                  <Select value={emcStatus} onValueChange={(v) => { setEmcStatus(v as typeof emcStatus); if (v === 'no') setPipLimit('2500.00'); else setPipLimit('10000.00'); }}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes — full $10,000 PIP</SelectItem>
+                      <SelectItem value="no">No — limited to $2,500</SelectItem>
+                      <SelectItem value="unknown">Unknown / Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <ul className="space-y-1">
-                  {analysis.redFlags.map((f, i) => (
-                    <li key={i} className="text-xs text-amber-700 dark:text-amber-400">• {f}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              )}
+              {pipState === 'MA' && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Health Insurance (COB)</Label>
+                  <Select value={cobStatus} onValueChange={(v) => setCobStatus(v as typeof cobStatus)}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No health insurance — full PIP</SelectItem>
+                      <SelectItem value="primary">Health insurance primary above $2,000</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 p-2 bg-muted/40 rounded border border-border/50 text-xs text-muted-foreground">
+              <strong className="text-foreground">{cfg.name}</strong> · {cfg.statute}
+            </div>
+          </Panel>
 
-            {/* Result Tabs */}
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="flex border-b border-border bg-muted/30">
-                {(["bills", "summary", "letter"] as const).map(tab => (
-                  <button key={tab} onClick={() => setActiveResultTab(tab)}
-                    className={`flex-1 py-2 text-xs font-semibold capitalize transition-colors ${activeResultTab === tab ? "bg-background border-b-2 border-[#ff6221] text-[#ff6221]" : "text-muted-foreground hover:text-foreground"}`}>
-                    {tab === "bills" ? "Bill Analysis" : tab === "summary" ? "Expert Summary" : "Response Letter"}
-                  </button>
+          <Panel title="Upload Bills" tag="AI EXTRACTION">
+            <p className="text-xs text-muted-foreground mb-3">Upload HCFA-1500 forms, scans, or PDFs. AI will extract provider, CPT codes, dates, and amounts.</p>
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-[#171b31]/40 transition-colors cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+            >
+              <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.zip" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+              <div className="text-2xl mb-2">↑</div>
+              <p className="text-sm font-medium text-foreground">Drop HCFA-1500s, scans, or a ZIP file here</p>
+              <p className="text-xs text-muted-foreground mt-1">PDF, PNG, JPG — multi-file supported</p>
+            </div>
+            {files.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {files.map((f, i) => (
+                  <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted text-xs">
+                    <span>{f.name}</span>
+                    <button onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">×</button>
+                  </div>
                 ))}
               </div>
-              <div className="p-4 max-h-[500px] overflow-y-auto">
-                {activeResultTab === "bills" && (
-                  <div className="space-y-2">
-                    {analysis.bills.map((bill, i) => (
-                      <div key={i} className={`p-3 rounded-lg border text-xs ${bill.applicable ? "border-green-200 bg-green-50 dark:bg-green-950/20" : "border-red-200 bg-red-50 dark:bg-red-950/20"}`}>
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <div className="font-semibold">{bill.provider}</div>
-                          <div className={`px-2 py-0.5 rounded text-xs font-bold flex-shrink-0 ${bill.applicable ? "bg-green-600 text-white" : "bg-red-600 text-white"}`}>
-                            {bill.applicable ? "✓ APPLICABLE" : "✗ NOT APPLICABLE"}
-                          </div>
-                        </div>
-                        <div className="text-muted-foreground">
-                          {bill.date} · CPT {bill.cptCode} — {bill.description} · <span className="font-semibold text-foreground">${bill.amount.toFixed(2)}</span>
-                        </div>
-                        <div className="mt-1 text-muted-foreground italic">{bill.reason}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {activeResultTab === "summary" && (
-                  <div className="text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap">{analysis.expertSummary}</div>
-                )}
-                {activeResultTab === "letter" && (
-                  <div className="text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap font-mono">{analysis.responseLetter}</div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={handleDownloadReport}>
-                <Download className="w-3.5 h-3.5" /> Full Analysis PDF
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={handleDownloadLetter}>
-                <FileText className="w-3.5 h-3.5" /> Response Letter PDF
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { navigator.clipboard.writeText(analysis.responseLetter); toast.success("Letter copied"); }}>
-                <Copy className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            {/* Inline PDF Preview */}
-            {previewPdfUrl && (
-              <div className="rounded-xl border border-border overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
-                  <span className="text-xs font-semibold text-foreground/70 flex items-center gap-1.5">
-                    <Eye className="w-3.5 h-3.5" />
-                    Preview — {previewMode === "report" ? "Full Analysis Report" : "Response Letter"}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => window.open(previewPdfUrl, "_blank")} className="text-xs text-[#ff6221] hover:underline flex items-center gap-1">
-                      <Maximize2 className="w-3 h-3" /> Full Screen
-                    </button>
-                    <button onClick={() => setPreviewPdfUrl(null)} className="text-foreground/40 hover:text-foreground">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+            )}
+            {extracting && (
+              <div className="mt-3">
+                <div className="bg-muted rounded-full h-2 overflow-hidden">
+                  <div className="bg-[#171b31] h-full transition-all" style={{ width: `${extractProgress}%` }} />
                 </div>
-                <iframe src={previewPdfUrl} className="w-full h-[500px]" title="PDF Preview" />
+                <p className="text-xs text-muted-foreground mt-1">{extractStatus}</p>
               </div>
             )}
+            {!extracting && extractStatus && <p className="text-xs text-muted-foreground mt-2">{extractStatus}</p>}
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" className="bg-[#171b31] hover:bg-[#1e2340] text-white text-xs" onClick={extractBills} disabled={!files.length || extracting}>
+                {extracting ? 'Extracting...' : 'Extract All Bills'}
+              </Button>
+              {billLines.length > 0 && (
+                <Button size="sm" variant="outline" className="text-xs" onClick={() => setActiveTab('bills')}>
+                  Review {billLines.length} Lines →
+                </Button>
+              )}
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {activeTab === 'bills' && (
+        <Panel title={`Bill Lines (${billLines.length})`} tag="EDIT AS NEEDED">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#171b31] text-white">
+                  {['Provider', 'DOS', 'CPT', 'Mod', 'Units', 'Billed ($)', ''].map(h => (
+                    <th key={h} className="px-2 py-1.5 text-left font-semibold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {billLines.map((l, i) => (
+                  <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                    <td className="px-2 py-1"><input className="w-full bg-transparent border-b border-transparent hover:border-border focus:border-[#171b31] outline-none text-xs" value={l.provider} onChange={(e) => setBillLines(prev => prev.map((x, j) => j === i ? {...x, provider: e.target.value} : x))} /></td>
+                    <td className="px-2 py-1"><input className="w-24 bg-transparent border-b border-transparent hover:border-border focus:border-[#171b31] outline-none text-xs font-mono" value={l.dos} onChange={(e) => setBillLines(prev => prev.map((x, j) => j === i ? {...x, dos: e.target.value} : x))} /></td>
+                    <td className="px-2 py-1"><input className="w-16 bg-transparent border-b border-transparent hover:border-border focus:border-[#171b31] outline-none text-xs font-mono font-bold" value={l.cpt} onChange={(e) => setBillLines(prev => prev.map((x, j) => j === i ? {...x, cpt: e.target.value} : x))} /></td>
+                    <td className="px-2 py-1"><input className="w-12 bg-transparent border-b border-transparent hover:border-border focus:border-[#171b31] outline-none text-xs font-mono" value={l.modifier} onChange={(e) => setBillLines(prev => prev.map((x, j) => j === i ? {...x, modifier: e.target.value} : x))} /></td>
+                    <td className="px-2 py-1"><input className="w-12 bg-transparent border-b border-transparent hover:border-border focus:border-[#171b31] outline-none text-xs font-mono text-right" type="number" value={l.units} onChange={(e) => setBillLines(prev => prev.map((x, j) => j === i ? {...x, units: parseInt(e.target.value)||1} : x))} /></td>
+                    <td className="px-2 py-1"><input className="w-20 bg-transparent border-b border-transparent hover:border-border focus:border-[#171b31] outline-none text-xs font-mono text-right" type="number" value={l.billed} onChange={(e) => setBillLines(prev => prev.map((x, j) => j === i ? {...x, billed: parseFloat(e.target.value)||0} : x))} /></td>
+                    <td className="px-2 py-1"><button onClick={() => setBillLines(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive text-xs">✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-80 rounded-xl border-2 border-dashed border-border text-center p-8">
-            <Brain className="w-12 h-12 text-muted-foreground/30 mb-4" />
-            <p className="text-sm font-semibold text-muted-foreground">Medical Demand Analysis</p>
-            <p className="text-xs text-muted-foreground/60 mt-2 max-w-xs">Upload a demand package PDF and fill in the claim context, then run the AI analysis to get a full bill-by-bill breakdown, CPT code review, mechanism of loss assessment, and response letter.</p>
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" onClick={() => setBillLines(prev => [...prev, { provider: '', dos: '', pos: '11', cpt: '', modifier: '', units: 1, billed: 0 }])} variant="outline" className="text-xs">+ Add Line</Button>
+            <Button size="sm" className="bg-[#171b31] hover:bg-[#1e2340] text-white text-xs" onClick={runReview} disabled={reviewing || !billLines.length}>
+              {reviewing ? 'Reviewing...' : 'Run Fee Schedule Review →'}
+            </Button>
           </div>
-        )}
-      </div>
+        </Panel>
+      )}
+
+      {activeTab === 'results' && result && (
+        <div className="space-y-4">
+          {/* Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Billed', value: `$${result.totalBilled.toFixed(2)}`, color: 'text-foreground' },
+              { label: 'Total Allowed', value: `$${result.totalAllowed.toFixed(2)}`, color: 'text-green-700 dark:text-green-400' },
+              { label: 'Total Reduced', value: `$${result.totalReduced.toFixed(2)}`, color: 'text-red-700 dark:text-red-400' },
+              { label: 'PIP Remaining', value: `$${result.pipRemaining.toFixed(2)}`, color: result.pipRemaining <= 0 ? 'text-red-700 dark:text-red-400' : 'text-foreground' },
+            ].map(s => (
+              <div key={s.label} className="rounded-lg border border-border bg-card p-3">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{s.label}</div>
+                <div className={`text-xl font-bold mt-1 ${s.color}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+          {/* Flags */}
+          {result.flags.length > 0 && (
+            <div className="space-y-2">
+              {result.flags.map((f, i) => (
+                <div key={i} className={`flex gap-2 p-3 rounded-lg border text-xs ${f.severity === 'severe' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : f.severity === 'warn' ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800' : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'}`}>
+                  <span>{f.severity === 'severe' ? '⛔' : f.severity === 'warn' ? '⚠️' : 'ℹ️'}</span>
+                  <div><div className="font-semibold">{f.title}</div><div className="text-muted-foreground mt-0.5">{f.detail}</div></div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Provider breakdown */}
+          <Panel title="By Provider">
+            {Object.entries(byProvider).map(([p, s]) => (
+              <div key={p} className="flex items-center justify-between p-2 bg-muted/30 rounded border-l-2 border-[#171b31] mb-2 text-xs">
+                <div><span className="font-semibold">{p}</span> <span className="text-muted-foreground">({s.lines} line{s.lines>1?'s':''})</span></div>
+                <div className="font-mono">Billed <strong>${s.billed.toFixed(2)}</strong> → Allowed <strong className="text-green-700 dark:text-green-400">${s.allowed.toFixed(2)}</strong></div>
+              </div>
+            ))}
+          </Panel>
+          {/* Results table */}
+          <Panel title="Line-by-Line Results">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#171b31] text-white">
+                    {['Provider', 'DOS', 'CPT', 'Units', 'Billed', 'Allowed', 'Status', 'Reason'].map(h => (
+                      <th key={h} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.lines.map((l, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                      <td className="px-2 py-1.5 text-xs">{l.provider || '-'}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs">{l.dos || '-'}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs"><strong>{l.cpt}</strong>{l.codeName && <div className="text-muted-foreground text-[10px]">{l.codeName}</div>}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs text-right">{l.units}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs text-right">${l.billed.toFixed(2)}</td>
+                      <td className={`px-2 py-1.5 font-mono text-xs text-right font-bold ${l.status === 'allowed' ? 'text-green-700 dark:text-green-400' : l.status === 'partial' ? 'text-yellow-700 dark:text-yellow-400' : 'text-red-700 dark:text-red-400'}`}>${l.allowed.toFixed(2)}</td>
+                      <td className="px-2 py-1.5 text-xs"><span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${l.status === 'allowed' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : l.status === 'partial' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>{l.status.toUpperCase()}</span></td>
+                      <td className="px-2 py-1.5 text-xs text-muted-foreground max-w-xs">{l.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+          {/* Actions */}
+          <Panel title="Generate Documents">
+            <HandlerSelect value={handlerName} onChange={setHandlerName} label="Signatory" id="pbr-handler" />
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Button size="sm" className="bg-[#171b31] hover:bg-[#1e2340] text-white text-xs" onClick={downloadEOR}>Download EOR (PDF)</Button>
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => { setActiveTab('setup'); }}>← Back to Setup</Button>
+            </div>
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Shared state rules for COI tabs ──────────────────────────────────────────
+
 const KLUTCH_STATE_RULES: Record<string, {
   biLimits: string; pdLimit: string;
   um: boolean; umLimit: string;
@@ -5699,7 +5901,6 @@ const KLUTCH_STATE_RULES: Record<string, {
   NC: { biLimits: "$30,000 / $60,000", pdLimit: "$25,000", um: true, umLimit: "$30,000 / $60,000", uim: true, uimLimit: "$30,000 / $60,000", pip: false, pipLimit: "" },
   SC: { biLimits: "$25,000 / $50,000", pdLimit: "$25,000", um: true, umLimit: "$25,000 / $50,000", uim: true, uimLimit: "$25,000 / $50,000", pip: false, pipLimit: "" },
 };
-
 // ─── Tab: Whip COI ─────────────────────────────────────────────────────────────
 function WhipCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [state, setState] = useState(initialState || "MD");
@@ -6304,14 +6505,14 @@ function KlutchCOITab({ initialState = "MD" }: { initialState?: string }) {
     if (form.additionalInsured) {
       doc.setFontSize(6.5);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(255, 98, 33);
+      doc.setTextColor(23, 27, 49);
       doc.text("✓ ADDITIONAL INSURED", col2 + 2, ry);
       ry += 4;
     }
     if (form.waiverOfSubrogation) {
       doc.setFontSize(6.5);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(255, 98, 33);
+      doc.setTextColor(23, 27, 49);
       doc.text("✓ WAIVER OF SUBROGATION", col2 + 2, ry);
       ry += 4;
     }
@@ -7287,7 +7488,7 @@ export default function DocGenerator() {
       case "pip-exhaustion": return <PIPExhaustionTab />;
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} />;
-      case "pip-bill-review": return <MedicalBillsReviewTab />;
+      case "pip-bill-review": return <PIPBillReviewTab />;
       case "coi-whip": return <WhipCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <KlutchCOITab initialState={initialMemberState} />;
       case "dec-page-whip": return <MetrocarsDecPageTab initialState={initialMemberState} />;
