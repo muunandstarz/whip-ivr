@@ -59,6 +59,7 @@ import {
   getExtensionCalls,
   getMissedCallBreakdown,
 } from "./db";
+import { getIntakeStatsByPeriod } from "./db";
 
 const callerTypeEnum = z.enum([
   "carrier",
@@ -472,6 +473,11 @@ export const appRouter = router({
       .input(z.object({ yearMonth: z.string() }))
       .query(async ({ input }) => {
         return getCallAnalyticsByMonth(input.yearMonth);
+      }),
+    intakeStatsByPeriod: protectedProcedure
+      .input(z.object({ yearMonth: z.string() }))
+      .query(async ({ input }) => {
+        return getIntakeStatsByPeriod(input.yearMonth);
       }),
   }),
 

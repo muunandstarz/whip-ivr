@@ -1,4 +1,4 @@
-import { eq, desc, like, and, or, sql, inArray } from "drizzle-orm";
+import { eq, desc, like, and, or, sql, inArray, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -316,6 +316,32 @@ export async function updateIntakeRecord(id: number, data: Partial<InsertIntakeR
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(intakeRecords).set(data).where(eq(intakeRecords.id, id));
+}
+
+// ─── Intake Stats by Period (for dashboard month toggle) ──────────────────────
+export async function getIntakeStatsByPeriod(yearMonth: string) {
+  const db = await getDb();
+  if (!db) return null;
+  // Parse "YYYY-MM" into start/end timestamps
+  const [year, month] = yearMonth.split("-").map(Number);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1); // exclusive upper bound (first day of next month)
+  const [totalRow, openRow, closedRow, carrierRow] = await Promise.all([
+    db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
+      .where(and(gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+    db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
+      .where(and(eq(intakeRecords.status, "open"), gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+    db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
+      .where(and(eq(intakeRecords.status, "closed"), gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+    db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
+      .where(and(eq(intakeRecords.callerType, "carrier"), gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+  ]);
+  return {
+    total: Number(totalRow[0]?.count ?? 0),
+    open: Number(openRow[0]?.count ?? 0),
+    closed: Number(closedRow[0]?.count ?? 0),
+    carrier: Number(carrierRow[0]?.count ?? 0),
+  };
 }
 
 export async function getIntakeAnalytics() {

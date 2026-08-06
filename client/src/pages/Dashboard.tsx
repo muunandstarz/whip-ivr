@@ -121,15 +121,17 @@ export default function Dashboard() {
   const currentYearMonth = format(new Date(), "yyyy-MM");
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth);
   const { data: monthCallData, isLoading: monthLoading } = trpc.dashboard.callsByMonth.useQuery({ yearMonth: selectedMonth });
+  const { data: intakePeriodData } = trpc.dashboard.intakeStatsByPeriod.useQuery({ yearMonth: selectedMonth });
 
   // ── Derived KPIs ──────────────────────────────────────────────────────────
-  const totalRecords  = openData?.total ?? 0; // total open intakes (recentData removed)
-  const openCount     = openData?.total ?? 0;
-  const closedCount   = closedData?.total ?? 0;
+  // Intake Records: use period-filtered data when available (driven by selectedMonth toggle)
+  const totalRecords  = intakePeriodData?.total ?? openData?.total ?? 0;
+  const openCount     = intakePeriodData?.open ?? openData?.total ?? 0;
+  const closedCount   = intakePeriodData?.closed ?? closedData?.total ?? 0;
   const urgentCount   = urgentData?.total ?? 0;
   const callerTypeBreakdown  = analyticsData?.byCallerType ?? [];
   const dispositionBreakdown = analyticsData?.byCallbackDisposition ?? [];
-  const carrierCount  = callerTypeBreakdown.find((c) => c.callerType === "carrier")?.count ?? 0;
+  const carrierCount  = intakePeriodData?.carrier ?? callerTypeBreakdown.find((c) => c.callerType === "carrier")?.count ?? 0;
   const todayStr      = format(new Date(), "yyyy-MM-dd");
   const todayCount    = analyticsData?.byDay?.find((d) => d.day === todayStr)?.count ?? 0;
 
@@ -381,7 +383,7 @@ export default function Dashboard() {
         {/* ── Intake KPI Row (merged, no duplication) ── */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Intake Records</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Intake Records — {monthLabel}</p>
             <InfoTooltip text="AI-processed voicemail intake records from the Whip Claims line." />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
