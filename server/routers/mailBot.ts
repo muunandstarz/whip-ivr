@@ -227,6 +227,7 @@ export const mailBotRouter = router({
         source: input.source,
         batchSize: input.batchSize,
         lookbackHours: input.lookbackHours,
+        scanMode: input.scanMode,
       });
       return result;
     }),

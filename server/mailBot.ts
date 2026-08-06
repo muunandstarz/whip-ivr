@@ -244,6 +244,7 @@ export interface BotRunOptions {
   source: "slack_mail" | "gmail_fax" | "both";
   batchSize?: number;
   lookbackHours?: number;
+  scanMode?: "hours" | "all_time";
 }
 
 export async function runMailBot(options: BotRunOptions): Promise<{ runId: string; assigned: number; skipped: number; errors: string[] }> {
@@ -262,8 +263,8 @@ export async function runMailBot(options: BotRunOptions): Promise<{ runId: strin
   const token = config.slackBotToken ?? process.env.SLACK_BOT_TOKEN ?? "";
   const batchSize = options.batchSize ?? config.batchSize;
   const lookbackHours = options.lookbackHours ?? config.lookbackHours;
-  // scanMode: "all_time" = no oldest filter (fetch all unchecked), "hours" = lookback window
-  const scanMode = (config as typeof config & { scanMode?: string }).scanMode ?? "hours";
+  // scanMode: options.scanMode overrides DB config (used for manual runs)
+  const scanMode = options.scanMode ?? config.scanMode ?? "hours";
   const mailChannelId = config.claimsMailChannelId;
   const hubChannelId = config.claimsHubChannelId;
 
