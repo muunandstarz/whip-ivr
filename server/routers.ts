@@ -77,6 +77,7 @@ export const appRouter = router({
   docgen: docgenRouter,
   mailBot: mailBotRouter,
   lou: louRouter,
+  mail: mailRouter,
   kb: kbRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
@@ -714,3 +715,4 @@ export const appRouter = router({
 });
 export type AppRouter = typeof appRouter;
 import { louRouter } from "./routers/lou";
+import { mailRouter } from "./routers/mail";
