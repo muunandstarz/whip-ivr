@@ -362,6 +362,106 @@ function Field({
   );
 }
 
+// ─── Coverage-through date utilities ─────────────────────────────────────────
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  const targetMonth = d.getMonth() + months;
+  d.setMonth(targetMonth);
+  // Clamp month-end: if day overflowed (e.g. Jan 31 + 1 month → Mar 3), roll back
+  if (d.getMonth() !== ((targetMonth % 12) + 12) % 12) {
+    d.setDate(0); // last day of previous month
+  }
+  return d;
+}
+function toDateOnly(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function parseLocalDate(s: string): Date | null {
+  if (!s) return null;
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+function formatDateISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function formatDateDisplay(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+}
+
+interface CoverageThroughResult {
+  throughDate: Date | null;
+  helperText: string;
+  warning: string | null;
+}
+
+function computeCoverageThrough(opts: {
+  startDateStr: string;
+  state: string;
+  stillInRental: boolean;
+  dateOfLossStr: string;
+  refDateStr?: string; // defaults to today
+}): CoverageThroughResult {
+  const { startDateStr, state, stillInRental, dateOfLossStr, refDateStr } = opts;
+  const start = parseLocalDate(startDateStr);
+  if (!start) return { throughDate: null, helperText: "", warning: null };
+
+  const isMD = state === "MD";
+  const initialTermEnd = isMD ? addDays(start, 30) : addMonths(start, 12);
+
+  if (!stillInRental) {
+    // Not in rental: use date of loss (or start date as fallback)
+    const lossDate = parseLocalDate(dateOfLossStr) || start;
+    return {
+      throughDate: lossDate,
+      helperText: `Rental ended — coverage through last rental day (${formatDateDisplay(lossDate)}).`,
+      warning: null,
+    };
+  }
+
+  // Still in rental: compute from reference date (today by default)
+  const today = toDateOnly(refDateStr ? (parseLocalDate(refDateStr) || new Date()) : new Date());
+
+  if (today < toDateOnly(start)) {
+    return {
+      throughDate: null,
+      helperText: "",
+      warning: "Reference date is before the coverage start date — please check the effective date.",
+    };
+  }
+
+  const termEndDay = toDateOnly(initialTermEnd);
+
+  if (today <= termEndDay) {
+    // Still inside initial term
+    const label = isMD ? "MD 30-day initial term" : "12-month initial term";
+    return {
+      throughDate: termEndDay,
+      helperText: `Still in rental — ${label} ends ${formatDateDisplay(termEndDay)}, currently covered through ${formatDateDisplay(termEndDay)}.`,
+      warning: null,
+    };
+  }
+
+  // Past initial term — find current 7-day renewal window
+  const daysAfterTerm = Math.ceil((today.getTime() - termEndDay.getTime()) / 86400000);
+  const weeks = Math.ceil(daysAfterTerm / 7);
+  const throughDate = addDays(termEndDay, weeks * 7);
+  const label = isMD ? "MD initial term ended" : "Initial term ended";
+  return {
+    throughDate,
+    helperText: `Still in rental — ${label} ${formatDateDisplay(termEndDay)}, renews weekly, currently covered through ${formatDateDisplay(throughDate)}.`,
+    warning: null,
+  };
+}
+
 // ─── Shared: Handler Select Dropdown ─────────────────────────────────────────
 // Priority handlers shown first; rest sorted alphabetically
 const PRIORITY_HANDLERS = ["Tim Chan", "Daniel Giono"];
@@ -5907,6 +6007,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [waiverOfSubrogation, setWaiverOfSubrogation] = React.useState(false);
   const [umRejected, setUmRejected] = React.useState(false);
   const [pipWaived, setPipWaived] = React.useState(false);
+  const [stillInRentalCOI, setStillInRentalCOI] = React.useState(true);
   const [form, setForm] = React.useState({
     namedOperator: "",
     insuredAddress: "14670 Southlawn Lane, Rockville, MD 20850",
@@ -5917,12 +6018,25 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     plateNumber: "",
     effectiveDate: "",
     expirationDate: "",
+    dateOfLoss: "",
     certDate: new Date().toISOString().slice(0, 10),
     certNumber: "",
     revisionNumber: "",
     specialProvisions: "",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
+  // Auto-compute coverage-through date whenever effectiveDate, state, or stillInRental changes
+  const coiCoverage = React.useMemo(() => computeCoverageThrough({
+    startDateStr: form.effectiveDate,
+    state,
+    stillInRental: stillInRentalCOI,
+    dateOfLossStr: form.dateOfLoss,
+  }), [form.effectiveDate, form.dateOfLoss, state, stillInRentalCOI]);
+  React.useEffect(() => {
+    if (coiCoverage.throughDate && !coiCoverage.warning) {
+      setForm(p => ({ ...p, expirationDate: formatDateISO(coiCoverage.throughDate!) }));
+    }
+  }, [coiCoverage.throughDate, coiCoverage.warning]);
   const [vinDecoding, setVinDecoding] = React.useState(false);
   const decodeVinCOI = async () => {
     const vin = form.vin.trim();
@@ -6479,10 +6593,30 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
           {/* Policy Period */}
           <Panel title="Coverage Period">
+            <div className="mb-3">
+              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                <Checkbox checked={stillInRentalCOI} onCheckedChange={(v) => setStillInRentalCOI(!!v)} />
+                <div>
+                  <div className="text-xs font-semibold">Driver is still in the rental</div>
+                  <div className="text-xs text-muted-foreground">Coverage-through date will be auto-computed from today</div>
+                </div>
+              </label>
+            </div>
+            {!stillInRentalCOI && (
+              <div className="mb-3">
+                <Field label="Date Rental Ended (Date of Loss)" id="coi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
+              </div>
+            )}
+            {coiCoverage.warning && (
+              <div className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">⚠️ {coiCoverage.warning}</div>
+            )}
+            {coiCoverage.helperText && !coiCoverage.warning && (
+              <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
+            )}
             <Grid3>
               <Field label="Certificate Date" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
               <Field label="Effective Date" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
-              <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+              <Field label="Coverage Through" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid3>
             <Grid2>
               <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KIS0000" : `${state}000S0137XX`} />
@@ -6597,12 +6731,26 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     vehicleType: "Auto",
     effectiveDate: "",
     expirationDate: "",
+    dateOfLoss: "",
     issuedDate: "",
     weeklyRate: "",
     collisionDeductible: "$1,000",
     compDeductible: "$1,000",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
+  const [stillInRentalDec, setStillInRentalDec] = React.useState(true);
+  // Auto-compute coverage-through date
+  const decCoverage = React.useMemo(() => computeCoverageThrough({
+    startDateStr: form.effectiveDate,
+    state,
+    stillInRental: stillInRentalDec,
+    dateOfLossStr: form.dateOfLoss,
+  }), [form.effectiveDate, form.dateOfLoss, state, stillInRentalDec]);
+  React.useEffect(() => {
+    if (decCoverage.throughDate && !decCoverage.warning) {
+      setForm(p => ({ ...p, expirationDate: formatDateISO(decCoverage.throughDate!) }));
+    }
+  }, [decCoverage.throughDate, decCoverage.warning]);
   const [vinDecoding, setVinDecoding] = React.useState(false);
   const decodeVinDec = async () => {
     const vin = form.vin.trim();
@@ -7345,7 +7493,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
           <Panel title="Policy Period & Premium">
             <Grid3>
               <Field label="Effective Date" id="dp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
-              <Field label="Expiration Date" id="dp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+              <Field label="Coverage Through" id="dp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
               <Field label="Date Issued" id="dp-issued" value={form.issuedDate} onChange={set("issuedDate")} type="date" />
             </Grid3>
             <Grid3>
