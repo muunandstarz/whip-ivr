@@ -27,6 +27,11 @@ import {
   MAIL_SLACK_EVENTS_PATH,
   mailSlackEventsHandler,
 } from "../mail/slackEventsHandler";
+import {
+  mailRemindersHandler,
+  mailProcessHandler,
+  mailQaWeeklyHandler,
+} from "../mail/jobs";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -107,6 +112,10 @@ async function startServer() {
   // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
   app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
+  // ─── Claims Mail Triage jobs (manual-trigger only; crons disabled) ──────────
+  app.post("/api/scheduled/mailReminders", mailRemindersHandler);
+  app.post("/api/scheduled/mailProcess", mailProcessHandler);
+  app.post("/api/scheduled/mailQaWeekly", mailQaWeeklyHandler);
 
   // Aircall recording proxy — accepts ?url=<encoded assets.aircall.io URL> or ?callId=<id>
   // Resolves the Aircall asset URL to a fresh signed S3 URL via the Aircall API, then
