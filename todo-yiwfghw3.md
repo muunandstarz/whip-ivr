@@ -282,3 +282,13 @@
 - [x] Dec Page: BI row now always shows state limits (removed "Not elected" for FL biNotMandated)
 - [x] Dec Page: "Page 1 of 2" label added to header; maxWidth on limits column to prevent overlap
 - [x] COI PDF: ADDL INSD column restored (only SUBR WVD removed per spec); ADDL INSD form checkbox still removed
+- [x] Klutch COI: darken the "Insurance Company" wordmark in the logo to match the rest of the logo
+- [x] Klutch COI: prevent the word "coverage" from running into the right border of the top disclaimer box
+- [x] Klutch COI: remove the strike-through artifact under Vehicle in the insured box
+- [x] COI PDFs: widen the INSR LTR column without breaking the rest of the coverage table layout
+- [x] COI PDFs: add half-line spacing after items 1 and 2 in Description of Operations / Coverages sections
+- [x] Metrocars COI: enlarge the logo by 20%
+- [x] Metrocars COI: remove the line through Vehicle under insured
+- [x] Metrocars COI: add half-line spacing between the coverages paragraph and the coverage table
+- [x] Metrocars COI: fix PIP limits overlap in the coverage table (widened LIMITS column)
+- [x] Dec Page: mainW increased to 67%, column positions adjusted, sidebar contact info fixed, row spacing improved

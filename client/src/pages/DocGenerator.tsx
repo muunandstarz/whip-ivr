@@ -1323,6 +1323,7 @@ function CertOfCoverageTab({ initialState = "MD" }: { initialState?: string }) {
       doc.text("KLUTCH", 8, 10);
       doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
+      doc.setTextColor(255, 255, 255);
       doc.text("INSURANCE COMPANY", 8, 15);
     }
 
@@ -6098,11 +6099,18 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     if (isKlutch) {
       // Klutch logo: 26x10mm (proportional, not stretched)
       // Klutch logo: landscape ~3.95:1 ratio (1401x355px), at 40mm wide = 10mm tall
-      try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 40, 10); } catch {}
+      try {
+        doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 40, 10);
+        // Overlay "INSURANCE COMPANY" text in dark color to compensate for faded PNG text
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(5.5);
+        doc.setTextColor(23, 27, 49);
+        doc.text("INSURANCE COMPANY", lm + 14.5, y + 9);
+      } catch {}
     } else {
       // Metrocars: MCL logo (inverted, white on dark)
       try {
-        doc.addImage(MCL_LOGO_B64, "PNG", lm, y + 1, 30, 10);
+        doc.addImage(MCL_LOGO_B64, "PNG", lm, y + 1, 36, 12);
       } catch {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
@@ -6156,15 +6164,15 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // ── DISCLAIMER BOX ──────────────────────────────────────────────────────
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.6);
-    doc.rect(lm, y, textW, 12);
+    doc.rect(lm, y, textW, 14);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(0, 0, 0);
     const disclaimerText = isKlutch
       ? "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE POLICY ISSUED BY KLUTCH INSURANCE COMPANY. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE POLICY."
       : "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE SELF-INSURANCE PROGRAM. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE PROGRAM.";
-    doc.text(disclaimerText, lm + 2, y + 4, { maxWidth: textW - 4 });
-    y += 14;
+    doc.text(disclaimerText, lm + 2, y + 4, { maxWidth: textW - 5 });
+    y += 16;
 
     // ── IMPORTANT BOX ───────────────────────────────────────────────────────
     doc.setDrawColor(150, 150, 150);
@@ -6272,9 +6280,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // Mailing address
     doc.text(form.insuredAddress || "14670 Southlawn Lane, Rockville, MD 20850", lm + 2, y + 13);
     // Second insured: named operator/member
-    doc.text(`${form.namedOperator || "—"}`, lm + 2, y + 17);
     const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
-    doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17.5);
+    doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17);
     if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 21);
 
     // Right cell: coverage period + state
@@ -6303,12 +6310,12 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(60, 60, 60);
     const preamble = `THIS IS TO CERTIFY THAT THE COVERAGES LISTED BELOW HAVE BEEN ISSUED TO THE INSURED NAMED ABOVE FOR THE COVERAGE PERIOD INDICATED. NOTWITHSTANDING ANY REQUIREMENT, TERM OR CONDITION OF ANY CONTRACT OR OTHER DOCUMENT WITH RESPECT TO WHICH THIS CERTIFICATE MAY BE ISSUED OR MAY PERTAIN, THE COVERAGE AFFORDED IS SUBJECT TO ALL TERMS, EXCLUSIONS AND CONDITIONS OF THE POLICY. LIMITS SHOWN MAY HAVE BEEN REDUCED BY PAID CLAIMS.`;
     doc.text(preamble, lm, y, { maxWidth: textW });
-    y += 8;
+    y += 11;
 
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
     // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
     // Column widths: total = textW (186mm on letter). Give type more room, tighten others
-    const cols = { insr: 7, addl: 6, type: 64, pol: 28, eff: 16, exp: 16 };
+    const cols = { insr: 11, addl: 6, type: 60, pol: 24, eff: 16, exp: 16 };
     const limW = textW - cols.insr - cols.addl - cols.type - cols.pol - cols.eff - cols.exp;
     const rowH = 8;
     const hdrH = 6;
@@ -6430,7 +6437,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
     // ── DESCRIPTION OF OPERATIONS ────────────────────────────────────────────
     doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.3);
-    const descH = 24;
+    const descH = 30;
     doc.rect(lm, y, textW, descH);
     doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
     doc.text("DESCRIPTION OF OPERATIONS / LOCATIONS / VEHICLES / SPECIAL CONDITIONS", lm + 2, y + 3.5);
@@ -6445,9 +6452,9 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     const desc4 = `4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per applicable state law.`;
     // Increase description box height and add more spacing between items
     doc.text(desc1, lm + 2, y + 6.5, { maxWidth: textW - 4 });
-    doc.text(desc2, lm + 2, y + 12.5, { maxWidth: textW - 4 });
-    doc.text(desc3, lm + 2, y + 18, { maxWidth: textW - 4 });
-    doc.text(desc4, lm + 2, y + 23, { maxWidth: textW - 4 });
+    doc.text(desc2, lm + 2, y + 13.5, { maxWidth: textW - 4 });
+    doc.text(desc3, lm + 2, y + 20, { maxWidth: textW - 4 });
+    doc.text(desc4, lm + 2, y + 25.5, { maxWidth: textW - 4 });
     y += descH + 3;
 
     // ── BOTTOM GRID: CERT HOLDER + CANCELLATION ──────────────────────────────
@@ -6816,9 +6823,9 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
     const lm = 14, rm = W - 14;
-    const mainW = (W - 14 - 14) * 0.63;
-    const sideW = (W - 14 - 14) * 0.35;
-    const sideX = lm + mainW + 6;
+    const mainW = (W - 14 - 14) * 0.67;
+    const sideW = (W - 14 - 14) * 0.30;
+    const sideX = lm + mainW + 4;
     let y = 10;
 
     // ── PAGE 1 ──────────────────────────────────────────────────────────────
@@ -6913,8 +6920,8 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.line(lm, y, lm + mainW, y);
     y += 3;
     // Fixed column positions for coverage table
-    const covLimX = lm + mainW * 0.52;
-    const covDedX = lm + mainW * 0.68;
+    const covLimX = lm + mainW * 0.50;
+    const covDedX = lm + mainW * 0.72;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(23, 27, 49);
@@ -6926,8 +6933,8 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text("What Klutch pays", covLimX, y);
-    doc.text("What you pay", covDedX, y);
+    doc.text("What Klutch pays", covLimX, y, { maxWidth: covDedX - covLimX - 2 });
+    doc.text("What you pay", covDedX, y, { maxWidth: lm + mainW - covDedX - 10 });
     doc.text("Cost for 6-month policy period", lm + mainW, y, { align: "right" });
     y += 3;
     doc.line(lm, y, lm + mainW, y);
@@ -6957,7 +6964,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
         doc.setTextColor(150, 150, 150);
         doc.text("—", lm + mainW, y, { align: "right" });
       }
-      y += sublabel ? 9 : 6;
+      y += sublabel ? 11 : 7;
       doc.setDrawColor(230, 230, 230);
       doc.line(lm, y - 1, lm + mainW, y - 1);
       y += 1;
@@ -7105,10 +7112,10 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
 
     // Summary content
     doc.setFillColor(248, 249, 251);
-    doc.rect(sideX, sy, sideW, 70, "F");
+    doc.rect(sideX, sy, sideW, 82, "F");
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.2);
-    doc.rect(sideX, sy, sideW, 70);
+    doc.rect(sideX, sy, sideW, 82);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
@@ -7128,7 +7135,16 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     sumLine("Named Insured", "Metrocars Leasing Corp");
     sumLine("Named Operator / Lessee", form.memberName || "—");
     sumLine("Policy Number", form.policyNumber || "—");
-    sumLine("Contact Information", "Klutch Insurance Company\nP.O. Box 10622\nRockville, MD 20850\n(855) 906-5949");
+    // Contact info — render manually with smaller font to avoid overflow
+    doc.text("CONTACT INFORMATION", sideX + 3, syi);
+    syi += 3.5;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(23, 27, 49);
+    doc.text("Klutch Insurance Company", sideX + 3, syi, { maxWidth: sideW - 6 }); syi += 3.5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
+    doc.text("P.O. Box 10622", sideX + 3, syi); syi += 3.5;
+    doc.text("Rockville, MD 20850", sideX + 3, syi); syi += 3.5;
+    doc.text("(855) 906-5949", sideX + 3, syi); syi += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 100, 100);
     const period = (form.effectiveDate && form.expirationDate)
       ? `Effective: ${fmtDateShort(form.effectiveDate)}\nExpiration: ${fmtDateShort(form.expirationDate)}`
       : "—";
@@ -7137,7 +7153,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFontSize(7.5);
     doc.setTextColor(60, 60, 60);
     doc.text("Your policy is written by\nKlutch Insurance Company", sideX + 3, syi, { maxWidth: sideW - 6 });
-    sy += 73;
+    sy += 85;
 
     // How to Report a Claim
     doc.setFillColor(23, 27, 49);
