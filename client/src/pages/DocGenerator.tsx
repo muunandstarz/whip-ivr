@@ -7339,18 +7339,6 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
                   </button>
                 </div>
               </div>
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Vehicle Type</Label>
-                <Select value={form.vehicleType} onValueChange={set("vehicleType")}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Auto">Auto</SelectItem>
-                    <SelectItem value="SUV">SUV</SelectItem>
-                    <SelectItem value="Truck">Truck</SelectItem>
-                    <SelectItem value="Van">Van</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </Grid2>
           </Panel>
 
