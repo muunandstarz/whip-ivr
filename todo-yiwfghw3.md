@@ -274,5 +274,7 @@
 ## Session 2026-08-06 Tasks
 - [x] Slice 6 redesign: MyMailroom.tsx rebuilt per mockup — 5 stat cards (Overdue/Urgent/Legal/Demands/AllPending), dense table with signal column, right-side Sheet drawer on row click (no page navigation), full-width layout, sidebar label "myMailroom"
 - [x] myMailroomStats tRPC procedure added to mail router (5 handler-scoped counts)
-- [x] WhipLayout: sidebar label updated from "My Mailroom" to "myMailroom" (camelCase)
-- [x] COI/Dec Page: coverage-through date logic (computeCoverageThrough), still-in-rental toggle, Expiration Date field, duplicate date fields removed
+  - [x] WhipLayout: sidebar label updated from "My Mailroom" to "myMailroom" (camelCase)
+  - [x] COI/Dec Page: coverage-through date logic (computeCoverageThrough), still-in-rental toggle, Expiration Date field, duplicate date fields removed
+- [x] COI: removed ADDL INSD and SUBR WVD columns from PDF coverage table; removed Additional Insured and Waiver of Subrogation checkboxes from form
+- [x] Dec Page: Toyota make auto-presets Collision and Comprehensive deductibles to $500

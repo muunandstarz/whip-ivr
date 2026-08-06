@@ -6003,8 +6003,6 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [insurer, setInsurer] = React.useState<"klutch" | "metrocars">("klutch");
   const [state, setState] = React.useState(initialState || "MD");
   const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
-  const [additionalInsured, setAdditionalInsured] = React.useState(false);
-  const [waiverOfSubrogation, setWaiverOfSubrogation] = React.useState(false);
   const [umRejected, setUmRejected] = React.useState(false);
   const [pipWaived, setPipWaived] = React.useState(false);
   const [stillInRentalCOI, setStillInRentalCOI] = React.useState(false);
@@ -6310,8 +6308,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
     // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
     // Column widths: total = textW (186mm on letter). Give type more room, tighten others
-    const cols = { insr: 7, addl: 6, subr: 6, type: 58, pol: 28, eff: 16, exp: 16 };
-    const limW = textW - cols.insr - cols.addl - cols.subr - cols.type - cols.pol - cols.eff - cols.exp;
+    const cols = { insr: 7, type: 70, pol: 28, eff: 16, exp: 16 };
+    const limW = textW - cols.insr - cols.type - cols.pol - cols.eff - cols.exp;
     const rowH = 8;
     const hdrH = 6;
 
@@ -6324,8 +6322,6 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     let cx = lm;
     const hdrLabels = [
       { w: cols.insr, t: "INSR\nLTR" },
-      { w: cols.addl, t: "ADDL\nINSD" },
-      { w: cols.subr, t: "SUBR\nWVD" },
       { w: cols.type, t: "TYPE OF INSURANCE" },
       { w: cols.pol, t: "POLICY NUMBER" },
       { w: cols.eff, t: "POLICY EFF\n(MM/DD/YYYY)" },
@@ -6343,8 +6339,6 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     const policyNo = form.certNumber || "—";
     const effDate = fmtDate(form.effectiveDate);
     const expDate = fmtDate(form.expirationDate);
-    const checkMark = additionalInsured ? "[X]" : "[ ]";
-    const subrMark = waiverOfSubrogation ? "[X]" : "[ ]";
 
     const coverageRows = [
       {
@@ -6399,26 +6393,20 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.2);
       doc.rect(lm, y, textW, rH);
       cx = lm;
-      for (const col of [cols.insr, cols.addl, cols.subr, cols.type, cols.pol, cols.eff, cols.exp, limW]) {
+      for (const col of [cols.insr, cols.type, cols.pol, cols.eff, cols.exp, limW]) {
         cx += col;
         if (cx < lm + textW) doc.line(cx, y, cx, y + rH);
       }
       // INSR LTR
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
       doc.text(row.insr, lm + cols.insr / 2, y + rH / 2 + 1, { align: "center" });
-      // ADDL INSD checkbox
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.text(checkMark, lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
-      // SUBR WVD checkbox
-      doc.text(subrMark, lm + cols.insr + cols.addl + cols.subr / 2, y + rH / 2 + 1.5, { align: "center" });
       // Type — use 7pt and maxWidth to prevent overflow into policy number column
       doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-      const typeX = lm + cols.insr + cols.addl + cols.subr + 2;
+      const typeX = lm + cols.insr + 2;
       doc.text(row.type, typeX, y + rH / 2 + 1, { maxWidth: cols.type - 3 });
       // Policy No
       doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-      const polX = lm + cols.insr + cols.addl + cols.subr + cols.type + 2;
+      const polX = lm + cols.insr + cols.type + 2;
       doc.text(policyNo, polX, y + rH / 2 + 1);
       // Eff / Exp dates
       const effX = polX + cols.pol;
@@ -6625,20 +6613,6 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
           {/* Coverage Options */}
           <Panel title="Coverage Options">
             <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-                <Checkbox checked={additionalInsured} onCheckedChange={(v) => setAdditionalInsured(!!v)} />
-                <div>
-                  <div className="text-xs font-semibold">Additional Insured</div>
-                  <div className="text-xs text-muted-foreground">Marks ADDL INSD checkbox on all coverage rows</div>
-                </div>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-                <Checkbox checked={waiverOfSubrogation} onCheckedChange={(v) => setWaiverOfSubrogation(!!v)} />
-                <div>
-                  <div className="text-xs font-semibold">Waiver of Subrogation</div>
-                  <div className="text-xs text-muted-foreground">Marks SUBR WVD checkbox on all coverage rows</div>
-                </div>
-              </label>
               {rules.umRejectable && (
                 <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
                   <Checkbox checked={umRejected} onCheckedChange={(v) => setUmRejected(!!v)} />
@@ -6783,6 +6757,12 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   React.useEffect(() => {
     setForm(p => ({ ...p, policyNumber: state + "-000S0137" }));
   }, [state]);
+  // Toyota preset: if make is Toyota, default deductibles to $500
+  React.useEffect(() => {
+    if (form.vehicleMake.toLowerCase().trim() === "toyota") {
+      setForm(p => ({ ...p, collisionDeductible: "$500", compDeductible: "$500" }));
+    }
+  }, [form.vehicleMake]);
 
   const fmtDate = (d: string) => {
     if (!d) return "—";
