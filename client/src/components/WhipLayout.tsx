@@ -2,6 +2,9 @@ import { Link, useLocation } from "wouter";
 import OnboardingModal from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -51,8 +54,6 @@ const ADMIN_NAV_ITEMS = [
   { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/mailroom", label: "Mailroom", icon: Inbox },
-  { href: "/users", label: "User Management", icon: UserCog },
-  { href: "/settings", label: "Settings", icon: SlidersHorizontal },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
 ];
 
@@ -342,17 +343,44 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
         {/* User */}
         <div className="px-4 py-4 border-t border-white/10">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-[#ff6221]/20 flex items-center justify-center text-[#ff6221] text-xs font-bold flex-shrink-0">
-              {avatarInitial}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">{displayName}</div>
-              <div className="text-xs text-white/50 truncate">
-                {isAdmin ? "Admin" : "Handler"} · {displayEmail}
-              </div>
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 mb-3 w-full text-left hover:bg-white/5 rounded-lg px-1 py-1 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-[#ff6221]/20 flex items-center justify-center text-[#ff6221] text-xs font-bold flex-shrink-0">
+                  {avatarInitial}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate">{displayName}</div>
+                  <div className="text-xs text-white/50 truncate">
+                    {isAdmin ? "Admin" : "Handler"} · {displayEmail}
+                  </div>
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-52">
+              {isAdmin && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link href="/users" className="flex items-center gap-2 cursor-pointer">
+                      <UserCog className="w-4 h-4" /> User Management
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings" className="flex items-center gap-2 cursor-pointer">
+                      <SlidersHorizontal className="w-4 h-4" /> Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onClick={() => logout().then(() => { window.location.href = "/"; })}
+              >
+                <LogOut className="w-4 h-4 mr-2" /> Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {/* Theme toggle */}
           <div className="flex items-center gap-1 mb-2">
             {([
@@ -375,15 +403,6 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
               </button>
             ))}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-white/60 hover:text-white hover:bg-background/10 gap-2 justify-start"
-            onClick={() => logout().then(() => { window.location.href = "/"; })}
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </Button>
         </div>
       </aside>
 
