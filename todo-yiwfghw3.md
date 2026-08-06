@@ -291,4 +291,6 @@
 - [x] Metrocars COI: remove the line through Vehicle under insured
 - [x] Metrocars COI: add half-line spacing between the coverages paragraph and the coverage table
 - [x] Metrocars COI: fix PIP limits overlap in the coverage table (widened LIMITS column)
-- [x] Dec Page: mainW increased to 67%, column positions adjusted, sidebar contact info fixed, row spacing improved
+  - [x] Dec Page: mainW increased to 67%, column positions adjusted, sidebar contact info fixed, row spacing improved
+- [x] Denial letter: top-level field renamed "Letter Date" and auto-populated with today's date; dol template field remains for actual date of loss
+- [x] All Whip letters: addWhipLetterhead reformatted to clean letterhead only (logo + company info + rule); title/subtitle blocks removed; body font 9→10pt across all letters
