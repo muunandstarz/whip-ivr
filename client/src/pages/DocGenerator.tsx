@@ -6615,7 +6615,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             <Grid3>
               <Field label="Certificate Date" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
               <Field label="Date Issued" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
-              <Field label="Coverage Through" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+              <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid3>
             <Grid2>
               <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KIS0000" : `${state}000S0137XX`} />
@@ -7493,10 +7493,25 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
           </Panel>
 
           <Panel title="Policy Period & Premium">
+            <div className="mb-3">
+              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                <Checkbox checked={stillInRentalDec} onCheckedChange={(v) => setStillInRentalDec(!!v)} />
+                <div>
+                  <div className="text-xs font-semibold">Driver is still in the rental</div>
+                  <div className="text-xs text-muted-foreground">Auto-computes Expiration Date from Date Issued + state rules</div>
+                </div>
+              </label>
+            </div>
+            {stillInRentalDec && decCoverage.warning && (
+              <div className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">⚠️ {decCoverage.warning}</div>
+            )}
+            {stillInRentalDec && decCoverage.helperText && !decCoverage.warning && (
+              <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{decCoverage.helperText}</div>
+            )}
             <Grid3>
-              <Field label="Effective Date" id="dp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
-              <Field label="Coverage Through" id="dp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
-              <Field label="Date Issued" id="dp-issued" value={form.issuedDate} onChange={set("issuedDate")} type="date" />
+              <Field label="Date Issued" id="dp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
+              <Field label="Expiration Date" id="dp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
+              <Field label="Issued Date" id="dp-issued" value={form.issuedDate} onChange={set("issuedDate")} type="date" />
             </Grid3>
             <Grid3>
               <Field label="Policy Number" id="dp-polnum" value={form.policyNumber} onChange={set("policyNumber")} placeholder="MD-000S0137" />
