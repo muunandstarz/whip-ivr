@@ -6027,11 +6027,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
   // Auto-compute coverage-through date whenever effectiveDate, state, or stillInRental changes
   const coiCoverage = React.useMemo(() => computeCoverageThrough({
-    startDateStr: form.effectiveDate,
+    startDateStr: form.certDate,
     state,
     stillInRental: stillInRentalCOI,
     dateOfLossStr: form.dateOfLoss,
-  }), [form.effectiveDate, form.dateOfLoss, state, stillInRentalCOI]);
+  }), [form.certDate, form.dateOfLoss, state, stillInRentalCOI]);
   React.useEffect(() => {
     if (stillInRentalCOI && coiCoverage.throughDate && !coiCoverage.warning) {
       setForm(p => ({ ...p, expirationDate: formatDateISO(coiCoverage.throughDate!) }));
@@ -6612,11 +6612,10 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             {stillInRentalCOI && coiCoverage.helperText && !coiCoverage.warning && (
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
             )}
-            <Grid3>
+            <Grid2>
               <Field label="Date Issued" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
-              <Field label="Date Issued" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
               <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
-            </Grid3>
+            </Grid2>
             <Grid2>
               <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KIS0000" : `${state}000S0137XX`} />
               <Field label="Revision Number" id="coi-rev" value={form.revisionNumber} onChange={set("revisionNumber")} placeholder="e.g. 0" />
