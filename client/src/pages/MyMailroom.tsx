@@ -1,16 +1,17 @@
 /**
- * /my-mailroom — Personal handler queue
- * Only accessible when the user has a handlerProfileId (or an admin is impersonating a handler).
- * Calls myMailroom (not adminQueue) — always scoped to the effective handler.
+ * /my-mailroom — Personal handler queue (redesigned per mockup)
+ * Full-width layout, 5 stat cards, dense table with signal column,
+ * right-side Sheet drawer on row click (no page navigation).
  */
-import { useState, useMemo } from "react";
-import { Link } from "wouter";
+import { useState, useMemo, useCallback } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import WhipLayout from "@/components/WhipLayout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -18,18 +19,24 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Mail, Clock, ArrowRight, CheckCircle, AlertCircle, MoreHorizontal,
-  RefreshCw, ChevronUp, ChevronDown,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Mail, Clock, AlertTriangle, Scale, FileText, RefreshCw,
+  MoreHorizontal, ArrowRight, CheckCircle, AlertCircle,
+  ChevronLeft, ChevronRight, Download, Search, Filter,
+  ExternalLink, Bell,
 } from "lucide-react";
 import { toast } from "sonner";
+import { format, formatDistanceToNow, isToday, isPast } from "date-fns";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
   injury_pip_bi: "Injury / PIP / BI",
@@ -37,271 +44,710 @@ const CATEGORY_LABELS: Record<string, string> = {
   existing_claim_followup: "Claim Follow-Up",
   outbound_subro: "OB Subro",
   total_loss: "Total Loss",
-  legal_or_high_risk: "Legal / High Risk",
-  other_or_unclear: "Other / Unclear",
+  legal_or_high_risk: "Legal",
+  other_or_unclear: "General",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  injury_pip_bi: "bg-blue-100 text-blue-800",
-  inbound_subro: "bg-purple-100 text-purple-800",
-  existing_claim_followup: "bg-gray-100 text-gray-800",
-  outbound_subro: "bg-indigo-100 text-indigo-800",
-  total_loss: "bg-orange-100 text-orange-800",
-  legal_or_high_risk: "bg-red-100 text-red-800",
-  other_or_unclear: "bg-yellow-100 text-yellow-800",
+  injury_pip_bi: "bg-blue-100 text-blue-800 border-blue-200",
+  inbound_subro: "bg-purple-100 text-purple-800 border-purple-200",
+  existing_claim_followup: "bg-gray-100 text-gray-700 border-gray-200",
+  outbound_subro: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  total_loss: "bg-orange-100 text-orange-800 border-orange-200",
+  legal_or_high_risk: "bg-red-100 text-red-800 border-red-200",
+  other_or_unclear: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
-function fmtDate(d: Date | string | null | undefined) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-function fmtRelative(d: Date | string | null | undefined) {
-  if (!d) return "—";
-  const diff = Date.now() - new Date(d).getTime();
-  const h = Math.floor(diff / 3600000);
-  if (h < 1) return "just now";
-  if (h < 24) return `${h}h ago`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return fmtDate(d);
+const STATUS_COLORS: Record<string, string> = {
+  new: "bg-slate-100 text-slate-700",
+  assigned: "bg-green-100 text-green-800",
+  escalated: "bg-amber-100 text-amber-800",
+  resolved: "bg-gray-100 text-gray-600",
+  review: "bg-yellow-100 text-yellow-800",
+  needs_review: "bg-yellow-100 text-yellow-800",
+};
+
+type FilterTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "resolved";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function relativeTime(date: Date | string | null | undefined): string {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
+  const diff = Date.now() - d.getTime();
+  if (diff < 60_000) return "just now";
+  return formatDistanceToNow(d, { addSuffix: true })
+    .replace("about ", "")
+    .replace(" ago", " ago");
 }
 
-function RerouteDialog({ itemId, open, onClose }: { itemId: number; open: boolean; onClose: () => void }) {
-  const [toHandlerId, setToHandlerId] = useState("");
-  const [reason, setReason] = useState("");
-  const utils = trpc.useUtils();
-  const { data: handlers } = trpc.handlers.list.useQuery();
-  const reroute = trpc.mail.reroute.useMutation({
-    onSuccess: () => { toast.success("Rerouted"); utils.mail.myMailroom.invalidate(); utils.mail.myPendingCount.invalidate(); onClose(); },
-    onError: e => toast.error(e.message),
-  });
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Reroute Item</DialogTitle></DialogHeader>
-        <div className="space-y-4 py-2">
-          <div>
-            <Label>Assign to Handler</Label>
-            <Select value={toHandlerId} onValueChange={setToHandlerId}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Select handler…" /></SelectTrigger>
-              <SelectContent>{handlers?.map(h => <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Reason (optional)</Label>
-            <Textarea className="mt-1" value={reason} onChange={e => setReason(e.target.value)} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={!toHandlerId || reroute.isPending}
-            onClick={() => reroute.mutate({ itemId, toHandlerId: Number(toHandlerId), reason: reason || undefined })}>
-            {reroute.isPending ? "Rerouting…" : "Reroute"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+function dueLabel(dueAt: Date | string | null | undefined) {
+  if (!dueAt) return null;
+  const d = new Date(dueAt);
+  if (isNaN(d.getTime())) return null;
+  if (isPast(d) && !isToday(d)) return { text: "Overdue", color: "text-red-600" };
+  if (isToday(d)) return { text: "Due today", color: "text-amber-600" };
+  return null;
+}
+
+function SignalDot({ item }: { item: any }) {
+  const due = item.dueAt ? new Date(item.dueAt) : null;
+  const overdue = due && isPast(due) && !isToday(due);
+  const urgent = item.urgency === "urgent";
+  const legal = item.category === "legal_or_high_risk";
+  const demand = item.isDemand === 1;
+
+  if (overdue) return <span className="inline-block w-2 h-2 rounded-full bg-red-500 mt-0.5" title="Overdue" />;
+  if (urgent) return <span className="inline-block w-2 h-2 rounded-full bg-amber-500 mt-0.5" title="Urgent" />;
+  if (legal) return <Scale className="w-3.5 h-3.5 text-blue-600 mt-0.5" aria-label="Legal" />;
+  if (demand) return <FileText className="w-3.5 h-3.5 text-indigo-600 mt-0.5" aria-label="Demand" />;
+  return <span className="inline-block w-2 h-2 rounded-full bg-transparent" />;
+}
+
+// ─── Drawer ───────────────────────────────────────────────────────────────────
+
+function MailDrawer({
+  itemId,
+  open,
+  onClose,
+  onActionSuccess,
+}: {
+  itemId: number | null;
+  open: boolean;
+  onClose: () => void;
+  onActionSuccess: () => void;
+}) {
+  const [, navigate] = useLocation();
+  const [noteText, setNoteText] = useState("");
+  const [reminderDate, setReminderDate] = useState("");
+  const [showReminderInput, setShowReminderInput] = useState(false);
+  const [showRerouteDialog, setShowRerouteDialog] = useState(false);
+  const [rerouteHandlerId, setRerouteHandlerId] = useState("");
+  const [rerouteReason, setRerouteReason] = useState("");
+
+  const { data, isLoading, refetch } = trpc.mail.getItem.useQuery(
+    { id: itemId! },
+    { enabled: open && itemId != null }
   );
-}
 
-function ResolveDialog({ itemId, open, onClose }: { itemId: number; open: boolean; onClose: () => void }) {
-  const [note, setNote] = useState("");
   const utils = trpc.useUtils();
-  const resolve = trpc.mail.resolve.useMutation({
-    onSuccess: () => { toast.success("Resolved"); utils.mail.myMailroom.invalidate(); utils.mail.myPendingCount.invalidate(); onClose(); },
-    onError: e => toast.error(e.message),
-  });
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Resolve Item</DialogTitle></DialogHeader>
-        <div className="py-2">
-          <Label>Note (optional)</Label>
-          <Textarea className="mt-1" value={note} onChange={e => setNote(e.target.value)} />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={resolve.isPending}
-            onClick={() => resolve.mutate({ itemId, note: note || undefined })}>
-            {resolve.isPending ? "Resolving…" : "Mark Resolved"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+  const invalidate = useCallback(() => {
+    utils.mail.myMailroom.invalidate();
+    utils.mail.myMailroomStats.invalidate();
+    utils.mail.myPendingCount.invalidate();
+    onActionSuccess();
+  }, [utils, onActionSuccess]);
 
-function ItemRow({ item }: { item: any }) {
-  const [rerouteOpen, setRerouteOpen] = useState(false);
-  const [resolveOpen, setResolveOpen] = useState(false);
-  const utils = trpc.useUtils();
-  const escalate = trpc.mail.escalate.useMutation({
-    onSuccess: () => { toast.success("Escalated"); utils.mail.myMailroom.invalidate(); },
-    onError: e => toast.error(e.message),
+  const resolveMut = trpc.mail.resolve.useMutation({
+    onSuccess: () => { toast.success("Resolved"); invalidate(); onClose(); },
+    onError: (e) => toast.error(e.message),
   });
-  const isOverdue = item.dueAt && new Date(item.dueAt) < new Date() && item.status !== "resolved";
+  const escalateMut = trpc.mail.escalate.useMutation({
+    onSuccess: () => { toast.success("Escalated"); invalidate(); onClose(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const rerouteMut = trpc.mail.reroute.useMutation({
+    onSuccess: () => { toast.success("Rerouted"); invalidate(); onClose(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const addNoteMut = trpc.mail.addNote.useMutation({
+    onSuccess: () => { toast.success("Note added"); setNoteText(""); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const reminderMut = trpc.mail.setReminder.useMutation({
+    onSuccess: () => { toast.success("Reminder set"); setShowReminderInput(false); setReminderDate(""); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const item = data?.item;
+  const files = data?.files ?? [];
+  const notes = data?.notes ?? [];
+  const history = data?.history ?? [];
+
   return (
     <>
-      <TableRow className={item.isDemand ? "bg-red-50/30" : ""}>
-        <TableCell className="max-w-xs">
-          <Link href={`/mailroom/${item.id}`} className="hover:underline font-medium text-sm line-clamp-1">
-            {item.subject ?? "(no subject)"}
-          </Link>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {item.source === "mail" ? "📠" : "📧"} {item.fromEmail ?? item.fromName ?? "—"}
-            {item.isDemand === 1 && <span className="ml-1 text-red-600 font-medium">DEMAND</span>}
+      <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+        <SheetContent side="right" className="w-[480px] sm:w-[520px] overflow-y-auto p-0 flex flex-col">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Mail Item Detail</SheetTitle>
+          </SheetHeader>
+          {isLoading || !item ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              {isLoading ? "Loading…" : "No item selected"}
+            </div>
+          ) : (
+            <>
+              {/* Header */}
+              <div className="px-5 pt-5 pb-3 border-b">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold leading-snug line-clamp-2">
+                    {item.subject || "(No subject)"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {item.fromEmail} · {item.receivedAt ? format(new Date(item.receivedAt), "MMM d, yyyy, h:mm a") : "—"}
+                  </p>
+                </div>
+                {/* Badges */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {item.category && (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
+                      {CATEGORY_LABELS[item.category] ?? item.category}
+                    </span>
+                  )}
+                  {item.status && (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[item.status] ?? "bg-gray-100 text-gray-700"}`}>
+                      {item.status}
+                    </span>
+                  )}
+                  {item.dueAt && isPast(new Date(item.dueAt)) && !isToday(new Date(item.dueAt)) && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Overdue</span>
+                  )}
+                  {item.urgency === "urgent" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">Urgent</span>
+                  )}
+                  {item.category === "legal_or_high_risk" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Legal</span>
+                  )}
+                  {item.isDemand === 1 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700">Demand</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-5 py-3 border-b">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Message Body</p>
+                <div className="text-sm text-foreground max-h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                  {item.bodyText || <span className="text-muted-foreground italic">No body content</span>}
+                </div>
+              </div>
+
+              {/* Claim Information */}
+              <div className="px-5 py-3 border-b">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Claim Information</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                  <div>
+                    <span className="text-muted-foreground text-xs">Claim #</span>
+                    <p className="font-medium">{item.claimNumber || "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-xs">Loss Date</span>
+                    <p className="font-medium">{item.dateOfLoss ? format(new Date(item.dateOfLoss), "MMM d, yyyy") : "—"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-xs">Urgency</span>
+                    <p className="font-medium capitalize">{item.urgency || "normal"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-xs">Confidence</span>
+                    <p className="font-medium">{item.confidence != null ? `${item.confidence}%` : "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions 2×2 */}
+              <div className="px-5 py-3 border-b">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Actions</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                    onClick={() => setShowRerouteDialog(true)}>
+                    <ArrowRight className="w-3.5 h-3.5" /> Reroute
+                  </Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                    onClick={() => resolveMut.mutate({ itemId: item.id })}
+                    disabled={resolveMut.isPending}>
+                    <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Resolve
+                  </Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                    onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated from mailroom" })}
+                    disabled={escalateMut.isPending}>
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Escalate
+                  </Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                    onClick={() => setShowReminderInput(true)}>
+                    <Bell className="w-3.5 h-3.5 text-blue-600" /> Set Reminder
+                  </Button>
+                </div>
+                {showReminderInput && (
+                  <div className="mt-2 flex gap-2">
+                    <Input type="datetime-local" className="text-xs h-8 flex-1"
+                      value={reminderDate} onChange={e => setReminderDate(e.target.value)} />
+                    <Button size="sm" className="h-8 text-xs" disabled={!reminderDate || reminderMut.isPending}
+                      onClick={() => reminderMut.mutate({ itemId: item.id, remindAt: new Date(reminderDate) })}>
+                      Set
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReminderInput(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Open in Full View */}
+              <div className="px-5 py-3 border-b">
+                <Button className="w-full gap-2 text-sm" variant="default"
+                  onClick={() => { onClose(); navigate(`/mailroom/${item.id}`); }}>
+                  <ExternalLink className="w-4 h-4" /> Open in Full View
+                </Button>
+              </div>
+
+              {/* Notes */}
+              <div className="px-5 py-3 border-b">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Notes ({notes.length})
+                  </p>
+                </div>
+                <div className="space-y-2 max-h-32 overflow-y-auto mb-2">
+                  {notes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No notes yet</p>
+                  ) : notes.map((n: any) => (
+                    <div key={n.id} className="text-xs bg-muted/40 rounded p-2">
+                      <p className="text-muted-foreground mb-0.5">{n.createdAt ? format(new Date(n.createdAt), "M/d/yy, h:mm a") : ""}</p>
+                      <p>{n.note}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input placeholder="Add a note…" className="text-xs h-8 flex-1"
+                    value={noteText} onChange={e => setNoteText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && noteText.trim()) addNoteMut.mutate({ itemId: item.id, note: noteText.trim() }); }} />
+                  <Button size="sm" className="h-8 text-xs" disabled={!noteText.trim() || addNoteMut.isPending}
+                    onClick={() => addNoteMut.mutate({ itemId: item.id, note: noteText.trim() })}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Attachments */}
+              {files.length > 0 && (
+                <div className="px-5 py-3 border-b">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Attachments ({files.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {files.map((f: any) => (
+                      <div key={f.id} className="flex items-center justify-between text-xs bg-muted/30 rounded px-2 py-1.5">
+                        <span className="truncate flex-1 mr-2">{f.filename || f.storageKey?.split("/").pop() || "File"}</span>
+                        {f.signedUrl && (
+                          <a href={f.signedUrl} target="_blank" rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1 shrink-0">
+                            <Download className="w-3 h-3" /> Download
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Routing History */}
+              {history.length > 0 && (
+                <div className="px-5 py-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Routing History
+                  </p>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {history.map((h: any) => (
+                      <div key={h.id} className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground capitalize">{h.action}</span>
+                        {h.reason ? ` — ${h.reason}` : ""}
+                        <span className="ml-1 text-muted-foreground/70">
+                          · {h.createdAt ? format(new Date(h.createdAt), "M/d/yy, h:mm a") : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Reroute Dialog */}
+      <Dialog open={showRerouteDialog} onOpenChange={setShowRerouteDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Reroute Mail Item</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Handler ID</Label>
+              <Input placeholder="Handler ID (number)" value={rerouteHandlerId}
+                onChange={e => setRerouteHandlerId(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">Reason (optional)</Label>
+              <Textarea placeholder="Reason for reroute…" value={rerouteReason}
+                onChange={e => setRerouteReason(e.target.value)} className="mt-1 h-20" />
+            </div>
           </div>
-        </TableCell>
-        <TableCell>
-          {item.category ? (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
-              {CATEGORY_LABELS[item.category] ?? item.category}
-            </span>
-          ) : <span className="text-muted-foreground text-xs">—</span>}
-        </TableCell>
-        <TableCell>
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            item.status === "resolved" ? "bg-gray-100 text-gray-500" :
-            item.status === "escalated" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
-          }`}>{item.status}</span>
-        </TableCell>
-        <TableCell className={`text-xs ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
-          {isOverdue && <Clock className="inline h-3 w-3 mr-1" />}
-          {fmtDate(item.dueAt)}
-        </TableCell>
-        <TableCell className="text-xs text-muted-foreground">{fmtRelative(item.receivedAt)}</TableCell>
-        <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={`/mailroom/${item.id}`}>View Detail</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setRerouteOpen(true)}>
-                <ArrowRight className="h-3.5 w-3.5 mr-2" /> Reroute
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setResolveOpen(true)}>
-                <CheckCircle className="h-3.5 w-3.5 mr-2" /> Resolve
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => escalate.mutate({ itemId: item.id, reason: "Manual escalation" })}
-                className="text-destructive"
-              >
-                <AlertCircle className="h-3.5 w-3.5 mr-2" /> Escalate
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      </TableRow>
-      <RerouteDialog itemId={item.id} open={rerouteOpen} onClose={() => setRerouteOpen(false)} />
-      <ResolveDialog itemId={item.id} open={resolveOpen} onClose={() => setResolveOpen(false)} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRerouteDialog(false)}>Cancel</Button>
+            <Button disabled={!rerouteHandlerId || rerouteMut.isPending}
+              onClick={() => {
+                if (item) rerouteMut.mutate({
+                  itemId: item.id,
+                  toHandlerId: Number(rerouteHandlerId),
+                  reason: rerouteReason || undefined,
+                });
+                setShowRerouteDialog(false);
+              }}>
+              Reroute
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function MyMailroom() {
   const { user } = useAuth();
-  const isHandler = !!user?.handlerProfileId;
-
-  const [filter, setFilter] = useState<"all" | "overdue" | "legal" | "resolved">("all");
+  const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const { data: pendingData } = trpc.mail.myPendingCount.useQuery(undefined, {
-    enabled: isHandler,
-    refetchInterval: 60000,
+  // Build query input based on active tab
+  const queryInput = useMemo(() => {
+    switch (activeTab) {
+      case "overdue": return { overdue: true };
+      case "legal": return { legalOnly: true };
+      case "demands": return { legalOnly: true };
+      case "resolved": return { showResolved: true, status: "resolved" as const };
+      default: return {};
+    }
+  }, [activeTab]);
+
+  const { data, isLoading, refetch } = trpc.mail.myMailroom.useQuery(queryInput, {
+    refetchInterval: 60_000,
   });
-  const pendingCount = pendingData?.count ?? 0;
+  const { data: stats } = trpc.mail.myMailroomStats.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+  const { data: pendingData } = trpc.mail.myPendingCount.useQuery();
 
-  const { data, isLoading, refetch } = trpc.mail.myMailroom.useQuery({
-    overdue: filter === "overdue" ? true : undefined,
-    legalOnly: filter === "legal" ? true : undefined,
-    showResolved: filter === "resolved" ? true : undefined,
-  }, { enabled: isHandler });
+  // Client-side filter for urgent tab and search
+  const filteredItems = useMemo(() => {
+    let items = data?.items ?? [];
+    if (activeTab === "urgent") items = items.filter((i: any) => i.urgency === "urgent");
+    if (activeTab === "demands") items = items.filter((i: any) => i.isDemand === 1);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter((i: any) =>
+        (i.subject ?? "").toLowerCase().includes(q) ||
+        (i.fromEmail ?? "").toLowerCase().includes(q) ||
+        (i.claimNumber ?? "").toLowerCase().includes(q)
+      );
+    }
+    return items;
+  }, [data, activeTab, search]);
 
-  const filtered = useMemo(() => {
-    if (!data?.items) return [];
-    if (!search.trim()) return data.items;
-    const q = search.toLowerCase();
-    return data.items.filter(i =>
-      (i.subject ?? "").toLowerCase().includes(q) ||
-      (i.fromEmail ?? "").toLowerCase().includes(q) ||
-      (i.claimNumber ?? "").toLowerCase().includes(q)
-    );
-  }, [data?.items, search]);
+  const totalItems = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const pagedItems = filteredItems.slice((page - 1) * pageSize, page * pageSize);
+  const showFrom = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showTo = Math.min(page * pageSize, totalItems);
 
-  if (!isHandler) {
-    return (
-      <WhipLayout>
-        <div className="p-6 text-center text-muted-foreground py-12">
-          You need a handler profile to access the personal mailroom.
-        </div>
-      </WhipLayout>
-    );
-  }
+  const handleTabChange = (tab: FilterTab) => {
+    setActiveTab(tab);
+    setPage(1);
+  };
+
+  const handleRowClick = (id: number) => {
+    setSelectedId(id);
+    setDrawerOpen(true);
+  };
+
+  const TABS: { key: FilterTab; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "overdue", label: "Overdue" },
+    { key: "urgent", label: "Urgent" },
+    { key: "legal", label: "Legal & Demands" },
+    { key: "demands", label: "Demands" },
+    { key: "resolved", label: "Resolved" },
+  ];
 
   return (
     <WhipLayout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-col h-full min-h-0 w-full px-6 py-5 gap-4">
+
+        {/* Page Header */}
         <div className="flex items-center gap-3">
-          <Mail className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">My Mailroom</h1>
-          {pendingCount > 0 && (
-            <Badge variant="destructive" className="text-xs">{pendingCount} pending</Badge>
+          <Mail className="w-5 h-5 text-muted-foreground" />
+          <h1 className="text-lg font-semibold">My Mailroom</h1>
+          {pendingData && pendingData.count > 0 && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-500 text-white">
+              {pendingData.count} pending
+            </span>
           )}
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1">
-            {(["all", "overdue", "legal", "resolved"] as const).map(f => (
-              <Button
-                key={f}
-                size="sm"
-                variant={filter === f ? "default" : "outline"}
-                onClick={() => setFilter(f)}
+        {/* Stat Cards */}
+        <div className="grid grid-cols-5 gap-3">
+          {[
+            {
+              key: "overdue" as FilterTab,
+              label: "Overdue",
+              count: stats?.overdue ?? 0,
+              icon: <Clock className="w-5 h-5 text-red-500" />,
+              countColor: "text-red-600",
+              linkColor: "text-red-500 hover:text-red-700",
+              linkLabel: "View overdue",
+            },
+            {
+              key: "urgent" as FilterTab,
+              label: "Urgent",
+              count: stats?.urgent ?? 0,
+              icon: <AlertTriangle className="w-5 h-5 text-amber-500" />,
+              countColor: "text-amber-600",
+              linkColor: "text-amber-500 hover:text-amber-700",
+              linkLabel: "View urgent",
+            },
+            {
+              key: "legal" as FilterTab,
+              label: "Legal & Demands",
+              count: stats?.legal ?? 0,
+              icon: <Scale className="w-5 h-5 text-blue-500" />,
+              countColor: "text-blue-700",
+              linkColor: "text-blue-500 hover:text-blue-700",
+              linkLabel: "View legal",
+            },
+            {
+              key: "demands" as FilterTab,
+              label: "Demands",
+              count: stats?.demands ?? 0,
+              icon: <FileText className="w-5 h-5 text-indigo-500" />,
+              countColor: "text-indigo-700",
+              linkColor: "text-indigo-500 hover:text-indigo-700",
+              linkLabel: "View demands",
+            },
+            {
+              key: "all" as FilterTab,
+              label: "All Pending",
+              count: stats?.allPending ?? 0,
+              icon: <Mail className="w-5 h-5 text-gray-500" />,
+              countColor: "text-gray-800",
+              linkColor: "text-gray-500 hover:text-gray-700",
+              linkLabel: "View all",
+            },
+          ].map(card => (
+            <div key={card.key} className="bg-card border rounded-lg px-4 py-3 flex flex-col gap-1 hover:shadow-sm transition-shadow">
+              <div className="flex items-center gap-2">
+                {card.icon}
+                <span className="text-xs text-muted-foreground font-medium">{card.label}</span>
+              </div>
+              <p className={`text-2xl font-bold ${card.countColor}`}>{card.count}</p>
+              <button
+                onClick={() => handleTabChange(card.key)}
+                className={`text-xs font-medium ${card.linkColor} text-left`}
               >
-                {f === "legal" ? "Legal & Demands" : f === "overdue" ? "⏰ Overdue" : f.charAt(0).toUpperCase() + f.slice(1)}
-              </Button>
-            ))}
-          </div>
-          <Input
-            className="max-w-xs h-8"
-            placeholder="Search subject, email, claim #…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <Button size="sm" variant="ghost" onClick={() => refetch()}>
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
+                {card.linkLabel}
+              </button>
+            </div>
+          ))}
         </div>
 
-        {isLoading ? (
-          <div className="py-12 text-center text-muted-foreground text-sm">Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground text-sm">No items found.</div>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Subject / From</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Received</TableHead>
-                  <TableHead className="w-8" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map(item => <ItemRow key={item.id} item={item} />)}
-              </TableBody>
-            </Table>
+        {/* Filter Tabs + Search */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
+            {TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => handleTabChange(tab.key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activeTab === tab.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search subject, sender, claim #…"
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <Filter className="w-3.5 h-3.5" /> Filter
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => refetch()} title="Refresh">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 min-h-0 border rounded-lg overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-6 px-3" />
+                <TableHead className="text-xs font-semibold">Subject / From</TableHead>
+                <TableHead className="text-xs font-semibold w-36">Category</TableHead>
+                <TableHead className="text-xs font-semibold w-32">Claim #</TableHead>
+                <TableHead className="text-xs font-semibold w-24">Status</TableHead>
+                <TableHead className="text-xs font-semibold w-32">Due</TableHead>
+                <TableHead className="text-xs font-semibold w-24">Received</TableHead>
+                <TableHead className="w-8 px-2" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground text-sm">
+                    Loading…
+                  </TableCell>
+                </TableRow>
+              ) : pagedItems.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground text-sm">
+                    No items found
+                  </TableCell>
+                </TableRow>
+              ) : pagedItems.map((item: any) => {
+                const dl = dueLabel(item.dueAt);
+                return (
+                  <TableRow
+                    key={item.id}
+                    className="cursor-pointer hover:bg-muted/40 transition-colors"
+                    onClick={() => handleRowClick(item.id)}
+                  >
+                    {/* Signal */}
+                    <TableCell className="px-3 py-2.5">
+                      <div className="flex items-center justify-center">
+                        <SignalDot item={item} />
+                      </div>
+                    </TableCell>
+                    {/* Subject / From */}
+                    <TableCell className="py-2.5">
+                      <p className="text-sm font-medium leading-snug line-clamp-1">{item.subject || "(No subject)"}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <Mail className="w-3 h-3" /> {item.fromEmail || "—"}
+                      </p>
+                    </TableCell>
+                    {/* Category */}
+                    <TableCell className="py-2.5">
+                      {item.category ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
+                          {CATEGORY_LABELS[item.category] ?? item.category}
+                        </span>
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
+                    {/* Claim # */}
+                    <TableCell className="py-2.5 text-xs font-mono">
+                      {item.claimNumber || <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    {/* Status */}
+                    <TableCell className="py-2.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[item.status] ?? "bg-gray-100 text-gray-700"}`}>
+                        {item.status || "—"}
+                      </span>
+                    </TableCell>
+                    {/* Due */}
+                    <TableCell className="py-2.5">
+                      {item.dueAt ? (
+                        <div>
+                          <p className="text-xs">{format(new Date(item.dueAt), "MMM d, yyyy")}</p>
+                          {dl && <p className={`text-xs font-medium ${dl.color}`}>{dl.text}</p>}
+                        </div>
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
+                    {/* Received */}
+                    <TableCell className="py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                      {relativeTime(item.receivedAt)}
+                    </TableCell>
+                    {/* ⋯ menu */}
+                    <TableCell className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="text-xs">
+                          <DropdownMenuItem onClick={() => handleRowClick(item.id)}>
+                            <ArrowRight className="w-3.5 h-3.5 mr-2" /> Reroute
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleRowClick(item.id)}>
+                            <CheckCircle className="w-3.5 h-3.5 mr-2" /> Resolve
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleRowClick(item.id)}>
+                            <AlertCircle className="w-3.5 h-3.5 mr-2" /> Escalate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleRowClick(item.id)}>
+                            <Bell className="w-3.5 h-3.5 mr-2" /> Set Reminder
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Footer Pagination */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {totalItems === 0
+              ? "No results"
+              : `Showing ${showFrom}–${showTo} of ${totalItems} results`}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+              disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </Button>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(p => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`h-7 w-7 rounded text-xs font-medium transition-colors ${
+                  page === p ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+              disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+            <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
+              <SelectTrigger className="h-7 w-24 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 25, 50].map(s => (
+                  <SelectItem key={s} value={String(s)} className="text-xs">{s} / page</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
+
+      {/* Right-side Drawer */}
+      <MailDrawer
+        itemId={selectedId}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onActionSuccess={() => refetch()}
+      />
     </WhipLayout>
   );
 }

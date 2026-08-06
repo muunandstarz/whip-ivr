@@ -269,4 +269,10 @@
 - [x] Insurer toggle with date guidance (Klutch = April 2026+, Metrocars = pre-April 2026)
 - [x] State selector with 11 states (MD/VA/FL/GA/IL/MA/PA/TX/NJ/NY/DC)
 - [x] Coverage options: Additional Insured, Waiver of Subrogation, UM Rejected, PIP Waived
-- [x] Consolidated nav: single "Certificate of Coverage" entry instead of two separate tabs
+  - [x] Consolidated nav: single "Certificate of Coverage" entry instead of two separate tabs
+
+## Session 2026-08-06 Tasks
+- [x] Slice 6 redesign: MyMailroom.tsx rebuilt per mockup — 5 stat cards (Overdue/Urgent/Legal/Demands/AllPending), dense table with signal column, right-side Sheet drawer on row click (no page navigation), full-width layout, sidebar label "myMailroom"
+- [x] myMailroomStats tRPC procedure added to mail router (5 handler-scoped counts)
+- [x] WhipLayout: sidebar label updated from "My Mailroom" to "myMailroom" (camelCase)
+- [x] COI/Dec Page: coverage-through date logic (computeCoverageThrough), still-in-rental toggle, Expiration Date field, duplicate date fields removed

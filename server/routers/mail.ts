@@ -71,6 +71,33 @@ export const mailRouter = router({
     return { count: Number(rows[0]?.count ?? 0) };
   }),
 
+  /** Five stat-card counts for the handler's mailroom summary strip */
+  myMailroomStats: handlerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { overdue: 0, urgent: 0, legal: 0, demands: 0, allPending: 0 };
+    const hid = ctx.user.handlerProfileId!;
+    const now = new Date();
+    const base = and(
+      eq(mailItems.assignedHandlerId, hid),
+      inArray(mailItems.status, ['new', 'assigned', 'escalated']),
+      isNull(mailItems.resolvedAt),
+    );
+    const cnt = async (extra: Parameters<typeof and>[0]) => {
+      const r = await db.select({ c: sql<number>`COUNT(*)` }).from(mailItems)
+        .where(and(base, extra));
+      return Number(r[0]?.c ?? 0);
+    };
+    const [overdue, urgent, legal, demands, allPending] = await Promise.all([
+      cnt(lt(mailItems.dueAt, now)),
+      cnt(eq(mailItems.urgency, 'urgent')),
+      cnt(or(eq(mailItems.isDemand, 1), eq(mailItems.category, 'legal_or_high_risk'))!),
+      cnt(eq(mailItems.isDemand, 1)),
+      cnt(sql`1=1`),
+    ]);
+    return { overdue, urgent, legal, demands, allPending };
+  }),
+
+
   /** Handler's mailroom queue with filters */
   myMailroom: handlerProcedure
     .input(z.object({

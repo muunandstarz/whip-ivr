@@ -79,7 +79,7 @@ const HANDLER_NAV_ITEMS_BASE = [
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
-  { href: "/my-mailroom", label: "My Mailroom", icon: Inbox },
+  { href: "/my-mailroom", label: "myMailroom", icon: Inbox },
 ];
 
 const HANDLER_KB_NAV_ITEMS = [
