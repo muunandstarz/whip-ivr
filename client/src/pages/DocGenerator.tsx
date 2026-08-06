@@ -6613,7 +6613,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
             )}
             <Grid3>
-              <Field label="Certificate Date" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
+              <Field label="Date Issued" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
               <Field label="Date Issued" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
               <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid3>
@@ -7508,11 +7508,10 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
             {stillInRentalDec && decCoverage.helperText && !decCoverage.warning && (
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{decCoverage.helperText}</div>
             )}
-            <Grid3>
+            <Grid2>
               <Field label="Date Issued" id="dp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
               <Field label="Expiration Date" id="dp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
-              <Field label="Issued Date" id="dp-issued" value={form.issuedDate} onChange={set("issuedDate")} type="date" />
-            </Grid3>
+            </Grid2>
             <Grid3>
               <Field label="Policy Number" id="dp-polnum" value={form.policyNumber} onChange={set("policyNumber")} placeholder="MD-000S0137" />
               <Field label="Weekly Rate ($)" id="dp-weekly" value={form.weeklyRate} onChange={set("weeklyRate")} placeholder="35.00" />
