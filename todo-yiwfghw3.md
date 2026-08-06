@@ -277,4 +277,8 @@
   - [x] WhipLayout: sidebar label updated from "My Mailroom" to "myMailroom" (camelCase)
   - [x] COI/Dec Page: coverage-through date logic (computeCoverageThrough), still-in-rental toggle, Expiration Date field, duplicate date fields removed
 - [x] COI: removed ADDL INSD and SUBR WVD columns from PDF coverage table; removed Additional Insured and Waiver of Subrogation checkboxes from form
-- [x] Dec Page: Toyota make auto-presets Collision and Comprehensive deductibles to $500
+  - [x] Dec Page: Toyota make auto-presets Collision and Comprehensive deductibles to $500
+- [x] Dec Page: removed "PIP waived per Maryland Transportation Article" sublabel from PIP row
+- [x] Dec Page: BI row now always shows state limits (removed "Not elected" for FL biNotMandated)
+- [x] Dec Page: "Page 1 of 2" label added to header; maxWidth on limits column to prevent overlap
+- [x] COI PDF: ADDL INSD column restored (only SUBR WVD removed per spec); ADDL INSD form checkbox still removed

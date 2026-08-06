@@ -6308,8 +6308,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
     // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
     // Column widths: total = textW (186mm on letter). Give type more room, tighten others
-    const cols = { insr: 7, type: 70, pol: 28, eff: 16, exp: 16 };
-    const limW = textW - cols.insr - cols.type - cols.pol - cols.eff - cols.exp;
+    const cols = { insr: 7, addl: 6, type: 64, pol: 28, eff: 16, exp: 16 };
+    const limW = textW - cols.insr - cols.addl - cols.type - cols.pol - cols.eff - cols.exp;
     const rowH = 8;
     const hdrH = 6;
 
@@ -6322,6 +6322,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     let cx = lm;
     const hdrLabels = [
       { w: cols.insr, t: "INSR\nLTR" },
+      { w: cols.addl, t: "ADDL\nINSD" },
       { w: cols.type, t: "TYPE OF INSURANCE" },
       { w: cols.pol, t: "POLICY NUMBER" },
       { w: cols.eff, t: "POLICY EFF\n(MM/DD/YYYY)" },
@@ -6393,20 +6394,24 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.2);
       doc.rect(lm, y, textW, rH);
       cx = lm;
-      for (const col of [cols.insr, cols.type, cols.pol, cols.eff, cols.exp, limW]) {
+      for (const col of [cols.insr, cols.addl, cols.type, cols.pol, cols.eff, cols.exp, limW]) {
         cx += col;
         if (cx < lm + textW) doc.line(cx, y, cx, y + rH);
       }
       // INSR LTR
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
       doc.text(row.insr, lm + cols.insr / 2, y + rH / 2 + 1, { align: "center" });
+      // ADDL INSD checkbox (always [ ] — form option removed, column kept for format compliance)
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.text("[ ]", lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
       // Type — use 7pt and maxWidth to prevent overflow into policy number column
       doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-      const typeX = lm + cols.insr + 2;
+      const typeX = lm + cols.insr + cols.addl + 2;
       doc.text(row.type, typeX, y + rH / 2 + 1, { maxWidth: cols.type - 3 });
       // Policy No
       doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-      const polX = lm + cols.insr + cols.type + 2;
+      const polX = lm + cols.insr + cols.addl + cols.type + 2;
       doc.text(policyNo, polX, y + rH / 2 + 1);
       // Eff / Exp dates
       const effX = polX + cols.pol;
@@ -6830,7 +6835,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     // Page number
     doc.setFontSize(8);
     doc.setTextColor(120, 120, 120);
-    doc.text("1 of 2", rm, y + 3, { align: "right" });
+    doc.text("Page 1 of 2", rm, y + 3, { align: "right" });
     // Klutch logo
     try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
     y += 22;
@@ -6943,7 +6948,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(0, 0, 0);
-      doc.text(limits, covLimX, y);
+      doc.text(limits, covLimX, y, { maxWidth: covDedX - covLimX - 1 });
       doc.text(deductible, covDedX, y);
       if (premium) {
         doc.setFont("helvetica", "bold");
@@ -6971,7 +6976,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
 
     sectionHeader("Coverage for when you're at fault");
     const biPrem = calcPremium("bi");
-    const biLimits = rules.biNotMandated ? "Not elected" : `${rules.biPP} per person / ${rules.biPO} per occurrence`;
+    const biLimits = `${rules.biPP} per person / ${rules.biPO} per occurrence`;
     covRow("Liability Coverage - Bodily Injury", "Covers injuries to others when you are at fault", biLimits, "Not applicable", biPrem);
     const pdPrem = calcPremium("pd");
     covRow("Liability Coverage - Property Damage", "Covers damage to others' property when you are at fault", `${rules.pdLimit} per occurrence`, "Not applicable", pdPrem);
@@ -6985,7 +6990,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     if (rules.pip) {
       const pipPrem = pipWaived ? null : calcPremium("pip");
       const pipLimits = pipWaived ? "Waived" : `${rules.pipLimit} per person`;
-      covRow("Personal Injury Protection (PIP)", "PIP waived per Maryland Transportation Article", pipLimits, "—", pipPrem);
+      covRow("Personal Injury Protection (PIP)", "", pipLimits, "—", pipPrem);
     }
 
     sectionHeader("Coverage if you're hit by an uninsured or underinsured driver");
@@ -7567,7 +7572,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
             `VIN: ${form.vin || "—"}`,
             ``,
             `COVERAGES:`,
-            `BI: ${rules.biNotMandated ? "Not elected" : `${rules.biPP}/${rules.biPO}`}`,
+            `BI: ${rules.biPP}/${rules.biPO}`,
             `PD: ${rules.pdLimit} per occurrence`,
             `Collision: ACV, deductible ${form.collisionDeductible}`,
             `Comprehensive: ACV, deductible ${form.compDeductible}`,
