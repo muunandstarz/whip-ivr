@@ -5909,6 +5909,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [pipWaived, setPipWaived] = React.useState(false);
   const [form, setForm] = React.useState({
     namedOperator: "",
+    insuredAddress: "14670 Southlawn Lane, Rockville, MD 20850",
     vehicleYear: "",
     vehicleMake: "",
     vehicleModel: "",
@@ -6135,8 +6136,10 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0, 0, 0);
     doc.text("METROCARS LEASING CORP", lm + 2, y + 8);
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+    // Mailing address
+    doc.text(form.insuredAddress || "14670 Southlawn Lane, Rockville, MD 20850", lm + 2, y + 13);
     // Second insured: named operator/member
-    doc.text(`${form.namedOperator || "—"}`, lm + 2, y + 13);
+    doc.text(`${form.namedOperator || "—"}`, lm + 2, y + 17);
     const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
     doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17.5);
     if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 21);
@@ -6434,6 +6437,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
           {/* Named Operator & Vehicle */}
           <Panel title="Named Operator / Member">
             <Field label="Named Operator (Member Name)" id="coi-operator" value={form.namedOperator} onChange={set("namedOperator")} placeholder="First Last" required />
+            <Field label="Mailing Address" id="coi-addr" value={form.insuredAddress} onChange={set("insuredAddress")} placeholder="14670 Southlawn Lane, Rockville, MD 20850" />
             <Grid3>
               <Field label="Vehicle Year" id="coi-yr" value={form.vehicleYear} onChange={set("vehicleYear")} placeholder="2024" />
               <Field label="Make" id="coi-make" value={form.vehicleMake} onChange={set("vehicleMake")} placeholder="Toyota" />
@@ -6557,7 +6561,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const [form, setForm] = React.useState({
     policyNumber: "",
     memberName: "",
-    memberAddress: "",
+    memberAddress: "14670 Southlawn Lane, Rockville, MD 20850",
     vehicleYear: "",
     vehicleMake: "",
     vehicleModel: "",
