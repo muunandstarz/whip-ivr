@@ -54,7 +54,6 @@ const ADMIN_NAV_ITEMS = [
   { href: "/users", label: "User Management", icon: UserCog },
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
-  { href: "/mailroom", label: "Mailroom", icon: Inbox },
 ];
 
 // ── Knowledge Base nav items (shown to all authenticated users) ───────────────
@@ -79,6 +78,7 @@ const HANDLER_NAV_ITEMS_BASE = [
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
+  { href: "/mailroom", label: "Mailroom", icon: Inbox },
 ];
 
 const HANDLER_KB_NAV_ITEMS = [
@@ -158,7 +158,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
   // Order: My Dashboard (0) → Intake Records (1) → Loss Intake (if authorized) → Softphone (2)
   const handlerNavItems = showLossIntake
-    ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[2]]
+    ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[2], HANDLER_NAV_ITEMS_BASE[3]]
     : HANDLER_NAV_ITEMS_BASE;
   const navItems: { href: string; label: string; icon: React.ElementType }[] =
     isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems;

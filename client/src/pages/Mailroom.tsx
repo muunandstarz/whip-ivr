@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import WhipLayout from "@/components/WhipLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -611,47 +612,40 @@ export default function Mailroom() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isHandler = !!user?.handlerProfileId;
-
-  // Pending count badge
+  // Pending count badge — only for handlers (not admins)
   const { data: pendingData } = trpc.mail.myPendingCount.useQuery(undefined, {
-    enabled: isHandler,
+    enabled: isHandler && !isAdmin,
     refetchInterval: 60000,
   });
   const pendingCount = pendingData?.count ?? 0;
 
-  return (
+  const content = (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Mail className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold">Mailroom</h1>
-        {isHandler && pendingCount > 0 && (
+        {isHandler && !isAdmin && pendingCount > 0 && (
           <Badge variant="destructive" className="text-xs">{pendingCount} pending</Badge>
         )}
       </div>
 
       {isAdmin ? (
+        // Admin sees: All Mail, Legal & Demands, Mail Log, Stats
+        // "My Queue" is NOT shown to admins — only to handlers when impersonated
         <Tabs defaultValue="queue">
           <TabsList>
             <TabsTrigger value="queue"><Inbox className="h-3.5 w-3.5 mr-1.5" />All Mail</TabsTrigger>
             <TabsTrigger value="legal"><Scale className="h-3.5 w-3.5 mr-1.5" />Legal & Demands</TabsTrigger>
             <TabsTrigger value="log"><FileText className="h-3.5 w-3.5 mr-1.5" />Mail Log</TabsTrigger>
             <TabsTrigger value="stats"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Stats</TabsTrigger>
-            {isHandler && (
-              <TabsTrigger value="mine">
-                My Queue
-                {pendingCount > 0 && (
-                  <Badge variant="destructive" className="ml-1.5 text-xs">{pendingCount}</Badge>
-                )}
-              </TabsTrigger>
-            )}
           </TabsList>
           <TabsContent value="queue" className="mt-4"><AdminAllMail /></TabsContent>
           <TabsContent value="legal" className="mt-4"><AdminLegalQueue /></TabsContent>
           <TabsContent value="log" className="mt-4"><AdminMailLog /></TabsContent>
           <TabsContent value="stats" className="mt-4"><AdminStats /></TabsContent>
-          {isHandler && <TabsContent value="mine" className="mt-4"><HandlerMailroom /></TabsContent>}
         </Tabs>
       ) : isHandler ? (
+        // Handler sees: their own queue with filters + pending badge
         <HandlerMailroom />
       ) : (
         <div className="py-12 text-center text-muted-foreground">
@@ -660,4 +654,6 @@ export default function Mailroom() {
       )}
     </div>
   );
+
+  return <WhipLayout>{content}</WhipLayout>;
 }

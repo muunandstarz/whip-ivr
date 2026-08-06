@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import WhipLayout from "@/components/WhipLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,13 +101,14 @@ export default function MailroomItem() {
   });
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
-  if (!data?.item) return <div className="p-6 text-muted-foreground">Item not found.</div>;
+  if (!data?.item) return <WhipLayout><div className="p-6 text-muted-foreground">Item not found.</div></WhipLayout>;
 
   const { item, files, notes, history } = data;
   const isResolved = item.status === "resolved";
   const isLegal = item.category === "legal_or_high_risk" || item.isDemand === 1;
 
   return (
+    <WhipLayout>
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -413,5 +415,6 @@ export default function MailroomItem() {
         </DialogContent>
       </Dialog>
     </div>
+    </WhipLayout>
   );
 }
