@@ -6007,7 +6007,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [waiverOfSubrogation, setWaiverOfSubrogation] = React.useState(false);
   const [umRejected, setUmRejected] = React.useState(false);
   const [pipWaived, setPipWaived] = React.useState(false);
-  const [stillInRentalCOI, setStillInRentalCOI] = React.useState(true);
+  const [stillInRentalCOI, setStillInRentalCOI] = React.useState(false);
   const [form, setForm] = React.useState({
     namedOperator: "",
     insuredAddress: "14670 Southlawn Lane, Rockville, MD 20850",
@@ -6033,10 +6033,14 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     dateOfLossStr: form.dateOfLoss,
   }), [form.effectiveDate, form.dateOfLoss, state, stillInRentalCOI]);
   React.useEffect(() => {
-    if (coiCoverage.throughDate && !coiCoverage.warning) {
+    if (stillInRentalCOI && coiCoverage.throughDate && !coiCoverage.warning) {
       setForm(p => ({ ...p, expirationDate: formatDateISO(coiCoverage.throughDate!) }));
     }
-  }, [coiCoverage.throughDate, coiCoverage.warning]);
+    // When toggled off, clear the auto-filled date so handler can enter manually
+    if (!stillInRentalCOI) {
+      setForm(p => ({ ...p, expirationDate: "" }));
+    }
+  }, [stillInRentalCOI, coiCoverage.throughDate, coiCoverage.warning]);
   const [vinDecoding, setVinDecoding] = React.useState(false);
   const decodeVinCOI = async () => {
     const vin = form.vin.trim();
@@ -6598,24 +6602,19 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
                 <Checkbox checked={stillInRentalCOI} onCheckedChange={(v) => setStillInRentalCOI(!!v)} />
                 <div>
                   <div className="text-xs font-semibold">Driver is still in the rental</div>
-                  <div className="text-xs text-muted-foreground">Coverage-through date will be auto-computed from today</div>
+                  <div className="text-xs text-muted-foreground">Auto-computes Coverage Through from Date Issued + state rules</div>
                 </div>
               </label>
             </div>
-            {!stillInRentalCOI && (
-              <div className="mb-3">
-                <Field label="Date Rental Ended (Date of Loss)" id="coi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
-              </div>
-            )}
-            {coiCoverage.warning && (
+            {stillInRentalCOI && coiCoverage.warning && (
               <div className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">⚠️ {coiCoverage.warning}</div>
             )}
-            {coiCoverage.helperText && !coiCoverage.warning && (
+            {stillInRentalCOI && coiCoverage.helperText && !coiCoverage.warning && (
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
             )}
             <Grid3>
               <Field label="Certificate Date" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
-              <Field label="Effective Date" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
+              <Field label="Date Issued" id="coi-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
               <Field label="Coverage Through" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid3>
             <Grid2>
@@ -6738,7 +6737,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     compDeductible: "$1,000",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
-  const [stillInRentalDec, setStillInRentalDec] = React.useState(true);
+  const [stillInRentalDec, setStillInRentalDec] = React.useState(false);
   // Auto-compute coverage-through date
   const decCoverage = React.useMemo(() => computeCoverageThrough({
     startDateStr: form.effectiveDate,
@@ -6747,10 +6746,13 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     dateOfLossStr: form.dateOfLoss,
   }), [form.effectiveDate, form.dateOfLoss, state, stillInRentalDec]);
   React.useEffect(() => {
-    if (decCoverage.throughDate && !decCoverage.warning) {
+    if (stillInRentalDec && decCoverage.throughDate && !decCoverage.warning) {
       setForm(p => ({ ...p, expirationDate: formatDateISO(decCoverage.throughDate!) }));
     }
-  }, [decCoverage.throughDate, decCoverage.warning]);
+    if (!stillInRentalDec) {
+      setForm(p => ({ ...p, expirationDate: "" }));
+    }
+  }, [stillInRentalDec, decCoverage.throughDate, decCoverage.warning]);
   const [vinDecoding, setVinDecoding] = React.useState(false);
   const decodeVinDec = async () => {
     const vin = form.vin.trim();
