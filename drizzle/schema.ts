@@ -668,3 +668,147 @@ export const louCalcs = mysqlTable("lou_calcs", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LouCalc = typeof louCalcs.$inferSelect;
+
+// ─── Claims Mail Triage ───────────────────────────────────────────────────────
+import {
+  date as drizzleDate,
+  datetime,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/mysql-core";
+
+const MAIL_CATEGORIES = [
+  'injury_pip_bi', 'inbound_subro', 'existing_claim_followup',
+  'outbound_subro', 'total_loss', 'legal_or_high_risk', 'other_or_unclear',
+] as const;
+
+export const teams = mysqlTable('teams', {
+  id: int('id').primaryKey().autoincrement(),
+  name: varchar('name', { length: 128 }).notNull(),
+  isReviewLane: int('is_review_lane').default(0),
+  slaHours: int('sla_hours').default(48),
+  forwardOnAssign: int('forward_on_assign').default(0),
+  active: int('active').default(1),
+});
+export type Team = typeof teams.$inferSelect;
+
+export const teamMembers = mysqlTable('team_members', {
+  id: int('id').primaryKey().autoincrement(),
+  teamId: int('team_id').notNull(),
+  handlerId: int('handler_id').notNull(),
+}, (t) => ({ uniq: uniqueIndex('team_member_uniq').on(t.teamId, t.handlerId) }));
+export type TeamMember = typeof teamMembers.$inferSelect;
+
+export const categoryRouting = mysqlTable('category_routing', {
+  id: int('id').primaryKey().autoincrement(),
+  category: mysqlEnum('category', MAIL_CATEGORIES).notNull().unique(),
+  teamId: int('team_id').notNull(),
+});
+export type CategoryRouting = typeof categoryRouting.$inferSelect;
+
+export const mailSettings = mysqlTable('mail_settings', {
+  key: varchar('key', { length: 64 }).primaryKey(),
+  value: varchar('value', { length: 255 }).notNull(),
+});
+export type MailSetting = typeof mailSettings.$inferSelect;
+
+export const mailItems = mysqlTable('mail_items', {
+  id: int('id').primaryKey().autoincrement(),
+  source: mysqlEnum('source', ['email', 'mail']).notNull(),
+  externalId: varchar('external_id', { length: 255 }).notNull(),
+  receivedAt: datetime('received_at').notNull(),
+  status: mysqlEnum('status', ['new', 'assigned', 'resolved', 'escalated']).notNull().default('new'),
+  category: mysqlEnum('category', MAIL_CATEGORIES),
+  confidence: int('confidence'),
+  needsReview: int('needs_review').default(0),
+  isDemand: int('is_demand').default(0),
+  preReviewed: int('pre_reviewed').default(0),
+  initialCategory: mysqlEnum('initial_category', MAIL_CATEGORIES),
+  initialHandlerId: int('initial_handler_id'),
+  initialConfidence: int('initial_confidence'),
+  assignedTeamId: int('assigned_team_id'),
+  assignedHandlerId: int('assigned_handler_id'),
+  assignedAt: datetime('assigned_at'),
+  dueAt: datetime('due_at'),
+  remindAt: datetime('remind_at'),
+  lastRemindedAt: datetime('last_reminded_at'),
+  claimNumber: varchar('claim_number', { length: 64 }),
+  fromName: varchar('from_name', { length: 255 }),
+  fromEmail: varchar('from_email', { length: 255 }),
+  senderOrg: varchar('sender_org', { length: 255 }),
+  adverseCarrier: varchar('adverse_carrier', { length: 255 }),
+  claimantName: varchar('claimant_name', { length: 255 }),
+  dateOfLoss: varchar('date_of_loss', { length: 32 }),
+  requestedAction: text('requested_action'),
+  urgency: mysqlEnum('urgency', ['low', 'normal', 'high', 'urgent']).default('normal'),
+  reason: text('reason'),
+  demandDate: varchar('demand_date', { length: 32 }),
+  responseDueDate: varchar('response_due_date', { length: 32 }),
+  subject: varchar('subject', { length: 512 }),
+  bodyText: text('body_text'),
+  gmailThreadId: varchar('gmail_thread_id', { length: 255 }),
+  slackChannelId: varchar('slack_channel_id', { length: 64 }),
+  slackMessageTs: varchar('slack_message_ts', { length: 32 }),
+  slackPermalink: varchar('slack_permalink', { length: 512 }),
+  claimEmail: varchar('claim_email', { length: 255 }),
+  resolvedAt: datetime('resolved_at'),
+  resolvedByHandlerId: int('resolved_by_handler_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (t) => ({
+  dedupe: uniqueIndex('mail_items_dedupe').on(t.source, t.externalId),
+  byStatus: index('mail_items_status_idx').on(t.status),
+  byHandler: index('mail_items_handler_idx').on(t.assignedHandlerId),
+  byTeam: index('mail_items_team_idx').on(t.assignedTeamId),
+  byDue: index('mail_items_due_idx').on(t.dueAt),
+}));
+export type MailItem = typeof mailItems.$inferSelect;
+export type InsertMailItem = typeof mailItems.$inferInsert;
+
+export const mailItemFiles = mysqlTable('mail_item_files', {
+  id: int('id').primaryKey().autoincrement(),
+  itemId: int('item_id').notNull(),
+  storageKey: varchar('storage_key', { length: 512 }).notNull(),
+  filename: varchar('filename', { length: 255 }),
+  contentType: varchar('content_type', { length: 128 }),
+  sizeBytes: int('size_bytes'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+export type MailItemFile = typeof mailItemFiles.$inferSelect;
+
+export const mailItemNotes = mysqlTable('mail_item_notes', {
+  id: int('id').primaryKey().autoincrement(),
+  itemId: int('item_id').notNull(),
+  byUserId: int('by_user_id'),
+  note: text('note').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({ byItem: index('mail_notes_item_idx').on(t.itemId) }));
+export type MailItemNote = typeof mailItemNotes.$inferSelect;
+
+export const mailRoutingHistory = mysqlTable('mail_routing_history', {
+  id: int('id').primaryKey().autoincrement(),
+  itemId: int('item_id').notNull(),
+  action: mysqlEnum('action', ['classified', 'assigned', 'rerouted', 'escalated', 'resolved']).notNull(),
+  fromHandlerId: int('from_handler_id'),
+  toHandlerId: int('to_handler_id'),
+  byUserId: int('by_user_id'),
+  reason: text('reason'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({ byItem: index('mail_routing_item_idx').on(t.itemId) }));
+export type MailRoutingHistory = typeof mailRoutingHistory.$inferSelect;
+
+export const mailQaSnapshots = mysqlTable('mail_qa_snapshots', {
+  id: int('id').primaryKey().autoincrement(),
+  periodStart: drizzleDate('period_start').notNull(),
+  periodEnd: drizzleDate('period_end').notNull(),
+  totalIngested: int('total_ingested'),
+  autoAssigned: int('auto_assigned'),
+  sentToReview: int('sent_to_review'),
+  routeAccuracyPct: int('route_accuracy_pct'),
+  withinSlaPct: int('within_sla_pct'),
+  overdueCount: int('overdue_count'),
+  medianResolveMins: int('median_resolve_mins'),
+  metricsJson: text('metrics_json'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+export type MailQaSnapshot = typeof mailQaSnapshots.$inferSelect;
