@@ -204,13 +204,27 @@ async function slackReply(token: string, channel: string, ts: string, text: stri
 }
 
 async function slackGetMessages(token: string, channelId: string, oldest?: string): Promise<SlackMessage[]> {
-  const params = new URLSearchParams({ channel: channelId, limit: "200" });
-  if (oldest) params.set("oldest", oldest);
-  const res = await fetch(`https://slack.com/api/conversations.history?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await res.json() as { ok: boolean; messages?: SlackMessage[] };
-  return data.messages ?? [];
+  const allMessages: SlackMessage[] = [];
+  let cursor: string | undefined;
+  // Paginate through all pages (Slack returns max 200 per page)
+  do {
+    const params = new URLSearchParams({ channel: channelId, limit: "200" });
+    if (oldest) params.set("oldest", oldest);
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`https://slack.com/api/conversations.history?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json() as {
+      ok: boolean;
+      messages?: SlackMessage[];
+      has_more?: boolean;
+      response_metadata?: { next_cursor?: string };
+    };
+    if (!data.ok) break;
+    allMessages.push(...(data.messages ?? []));
+    cursor = data.has_more ? data.response_metadata?.next_cursor : undefined;
+  } while (cursor);
+  return allMessages;
 }
 
 interface SlackMessage {
