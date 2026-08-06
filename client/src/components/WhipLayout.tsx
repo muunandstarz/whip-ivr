@@ -31,7 +31,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { FileText } from "lucide-react";
-import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car } from "lucide-react";
+import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox } from "lucide-react";
 import { Database, Library, Link2 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -50,9 +50,11 @@ const ADMIN_NAV_ITEMS = [
   { href: "/qa", label: "Weekly QA", icon: Star },
   { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/softphone", label: "Softphone", icon: Phone },
+  { href: "/mailroom", label: "Mailroom", icon: Inbox },
   { href: "/users", label: "User Management", icon: UserCog },
   { href: "/settings", label: "Settings", icon: SlidersHorizontal },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
+  { href: "/mailroom", label: "Mailroom", icon: Inbox },
 ];
 
 // ── Knowledge Base nav items (shown to all authenticated users) ───────────────
