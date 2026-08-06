@@ -23,6 +23,10 @@ import {
   remoteOpsSlackEventsHandler,
 } from "../remoteOpsSlackEvents";
 import { storagePut } from "../storage";
+import {
+  MAIL_SLACK_EVENTS_PATH,
+  mailSlackEventsHandler,
+} from "../mail/slackEventsHandler";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -58,6 +62,12 @@ async function startServer() {
   app.post(SLACK_LOSS_INTAKE_PATH,
     express.raw({ type: "application/json", limit: "1mb" }),
     slackLossIntakeEventsHandler,
+  );
+
+  app.post(
+    MAIL_SLACK_EVENTS_PATH,
+    express.raw({ type: "application/json", limit: "1mb" }),
+    mailSlackEventsHandler,
   );
 
   // Configure body parser with larger size limit for file uploads
