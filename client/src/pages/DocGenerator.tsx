@@ -5923,6 +5923,23 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     specialProvisions: "",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
+  const [vinDecoding, setVinDecoding] = React.useState(false);
+  const decodeVinCOI = async () => {
+    const vin = form.vin.trim();
+    if (vin.length !== 17) { toast.error("VIN must be exactly 17 characters"); return; }
+    setVinDecoding(true);
+    try {
+      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`);
+      const data = await res.json() as { Results: Array<{ Variable: string; Value: string | null }> };
+      const get = (v: string) => data.Results.find(r => r.Variable === v)?.Value || "";
+      const year = get("Model Year"); const make = get("Make"); const model = get("Model"); const trim = get("Trim");
+      if (year || make || model) {
+        setForm(p => ({ ...p, vehicleYear: year || p.vehicleYear, vehicleMake: make || p.vehicleMake, vehicleModel: trim ? `${model} ${trim}` : model || p.vehicleModel }));
+        toast.success(`Decoded: ${[year, make, model, trim].filter(Boolean).join(" ")}`);
+      } else { toast.error("Could not decode VIN — check the number and try again"); }
+    } catch { toast.error("VIN decode failed — check your connection"); }
+    finally { setVinDecoding(false); }
+  };
 
   const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
   const isKlutch = insurer === "klutch";
@@ -6444,7 +6461,18 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
               <Field label="Model" id="coi-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Camry" />
             </Grid3>
             <Grid2>
-              <Field label="VIN" id="coi-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">VIN</label>
+                <div className="flex gap-1.5">
+                  <input id="coi-vin" value={form.vin} onChange={e => set("vin")(e.target.value)} placeholder="17-character VIN"
+                    className="flex-1 h-9 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                  <button onClick={decodeVinCOI} disabled={vinDecoding || form.vin.length !== 17}
+                    className="h-9 px-3 text-xs font-medium rounded-md border border-input bg-muted hover:bg-accent disabled:opacity-40 flex items-center gap-1.5 whitespace-nowrap">
+                    {vinDecoding ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                    Decode
+                  </button>
+                </div>
+              </div>
               <Field label="Plate Number" id="coi-plate" value={form.plateNumber} onChange={set("plateNumber")} placeholder="e.g. ABC1234" />
             </Grid2>
           </Panel>
@@ -6575,6 +6603,23 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     compDeductible: "$1,000",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
+  const [vinDecoding, setVinDecoding] = React.useState(false);
+  const decodeVinDec = async () => {
+    const vin = form.vin.trim();
+    if (vin.length !== 17) { toast.error("VIN must be exactly 17 characters"); return; }
+    setVinDecoding(true);
+    try {
+      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`);
+      const data = await res.json() as { Results: Array<{ Variable: string; Value: string | null }> };
+      const get = (v: string) => data.Results.find(r => r.Variable === v)?.Value || "";
+      const year = get("Model Year"); const make = get("Make"); const model = get("Model"); const trim = get("Trim");
+      if (year || make || model) {
+        setForm(p => ({ ...p, vehicleYear: year || p.vehicleYear, vehicleMake: make || p.vehicleMake, vehicleModel: trim ? `${model} ${trim}` : model || p.vehicleModel }));
+        toast.success(`Decoded: ${[year, make, model, trim].filter(Boolean).join(" ")}`);
+      } else { toast.error("Could not decode VIN — check the number and try again"); }
+    } catch { toast.error("VIN decode failed — check your connection"); }
+    finally { setVinDecoding(false); }
+  };
 
   const rules = DEC_STATE_RULES[state] || DEC_STATE_RULES["MD"];
 
@@ -7282,7 +7327,18 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
               <Field label="Model" id="dp-model" value={form.vehicleModel} onChange={set("vehicleModel")} placeholder="Camry" />
             </Grid3>
             <Grid2>
-              <Field label="VIN" id="dp-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">VIN</label>
+                <div className="flex gap-1.5">
+                  <input id="dp-vin" value={form.vin} onChange={e => set("vin")(e.target.value)} placeholder="17-character VIN"
+                    className="flex-1 h-9 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                  <button onClick={decodeVinDec} disabled={vinDecoding || form.vin.length !== 17}
+                    className="h-9 px-3 text-xs font-medium rounded-md border border-input bg-muted hover:bg-accent disabled:opacity-40 flex items-center gap-1.5 whitespace-nowrap">
+                    {vinDecoding ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                    Decode
+                  </button>
+                </div>
+              </div>
               <div>
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Vehicle Type</Label>
                 <Select value={form.vehicleType} onValueChange={set("vehicleType")}>
