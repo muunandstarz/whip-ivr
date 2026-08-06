@@ -27,6 +27,7 @@ import LossIntake from "./pages/LossIntake";
 import DocGenerator from "./pages/DocGenerator";
 import MailBot from "./pages/MailBot";
 import Mailroom from "./pages/Mailroom";
+import MyMailroom from "./pages/MyMailroom";
 import MailroomItem from "./pages/MailroomItem";
 import ProRataCalc from "./pages/ProRataCalc";
 import LiabilityGuide from "./pages/kb/LiabilityGuide";
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/mail-bot" component={MailBot} />
       <Route path="/mailroom/:id" component={MailroomItem} />
       <Route path="/mailroom" component={Mailroom} />
+      <Route path="/my-mailroom" component={MyMailroom} />
       <Route path="/pro-rata" component={ProRataCalc} />
       <Route path="/kb/liability-guide" component={LiabilityGuide} />
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />

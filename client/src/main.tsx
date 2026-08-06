@@ -34,9 +34,16 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
             url: "/api/trpc",
             transformer: superjson,
             fetch(input, init) {
+              // Read impersonation from sessionStorage (set by ImpersonationContext)
+              const impersonateId = sessionStorage.getItem("impersonating_handler_id");
+              const headers: Record<string, string> = {};
+              if (impersonateId) {
+                headers["x-impersonate-handler-id"] = impersonateId;
+              }
               return globalThis.fetch(input, {
                 ...(init ?? {}),
                 credentials: "include",
+                headers: { ...(init?.headers as Record<string, string> ?? {}), ...headers },
               });
             },
           }),

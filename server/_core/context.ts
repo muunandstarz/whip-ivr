@@ -20,6 +20,18 @@ export async function createContext(
     user = null;
   }
 
+  // Impersonation: admins may send x-impersonate-handler-id to scope
+  // handler-specific procedures (myMailroom, myPendingCount) to a specific handler.
+  if (user && user.role === 'admin') {
+    const impersonateId = opts.req.headers['x-impersonate-handler-id'];
+    if (impersonateId && typeof impersonateId === 'string') {
+      const parsed = parseInt(impersonateId, 10);
+      if (!isNaN(parsed)) {
+        user = { ...user, handlerProfileId: parsed };
+      }
+    }
+  }
+
   return {
     req: opts.req,
     res: opts.res,

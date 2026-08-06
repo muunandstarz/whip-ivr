@@ -21,11 +21,21 @@ const ImpersonationContext = createContext<ImpersonationContextValue>({
 export function ImpersonationProvider({ children }: { children: ReactNode }) {
   const [impersonating, setImpersonating] = useState<ImpersonatedHandler | null>(null);
 
+  // Sync to sessionStorage so the tRPC fetch interceptor can read it
+  const setImpersonatingWithStorage = (handler: ImpersonatedHandler | null) => {
+    if (handler) {
+      sessionStorage.setItem("impersonating_handler_id", String(handler.id));
+    } else {
+      sessionStorage.removeItem("impersonating_handler_id");
+    }
+    setImpersonating(handler);
+  };
+
   return (
     <ImpersonationContext.Provider
       value={{
         impersonating,
-        setImpersonating,
+        setImpersonating: setImpersonatingWithStorage,
         isImpersonating: impersonating !== null,
       }}
     >
