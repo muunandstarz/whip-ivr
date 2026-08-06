@@ -322,19 +322,29 @@ export async function updateIntakeRecord(id: number, data: Partial<InsertIntakeR
 export async function getIntakeStatsByPeriod(yearMonth: string) {
   const db = await getDb();
   if (!db) return null;
-  // Parse "YYYY-MM" into start/end timestamps
-  const [year, month] = yearMonth.split("-").map(Number);
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 1); // exclusive upper bound (first day of next month)
+  // Support "YYYY-YTD", "ALL", and "YYYY-MM"
+  const isYTD = /^\d{4}-YTD$/.test(yearMonth);
+  const isAll = yearMonth === 'ALL';
+  let periodCond: ReturnType<typeof sql> | undefined;
+  if (isAll) {
+    periodCond = undefined; // no filter
+  } else if (isYTD) {
+    const ytdYear = yearMonth.slice(0, 4);
+    periodCond = sql`YEAR(${intakeRecords.createdAt}) = ${ytdYear}`;
+  } else {
+    const [year, month] = yearMonth.split("-").map(Number);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+    periodCond = and(gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate));
+  }
   const [totalRow, openRow, closedRow, carrierRow] = await Promise.all([
+    db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords).where(periodCond),
     db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
-      .where(and(gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+      .where(periodCond ? and(eq(intakeRecords.status, "open"), periodCond) : eq(intakeRecords.status, "open")),
     db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
-      .where(and(eq(intakeRecords.status, "open"), gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+      .where(periodCond ? and(eq(intakeRecords.status, "closed"), periodCond) : eq(intakeRecords.status, "closed")),
     db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
-      .where(and(eq(intakeRecords.status, "closed"), gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
-    db.select({ count: sql<number>`COUNT(*)` }).from(intakeRecords)
-      .where(and(eq(intakeRecords.callerType, "carrier"), gte(intakeRecords.createdAt, startDate), lte(intakeRecords.createdAt, endDate))),
+      .where(periodCond ? and(eq(intakeRecords.callerType, "carrier"), periodCond) : eq(intakeRecords.callerType, "carrier")),
   ]);
   return {
     total: Number(totalRow[0]?.count ?? 0),
@@ -1431,22 +1441,36 @@ export async function get7DayIntakeTrend() {
 export async function getCallAnalyticsByMonth(yearMonth: string) {
   const db = await getDb();
   if (!db) return null;
-  if (!/^\d{4}-\d{2}$/.test(yearMonth)) return null;
-
-  // Compute previous month string (e.g. 2026-05 → 2026-04)
-  const [yr, mo] = yearMonth.split('-').map(Number);
+  // Support special modes: "YYYY-YTD" (year-to-date) and "ALL" (all time)
+  const isYTD = /^\d{4}-YTD$/.test(yearMonth);
+  const isAll = yearMonth === 'ALL';
+  if (!isYTD && !isAll && !/^\d{4}-\d{2}$/.test(yearMonth)) return null;
+  // Build WHERE clause fragment for the period
+  const ytdYear = isYTD ? yearMonth.slice(0, 4) : null;
+  const periodFilter = isAll
+    ? sql`1=1`
+    : isYTD
+      ? sql`YEAR(startedAt) = ${ytdYear}`
+      : sql`DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}`;
+  const periodFilterEastern = isAll
+    ? sql`1=1`
+    : isYTD
+      ? sql`YEAR(CONVERT_TZ(startedAt, '+00:00', '-04:00')) = ${ytdYear}`
+      : sql`DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ${yearMonth}`;
+  // Compute previous month string — only used in month mode
+  const [yr, mo] = (!isYTD && !isAll) ? yearMonth.split('-').map(Number) : [0, 0];
   const prevMo = mo === 1 ? 12 : mo - 1;
   const prevYr = mo === 1 ? yr - 1 : yr;
-  const prevYearMonth = `${prevYr}-${String(prevMo).padStart(2, '0')}`;
+  const prevYearMonth = (!isYTD && !isAll) ? `${prevYr}-${String(prevMo).padStart(2, '0')}` : '';
 
   const [totals, byDirection, byDay, availableMonths, afterHoursRow, prevTotals, byCallerType, intakeVoicemail, prevInboundRow, prevBizHoursRow] = await Promise.all([
     db.execute<{ status: string; count: number }>(sql`
       SELECT status, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
-      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY status
+      WHERE ${periodFilter} GROUP BY status
     `),
     db.execute<{ direction: string; count: number }>(sql`
       SELECT direction, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
-      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY direction
+      WHERE ${periodFilter} GROUP BY direction
     `),
     db.execute<{ day: string; total: number; answered: number; missed: number; voicemail: number }>(sql`
       SELECT DATE_FORMAT(startedAt, '%Y-%m-%d') AS day,
@@ -1454,7 +1478,7 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
         CAST(SUM(CASE WHEN status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS answered,
         CAST(SUM(CASE WHEN status='missed' THEN 1 ELSE 0 END) AS SIGNED) AS missed,
         CAST(SUM(CASE WHEN status='voicemail' THEN 1 ELSE 0 END) AS SIGNED) AS voicemail
-      FROM call_history WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+      FROM call_history WHERE ${periodFilter}
       GROUP BY DATE_FORMAT(startedAt, '%Y-%m-%d') ORDER BY day ASC
     `),
     db.execute<{ month: string }>(sql`
@@ -1487,7 +1511,7 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
           AND DAYOFWEEK(CONVERT_TZ(startedAt, '+00:00', '-04:00')) NOT IN (1,7)
         THEN 1 ELSE 0 END) AS SIGNED) AS businessHoursTotal
       FROM call_history
-      WHERE DATE_FORMAT(CONVERT_TZ(startedAt, '+00:00', '-04:00'), '%Y-%m') = ${yearMonth}
+      WHERE ${periodFilterEastern}
         AND direction = 'inbound'
     `),
     // Previous month totals for MoM comparison
@@ -1498,15 +1522,15 @@ export async function getCallAnalyticsByMonth(yearMonth: string) {
     // Caller type breakdown for this month
     db.execute<{ callerType: string | null; count: number }>(sql`
       SELECT COALESCE(callerType, 'unknown') AS callerType, CAST(COUNT(*) AS SIGNED) AS count FROM call_history
-      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth} GROUP BY callerType ORDER BY count DESC
+      WHERE ${periodFilter} GROUP BY callerType ORDER BY count DESC
     `),
     // Voicemail count from intake_records + inbound-answered count for missed supplement
     db.execute<{ voicemailIntakes: number; inboundAnswered: number }>(sql`
       SELECT
-        (SELECT CAST(COUNT(*) AS SIGNED) FROM intake_records WHERE DATE_FORMAT(createdAt, '%Y-%m') = ${yearMonth}) AS voicemailIntakes,
+        (SELECT CAST(COUNT(*) AS SIGNED) FROM intake_records WHERE ${periodFilter}) AS voicemailIntakes,
         CAST(SUM(CASE WHEN direction='inbound' AND status='answered' THEN 1 ELSE 0 END) AS SIGNED) AS inboundAnswered
       FROM call_history
-      WHERE DATE_FORMAT(startedAt, '%Y-%m') = ${yearMonth}
+      WHERE ${periodFilter}
     `),
     // Previous month inbound answered count for MoM answer rate comparison
     db.execute<{ prevInbound: number; prevInboundAnswered: number }>(sql`

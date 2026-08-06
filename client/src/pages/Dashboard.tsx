@@ -120,8 +120,13 @@ export default function Dashboard() {
   // ── Month selector ────────────────────────────────────────────────────────
   const currentYearMonth = format(new Date(), "yyyy-MM");
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth);
-  const { data: monthCallData, isLoading: monthLoading } = trpc.dashboard.callsByMonth.useQuery({ yearMonth: selectedMonth });
-  const { data: intakePeriodData } = trpc.dashboard.intakeStatsByPeriod.useQuery({ yearMonth: selectedMonth });
+  // viewMode: "month" = single month, "ytd" = year-to-date, "all" = all time
+  const [viewMode, setViewMode] = useState<"month" | "ytd" | "all">("month");
+  // Compute the yearMonth key to pass to queries based on viewMode
+  const currentYear = format(new Date(), "yyyy");
+  const periodKey = viewMode === "ytd" ? `${currentYear}-YTD` : viewMode === "all" ? "ALL" : selectedMonth;
+  const { data: monthCallData, isLoading: monthLoading } = trpc.dashboard.callsByMonth.useQuery({ yearMonth: periodKey });
+  const { data: intakePeriodData } = trpc.dashboard.intakeStatsByPeriod.useQuery({ yearMonth: periodKey });
 
   // ── Derived KPIs ──────────────────────────────────────────────────────────
   // Intake Records: use period-filtered data when available (driven by selectedMonth toggle)
@@ -264,8 +269,10 @@ export default function Dashboard() {
   }, [overdueDetails, urgentCount]);
 
   const monthLabel = useMemo(() => {
+    if (viewMode === "ytd") return `${currentYear} YTD`;
+    if (viewMode === "all") return "All Time";
     try { return format(parseISO(selectedMonth + "-01"), "MMMM yyyy"); } catch { return selectedMonth; }
-  }, [selectedMonth]);
+  }, [selectedMonth, viewMode, currentYear]);
 
   return (
     <WhipLayout>
@@ -424,17 +431,32 @@ export default function Dashboard() {
               <InfoTooltip text="Live call statistics from Aircall for the Whip Claims line. Includes ALL calls (business hours, after hours, and weekends). Use the arrows to browse previous months." />
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                disabled={monthIndex >= availableMonths.length - 1}
-                onClick={() => { const next = availableMonths[monthIndex + 1]; if (next) setSelectedMonth(next); }}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground px-1 min-w-[90px] text-center">{monthLabel}</span>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                disabled={monthIndex <= 0}
-                onClick={() => { const prev = availableMonths[monthIndex - 1]; if (prev) setSelectedMonth(prev); }}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+              {/* Mode toggle: Month / YTD / All Time */}
+              <div className="flex items-center rounded-md border border-border overflow-hidden mr-1">
+                {(["month", "ytd", "all"] as const).map((mode) => (
+                  <button key={mode} onClick={() => setViewMode(mode)}
+                    className={`px-2 py-0.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+                    {mode === "month" ? "Month" : mode === "ytd" ? "YTD" : "All Time"}
+                  </button>
+                ))}
+              </div>
+              {/* Month nav — only shown in month mode */}
+              {viewMode === "month" && (<>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                  disabled={monthIndex >= availableMonths.length - 1}
+                  onClick={() => { const next = availableMonths[monthIndex + 1]; if (next) setSelectedMonth(next); }}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-xs text-muted-foreground px-1 min-w-[90px] text-center">{monthLabel}</span>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                  disabled={monthIndex <= 0}
+                  onClick={() => { const prev = availableMonths[monthIndex - 1]; if (prev) setSelectedMonth(prev); }}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </>)}
+              {viewMode !== "month" && (
+                <span className="text-xs text-muted-foreground px-2">{monthLabel}</span>
+              )}
             </div>
           </div>
 
