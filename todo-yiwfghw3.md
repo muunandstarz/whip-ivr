@@ -336,3 +336,7 @@
 - [x] Add mailbox widget to handler home dashboard (myPendingCount, links to /my-mailroom)
 - [x] Add mailbox widget to admin home dashboard (adminStats allPending, links to /mailroom)
 - [x] Fix New Intake Select empty-string crash (remove value="" items, use sentinel/undefined)
+- [x] Move mailbox to small header icon on handler dashboard (not a section card)
+- [x] Move mailbox to small header icon on admin dashboard (not a section card)
+- [x] Fix Mailroom Legal tab — label/filter should be Legal only (not demands)
+- [x] Fix Gmail OAuth 403 — redirect URI mismatch

@@ -321,6 +321,15 @@ export default function HandlerDashboard() {
                 {overdueCount} overdue callback{overdueCount !== 1 ? "s" : ""}
               </Badge>
             )}
+            {/* Mailroom icon */}
+            <a href="/my-mailroom" className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted transition-colors" title={mailPendingCount > 0 ? `${mailPendingCount} pending mail items` : "myMailroom"}>
+              <img src="/manus-storage/mailbox-badge_8b85da0d.png" alt="Mailroom" className="w-8 h-8 object-contain" />
+              {mailPendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none shadow">
+                  {mailPendingCount > 99 ? "99+" : mailPendingCount}
+                </span>
+              )}
+            </a>
             <Link href="/softphone">
               <Button size="sm" className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-1.5 h-8">
                 <Phone className="w-3.5 h-3.5" />
@@ -610,26 +619,6 @@ export default function HandlerDashboard() {
             </div>
           </div>
 
-            {/* ── Mailroom shortcut ── */}
-            <div className="px-5 py-3 border-b border-border/40 flex-shrink-0">
-              <a href="/my-mailroom" className="flex items-center gap-3 rounded-xl border border-border hover:border-primary/40 hover:shadow-sm transition-all px-3 py-2.5 bg-card group cursor-pointer">
-                <div className="relative flex-shrink-0">
-                  <img src="/manus-storage/mailbox-badge_8b85da0d.png" alt="Mailroom" className="w-10 h-10 object-contain" />
-                  {mailPendingCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 leading-none shadow">
-                      {mailPendingCount > 99 ? "99+" : mailPendingCount}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">myMailroom</div>
-                  <div className="text-xs text-muted-foreground">
-                    {mailPendingCount === 0 ? "No pending mail" : `${mailPendingCount} pending item${mailPendingCount !== 1 ? "s" : ""}`}
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-              </a>
-            </div>
           {/* RIGHT: Callback Queue */}
           <div className="flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 flex-shrink-0">

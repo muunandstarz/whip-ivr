@@ -281,29 +281,22 @@ export default function Dashboard() {
     <WhipLayout>
       <div className="p-6 space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Claims IVR Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">AI-powered call intake management for Whip Claims</p>
-        </div>
-
-        {/* ── Mailroom shortcut ── */}
-        <a href="/mailroom" className="flex items-center gap-3 rounded-xl border border-border hover:border-primary/40 hover:shadow-sm transition-all px-4 py-3 bg-card group cursor-pointer w-fit">
-          <div className="relative flex-shrink-0">
-            <img src="/manus-storage/mailbox-badge_8b85da0d.png" alt="Mailroom" className="w-12 h-12 object-contain" />
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Claims IVR Dashboard</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">AI-powered call intake management for Whip Claims</p>
+          </div>
+          {/* Mailroom icon */}
+          <a href="/mailroom" className="relative flex items-center justify-center w-11 h-11 rounded-lg hover:bg-muted transition-colors mt-0.5" title={mailAllPending > 0 ? `${mailAllPending} pending mail items` : "Mailroom"}>
+            <img src="/manus-storage/mailbox-badge_8b85da0d.png" alt="Mailroom" className="w-9 h-9 object-contain" />
             {mailAllPending > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center px-1 leading-none shadow">
+              <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none shadow">
                 {mailAllPending > 99 ? "99+" : mailAllPending}
               </span>
             )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Mailroom</div>
-            <div className="text-xs text-muted-foreground">
-              {mailAllPending === 0 ? "Queue is clear" : `${mailAllPending} pending item${mailAllPending !== 1 ? "s" : ""} org-wide`}
-            </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-        </a>
+          </a>
+        </div>
+
         {/* ── Top Banner: Today tiles + 7-day Sparkline ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Today tiles */}

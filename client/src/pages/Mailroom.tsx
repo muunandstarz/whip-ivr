@@ -463,7 +463,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     };
     if (activeTab === "overdue") base.overdue = true;
     else if (activeTab === "urgent") base.urgent = true;
-    else if (activeTab === "legal") base.legalOnly = true;
+    else if (activeTab === "legal") base.category = 'legal_or_high_risk';
     else if (activeTab === "demands") base.status = undefined, base.legalOnly = undefined;
     else if (activeTab === "resolved") base.status = "resolved";
     // status filter from dropdown (only applies on "all" tab)
@@ -1037,7 +1037,7 @@ export default function Mailroom() {
     { key: "allPending", label: "All Pending", icon: <Inbox className="w-4 h-4 text-gray-500" />, tab: "all" as AdminTab, color: "border-gray-200" },
     { key: "overdue", label: "Overdue", icon: <Clock className="w-4 h-4 text-red-500" />, tab: "overdue" as AdminTab, color: "border-red-200" },
     { key: "urgent", label: "Urgent", icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, tab: "urgent" as AdminTab, color: "border-amber-200" },
-    { key: "legalDemands", label: "Legal & Demands", icon: <Scale className="w-4 h-4 text-purple-500" />, tab: "legal" as AdminTab, color: "border-purple-200" },
+    { key: "legalDemands", label: "Legal", icon: <Scale className="w-4 h-4 text-purple-500" />, tab: "legal" as AdminTab, color: "border-purple-200" },
     { key: "demands", label: "Demands", icon: <FileText className="w-4 h-4 text-indigo-500" />, tab: "demands" as AdminTab, color: "border-indigo-200" },
     { key: "resolvedToday", label: "Resolved Today", icon: <CheckCircle className="w-4 h-4 text-green-500" />, tab: "resolved" as AdminTab, color: "border-green-200" },
   ] as const;
@@ -1101,7 +1101,7 @@ export default function Mailroom() {
             <TabsTrigger value="all" className="text-xs"><Inbox className="h-3.5 w-3.5 mr-1.5" />All Mail</TabsTrigger>
             <TabsTrigger value="overdue" className="text-xs"><Clock className="h-3.5 w-3.5 mr-1.5" />Overdue</TabsTrigger>
             <TabsTrigger value="urgent" className="text-xs"><AlertTriangle className="h-3.5 w-3.5 mr-1.5" />Urgent</TabsTrigger>
-            <TabsTrigger value="legal" className="text-xs"><Scale className="h-3.5 w-3.5 mr-1.5" />Legal & Demands</TabsTrigger>
+            <TabsTrigger value="legal" className="text-xs"><Scale className="h-3.5 w-3.5 mr-1.5" />Legal</TabsTrigger>
             <TabsTrigger value="demands" className="text-xs"><FileText className="h-3.5 w-3.5 mr-1.5" />Demands</TabsTrigger>
             <TabsTrigger value="resolved" className="text-xs"><CheckCircle className="h-3.5 w-3.5 mr-1.5" />Resolved</TabsTrigger>
             <TabsTrigger value="log" className="text-xs"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Mail Log</TabsTrigger>
