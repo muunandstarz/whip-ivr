@@ -712,9 +712,9 @@ export const mailSettings = mysqlTable('mail_settings', {
 });
 export type MailSetting = typeof mailSettings.$inferSelect;
 
-export const mailItems = mysqlTable('mail_items', {
+  export const mailItems = mysqlTable('mail_items', {
   id: int('id').primaryKey().autoincrement(),
-  source: mysqlEnum('source', ['email', 'mail']).notNull(),
+  source: mysqlEnum('source', ['email', 'mail', 'fax', 'manual']).notNull(),
   externalId: varchar('external_id', { length: 255 }).notNull(),
   receivedAt: datetime('received_at').notNull(),
   status: mysqlEnum('status', ['new', 'assigned', 'resolved', 'escalated']).notNull().default('new'),

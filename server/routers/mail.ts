@@ -13,11 +13,12 @@ import {
   mailItems, mailItemFiles, mailItemNotes, mailRoutingHistory,
 } from '../../drizzle/schema.js';
 import { eq, and, or, inArray, isNull, isNotNull, lt, desc, asc, sql, gte, lte } from 'drizzle-orm';
-import { storageGetSignedUrl } from '../storage.js';
+import { storageGetSignedUrl, storagePut } from '../storage.js';
 import { createHeartbeatJob, listHeartbeatJobs } from '../_core/heartbeat.js';
 import { parse as parseCookie } from 'cookie';
 import { COOKIE_NAME } from '../../shared/const.js';
 import mysql from 'mysql2/promise';
+import { randomUUID } from 'crypto';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -545,4 +546,151 @@ export const mailRouter = router({
     }
     return { ok: true, results };
   }),
+  // ── Feature A: attach a file to an existing item ──────────────────────────
+  /** Get presigned upload URL for a mail item file — caller POSTs to /api/mail/:id/files */
+  addFile: protectedProcedure
+    .input(z.object({
+      itemId: z.number(),
+      storageKey: z.string(),
+      filename: z.string(),
+      contentType: z.string(),
+      sizeBytes: z.number(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      const item = await requireItem(db, input.itemId);
+      // Permission: assigned handler or admin
+      const isAdmin = ctx.user.role === 'admin';
+      const isAssigned = ctx.user.handlerProfileId != null &&
+        item.assignedHandlerId === ctx.user.handlerProfileId;
+      if (!isAdmin && !isAssigned) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the assigned handler or an admin can attach files' });
+      }
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const [inserted] = await db.insert(mailItemFiles).values({
+        itemId: input.itemId,
+        storageKey: input.storageKey,
+        filename: input.filename,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+      });
+      const fileId = (inserted as any).insertId;
+      // Append note
+      await db.insert(mailItemNotes).values({
+        itemId: input.itemId,
+        byUserId: ctx.user.id,
+        note: `File added by ${ctx.user.name ?? ctx.user.email ?? 'user'}: ${input.filename}`,
+      });
+      // Append routing history
+      await appendHistory(db, input.itemId, 'assigned', null, null, ctx.user.id, `File attached: ${input.filename}`);
+      const signedUrl = await storageGetSignedUrl(input.storageKey).catch(() => null);
+      return { ok: true, fileId, signedUrl };
+    }),
+
+  // ── Feature B: create a mail item manually ─────────────────────────────────
+  /** Auto-classify a document body/filename using the existing classify() function */
+  autoClassify: adminProcedure
+    .input(z.object({
+      subject: z.string().optional(),
+      bodyText: z.string().optional(),
+      attachmentNames: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { classify } = await import('../mail/classify.js');
+      const result = await classify({
+        subject: input.subject,
+        bodyText: input.bodyText,
+        attachmentNames: input.attachmentNames,
+      });
+      return result;
+    }),
+
+  /** Create a mail item manually (admin only) */
+  createManualItem: adminProcedure
+    .input(z.object({
+      source: z.enum(['mail', 'fax', 'manual']),
+      subject: z.string().min(1),
+      fromName: z.string().optional(),
+      fromEmail: z.string().optional(),
+      claimNumber: z.string().optional(),
+      category: z.enum(['injury_pip_bi', 'inbound_subro', 'existing_claim_followup', 'outbound_subro', 'total_loss', 'legal_or_high_risk', 'other_or_unclear']).optional(),
+      assignedHandlerId: z.number().optional(),
+      urgency: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
+      receivedAt: z.string().optional(), // ISO date string
+      dateOfLoss: z.string().optional(),
+      responseDueDate: z.string().optional(),
+      bodyText: z.string().optional(),
+      // Files already uploaded via /api/mail/files/upload
+      files: z.array(z.object({
+        storageKey: z.string(),
+        filename: z.string(),
+        contentType: z.string(),
+        sizeBytes: z.number(),
+      })).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+
+      const externalId = `manual-${randomUUID()}`;
+      const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
+      const now = new Date();
+
+      // Compute dueAt: if responseDueDate provided use it, else 48h from now
+      let dueAt: Date | null = null;
+      if (input.responseDueDate) {
+        const parsed = new Date(input.responseDueDate);
+        dueAt = isNaN(parsed.getTime()) ? null : parsed;
+      }
+      if (!dueAt && input.category === 'legal_or_high_risk') {
+        dueAt = new Date(now.getTime() + 48 * 3600 * 1000);
+      }
+
+      const status = input.assignedHandlerId ? 'assigned' : 'new';
+
+      const [inserted] = await db.insert(mailItems).values({
+        source: input.source,
+        externalId,
+        receivedAt,
+        status: status as any,
+        category: input.category as any ?? null,
+        fromName: input.fromName ?? null,
+        fromEmail: input.fromEmail ?? null,
+        claimNumber: input.claimNumber ?? null,
+        urgency: input.urgency as any,
+        dateOfLoss: input.dateOfLoss ?? null,
+        responseDueDate: input.responseDueDate ?? null,
+        bodyText: input.bodyText ?? null,
+        subject: input.subject,
+        assignedHandlerId: input.assignedHandlerId ?? null,
+        assignedAt: input.assignedHandlerId ? now : null,
+        dueAt,
+      });
+      const itemId = (inserted as any).insertId;
+
+      // Insert files
+      if (input.files?.length) {
+        for (const f of input.files) {
+          await db.insert(mailItemFiles).values({
+            itemId,
+            storageKey: f.storageKey,
+            filename: f.filename,
+            contentType: f.contentType,
+            sizeBytes: f.sizeBytes,
+          });
+        }
+      }
+
+      // Write history
+      if (input.category) {
+        await appendHistory(db, itemId, 'classified', null, null, ctx.user.id, `Manually classified as ${input.category}`);
+      }
+      if (input.assignedHandlerId) {
+        await appendHistory(db, itemId, 'assigned', null, input.assignedHandlerId, ctx.user.id, 'Manual intake assignment');
+      }
+
+      return { ok: true, itemId, externalId };
+    }),
+
+
 });

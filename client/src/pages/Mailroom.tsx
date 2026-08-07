@@ -26,7 +26,7 @@ import {
   Mail, Inbox, AlertTriangle, Scale, BarChart3, Filter, Download,
   MoreHorizontal, ArrowRight, CheckCircle, AlertCircle, Clock,
   ExternalLink, FileText, RefreshCw, ChevronUp, ChevronDown,
-  Settings2, Zap, Wifi, WifiOff,
+  Settings2, Zap, Wifi, WifiOff, PlusCircle, Paperclip,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -734,12 +734,267 @@ function AdminMailSetup() {
   );
 }
 
+
+// ─── Admin: New Intake Form ───────────────────────────────────────────────────
+
+function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [source, setSource] = useState<"mail" | "fax" | "manual">("manual");
+  const [subject, setSubject] = useState("");
+  const [fromName, setFromName] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [claimNumber, setClaimNumber] = useState("");
+  const [category, setCategory] = useState<string>("");
+  const [assignedHandlerId, setAssignedHandlerId] = useState<string>("");
+  const [urgency, setUrgency] = useState<"low" | "normal" | "high" | "urgent">("normal");
+  const [receivedAt, setReceivedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [dateOfLoss, setDateOfLoss] = useState("");
+  const [responseDueDate, setResponseDueDate] = useState("");
+  const [bodyText, setBodyText] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<Array<{ storageKey: string; filename: string; contentType: string; sizeBytes: number }>>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [autoClassifying, setAutoClassifying] = useState(false);
+
+  const { data: handlers } = trpc.handlers.list.useQuery();
+  const utils = trpc.useUtils();
+  const autoClassify = trpc.mail.autoClassify.useMutation();
+  const createItem = trpc.mail.createManualItem.useMutation({
+    onSuccess: () => {
+      toast.success("Item created and added to queue");
+      utils.mail.adminQueue.invalidate();
+      
+      onCreated();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      // Upload to a temp endpoint — we use the existing document upload for now
+      const resp = await fetch("/api/upload/document", { method: "POST", body: fd });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error ?? "Upload failed");
+      setPendingFiles(prev => [...prev, {
+        storageKey: result.key,
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      }]);
+      toast.success(`${file.name} ready to attach`);
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setUploadingFile(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleAutoClassify() {
+    if (!subject && !bodyText && pendingFiles.length === 0) {
+      toast.error("Add a subject, body, or file first");
+      return;
+    }
+    setAutoClassifying(true);
+    try {
+      const result = await autoClassify.mutateAsync({
+        subject: subject || undefined,
+        bodyText: bodyText || undefined,
+        attachmentNames: pendingFiles.map(f => f.filename),
+      });
+      if (result.category) setCategory(result.category);
+      if (result.urgency) setUrgency(result.urgency as any);
+      if (result.demand_date) setResponseDueDate(result.demand_date);
+      if (result.response_due_date) setResponseDueDate(result.response_due_date);
+      toast.success(`Auto-classified as: ${result.category}`);
+    } catch (err: any) {
+      toast.error(err.message ?? "Auto-classify failed");
+    } finally {
+      setAutoClassifying(false);
+    }
+  }
+
+  function handleSubmit() {
+    if (!subject.trim()) { toast.error("Subject is required"); return; }
+    createItem.mutate({
+      source,
+      subject,
+      fromName: fromName || undefined,
+      fromEmail: fromEmail || undefined,
+      claimNumber: claimNumber || undefined,
+      category: category as any || undefined,
+      assignedHandlerId: assignedHandlerId ? Number(assignedHandlerId) : undefined,
+      urgency,
+      receivedAt: receivedAt || undefined,
+      dateOfLoss: dateOfLoss || undefined,
+      responseDueDate: responseDueDate || undefined,
+      bodyText: bodyText || undefined,
+      files: pendingFiles.length > 0 ? pendingFiles : undefined,
+    });
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PlusCircle className="h-5 w-5" /> New Intake
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {/* Row 1: Channel + Subject */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs">Channel</Label>
+              <Select value={source} onValueChange={(v) => setSource(v as any)}>
+                <SelectTrigger className="mt-1 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="mail">Mail / Fax (physical)</SelectItem>
+                  <SelectItem value="fax">Fax (eFax)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs">Subject *</Label>
+              <Input className="mt-1 h-8" value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Demand Letter — CLM-2026-001" />
+            </div>
+          </div>
+          {/* Row 2: Sender */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Sender Name</Label>
+              <Input className="mt-1 h-8" value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Attorney Smith" />
+            </div>
+            <div>
+              <Label className="text-xs">Sender Email / Org</Label>
+              <Input className="mt-1 h-8" value={fromEmail} onChange={e => setFromEmail(e.target.value)} placeholder="attorney@lawfirm.com" />
+            </div>
+          </div>
+          {/* Row 3: Claim # + Received */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Claim #</Label>
+              <Input className="mt-1 h-8" value={claimNumber} onChange={e => setClaimNumber(e.target.value)} placeholder="CLM-2026-001" />
+            </div>
+            <div>
+              <Label className="text-xs">Received Date</Label>
+              <Input type="date" className="mt-1 h-8" value={receivedAt} onChange={e => setReceivedAt(e.target.value)} />
+            </div>
+          </div>
+          {/* Row 4: Category + Auto-classify */}
+          <div className="grid grid-cols-2 gap-3 items-end">
+            <div>
+              <Label className="text-xs">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select or auto-classify…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="injury_pip_bi">Injury / PIP / BI</SelectItem>
+                  <SelectItem value="inbound_subro">Inbound Subro</SelectItem>
+                  <SelectItem value="existing_claim_followup">Claim Follow-Up</SelectItem>
+                  <SelectItem value="outbound_subro">OB Subro</SelectItem>
+                  <SelectItem value="total_loss">Total Loss</SelectItem>
+                  <SelectItem value="legal_or_high_risk">Legal / High Risk</SelectItem>
+                  <SelectItem value="other_or_unclear">Other / Unclear</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleAutoClassify} disabled={autoClassifying} className="h-8">
+              {autoClassifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+              Auto-classify from document
+            </Button>
+          </div>
+          {/* Row 5: Handler + Urgency */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Assign to Handler</Label>
+              <Select value={assignedHandlerId} onValueChange={setAssignedHandlerId}>
+                <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Unassigned</SelectItem>
+                  {handlers?.map(h => (
+                    <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Urgency</Label>
+              <Select value={urgency} onValueChange={(v) => setUrgency(v as any)}>
+                <SelectTrigger className="mt-1 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {/* Row 6: Legal dates (optional) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Date of Loss (optional)</Label>
+              <Input type="date" className="mt-1 h-8" value={dateOfLoss} onChange={e => setDateOfLoss(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Response Due (optional)</Label>
+              <Input type="date" className="mt-1 h-8" value={responseDueDate} onChange={e => setResponseDueDate(e.target.value)} />
+            </div>
+          </div>
+          {/* Body text */}
+          <div>
+            <Label className="text-xs">Body / Notes (optional)</Label>
+            <Textarea className="mt-1 text-sm" rows={3} value={bodyText} onChange={e => setBodyText(e.target.value)} placeholder="Paste or type the mail content…" />
+          </div>
+          {/* File attachments */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs">Attachments</Label>
+              <label className={`flex items-center gap-1 text-xs cursor-pointer text-primary hover:underline ${uploadingFile ? "opacity-50 pointer-events-none" : ""}`}>
+                <Paperclip className="h-3 w-3" />
+                {uploadingFile ? "Uploading…" : "Add file"}
+                <input type="file" className="hidden" onChange={handleFileSelect} disabled={uploadingFile} />
+              </label>
+            </div>
+            {pendingFiles.length > 0 ? (
+              <div className="space-y-1">
+                {pendingFiles.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs bg-muted/30 rounded px-2 py-1">
+                    <span className="truncate">{f.filename}</span>
+                    <button className="text-muted-foreground hover:text-destructive ml-2" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No files attached.</p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={createItem.isPending || !subject.trim()}>
+            {createItem.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+            Create Item
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Mailroom page ───────────────────────────────────────────────────────
 
 export default function Mailroom() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isHandler = !!user?.handlerProfileId;
+  const [showNewIntake, setShowNewIntake] = useState(false);
+  const utils = trpc.useUtils();
   // Pending count badge — only for handlers (not admins)
   const { data: pendingData } = trpc.mail.myPendingCount.useQuery(undefined, {
     enabled: isHandler && !isAdmin,
@@ -749,13 +1004,26 @@ export default function Mailroom() {
 
   const content = (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Mail className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Mailroom</h1>
-        {isHandler && !isAdmin && pendingCount > 0 && (
-          <Badge variant="destructive" className="text-xs">{pendingCount} pending</Badge>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Mail className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">Mailroom</h1>
+          {isHandler && !isAdmin && pendingCount > 0 && (
+            <Badge variant="destructive" className="text-xs">{pendingCount} pending</Badge>
+          )}
+        </div>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setShowNewIntake(true)}>
+            <PlusCircle className="h-3.5 w-3.5 mr-1.5" /> New Intake
+          </Button>
         )}
       </div>
+      {showNewIntake && (
+        <NewIntakeForm
+          onClose={() => setShowNewIntake(false)}
+          onCreated={() => { utils.mail.adminQueue.invalidate();  }}
+        />
+      )}
 
       {isAdmin ? (
         // Admin sees: All Mail, Legal & Demands, Mail Log, Stats

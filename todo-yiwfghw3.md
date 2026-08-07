@@ -307,3 +307,13 @@
 - [x] Slice 7: store Gmail OAuth refresh_token in DB (mail_settings table)
 - [x] Slice 7: add Gmail OAuth connect flow in admin UI (authorize → callback → store token)
 - [x] Slice 7: admin panel — Setup Crons button + Trigger Now button
+- [x] Slice 8: schema migration — extend mail_items.source enum to include fax and manual
+- [x] Slice 8 Feature A: /api/mail/:id/files upload route (multer + storagePut + mail_item_files insert)
+- [x] Slice 8 Feature A: addFile tRPC procedure (auth: assigned handler or admin)
+- [x] Slice 8 Feature A: Upload control in MyMailroom drawer Attachments section
+- [x] Slice 8 Feature A: Upload control in MailroomItem Attachments section
+- [x] Slice 8 Feature B: New Intake form (manual create) with all required fields
+- [x] Slice 8 Feature B: createManualItem adminProcedure with synthetic externalId
+- [x] Slice 8 Feature B: Auto-classify button (runs classify() on uploaded file, pre-fills fields)
+- [x] Slice 8 Feature B: New Intake button wired in admin Mailroom header
+- [x] Slice 8: remove any compose/reply controls from mailroom

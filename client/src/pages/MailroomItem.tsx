@@ -16,8 +16,7 @@ import {
 import {
   ArrowLeft, ExternalLink, Download, FileText, MessageSquare,
   GitBranch, ArrowRight, CheckCircle, AlertCircle, Clock,
-  Mail, Printer,
-} from "lucide-react";
+  Mail, Printer, Paperclip} from "lucide-react";
 import { toast } from "sonner";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -54,8 +53,29 @@ export default function MailroomItem() {
   );
   const utils = trpc.useUtils();
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !itemId) return;
+    setUploadingFile(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const resp = await fetch(`/api/mail/${itemId}/files`, { method: "POST", body: fd });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error ?? "Upload failed");
+      toast.success(`${file.name} attached`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setUploadingFile(false);
+      e.target.value = "";
+    }
+  }
+
   const [noteText, setNoteText] = useState("");
   const [rerouteOpen, setRerouteOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [rerouteHandlerId, setRerouteHandlerId] = useState("");
@@ -185,14 +205,21 @@ export default function MailroomItem() {
           )}
 
           {/* Files */}
-          {files.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Attachments ({files.length})
+                  <FileText className="h-4 w-4" /> Attachments {files.length > 0 ? `(${files.length})` : ""}
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
+                <label className={`flex items-center gap-1 text-xs cursor-pointer text-primary hover:underline ${uploadingFile ? "opacity-50 pointer-events-none" : ""}`}>
+                  <Paperclip className="h-3.5 w-3.5" />
+                  {uploadingFile ? "Uploading…" : "Attach file"}
+                  <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
+                </label>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {files.length > 0 ? (
                 <div className="space-y-2">
                   {files.map(f => (
                     <div key={f.id} className="flex items-center justify-between p-2 rounded border bg-muted/30">
@@ -224,9 +251,11 @@ export default function MailroomItem() {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <p className="text-xs text-muted-foreground">No attachments yet.</p>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Notes */}
           <Card>

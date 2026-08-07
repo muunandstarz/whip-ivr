@@ -23,6 +23,7 @@ import {
   remoteOpsSlackEventsHandler,
 } from "../remoteOpsSlackEvents";
 import { storagePut } from "../storage";
+import { sdk } from "./sdk";
 import {
   MAIL_SLACK_EVENTS_PATH,
   mailSlackEventsHandler,
@@ -108,6 +109,57 @@ async function startServer() {
       res.json({ url, key, filename: originalname, mimetype });
     } catch (err) {
       console.error("[upload/document] Error:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
+  // ─── Mail item file upload ─────────────────────────────────────────────────
+  app.post("/api/mail/:id/files", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) { res.status(400).json({ error: "No file provided" }); return; }
+      // Auth: must be signed in
+      let user: any = null;
+      try { user = await sdk.authenticateRequest(req); } catch {}
+      if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+      const itemId = parseInt(req.params.id, 10);
+      if (isNaN(itemId)) { res.status(400).json({ error: "Invalid item id" }); return; }
+
+      // Load item to check permission
+      const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      try {
+        const [[item]] = await conn.execute<any[]>(
+          "SELECT id, assigned_handler_id FROM mail_items WHERE id = ?",
+          [itemId]
+        );
+        if (!item) { res.status(404).json({ error: "Item not found" }); return; }
+        const isAdmin = user.role === "admin";
+        const isAssigned = user.handlerProfileId != null && item.assigned_handler_id === user.handlerProfileId;
+        if (!isAdmin && !isAssigned) { res.status(403).json({ error: "Forbidden" }); return; }
+
+        const { originalname, mimetype, buffer } = req.file!;
+        const safeFilename = originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const key = `mail/uploads/${itemId}/${Date.now()}_${safeFilename}`;
+        const { key: storageKey } = await storagePut(key, buffer, mimetype);
+
+        await conn.execute(
+          "INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes) VALUES (?, ?, ?, ?, ?)",
+          [itemId, storageKey, originalname, mimetype, buffer.length]
+        );
+        const fileId = (await conn.execute<any>("SELECT LAST_INSERT_ID() AS id"))[0][0].id;
+
+        // Append note
+        await conn.execute(
+          "INSERT INTO mail_item_notes (item_id, by_user_id, note) VALUES (?, ?, ?)",
+          [itemId, user.id, `File added by ${user.name ?? user.email ?? "user"}: ${originalname}`]
+        );
+
+        res.json({ ok: true, fileId, storageKey, filename: originalname, contentType: mimetype, sizeBytes: buffer.length });
+      } finally {
+        await conn.end();
+      }
+    } catch (err) {
+      console.error("[mail/files] Error:", err);
       res.status(500).json({ error: "Upload failed" });
     }
   });

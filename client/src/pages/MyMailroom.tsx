@@ -31,7 +31,7 @@ import {
   Mail, Clock, AlertTriangle, Scale, FileText, RefreshCw,
   MoreHorizontal, ArrowRight, CheckCircle, AlertCircle,
   ChevronLeft, ChevronRight, Download, Search, Filter,
-  ExternalLink, Bell,
+  ExternalLink, Bell, Paperclip,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isToday, isPast } from "date-fns";
@@ -125,6 +125,7 @@ function MailDrawer({
   const [showRerouteDialog, setShowRerouteDialog] = useState(false);
   const [rerouteHandlerId, setRerouteHandlerId] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const { data, isLoading, refetch } = trpc.mail.getItem.useQuery(
     { id: itemId! },
@@ -160,6 +161,25 @@ function MailDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !itemId) return;
+    setUploadingFile(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const resp = await fetch(`/api/mail/${itemId}/files`, { method: "POST", body: fd });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error ?? "Upload failed");
+      toast.success(`${file.name} attached`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setUploadingFile(false);
+      e.target.value = "";
+    }
+  }
   const item = data?.item;
   const files = data?.files ?? [];
   const notes = data?.notes ?? [];
@@ -321,11 +341,18 @@ function MailDrawer({
               </div>
 
               {/* Attachments */}
-              {files.length > 0 && (
-                <div className="px-5 py-3 border-b">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Attachments ({files.length})
+              <div className="px-5 py-3 border-b">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Attachments {files.length > 0 ? `(${files.length})` : ""}
                   </p>
+                  <label className={`flex items-center gap-1 text-xs cursor-pointer text-primary hover:underline ${uploadingFile ? "opacity-50 pointer-events-none" : ""}`}>
+                    <Paperclip className="w-3 h-3" />
+                    {uploadingFile ? "Uploading…" : "Attach file"}
+                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
+                  </label>
+                </div>
+                {files.length > 0 ? (
                   <div className="space-y-1.5">
                     {files.map((f: any) => (
                       <div key={f.id} className="flex items-center justify-between text-xs bg-muted/30 rounded px-2 py-1.5">
@@ -339,8 +366,10 @@ function MailDrawer({
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-xs text-muted-foreground">No attachments yet.</p>
+                )}
+              </div>
 
               {/* Routing History */}
               {history.length > 0 && (
