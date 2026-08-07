@@ -328,7 +328,11 @@ export async function refreshGmailToken(refreshToken: string): Promise<string> {
  * - Adds the "mailroom-done" label after processing (never marks read)
  */
 export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
-  const CLAIMS_QUERY = 'to:claims@drivewhip.com -label:mailroom-done';
+  // Query catches:
+  // 1. Mail directly addressed to claims@drivewhip.com
+  // 2. Mail forwarded from claims@ (subject may contain "Fwd:" or original headers intact)
+  // Using OR to catch both direct delivery and forwarded copies
+  const CLAIMS_QUERY = '(to:claims@drivewhip.com OR deliveredto:claims@drivewhip.com) -label:mailroom-done';
 
   return {
     async getAccessToken() {
@@ -343,7 +347,7 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
 
     async listMessages(token) {
       const q = encodeURIComponent(CLAIMS_QUERY);
-      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=50`, {
+      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();

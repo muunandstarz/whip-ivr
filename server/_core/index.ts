@@ -23,6 +23,7 @@ import {
   remoteOpsSlackEventsHandler,
 } from "../remoteOpsSlackEvents";
 import { storagePut } from "../storage";
+import { storageGetSignedUrl } from "../storage";
 import { sdk } from "./sdk";
 import {
   MAIL_SLACK_EVENTS_PATH,
@@ -106,7 +107,9 @@ async function startServer() {
       const safeFilename = originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
       const key = `docgen-uploads/${Date.now()}_${safeFilename}`;
       const { url } = await storagePut(key, buffer, mimetype);
-      res.json({ url, key, filename: originalname, mimetype });
+      // Get a presigned S3 URL so the LLM can read the file directly
+      const signedUrl = await storageGetSignedUrl(key).catch(() => url);
+      res.json({ url, signedUrl, key, filename: originalname, mimetype });
     } catch (err) {
       console.error("[upload/document] Error:", err);
       res.status(500).json({ error: "Upload failed" });

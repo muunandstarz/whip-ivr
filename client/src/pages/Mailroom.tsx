@@ -890,7 +890,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
       // Auto-extract immediately after upload
       setExtracting(true);
       try {
-        const extracted = await extractDoc.mutateAsync({ fileUrl: result.url, mimeType: file.type || "application/pdf" });
+        const extracted = await extractDoc.mutateAsync({ fileUrl: result.signedUrl ?? result.url, mimeType: file.type || "application/pdf" });
         if (extracted.subject) setSubject(extracted.subject);
         if (extracted.fromName) setFromName(extracted.fromName);
         if (extracted.fromEmail) setFromEmail(extracted.fromEmail);
