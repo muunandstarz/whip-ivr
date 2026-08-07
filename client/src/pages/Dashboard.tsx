@@ -288,7 +288,7 @@ export default function Dashboard() {
           </div>
           {/* Mailroom icon */}
           <a href="/mailroom" className="relative flex items-center justify-center w-11 h-11 rounded-lg hover:bg-muted transition-colors mt-0.5" title={mailAllPending > 0 ? `${mailAllPending} pending mail items` : "Mailroom"}>
-            <img src="/manus-storage/mailbox-badge_8b85da0d.png" alt="Mailroom" className="w-9 h-9 object-contain" />
+            <img src="/manus-storage/mailbox-new_7d868b27.png" alt="Mailroom" className="w-9 h-9 object-contain" />
             {mailAllPending > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none shadow">
                 {mailAllPending > 99 ? "99+" : mailAllPending}

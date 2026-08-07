@@ -32,6 +32,7 @@ import {
   Settings2, Zap, Wifi, WifiOff, PlusCircle, Paperclip,
   TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight,
   Bell, Edit2, Mail as MailIcon,
+  Upload, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isToday, isPast } from "date-fns";
@@ -855,13 +856,13 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [dateOfLoss, setDateOfLoss] = useState("");
   const [responseDueDate, setResponseDueDate] = useState("");
   const [bodyText, setBodyText] = useState("");
-  const [pendingFiles, setPendingFiles] = useState<Array<{ storageKey: string; filename: string; contentType: string; sizeBytes: number }>>([]);
+  const [pendingFiles, setPendingFiles] = useState<Array<{ storageKey: string; filename: string; contentType: string; sizeBytes: number; url?: string }>>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
-  const [autoClassifying, setAutoClassifying] = useState(false);
-
+  const [extracting, setExtracting] = useState(false);
+  const [extractedFromFile, setExtractedFromFile] = useState<string | null>(null);
   const { data: handlers } = trpc.handlers.list.useQuery();
   const utils = trpc.useUtils();
-  const autoClassify = trpc.mail.autoClassify.useMutation();
+  const extractDoc = trpc.mail.extractMailDocument.useMutation();
   const createItem = trpc.mail.createManualItem.useMutation({
     onSuccess: () => {
       toast.success("Item created and added to queue");
@@ -883,28 +884,50 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
       const resp = await fetch("/api/upload/document", { method: "POST", body: fd });
       const result = await resp.json();
       if (!resp.ok) throw new Error(result.error ?? "Upload failed");
-      setPendingFiles(prev => [...prev, { storageKey: result.key, filename: file.name, contentType: file.type || "application/octet-stream", sizeBytes: file.size }]);
-      toast.success(`${file.name} ready to attach`);
+      const fileEntry = { storageKey: result.key, filename: file.name, contentType: file.type || "application/octet-stream", sizeBytes: file.size, url: result.url };
+      setPendingFiles(prev => [...prev, fileEntry]);
+      toast.success(`${file.name} uploaded — extracting info…`);
+      // Auto-extract immediately after upload
+      setExtracting(true);
+      try {
+        const extracted = await extractDoc.mutateAsync({ fileUrl: result.url, mimeType: file.type || "application/pdf" });
+        if (extracted.subject) setSubject(extracted.subject);
+        if (extracted.fromName) setFromName(extracted.fromName);
+        if (extracted.fromEmail) setFromEmail(extracted.fromEmail);
+        if (extracted.claimNumber) setClaimNumber(extracted.claimNumber);
+        if (extracted.category) setCategory(extracted.category);
+        if (extracted.urgency) setUrgency(extracted.urgency as any);
+        if (extracted.dateOfLoss) setDateOfLoss(extracted.dateOfLoss);
+        if (extracted.responseDueDate) setResponseDueDate(extracted.responseDueDate);
+        if (extracted.bodyText) setBodyText(extracted.bodyText);
+        setExtractedFromFile(file.name);
+        toast.success("Fields auto-filled from document — review and adjust as needed");
+      } catch (extractErr: any) {
+        toast.error("Could not extract info from document — please fill fields manually");
+      } finally {
+        setExtracting(false);
+      }
     } catch (err: any) { toast.error(err.message ?? "Upload failed"); }
     finally { setUploadingFile(false); e.target.value = ""; }
   }
 
-  async function handleAutoClassify() {
-    if (!subject && !bodyText && pendingFiles.length === 0) { toast.error("Add a subject, body, or file first"); return; }
-    setAutoClassifying(true);
-    try {
-      const result = await autoClassify.mutateAsync({ subject: subject || undefined, bodyText: bodyText || undefined, attachmentNames: pendingFiles.map(f => f.filename) });
-      if (result.category) setCategory(result.category);
-      if (result.urgency) setUrgency(result.urgency as any);
-      if (result.response_due_date) setResponseDueDate(result.response_due_date);
-      toast.success(`Auto-classified as: ${result.category}`);
-    } catch (err: any) { toast.error(err.message ?? "Auto-classify failed"); }
-    finally { setAutoClassifying(false); }
-  }
-
   function handleSubmit() {
     if (!subject.trim()) { toast.error("Subject is required"); return; }
-    createItem.mutate({ source, subject, fromName: fromName || undefined, fromEmail: fromEmail || undefined, claimNumber: claimNumber || undefined, category: category as any || undefined, assignedHandlerId: (assignedHandlerId && assignedHandlerId !== "unassigned") ? Number(assignedHandlerId) : undefined, urgency, receivedAt: receivedAt || undefined, dateOfLoss: dateOfLoss || undefined, responseDueDate: responseDueDate || undefined, bodyText: bodyText || undefined, files: pendingFiles.length > 0 ? pendingFiles : undefined });
+    createItem.mutate({
+      source,
+      subject,
+      fromName: fromName || undefined,
+      fromEmail: fromEmail || undefined,
+      claimNumber: claimNumber || undefined,
+      category: category as any || undefined,
+      assignedHandlerId: (assignedHandlerId && assignedHandlerId !== "unassigned") ? Number(assignedHandlerId) : undefined,
+      urgency,
+      receivedAt: receivedAt || undefined,
+      dateOfLoss: dateOfLoss || undefined,
+      responseDueDate: responseDueDate || undefined,
+      bodyText: bodyText || undefined,
+      files: pendingFiles.length > 0 ? pendingFiles.map(f => ({ storageKey: f.storageKey, filename: f.filename, contentType: f.contentType, sizeBytes: f.sizeBytes })) : undefined,
+    });
   }
 
   return (
@@ -912,6 +935,35 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle className="flex items-center gap-2"><PlusCircle className="h-5 w-5" /> New Intake</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
+          {/* Upload-first banner */}
+          <div className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors ${extracting ? "border-blue-300 bg-blue-50" : extractedFromFile ? "border-green-300 bg-green-50" : "border-border hover:border-primary/40"}`}>
+            {extracting ? (
+              <div className="flex flex-col items-center gap-2">
+                <RefreshCw className="h-6 w-6 text-blue-500 animate-spin" />
+                <p className="text-sm text-blue-700 font-medium">Reading document…</p>
+                <p className="text-xs text-blue-500">AI is extracting claim details</p>
+              </div>
+            ) : extractedFromFile ? (
+              <div className="flex flex-col items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <p className="text-sm text-green-700 font-medium">Fields auto-filled from <span className="font-semibold">{extractedFromFile}</span></p>
+                <label className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" /> Upload another document
+                  <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.tiff,.gif" onChange={handleFileSelect} disabled={uploadingFile || extracting} />
+                </label>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="h-7 w-7 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground">Upload the mail piece to auto-fill</p>
+                <p className="text-xs text-muted-foreground">PDF, image, or fax — AI will read it and fill in all fields</p>
+                <label className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium cursor-pointer hover:bg-primary/90 transition-colors ${uploadingFile ? "opacity-50 pointer-events-none" : ""}`}>
+                  <Paperclip className="h-3.5 w-3.5" />{uploadingFile ? "Uploading…" : "Choose file"}
+                  <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.tiff,.gif" onChange={handleFileSelect} disabled={uploadingFile || extracting} />
+                </label>
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label className="text-xs">Channel</Label>
@@ -953,10 +1005,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" variant="outline" onClick={handleAutoClassify} disabled={autoClassifying} className="h-8">
-              {autoClassifying ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
-              Auto-classify
-            </Button>
+
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

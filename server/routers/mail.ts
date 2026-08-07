@@ -19,6 +19,7 @@ import { parse as parseCookie } from 'cookie';
 import { COOKIE_NAME } from '../../shared/const.js';
 import mysql from 'mysql2/promise';
 import { randomUUID } from 'crypto';
+import { invokeLLM } from '../_core/llm.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -770,6 +771,80 @@ export const mailRouter = router({
       }
 
       return { ok: true, itemId, externalId };
+    }),
+  /** Extract structured data from an uploaded mail document (PDF/image) using AI */
+  extractMailDocument: adminProcedure
+    .input(z.object({
+      fileUrl: z.string(),
+      mimeType: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const mimeType = input.mimeType ?? 'application/pdf';
+      const isPdf = mimeType.includes('pdf');
+      const isImage = mimeType.startsWith('image/');
+      
+      const systemPrompt = `You are a claims mail intake specialist. Extract structured information from the uploaded document and return it as JSON.
+      
+Extract the following fields (use null if not found):
+- subject: brief description of what this document is about (e.g. "Demand Letter - CLM-2026-001" or "PIP Application - John Smith")
+- fromName: sender's name or organization
+- fromEmail: sender's email or fax number if present
+- claimNumber: any claim number referenced (look for patterns like CLM-XXXX, CS-XXXX, MD-XXXX, etc.)
+- category: one of: injury_pip_bi, inbound_subro, existing_claim_followup, outbound_subro, total_loss, legal_or_high_risk, other_or_unclear
+- urgency: one of: low, normal, high, urgent (urgent = policy limit demand, legal deadline; high = demand letter, legal notice; normal = standard correspondence)
+- dateOfLoss: date of the accident/loss in YYYY-MM-DD format
+- responseDueDate: any response deadline in YYYY-MM-DD format
+- bodyText: a concise summary of the document content (2-3 sentences max)
+- isDemand: true if this is a demand letter or legal demand for payment
+
+Return ONLY valid JSON with these exact keys. No markdown fences.`;
+
+      const userContent: any[] = [
+        { type: 'text', text: 'Please extract the structured information from this document.' }
+      ];
+      
+      if (isPdf) {
+        userContent.push({ type: 'file_url', file_url: { url: input.fileUrl, mime_type: 'application/pdf' } });
+      } else if (isImage) {
+        userContent.push({ type: 'image_url', image_url: { url: input.fileUrl, detail: 'high' } });
+      } else {
+        // Fallback for other types — just use the URL as text reference
+        userContent.push({ type: 'text', text: `Document URL: ${input.fileUrl}` });
+      }
+
+      const result = await invokeLLM({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        maxTokens: 1000,
+      });
+
+      const msgContent = result.choices[0]?.message?.content ?? '';
+      const raw = typeof msgContent === 'string' ? msgContent : JSON.stringify(msgContent);
+      // Strip markdown fences if present
+      const cleaned = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+      
+      let extracted: any = {};
+      try {
+        extracted = JSON.parse(cleaned);
+      } catch {
+        // Best-effort parse failed — return empty
+        console.error('[extractMailDocument] JSON parse failed:', cleaned.slice(0, 200));
+      }
+
+      return {
+        subject: extracted.subject ?? null,
+        fromName: extracted.fromName ?? null,
+        fromEmail: extracted.fromEmail ?? null,
+        claimNumber: extracted.claimNumber ?? null,
+        category: extracted.category ?? null,
+        urgency: extracted.urgency ?? 'normal',
+        dateOfLoss: extracted.dateOfLoss ?? null,
+        responseDueDate: extracted.responseDueDate ?? null,
+        bodyText: extracted.bodyText ?? null,
+        isDemand: extracted.isDemand === true,
+      };
     }),
 
 

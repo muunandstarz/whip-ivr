@@ -340,3 +340,6 @@
 - [x] Move mailbox to small header icon on admin dashboard (not a section card)
 - [x] Fix Mailroom Legal tab — label/filter should be Legal only (not demands)
 - [x] Fix Gmail OAuth 403 — redirect URI mismatch
+- [x] Fix manual intake file upload route (/api/upload/document)
+- [x] Add AI extract-and-fill endpoint: reads uploaded doc, returns subject/sender/claimNumber/category/urgency/dateOfLoss/responseDue/bodyText
+- [x] Rebuild New Intake UX: upload-first flow, AI auto-fill button reads doc and populates all fields, one-click create+assign
