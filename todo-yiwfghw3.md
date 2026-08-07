@@ -346,3 +346,8 @@
 - [x] Assignment cadence: 3 per handler per run, Tue-Fri only gate in triggerNow/mailProcess
 - [x] Admin Mailroom: auto-refresh every 30s so new items appear live without manual reload
 - [x] Admin queue: show "assigned" tick as items get assigned (live count update)
+- [ ] Status shows "assigned" but handler shows "Unassigned" — fix: status should be "new" until handler is actually set
+- [ ] Add sort control to admin Mailroom table (default: newest-first by received_at)
+- [ ] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
+- [ ] Gmail ingest: debug why 40+ emails return 0 inserted; fix query/filter
+- [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment

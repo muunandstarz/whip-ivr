@@ -34,7 +34,7 @@ export interface RoutingPatch {
   // assignment
   assignedTeamId: number;
   assignedHandlerId: number | null;
-  status: 'assigned' | 'escalated';
+  status: 'new' | 'assigned' | 'escalated';
   assignedAt: Date;
   dueAt: Date;
 
@@ -88,8 +88,8 @@ export async function route(
   const lowConf = classification.confidence < confReview;
   const needsReview = (team.isReviewLane === 1 || lowConf) ? 1 : 0;
 
-  // 3. Determine status
-  const status: 'assigned' | 'escalated' = isLegal ? 'escalated' : 'assigned';
+  // 3. Determine status (will be finalized after handler lookup)
+  const baseStatus: 'assigned' | 'escalated' = isLegal ? 'escalated' : 'assigned';
 
   // 4. Pick assignee
   //    - Review lane or low-confidence: assign to the review lane's first member (admin/lead)
@@ -143,11 +143,11 @@ export async function route(
   // 6. Build history actions
   const historyActions: RoutingPatch['historyActions'] = [
     { action: 'classified', toHandlerId: null, reason: classification.reason ?? null },
-    {
-      action: status === 'escalated' ? 'escalated' : 'assigned',
+    ...(assignedHandlerId ? [{
+      action: (baseStatus === 'escalated' ? 'escalated' : 'assigned') as 'assigned' | 'escalated',
       toHandlerId: assignedHandlerId,
       reason: needsReview ? 'low confidence — needs review' : null,
-    },
+    }] : []),
   ];
 
   return {
@@ -169,8 +169,8 @@ export async function route(
 
     assignedTeamId: team.id,
     assignedHandlerId,
-    status,
-    assignedAt: now,
+    status: assignedHandlerId ? baseStatus : 'new',
+    assignedAt: assignedHandlerId ? now : null as any,
     dueAt,
 
     initialCategory: classification.category,

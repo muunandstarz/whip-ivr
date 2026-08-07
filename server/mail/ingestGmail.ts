@@ -124,7 +124,7 @@ export async function ingestGmail(
   gmail: GmailFetchFn,
   claimEmail = 'claims@drivewhip.com',
 ): Promise<IngestGmailResult> {
-  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'newer_than:90d -label:mailroom-done' } };
+  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'to:claims@drivewhip.com newer_than:90d' } };
 
   // 0. Get access token
   let token: string;
@@ -134,6 +134,7 @@ export async function ingestGmail(
     result.errors.push(`getAccessToken failed: ${String(e)}`);
     return result;
   }
+  if (result.debug) (result.debug as any).tokenOk = true;
 
   // 0b. Ensure the "mailroom-done" label exists (idempotent)
   let mailroomDoneLabelId: string;
@@ -348,7 +349,8 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
   // We then check the Delivered-To or To header of each message to confirm it was
   // addressed to claims@drivewhip.com (catches forwarded mail where To: shows jasminea@).
   // The mailroom-done label is the only dedup guard — no is:unread dependency.
-  const CLAIMS_QUERY = 'newer_than:90d -label:mailroom-done';
+  // Query: all mail to claims@ in last 90 days; dedupe by message-ID is the safety net
+  const CLAIMS_QUERY = 'to:claims@drivewhip.com newer_than:90d';
   const CLAIMS_ADDRESS = 'claims@drivewhip.com';
 
   return {

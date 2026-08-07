@@ -294,6 +294,7 @@ export const mailRouter = router({
       limit: z.number().max(500).optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
+      sort: z.enum(['receivedAt_desc', 'receivedAt_asc', 'dueAt_asc', 'dueAt_desc']).optional(),
     }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
@@ -315,9 +316,14 @@ export const mailRouter = router({
       const offset = (page - 1) * pageSize;
       const whereClause = filters.length ? and(...filters) : undefined;
       const [{ total }] = await db.select({ total: sql<number>`COUNT(*)` }).from(mailItems).where(whereClause);
+      const sortOrder = input?.sort ?? 'receivedAt_desc';
+      const orderByClause = sortOrder === 'receivedAt_asc' ? asc(mailItems.receivedAt)
+        : sortOrder === 'dueAt_asc' ? asc(mailItems.dueAt)
+        : sortOrder === 'dueAt_desc' ? desc(mailItems.dueAt)
+        : desc(mailItems.receivedAt);  // default: newest first
       let rows = await db.select().from(mailItems)
         .where(whereClause)
-        .orderBy(desc(mailItems.receivedAt))
+        .orderBy(orderByClause)
         .limit(input?.limit ?? pageSize)
         .offset(offset);
       // Server-side search filter
@@ -596,7 +602,7 @@ export const mailRouter = router({
         results.ingest = { skipped: true, reason: String(ingestErr) };
       }
 
-      // Step 1b: Poll Slack #claims-mail for unreviewed file messages
+      // Step 1b: Poll Slack #claims-mail using files.list API (paginated, all files)
       try {
         // Read token from mail_bot_config (same token the mail bot uses) — fall back to env
         let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
@@ -607,66 +613,91 @@ export const mailRouter = router({
           );
           if (botCfg?.slack_bot_token) slackToken = botCfg.slack_bot_token;
           if (botCfg?.claims_mail_channel_id) CLAIMS_MAIL_CHANNEL = botCfg.claims_mail_channel_id;
-        } catch { /* mail_bot_config may not exist — use env fallback */ }
+        } catch { /* mail_bot_config may not exist */ }
         const REVIEWED_EMOJIS = ['white_check_mark', 'eyes', 'heavy_check_mark'];
-        
         if (!slackToken) {
           results.slackIngest = { skipped: true, reason: 'No SLACK_BOT_TOKEN' };
         } else {
-          // Get mail_settings for reviewed_emoji
           const [[reviewedRow]] = await conn.execute<any[]>(
             "SELECT value FROM mail_settings WHERE `key` = 'reviewed_emoji'"
           );
           const reviewedEmoji = reviewedRow?.value ?? 'white_check_mark';
           const allReviewed = Array.from(new Set([...REVIEWED_EMOJIS, reviewedEmoji]));
-          
-          // Fetch last 200 messages from #claims-mail
-          const histRes = await fetch(
-            `https://slack.com/api/conversations.history?channel=${CLAIMS_MAIL_CHANNEL}&limit=200`,
-            { headers: { Authorization: `Bearer ${slackToken}` } }
-          );
-          const histData = await histRes.json() as { ok: boolean; messages?: any[] };
-          
-          if (!histData.ok) {
-            results.slackIngest = { skipped: true, reason: `Slack API error: ${JSON.stringify(histData)}` };
-          } else {
-            const messages = histData.messages ?? [];
-            // Filter: has files, not already reviewed
-            const unreviewed = messages.filter(m =>
-              m.files && m.files.length > 0 &&
-              !m.reactions?.some((r: any) => allReviewed.includes(r.name))
+          const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
+          const slackFetch = buildRealSlackFetch(slackToken);
+          let inserted = 0, skipped = 0, errors: string[] = [];
+          let totalFiles = 0;
+          // Use files.list API with pagination to get ALL files in the channel
+          let page = 1;
+          let hasMore = true;
+          while (hasMore && page <= 20) {
+            const params = new URLSearchParams({
+              channel: CLAIMS_MAIL_CHANNEL,
+              count: '100',
+              page: String(page),
+              types: 'all',
+            });
+            const filesRes = await fetch(
+              `https://slack.com/api/files.list?${params}`,
+              { headers: { Authorization: `Bearer ${slackToken}` } }
             );
-            
-            let inserted = 0, skipped = 0, errors: string[] = [];
-            const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
-            const slackFetch = buildRealSlackFetch(slackToken);
-            
-            for (const msg of unreviewed) {
-              for (const file of (msg.files ?? [])) {
+            const filesData = await filesRes.json() as { ok: boolean; files?: any[]; paging?: { pages: number } };
+            if (!filesData.ok) {
+              errors.push(`files.list page ${page}: ${JSON.stringify(filesData)}`);
+              break;
+            }
+            const files = filesData.files ?? [];
+            totalFiles += files.length;
+            hasMore = page < (filesData.paging?.pages ?? 1);
+            page++;
+            for (const file of files) {
+              // Dedupe by file ID
+              const [existing] = await conn.execute<any[]>(
+                "SELECT id FROM mail_items WHERE source = 'mail' AND external_id = ?",
+                [file.id]
+              );
+              if (existing.length > 0) { skipped++; continue; }
+              // Get message ts from file shares
+              const shares = (file.shares?.public?.[CLAIMS_MAIL_CHANNEL] ?? file.shares?.private?.[CLAIMS_MAIL_CHANNEL] ?? []) as any[];
+              const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
+              // Check reactions on the message
+              let reactions: Array<{ name: string }> = [];
+              if (messageTs) {
                 try {
-                  const result = await handleSlackFileEvent(conn, {
-                    fileId: file.id,
-                    messageTs: msg.ts,
-                    channelId: CLAIMS_MAIL_CHANNEL,
-                    filename: file.name ?? file.title,
-                    mimeType: file.mimetype,
-                    urlPrivateDownload: file.url_private_download,
-                    reactions: msg.reactions ?? [],
-                  }, slackFetch, {
-                    reviewedEmoji,
-                    addBotMarker: false,
+                  const reactParams = new URLSearchParams({ channel: CLAIMS_MAIL_CHANNEL, timestamp: messageTs, full: 'true' });
+                  const reactRes = await fetch(`https://slack.com/api/reactions.get?${reactParams}`, {
+                    headers: { Authorization: `Bearer ${slackToken}` },
                   });
-                  if (result.action === 'inserted') inserted++;
-                  else skipped++;
-                } catch (e) {
-                  errors.push(String(e));
-                }
+                  const reactData = await reactRes.json() as { ok: boolean; message?: { reactions?: Array<{ name: string }> } };
+                  reactions = reactData.message?.reactions ?? [];
+                } catch { /* non-fatal */ }
+              }
+              const alreadyReviewed = reactions.some(r => allReviewed.includes(r.name));
+              if (alreadyReviewed) { skipped++; continue; }
+              try {
+                const result = await handleSlackFileEvent(conn, {
+                  fileId: file.id,
+                  messageTs,
+                  channelId: CLAIMS_MAIL_CHANNEL,
+                  filename: file.name ?? file.title,
+                  mimeType: file.mimetype,
+                  urlPrivateDownload: file.url_private_download,
+                  reactions,
+                }, slackFetch, {
+                  reviewedEmoji,
+                  addBotMarker: false,
+                });
+                if (result.action === 'inserted') inserted++;
+                else skipped++;
+              } catch (e) {
+                errors.push(String(e));
               }
             }
-            results.slackIngest = { inserted, skipped, errors, total: unreviewed.length };
           }
+          results.slackIngest = { inserted, skipped, errors: errors.slice(0, 5), total: totalFiles };
         }
       } catch (slackErr) {
+        results.slackIngest = { skipped: true, reason: String(slackErr) };
         results.slackIngest = { skipped: true, reason: String(slackErr) };
       }
       // Step 2: Classify + assign pending items

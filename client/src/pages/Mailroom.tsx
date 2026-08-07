@@ -451,6 +451,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const [sortOrder, setSortOrder] = useState<'receivedAt_desc' | 'receivedAt_asc' | 'dueAt_asc' | 'dueAt_desc'>('receivedAt_desc');
   const { data: handlers } = trpc.handlers.list.useQuery();
 
   // Build query input from active tab + filters
@@ -473,7 +474,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     if (activeTab === "all" && statusFilter !== "all") base.status = statusFilter;
     // demands tab: filter by isDemand — we'll filter client-side since adminQueue doesn't have isDemand filter
     return base;
-  }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo]);
+  }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo, sortOrder]);
 
   const { data, isLoading, refetch } = trpc.mail.adminQueue.useQuery(queryInput, { refetchInterval: 30000 });
   const items = useMemo(() => {
@@ -524,6 +525,15 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
         </Select>
         <Input type="date" className="w-36 h-8 text-xs" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} placeholder="From" />
         <Input type="date" className="w-36 h-8 text-xs" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} placeholder="To" />
+        <Select value={sortOrder} onValueChange={v => { setSortOrder(v as any); setPage(1); }}>
+          <SelectTrigger className="w-44 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="receivedAt_desc">Newest First</SelectItem>
+            <SelectItem value="receivedAt_asc">Oldest First</SelectItem>
+            <SelectItem value="dueAt_asc">Due Date (soonest)</SelectItem>
+            <SelectItem value="dueAt_desc">Due Date (latest)</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex-1 min-w-[160px]">
           <Input className="h-8 text-xs" placeholder="Search subject, sender, claim #…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
