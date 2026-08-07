@@ -518,6 +518,10 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
   const resolveMut = trpc.mail.resolve.useMutation({ onSuccess: () => { toast.success("Resolved"); utils.mail.adminQueue.invalidate(); utils.mail.adminStats.invalidate(); refetch(); }, onError: (e) => toast.error(e.message) });
   const escalateMut = trpc.mail.escalate.useMutation({ onSuccess: () => { toast.success("Escalated"); utils.mail.adminQueue.invalidate(); refetch(); }, onError: (e) => toast.error(e.message) });
   const rerouteMut = trpc.mail.reroute.useMutation({ onSuccess: () => { toast.success("Rerouted"); utils.mail.adminQueue.invalidate(); refetch(); }, onError: (e) => toast.error(e.message) });
+  const bulkArchiveMut = trpc.mail.bulkArchive.useMutation({ onSuccess: (r) => { toast.success(`${r.archived} item${r.archived !== 1 ? "s" : ""} archived`); setSelectedIds(new Set()); utils.mail.adminQueue.invalidate(); utils.mail.adminStats.invalidate(); refetch(); }, onError: (e) => toast.error(e.message) });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const toggleSelect = (id: number) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleSelectAll = () => setSelectedIds(prev => prev.size === items.length ? new Set() : new Set(items.map(i => i.id)));
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIdx = (page - 1) * pageSize + 1;
@@ -572,14 +576,33 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
         </Button>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="font-medium text-blue-800">{selectedIds.size} selected</span>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-100"
+            onClick={() => bulkArchiveMut.mutate({ ids: Array.from(selectedIds) })}
+            disabled={bulkArchiveMut.isPending}>
+            {bulkArchiveMut.isPending ? <RefreshCw className="h-3 w-3 animate-spin mr-1" /> : null}
+            Archive Selected
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600" onClick={() => setSelectedIds(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
       {/* Table */}
       <div className="rounded-lg border overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
+              <TableHead className="w-8 py-2" onClick={toggleSelectAll}>
+                <input type="checkbox" className="cursor-pointer" checked={items.length > 0 && selectedIds.size === items.length} onChange={toggleSelectAll} />
+              </TableHead>
               <TableHead className="w-8 py-2 text-xs">Status</TableHead>
               <TableHead className="w-8 py-2 text-xs">Type</TableHead>
               <TableHead className="py-2 text-xs">Subject / From</TableHead>
+              <TableHead className="py-2 text-xs min-w-[160px]">Summary</TableHead>
               <TableHead className="py-2 text-xs">Category</TableHead>
               <TableHead className="py-2 text-xs">Claim #</TableHead>
               <TableHead className="py-2 text-xs">Handler</TableHead>
@@ -590,23 +613,35 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
             ) : items.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">No items found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground text-sm">No items found.</TableCell></TableRow>
             ) : items.map(item => {
               const isOverdue = item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved";
               const handlerName = handlers?.find(h => h.id === item.assignedHandlerId)?.name;
               return (
                 <TableRow
                   key={item.id}
-                  className={`cursor-pointer hover:bg-muted/30 ${rowBorderClass(item)}`}
+                  className={`cursor-pointer hover:bg-muted/30 ${rowBorderClass(item)} ${selectedIds.has(item.id) ? "bg-blue-50/50" : ""}`}
                   onClick={() => { setSelectedItemId(item.id); setDrawerOpen(true); }}
                 >
+                  <TableCell className="py-2" onClick={e => { e.stopPropagation(); toggleSelect(item.id); }}>
+                    <input type="checkbox" className="cursor-pointer" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} />
+                  </TableCell>
                   <TableCell className="py-2"><StatusPill item={item} /></TableCell>
                   <TableCell className="py-2"><SourceIcon source={item.source} /></TableCell>
                   <TableCell className="py-2 max-w-xs">
                     <div className="font-medium text-xs line-clamp-1">{item.subject ?? "(no subject)"}</div>
                     <div className="text-xs text-muted-foreground mt-0.5 truncate">{item.fromEmail ?? item.fromName ?? "—"}</div>
+                  </TableCell>
+                  <TableCell className="py-2 max-w-[200px]">
+                    {item.summaryNote ? (
+                      <span className="text-xs text-muted-foreground line-clamp-2">{item.summaryNote}</span>
+                    ) : item.bodyText ? (
+                      <span className="text-xs text-muted-foreground/60 line-clamp-2 italic">{item.bodyText.slice(0, 120)}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/40">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="py-2"><CategoryBadge cat={item.category} /></TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">{item.claimNumber ?? "—"}</TableCell>

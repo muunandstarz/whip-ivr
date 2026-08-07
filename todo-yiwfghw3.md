@@ -351,3 +351,5 @@
 - [ ] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
 - [ ] Gmail ingest: debug why 40+ emails return 0 inserted; fix query/filter
 - [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment
+- [ ] Bulk archive: checkbox column, select-all, archive button in admin Mailroom
+- [ ] Summary column in All Mail table showing brief note of what the mail is

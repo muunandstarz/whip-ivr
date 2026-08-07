@@ -114,6 +114,7 @@ export const mailRouter = router({
       legalOnly: z.boolean().optional(),
       showResolved: z.boolean().optional(),
       sort: z.enum(['receivedAt', 'dueAt', 'urgency']).optional(),
+      includeArchived: z.boolean().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       const db = await getDb();
@@ -128,6 +129,8 @@ export const mailRouter = router({
       if (input?.category) filters.push(eq(mailItems.category, input.category as any));
       if (input?.source) filters.push(eq(mailItems.source, input.source));
       if (input?.overdue) filters.push(and(lt(mailItems.dueAt, new Date()), isNull(mailItems.resolvedAt))!);
+      // Exclude archived items by default unless explicitly requested
+      if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.legalOnly) filters.push(or(eq(mailItems.isDemand, 1), eq(mailItems.category, 'legal_or_high_risk'))!);
 
       const rows = await db.select().from(mailItems)
@@ -295,6 +298,7 @@ export const mailRouter = router({
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
       sort: z.enum(['receivedAt_desc', 'receivedAt_asc', 'dueAt_asc', 'dueAt_desc']).optional(),
+      includeArchived: z.boolean().optional(),
     }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
@@ -306,6 +310,8 @@ export const mailRouter = router({
       if (input?.handlerId) filters.push(eq(mailItems.assignedHandlerId, input.handlerId));
       if (input?.source) filters.push(eq(mailItems.source, input.source));
       if (input?.overdue) filters.push(and(lt(mailItems.dueAt, new Date()), isNull(mailItems.resolvedAt))!);
+      // Exclude archived items by default unless explicitly requested
+      if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.urgent) filters.push(eq(mailItems.urgency, 'urgent'));
       if (input?.legalOnly) filters.push(or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!);
       if (input?.needsReview) filters.push(eq(mailItems.needsReview, 1));
@@ -350,6 +356,7 @@ export const mailRouter = router({
       source: z.enum(['email', 'mail']).optional(),
       overdue: z.boolean().optional(),
       legalOnly: z.boolean().optional(),
+      includeArchived: z.boolean().optional(),
       limit: z.number().max(1000).optional(),
     }).optional())
     .query(async ({ input }) => {
@@ -364,6 +371,8 @@ export const mailRouter = router({
       if (input?.status) filters.push(eq(mailItems.status, input.status as any));
       if (input?.source) filters.push(eq(mailItems.source, input.source));
       if (input?.overdue) filters.push(and(lt(mailItems.dueAt, new Date()), isNull(mailItems.resolvedAt))!);
+      // Exclude archived items by default unless explicitly requested
+      if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.legalOnly) filters.push(or(eq(mailItems.isDemand, 1), eq(mailItems.category, 'legal_or_high_risk'))!);
 
       const rows = await db.select().from(mailItems)
@@ -504,6 +513,18 @@ export const mailRouter = router({
       needsReview: Number(needsReview?.count ?? 0),
     };
   }),
+
+  /** Bulk archive mail items */
+  bulkArchive: adminProcedure
+    .input(z.object({ ids: z.array(z.number()).min(1).max(200) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      await db.update(mailItems)
+        .set({ isArchived: 1 })
+        .where(inArray(mailItems.id, input.ids));
+      return { archived: input.ids.length };
+    }),
 
   /** QA metrics for a date range */
   qa: adminProcedure
