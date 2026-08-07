@@ -6809,12 +6809,12 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setTextColor(60, 60, 60);
     doc.text(`Policy number: ${form.policyNumber || "—"}`, lm, y + 10);
     doc.text(`Policy effective date: ${fmtDate(form.effectiveDate)}`, lm, y + 15);
-    // Page number
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text("Page 1 of 2", rm, y + 3, { align: "right" });
-    // Klutch logo
+    // Klutch logo (draw first, then page number below it)
     try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
+    // Page number — below logo, clear of it
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text("Page 1 of 2", rm, y + 13, { align: "right" });
     y += 22;
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.3);
@@ -6890,28 +6890,31 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.line(lm, y, lm + mainW, y);
     y += 3;
     // Fixed column positions for coverage table
+    // Limits col at 50%, Deductible at 68%, Premium right-aligned
     const covLimX = lm + mainW * 0.50;
-    const covDedX = lm + mainW * 0.72;
+    const covDedX = lm + mainW * 0.70;
+    // Line 1: column header labels
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(23, 27, 49);
     doc.text("Coverages", lm, y);
     doc.text("Limits", covLimX, y);
     doc.text("Deductible", covDedX, y);
     doc.text("Premium", lm + mainW, y, { align: "right" });
-    y += 2;
+    y += 3.5;
+    // Line 2: sublabels
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(100, 100, 100);
     doc.text("What Klutch pays", covLimX, y, { maxWidth: covDedX - covLimX - 2 });
-    doc.text("What you pay", covDedX, y, { maxWidth: lm + mainW - covDedX - 10 });
-    doc.text("Cost for 6-month policy period", lm + mainW, y, { align: "right" });
-    y += 3;
+    doc.text("What you pay", covDedX, y, { maxWidth: lm + mainW - covDedX - 18 });
+    doc.text("Cost for 6-month policy period", lm + mainW, y, { align: "right", maxWidth: 30 });
+    y += 4;
     doc.line(lm, y, lm + mainW, y);
     y += 4;
 
     // Coverage rows helper
-    const covRow = (label: string, sublabel: string, limits: string, deductible: string, premium: string | null, isBold = false) => {
+    const covRow = (label: string, sublabel: string, limits: string, deductible: string, premium: string | null, isBold = false, pipNote?: string) => {
       doc.setFont("helvetica", isBold ? "bold" : "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(23, 27, 49);
@@ -6922,19 +6925,35 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
         doc.setTextColor(100, 100, 100);
         doc.text(sublabel, lm, y + 4);
       }
+      // Limits — right-aligned within its column
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(0, 0, 0);
-      doc.text(limits, covLimX, y, { maxWidth: covDedX - covLimX - 1 });
-      doc.text(deductible, covDedX, y);
+      const limMaxW = covDedX - covLimX - 2;
+      doc.text(limits, covDedX - 2, y, { align: "right", maxWidth: limMaxW });
+      // Deductible — right-aligned within its column
+      const dedMaxW = lm + mainW - covDedX - 18;
+      doc.text(deductible, lm + mainW - 18, y, { align: "right", maxWidth: dedMaxW });
+      // Premium — navy bold, right-aligned
       if (premium) {
         doc.setFont("helvetica", "bold");
+        doc.setTextColor(23, 27, 49);
         doc.text(premium, lm + mainW, y, { align: "right" });
       } else {
+        doc.setFont("helvetica", "normal");
         doc.setTextColor(150, 150, 150);
         doc.text("—", lm + mainW, y, { align: "right" });
       }
-      y += sublabel ? 11 : 7;
+      const rowH = sublabel ? 11 : 7;
+      y += rowH;
+      // PIP waiver note (italic, below the row)
+      if (pipNote) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7);
+        doc.setTextColor(100, 100, 100);
+        doc.text(pipNote, lm, y, { maxWidth: mainW });
+        y += 5;
+      }
       doc.setDrawColor(230, 230, 230);
       doc.line(lm, y - 1, lm + mainW, y - 1);
       y += 1;
@@ -6966,8 +6985,9 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
 
     if (rules.pip) {
       const pipPrem = pipWaived ? null : calcPremium("pip");
-      const pipLimits = pipWaived ? "Waived" : `${rules.pipLimit} per person`;
-      covRow("Personal Injury Protection (PIP)", "", pipLimits, "—", pipPrem);
+      const pipLimits = pipWaived ? "Waived" : (rules.pipLimit ? `${rules.pipLimit} per person` : "$10,000 per person");
+      const pipNote = pipWaived ? "PIP waived per Maryland Transportation Article." : undefined;
+      covRow("Personal Injury Protection (PIP)", "", pipLimits, "—", pipPrem, false, pipNote);
     }
 
     sectionHeader("Coverage if you're hit by an uninsured or underinsured driver");
@@ -6986,6 +7006,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.text("Total Premium for Policy Period", lm, y);
     const total = totalPremium();
     doc.setFontSize(12);
+    doc.setTextColor(23, 27, 49);  // navy for total premium
     doc.text(total || "—", lm + mainW, y, { align: "right" });
     y += 6;
     doc.setDrawColor(23, 27, 49);
@@ -7144,7 +7165,9 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(23, 27, 49);
+    doc.setTextColor(0, 102, 204);  // blue link color
     doc.text("klutchinsurance.com/claims", sideX + 3, sy + 8);
+    doc.setTextColor(23, 27, 49);  // reset to navy
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
@@ -7168,10 +7191,13 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.rect(sideX, sy, sideW, 22, "F");
     doc.setDrawColor(220, 220, 220);
     doc.rect(sideX, sy, sideW, 22);
+    // Navy left-border accent
+    doc.setFillColor(23, 27, 49);
+    doc.rect(sideX, sy, 2.5, 22, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(23, 27, 49);
-    doc.text("Cancellation notice", sideX + 3, sy + 5);
+    doc.text("Cancellation notice", sideX + 5, sy + 5);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(60, 60, 60);
@@ -7183,14 +7209,16 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.rect(sideX, sy, sideW, 22, "F");
     doc.setDrawColor(220, 220, 220);
     doc.rect(sideX, sy, sideW, 22);
+    doc.setFillColor(23, 27, 49);
+    doc.rect(sideX, sy, 2.5, 22, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(23, 27, 49);
-    doc.text("Fraud warning", sideX + 3, sy + 5);
+    doc.text("Fraud warning", sideX + 5, sy + 5);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(60, 60, 60);
-    doc.text("Any person who knowingly and willfully presents false information on this declaration or in connection with any claim for the purpose of defrauding an insurer may be subject to civil penalties and criminal prosecution under applicable state law.", sideX + 3, sy + 9, { maxWidth: sideW - 6 });
+    doc.text("Any person who knowingly and willfully presents false information on this declaration or in connection with any claim for the purpose of defrauding an insurer may be subject to civil penalties and criminal prosecution under applicable state law.", sideX + 5, sy + 9, { maxWidth: sideW - 8 });
     sy += 25;
 
     // Renewal notice
@@ -7198,14 +7226,16 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.rect(sideX, sy, sideW, 16, "F");
     doc.setDrawColor(220, 220, 220);
     doc.rect(sideX, sy, sideW, 16);
+    doc.setFillColor(23, 27, 49);
+    doc.rect(sideX, sy, 2.5, 16, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(23, 27, 49);
-    doc.text("Renewal", sideX + 3, sy + 5);
+    doc.text("Renewal", sideX + 5, sy + 5);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(60, 60, 60);
-    doc.text("This policy renews for successive terms coinciding with your active Membership Agreement unless cancelled. Coverage terms and limits are subject to change upon renewal.", sideX + 3, sy + 9, { maxWidth: sideW - 6 });
+    doc.text("This policy renews for successive terms coinciding with your active Membership Agreement unless cancelled. Coverage terms and limits are subject to change upon renewal.", sideX + 5, sy + 9, { maxWidth: sideW - 8 });
 
     // Footer page 1
     doc.setDrawColor(200, 200, 200);
@@ -7234,10 +7264,10 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setTextColor(60, 60, 60);
     doc.text(`Policy number: ${form.policyNumber || "—"}`, lm, y + 10);
     doc.text(`Policy effective date: ${fmtDate(form.effectiveDate)}`, lm, y + 15);
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text("2 of 2", rm, y + 3, { align: "right" });
     try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text("Page 2 of 2", rm, y + 13, { align: "right" });
     y += 22;
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.3);
@@ -7257,17 +7287,42 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     y += 8;
 
     const condition = (num: string, title: string, text: string) => {
+      // Bold lead-in: "1. Insuring Agreement." then normal text on same/next line
+      const leadIn = `${num}. ${title}`;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
       doc.setTextColor(23, 27, 49);
-      doc.text(`${num}. ${title}`, lm, y);
-      y += 4;
+      const leadInW = doc.getTextWidth(leadIn);
+      doc.text(leadIn, lm, y);
+      // Continue text on same line if it fits, otherwise next line
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(60, 60, 60);
-      const lines2 = doc.splitTextToSize(text, mainW);
-      doc.text(lines2, lm, y);
-      y += lines2.length * 4 + 3;
+      const remainW = mainW - leadInW - 2;
+      if (remainW > 20) {
+        // Try to fit first word on same line
+        const firstLine = text.slice(0, 60);
+        const restText = " " + text;
+        const lines2 = doc.splitTextToSize(restText, mainW - leadInW - 2);
+        if (lines2.length > 0) {
+          doc.text(lines2[0], lm + leadInW + 1, y);
+          if (lines2.length > 1) {
+            const rest = doc.splitTextToSize(lines2.slice(1).join(" "), mainW);
+            y += 4;
+            doc.text(rest, lm, y);
+            y += rest.length * 4 + 3;
+          } else {
+            y += 7;
+          }
+        } else {
+          y += 7;
+        }
+      } else {
+        y += 4;
+        const lines2 = doc.splitTextToSize(text, mainW);
+        doc.text(lines2, lm, y);
+        y += lines2.length * 4 + 3;
+      }
     };
 
     condition("1", "Insuring Agreement.", "This policy is issued by Klutch Insurance Company to Metrocars Leasing Corp (named insured and vehicle owner/lessor). The named operator is an insured while operating the covered vehicle pursuant to an active Membership Agreement with Metrocars Leasing Corp.");

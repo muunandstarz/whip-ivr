@@ -317,3 +317,16 @@
 - [x] Slice 8 Feature B: Auto-classify button (runs classify() on uploaded file, pre-fills fields)
 - [x] Slice 8 Feature B: New Intake button wired in admin Mailroom header
 - [x] Slice 8: remove any compose/reply controls from mailroom
+- [x] Admin Mailroom redesign: adminStats tRPC procedure (6 org-wide counts)
+- [x] Admin Mailroom redesign: full-width layout, 6 stat cards with View links
+- [x] Admin Mailroom redesign: filter tabs (All/Overdue/Urgent/Legal/Demands/Resolved/Mail Log)
+- [x] Admin Mailroom redesign: admin filter row (status, category, handler, date range, search)
+- [x] Admin Mailroom redesign: table with Status/Type/Subject/Category/Claim#/Handler/Due/Received/Actions
+- [x] Admin Mailroom redesign: right-side Sheet drawer with routing block and Edit Routing
+- [x] Admin Mailroom redesign: New Intake + Compose/Upload buttons in header
+- [x] Dec Page fix: data merge — named operator, vehicle, VIN, dates, all 6 premiums + total
+- [x] Dec Page fix: PIP conditional (waived/enhanced/statutory) not hardcoded
+- [x] Dec Page fix: page number clear of logo, section headings navy, column headers fixed
+- [x] Dec Page fix: right-align Limits/Deductible/Premium columns, navy premium amounts
+- [x] Dec Page fix: sidebar blue left-border accents, online claim address as blue link
+- [x] Dec Page fix: page 2 conditions as bold lead-in + paragraph bullets

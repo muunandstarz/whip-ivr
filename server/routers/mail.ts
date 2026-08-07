@@ -108,7 +108,7 @@ export const mailRouter = router({
     .input(z.object({
       status: z.enum(['assigned', 'escalated', 'resolved']).optional(),
       category: z.string().optional(),
-      source: z.enum(['email', 'mail']).optional(),
+      source: z.enum(['email', 'mail', 'fax', 'manual']).optional(),
       overdue: z.boolean().optional(),
       legalOnly: z.boolean().optional(),
       showResolved: z.boolean().optional(),
@@ -282,16 +282,21 @@ export const mailRouter = router({
       category: z.string().optional(),
       teamId: z.number().optional(),
       handlerId: z.number().optional(),
-      source: z.enum(['email', 'mail']).optional(),
+      source: z.enum(['email', 'mail', 'fax', 'manual']).optional(),
       overdue: z.boolean().optional(),
+      urgent: z.boolean().optional(),
+      legalOnly: z.boolean().optional(),
       needsReview: z.boolean().optional(),
+      search: z.string().optional(),
       from: z.date().optional(),
       to: z.date().optional(),
       limit: z.number().max(500).optional(),
+      page: z.number().min(1).optional(),
+      pageSize: z.number().min(1).max(100).optional(),
     }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) return { items: [] };
+      if (!db) return { items: [], total: 0 };
       const filters: Parameters<typeof and>[0][] = [];
       if (input?.status) filters.push(eq(mailItems.status, input.status));
       if (input?.category) filters.push(eq(mailItems.category, input.category as any));
@@ -299,17 +304,33 @@ export const mailRouter = router({
       if (input?.handlerId) filters.push(eq(mailItems.assignedHandlerId, input.handlerId));
       if (input?.source) filters.push(eq(mailItems.source, input.source));
       if (input?.overdue) filters.push(and(lt(mailItems.dueAt, new Date()), isNull(mailItems.resolvedAt))!);
+      if (input?.urgent) filters.push(eq(mailItems.urgency, 'urgent'));
+      if (input?.legalOnly) filters.push(or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!);
       if (input?.needsReview) filters.push(eq(mailItems.needsReview, 1));
       if (input?.from) filters.push(gte(mailItems.receivedAt, input.from));
       if (input?.to) filters.push(lte(mailItems.receivedAt, input.to));
-
-      const rows = await db.select().from(mailItems)
-        .where(filters.length ? and(...filters) : undefined)
+      const pageSize = input?.pageSize ?? 200;
+      const page = input?.page ?? 1;
+      const offset = (page - 1) * pageSize;
+      const whereClause = filters.length ? and(...filters) : undefined;
+      const [{ total }] = await db.select({ total: sql<number>`COUNT(*)` }).from(mailItems).where(whereClause);
+      let rows = await db.select().from(mailItems)
+        .where(whereClause)
         .orderBy(desc(mailItems.receivedAt))
-        .limit(input?.limit ?? 200);
-      return { items: rows };
+        .limit(input?.limit ?? pageSize)
+        .offset(offset);
+      // Server-side search filter
+      if (input?.search?.trim()) {
+        const q = input.search.toLowerCase();
+        rows = rows.filter(i =>
+          (i.subject ?? '').toLowerCase().includes(q) ||
+          (i.fromEmail ?? '').toLowerCase().includes(q) ||
+          (i.fromName ?? '').toLowerCase().includes(q) ||
+          (i.claimNumber ?? '').toLowerCase().includes(q)
+        );
+      }
+      return { items: rows, total: Number(total ?? 0) };
     }),
-
   /** Official mail log — one row per piece with full metadata */
   log: adminProcedure
     .input(z.object({
@@ -390,6 +411,65 @@ export const mailRouter = router({
 
       return { success: true };
     }),
+
+  /** 6-card org-wide stats for the admin Mailroom header */
+  adminStats: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return null;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+
+    const unresolved = and(
+      inArray(mailItems.status, ['new', 'assigned', 'escalated']),
+    );
+
+    // All Pending
+    const [allPending] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems).where(unresolved!);
+    const [allPendingYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), lte(mailItems.createdAt, yesterdayStart)));
+
+    // Overdue
+    const [overdue] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(unresolved!, lt(mailItems.dueAt, now)));
+    const [overdueYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), lt(mailItems.dueAt, yesterdayStart)));
+
+    // Urgent
+    const [urgent] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(unresolved!, eq(mailItems.urgency, 'urgent')));
+    const [urgentYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), eq(mailItems.urgency, 'urgent'), lte(mailItems.createdAt, yesterdayStart)));
+
+    // Legal & Demands
+    const [legalDemands] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(unresolved!, or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!));
+    const [legalDemYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!, lte(mailItems.createdAt, yesterdayStart)));
+
+    // Demands only
+    const [demands] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(unresolved!, eq(mailItems.isDemand, 1)));
+    const [demandsYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), eq(mailItems.isDemand, 1), lte(mailItems.createdAt, yesterdayStart)));
+
+    // Resolved today
+    const [resolvedToday] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(eq(mailItems.status, 'resolved'), gte(mailItems.resolvedAt, todayStart)));
+    const [resolvedYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(eq(mailItems.status, 'resolved'), gte(mailItems.resolvedAt, yesterdayStart), lt(mailItems.resolvedAt, todayStart)));
+
+    const delta = (today: number, yest: number) => today - yest;
+
+    return {
+      allPending: { count: Number(allPending?.count ?? 0), delta: delta(Number(allPending?.count ?? 0), Number(allPendingYest?.count ?? 0)) },
+      overdue: { count: Number(overdue?.count ?? 0), delta: delta(Number(overdue?.count ?? 0), Number(overdueYest?.count ?? 0)) },
+      urgent: { count: Number(urgent?.count ?? 0), delta: delta(Number(urgent?.count ?? 0), Number(urgentYest?.count ?? 0)) },
+      legalDemands: { count: Number(legalDemands?.count ?? 0), delta: delta(Number(legalDemands?.count ?? 0), Number(legalDemYest?.count ?? 0)) },
+      demands: { count: Number(demands?.count ?? 0), delta: delta(Number(demands?.count ?? 0), Number(demandsYest?.count ?? 0)) },
+      resolvedToday: { count: Number(resolvedToday?.count ?? 0), delta: delta(Number(resolvedToday?.count ?? 0), Number(resolvedYest?.count ?? 0)) },
+    };
+  }),
 
   /** Aggregate stats for the admin dashboard */
   stats: adminProcedure.query(async () => {
