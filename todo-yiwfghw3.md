@@ -293,4 +293,17 @@
 - [x] Metrocars COI: fix PIP limits overlap in the coverage table (widened LIMITS column)
   - [x] Dec Page: mainW increased to 67%, column positions adjusted, sidebar contact info fixed, row spacing improved
 - [x] Denial letter: top-level field renamed "Letter Date" and auto-populated with today's date; dol template field remains for actual date of loss
-- [x] All Whip letters: addWhipLetterhead reformatted to clean letterhead only (logo + company info + rule); title/subtitle blocks removed; body font 9→10pt across all letters
+  - [x] All Whip letters: addWhipLetterhead reformatted to clean letterhead only (logo + company info + rule); title/subtitle blocks removed; body font 9→10pt across all letters
+- [ ] Klutch COI logo: darken the PNG programmatically (multiply/darken filter) instead of text overlay
+- [ ] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
+- [ ] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
+- [ ] Slice 7: enable reminder cron — due-date overdue/urgent notifications
+- [ ] Slice 7: live acceptance test — send test email to claims@, post to #claims-mail Slack, verify ingest + classify + assign + UI resolve
+- [x] Slice 7 correction: switch Gmail ingest from service account to standard OAuth (personal inbox)
+- [x] Slice 7 correction: remove is:unread filter — query all mail to:claims@ instead
+- [x] Slice 7 correction: use label-based filter — to:claims@drivewhip.com -label:mailroom-done
+- [x] Slice 7 correction: add mailroom-done label after processing (never mark read)
+- [x] Slice 7 correction: preserve Reply-To/CC sender extraction (never assume From = sender)
+- [x] Slice 7: store Gmail OAuth refresh_token in DB (mail_settings table)
+- [x] Slice 7: add Gmail OAuth connect flow in admin UI (authorize → callback → store token)
+- [x] Slice 7: admin panel — Setup Crons button + Trigger Now button

@@ -26,6 +26,7 @@ import {
   Mail, Inbox, AlertTriangle, Scale, BarChart3, Filter, Download,
   MoreHorizontal, ArrowRight, CheckCircle, AlertCircle, Clock,
   ExternalLink, FileText, RefreshCw, ChevronUp, ChevronDown,
+  Settings2, Zap, Wifi, WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -606,6 +607,133 @@ function AdminStats() {
   );
 }
 
+
+// ─── Admin: Setup (Gmail OAuth + Cron management) ─────────────────────────────
+
+function AdminMailSetup() {
+  const [gmailStatus, setGmailStatus] = useState<"loading" | "connected" | "disconnected">("loading");
+  const [triggerResult, setTriggerResult] = useState<any>(null);
+  const [cronResult, setCronResult] = useState<any>(null);
+
+  const setupCrons = trpc.mail.setupCrons.useMutation({
+    onSuccess: (data) => { setCronResult(data); toast.success("Crons registered"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const triggerNow = trpc.mail.triggerNow.useMutation({
+    onSuccess: (data) => { setTriggerResult(data); toast.success("Manual run complete"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const { data: cronList, refetch: refetchCrons } = trpc.mail.listCrons.useQuery();
+
+  const checkGmailStatus = () => {
+    fetch("/api/mail/gmail-status")
+      .then(r => r.json())
+      .then((d: any) => setGmailStatus(d.connected ? "connected" : "disconnected"))
+      .catch(() => setGmailStatus("disconnected"));
+  };
+  // Check on mount
+  useState(() => { checkGmailStatus(); });
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            {gmailStatus === "connected"
+              ? <Wifi className="h-4 w-4 text-green-600" />
+              : <WifiOff className="h-4 w-4 text-muted-foreground" />}
+            Gmail Connection
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Connect your Gmail inbox so the ingest cron can read mail addressed to{" "}
+            <code className="text-xs bg-muted px-1 rounded">claims@drivewhip.com</code>.
+            The cron queries <code className="text-xs bg-muted px-1 rounded">to:claims@drivewhip.com -label:mailroom-done</code>{" "}
+            and adds the <code className="text-xs bg-muted px-1 rounded">mailroom-done</code> label after processing.
+            Your personal mail is never touched.
+          </p>
+          <div className="flex items-center gap-3">
+            <span className={`text-sm font-medium ${gmailStatus === "connected" ? "text-green-600" : "text-muted-foreground"}`}>
+              {gmailStatus === "loading" ? "Checking…" : gmailStatus === "connected" ? "✓ Connected" : "Not connected"}
+            </span>
+            <Button size="sm" asChild>
+              <a href="/api/mail/gmail-oauth-start">
+                {gmailStatus === "connected" ? "Reconnect Gmail" : "Connect Gmail"}
+              </a>
+            </Button>
+            <Button size="sm" variant="ghost" onClick={checkGmailStatus}>Refresh</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Scheduled Crons
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Register the three mail crons with Heartbeat (idempotent — safe to run again):
+          </p>
+          <ul className="text-xs text-muted-foreground space-y-1 ml-2">
+            <li><strong>mail-ingest-gmail</strong> — every 5 min: poll claims@ Gmail</li>
+            <li><strong>mail-process</strong> — every 5 min (offset +2): classify + assign new items</li>
+            <li><strong>mail-reminders</strong> — every hour: DM handlers for overdue items</li>
+          </ul>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setupCrons.mutate()} disabled={setupCrons.isPending}>
+              {setupCrons.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Settings2 className="h-3.5 w-3.5 mr-1.5" />}
+              Setup Crons
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => refetchCrons()}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh Status
+            </Button>
+          </div>
+          {cronResult && (
+            <pre className="text-xs bg-muted p-2 rounded overflow-auto">{JSON.stringify(cronResult, null, 2)}</pre>
+          )}
+          {cronList?.jobs && cronList.jobs.length > 0 && (
+            <div className="space-y-1">
+              {(cronList.jobs as any[]).map((j) => (
+                <div key={j.name} className="flex items-center gap-2 text-xs">
+                  <span className={`w-2 h-2 rounded-full ${j.isEnable ? "bg-green-500" : "bg-gray-300"}`} />
+                  <span className="font-mono">{j.name}</span>
+                  <span className="text-muted-foreground">{j.cronExpression}</span>
+                  <span className="text-muted-foreground">last: {j.lastExecutedAt ? new Date(j.lastExecutedAt).toLocaleString() : "never"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Manual Trigger
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Run ingest + classify immediately (acceptance test / on-demand catch-up).
+          </p>
+          <Button size="sm" onClick={() => triggerNow.mutate()} disabled={triggerNow.isPending}>
+            {triggerNow.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+            {triggerNow.isPending ? "Running…" : "Trigger Now"}
+          </Button>
+          {triggerResult && (
+            <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-48">{JSON.stringify(triggerResult, null, 2)}</pre>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main Mailroom page ───────────────────────────────────────────────────────
 
 export default function Mailroom() {
@@ -638,11 +766,13 @@ export default function Mailroom() {
             <TabsTrigger value="legal"><Scale className="h-3.5 w-3.5 mr-1.5" />Legal & Demands</TabsTrigger>
             <TabsTrigger value="log"><FileText className="h-3.5 w-3.5 mr-1.5" />Mail Log</TabsTrigger>
             <TabsTrigger value="stats"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Stats</TabsTrigger>
+            <TabsTrigger value="setup"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Setup</TabsTrigger>
           </TabsList>
           <TabsContent value="queue" className="mt-4"><AdminAllMail /></TabsContent>
           <TabsContent value="legal" className="mt-4"><AdminLegalQueue /></TabsContent>
           <TabsContent value="log" className="mt-4"><AdminMailLog /></TabsContent>
           <TabsContent value="stats" className="mt-4"><AdminStats /></TabsContent>
+          <TabsContent value="setup" className="mt-4"><AdminMailSetup /></TabsContent>
         </Tabs>
       ) : isHandler ? (
         // Handler sees: their own queue with filters + pending badge

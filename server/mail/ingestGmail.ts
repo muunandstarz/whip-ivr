@@ -1,20 +1,27 @@
 /**
- * ingestGmail(conn, opts?)
+ * ingestGmail(conn, gmail)
  *
- * Queries the claims@ mailbox for unread messages via the Gmail API
- * (service account with domain-wide delegation). For each message:
- *   1. Dedupe on (source='email', external_id=messageId)
- *   2. Parse body, thread id, sender, subject, date
+ * Queries the owner's Gmail inbox for messages addressed to claims@drivewhip.com
+ * that have NOT yet been labeled "mailroom-done". For each message:
+ *   1. Dedupe on (source='email', external_id=messageId)  ← safety net
+ *   2. Parse body, thread id, sender (Reply-To > From), subject, date
  *   3. storagePut attachments → mail_item_files
  *   4. Insert mail_items row (status='new', category=null)
- *   5. Remove UNREAD label so it is never pulled again
+ *   5. Add "mailroom-done" label → drops out of next poll
  *
- * The Gmail HTTP calls are injected via `opts.gmailFetch` so tests can
- * mock them without touching the real API.
+ * Query: `to:claims@drivewhip.com -label:mailroom-done`
+ * Never marks messages read. Never touches non-claims@ mail.
+ *
+ * OAuth token refresh: reads gmail_refresh_token from mail_settings,
+ * exchanges it for a fresh access_token on every run.
+ *
+ * The Gmail HTTP calls are injected via the GmailFetchFn interface so tests
+ * can mock them without hitting the real API.
  */
-
 import type { Connection } from 'mysql2/promise';
 import { storagePut } from '../storage.js';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface GmailMessage {
   id: string;
@@ -37,16 +44,20 @@ export interface GmailPart {
 }
 
 export interface GmailFetchFn {
-  /** GET https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread */
-  listMessages(token: string): Promise<{ messages?: Array<{ id: string }> }>;
-  /** GET .../messages/{id}?format=full */
-  getMessage(token: string, messageId: string): Promise<GmailMessage>;
-  /** GET .../messages/{id}/attachments/{attachmentId} */
-  getAttachment(token: string, messageId: string, attachmentId: string): Promise<{ data: string }>;
-  /** POST .../messages/{id}/modify — remove UNREAD label */
-  markRead(token: string, messageId: string): Promise<void>;
-  /** Get a short-lived OAuth2 access token from the service account */
+  /** Exchange refresh_token for a fresh access_token */
   getAccessToken(): Promise<string>;
+  /** List messages matching the claims@ query */
+  listMessages(token: string): Promise<{ messages?: Array<{ id: string }> }>;
+  /** Fetch full message */
+  getMessage(token: string, messageId: string): Promise<GmailMessage>;
+  /** Download an attachment */
+  getAttachment(token: string, messageId: string, attachmentId: string): Promise<{ data: string }>;
+  /** Add a label to a message (used to mark "mailroom-done") */
+  addLabel(token: string, messageId: string, labelId: string): Promise<void>;
+  /** Get or create a label by name, returning its ID */
+  getOrCreateLabel(token: string, labelName: string): Promise<string>;
+  /** @deprecated kept for test compatibility — no-op in production */
+  markRead(token: string, messageId: string): Promise<void>;
 }
 
 export interface IngestGmailResult {
@@ -55,17 +66,16 @@ export interface IngestGmailResult {
   errors: string[];
 }
 
-/** Decode base64url → string */
+// ─── MIME helpers ─────────────────────────────────────────────────────────────
+
 function b64urlToString(data: string): string {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
 }
 
-/** Decode base64url → Buffer */
 function b64urlToBuffer(data: string): Buffer {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
 
-/** Recursively extract text/plain body from a MIME tree */
 function extractTextBody(part: GmailPart): string {
   if (part.mimeType === 'text/plain' && part.body?.data) {
     return b64urlToString(part.body.data);
@@ -79,7 +89,6 @@ function extractTextBody(part: GmailPart): string {
   return '';
 }
 
-/** Collect all attachment parts (has filename + attachmentId or inline data) */
 function collectAttachments(part: GmailPart): Array<{ filename: string; mimeType: string; attachmentId?: string; data?: string }> {
   const result: Array<{ filename: string; mimeType: string; attachmentId?: string; data?: string }> = [];
   if (part.filename && part.body) {
@@ -98,6 +107,17 @@ function collectAttachments(part: GmailPart): Array<{ filename: string; mimeType
   return result;
 }
 
+/** Parse "Name <email>" or bare "email" → { name, email } */
+function parseAddress(raw: string): { name: string | null; email: string } {
+  const m = raw.match(/^(.*?)\s*<([^>]+)>$/);
+  if (m) {
+    return { name: m[1].replace(/^"|"$/g, '').trim() || null, email: m[2].trim() };
+  }
+  return { name: null, email: raw.trim() };
+}
+
+// ─── Core ingest function ─────────────────────────────────────────────────────
+
 export async function ingestGmail(
   conn: Connection,
   gmail: GmailFetchFn,
@@ -105,6 +125,7 @@ export async function ingestGmail(
 ): Promise<IngestGmailResult> {
   const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [] };
 
+  // 0. Get access token
   let token: string;
   try {
     token = await gmail.getAccessToken();
@@ -113,6 +134,16 @@ export async function ingestGmail(
     return result;
   }
 
+  // 0b. Ensure the "mailroom-done" label exists (idempotent)
+  let mailroomDoneLabelId: string;
+  try {
+    mailroomDoneLabelId = await gmail.getOrCreateLabel(token, 'mailroom-done');
+  } catch (e) {
+    result.errors.push(`getOrCreateLabel failed: ${String(e)}`);
+    return result;
+  }
+
+  // 1. List messages: to:claims@drivewhip.com -label:mailroom-done
   let messageList: { messages?: Array<{ id: string }> };
   try {
     messageList = await gmail.listMessages(token);
@@ -125,33 +156,35 @@ export async function ingestGmail(
 
   for (const { id: messageId } of ids) {
     try {
-      // 1. Dedupe check
+      // 2. Dedupe safety net
       const [existing] = await conn.execute<any[]>(
         "SELECT id FROM mail_items WHERE source = 'email' AND external_id = ?",
         [messageId]
       );
       if (existing.length > 0) {
+        // Already in DB — still add the label so it drops out of next poll
+        try { await gmail.addLabel(token, messageId, mailroomDoneLabelId); } catch {}
         result.skipped++;
         continue;
       }
 
-      // 2. Fetch full message
+      // 3. Fetch full message
       const msg = await gmail.getMessage(token, messageId);
       const headers = msg.payload?.headers ?? [];
       const getHeader = (name: string) =>
         headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? null;
 
       const subject = getHeader('Subject');
-      const fromRaw = getHeader('From') ?? '';
       const dateRaw = getHeader('Date');
       const receivedAt = dateRaw ? new Date(dateRaw) : new Date(Number(msg.internalDate));
 
-      // Parse from: "Name <email>" or just "email"
-      const fromMatch = fromRaw.match(/^(.*?)\s*<([^>]+)>$/) ?? null;
-      const fromName = fromMatch ? fromMatch[1].replace(/^"|"$/g, '').trim() : null;
-      const fromEmail = fromMatch ? fromMatch[2] : fromRaw.trim();
+      // Sender extraction: Reply-To > From (carrier sends to claims@, owner inbox is just a copy)
+      const replyToRaw = getHeader('Reply-To');
+      const fromRaw = getHeader('From') ?? '';
+      const senderRaw = replyToRaw || fromRaw;
+      const { name: fromName, email: fromEmail } = parseAddress(senderRaw);
 
-      // 3. Extract body
+      // 4. Extract body text
       let bodyText = '';
       if (msg.payload) {
         if (msg.payload.mimeType === 'text/plain' && msg.payload.body?.data) {
@@ -164,7 +197,7 @@ export async function ingestGmail(
         }
       }
 
-      // 4. Insert mail_items row
+      // 5. Insert mail_items row
       const [insertResult] = await conn.execute<any>(
         `INSERT INTO mail_items
            (source, external_id, received_at, status, subject, body_text,
@@ -183,11 +216,10 @@ export async function ingestGmail(
       );
       const itemId = (insertResult as any).insertId;
 
-      // 5. Save attachments
+      // 6. Save attachments
       const attachments = msg.payload?.parts
         ? collectAttachments({ mimeType: 'multipart/mixed', parts: msg.payload.parts })
         : [];
-
       for (const att of attachments) {
         try {
           let buffer: Buffer;
@@ -200,7 +232,7 @@ export async function ingestGmail(
             continue;
           }
           const key = `mail/email/${messageId}/${att.filename}`;
-          const { key: storageKey, url } = await storagePut(key, buffer, att.mimeType);
+          const { key: storageKey } = await storagePut(key, buffer, att.mimeType);
           await conn.execute(
             `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes)
              VALUES (?, ?, ?, ?, ?)`,
@@ -211,11 +243,11 @@ export async function ingestGmail(
         }
       }
 
-      // 6. Mark as read (remove UNREAD label)
+      // 7. Add "mailroom-done" label — drops message from next poll
       try {
-        await gmail.markRead(token, messageId);
-      } catch (markErr) {
-        result.errors.push(`markRead ${messageId}: ${String(markErr)}`);
+        await gmail.addLabel(token, messageId, mailroomDoneLabelId);
+      } catch (labelErr) {
+        result.errors.push(`addLabel ${messageId}: ${String(labelErr)}`);
       }
 
       result.inserted++;
@@ -223,73 +255,139 @@ export async function ingestGmail(
       result.errors.push(`message ${messageId}: ${String(e)}`);
     }
   }
-
   return result;
 }
 
-/** Build a real GmailFetchFn using the service account credentials from env */
-export function buildRealGmailFetch(): GmailFetchFn {
-  const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
+// ─── OAuth helpers ────────────────────────────────────────────────────────────
 
-  async function getAccessToken(): Promise<string> {
-    const credsJson = process.env.GMAIL_SERVICE_ACCOUNT_JSON;
-    if (!credsJson) throw new Error('GMAIL_SERVICE_ACCOUNT_JSON env var not set');
-    const creds = JSON.parse(credsJson);
-    // Build JWT for service account impersonation
-    const now = Math.floor(Date.now() / 1000);
-    const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({
-      iss: creds.client_email,
-      sub: 'claims@drivewhip.com',
-      scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
-      aud: 'https://oauth2.googleapis.com/token',
-      iat: now,
-      exp: now + 3600,
-    })).toString('base64url');
-    const { createSign } = await import('crypto');
-    const sign = createSign('RSA-SHA256');
-    sign.update(`${header}.${payload}`);
-    const sig = sign.sign(creds.private_key, 'base64url');
-    const jwt = `${header}.${payload}.${sig}`;
-    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion: jwt,
-      }),
-    });
-    const tokenData = await tokenResp.json() as { access_token?: string; error?: string };
-    if (!tokenData.access_token) throw new Error(`Gmail token error: ${tokenData.error}`);
-    return tokenData.access_token;
-  }
+const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
+const GMAIL_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.labels',
+  'https://www.googleapis.com/auth/gmail.modify',
+].join(' ');
+
+/** Build the Google OAuth consent URL for the admin to visit */
+export function buildGmailOAuthUrl(redirectUri: string): string {
+  const params = new URLSearchParams({
+    client_id: process.env.GMAIL_CLIENT_ID ?? '',
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: GMAIL_SCOPES,
+    access_type: 'offline',
+    prompt: 'consent',
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+/** Exchange an auth code for tokens */
+export async function exchangeGmailCode(
+  code: string,
+  redirectUri: string,
+): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.GMAIL_CLIENT_ID ?? '',
+      client_secret: process.env.GMAIL_CLIENT_SECRET ?? '',
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    }),
+  });
+  const data = await resp.json() as any;
+  if (!data.access_token) throw new Error(`Gmail token exchange failed: ${data.error} — ${data.error_description}`);
+  return data;
+}
+
+/** Use a refresh_token to get a fresh access_token */
+export async function refreshGmailToken(refreshToken: string): Promise<string> {
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: process.env.GMAIL_CLIENT_ID ?? '',
+      client_secret: process.env.GMAIL_CLIENT_SECRET ?? '',
+      grant_type: 'refresh_token',
+    }),
+  });
+  const data = await resp.json() as any;
+  if (!data.access_token) throw new Error(`Gmail refresh failed: ${data.error} — ${data.error_description}`);
+  return data.access_token;
+}
+
+// ─── Real GmailFetchFn (OAuth, reads refresh_token from mail_settings) ────────
+
+/**
+ * Build a real GmailFetchFn that:
+ * - Reads the refresh_token from mail_settings (key='gmail_refresh_token')
+ * - Exchanges it for a fresh access_token on each cron run
+ * - Queries to:claims@drivewhip.com -label:mailroom-done
+ * - Adds the "mailroom-done" label after processing (never marks read)
+ */
+export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
+  const CLAIMS_QUERY = 'to:claims@drivewhip.com -label:mailroom-done';
 
   return {
-    getAccessToken,
+    async getAccessToken() {
+      const [[row]] = await conn.execute<any[]>(
+        "SELECT value FROM mail_settings WHERE `key` = 'gmail_refresh_token'"
+      );
+      if (!row?.value) {
+        throw new Error('Gmail not connected — no refresh_token in mail_settings. Visit the admin panel to connect Gmail.');
+      }
+      return refreshGmailToken(row.value);
+    },
+
     async listMessages(token) {
-      const res = await fetch(`${GMAIL_BASE}/messages?q=is%3Aunread&maxResults=100`, {
+      const q = encodeURIComponent(CLAIMS_QUERY);
+      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=50`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();
     },
+
     async getMessage(token, messageId) {
       const res = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();
     },
+
     async getAttachment(token, messageId, attachmentId) {
       const res = await fetch(`${GMAIL_BASE}/messages/${messageId}/attachments/${attachmentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();
     },
-    async markRead(token, messageId) {
+
+    async addLabel(token, messageId, labelId) {
       await fetch(`${GMAIL_BASE}/messages/${messageId}/modify`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ removeLabelIds: ['UNREAD'] }),
+        body: JSON.stringify({ addLabelIds: [labelId] }),
       });
     },
+
+    async getOrCreateLabel(token, labelName) {
+      const listRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const listData = await listRes.json() as { labels?: Array<{ id: string; name: string }> };
+      const existing = listData.labels?.find(l => l.name === labelName);
+      if (existing) return existing.id;
+      const createRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: labelName, labelListVisibility: 'labelHide', messageListVisibility: 'hide' }),
+      });
+      const created = await createRes.json() as { id: string };
+      return created.id;
+    },
+
+    /** No-op — kept for test compatibility */
+    async markRead(_token, _messageId) {},
   };
 }

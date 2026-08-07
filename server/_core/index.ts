@@ -32,6 +32,12 @@ import {
   mailProcessHandler,
   mailQaWeeklyHandler,
 } from "../mail/jobs";
+import { mailIngestGmailHandler } from "../mail/jobs";
+import {
+  buildGmailOAuthUrl,
+  exchangeGmailCode,
+} from "../mail/ingestGmail";
+import mysql from "mysql2/promise";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -112,10 +118,63 @@ async function startServer() {
   // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
   app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
-  // ─── Claims Mail Triage jobs (manual-trigger only; crons disabled) ──────────
+  // ─── Claims Mail Triage jobs ─────────────────────────────────────────────────
+  app.post("/api/scheduled/mailIngestGmail", mailIngestGmailHandler);
   app.post("/api/scheduled/mailReminders", mailRemindersHandler);
   app.post("/api/scheduled/mailProcess", mailProcessHandler);
   app.post("/api/scheduled/mailQaWeekly", mailQaWeeklyHandler);
+
+  // ─── Gmail OAuth connect ──────────────────────────────────────────────────
+  const GMAIL_REDIRECT_URI = `${process.env.VITE_APP_URL ?? "https://whipivr-tyswfku7.manus.space"}/api/mail/gmail-oauth-callback`;
+
+  /** Step 1: redirect admin to Google consent screen */
+  app.get("/api/mail/gmail-oauth-start", (req, res) => {
+    const url = buildGmailOAuthUrl(GMAIL_REDIRECT_URI);
+    res.redirect(url);
+  });
+
+  /** Step 2: Google redirects here with ?code=... — exchange for tokens and store */
+  app.get("/api/mail/gmail-oauth-callback", async (req, res) => {
+    const code = req.query.code as string;
+    if (!code) {
+      res.status(400).send("Missing code parameter");
+      return;
+    }
+    let conn: mysql.Connection | null = null;
+    try {
+      const tokens = await exchangeGmailCode(code, GMAIL_REDIRECT_URI);
+      conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      // Upsert the refresh token into mail_settings
+      await conn.execute(
+        `INSERT INTO mail_settings (\`key\`, value) VALUES ('gmail_refresh_token', ?)
+         ON DUPLICATE KEY UPDATE value = VALUES(value)`,
+        [tokens.refresh_token]
+      );
+      // Also store the connected email if available (best-effort)
+      res.redirect("/#/mailroom?gmail=connected");
+    } catch (e) {
+      console.error("[gmail-oauth-callback] error:", e);
+      res.redirect(`/#/mailroom?gmail=error&msg=${encodeURIComponent(String(e))}`);
+    } finally {
+      if (conn) await conn.end();
+    }
+  });
+
+  /** Admin endpoint: check Gmail connection status */
+  app.get("/api/mail/gmail-status", async (req, res) => {
+    let conn: mysql.Connection | null = null;
+    try {
+      conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      const [[row]] = await conn.execute<any[]>(
+        "SELECT value FROM mail_settings WHERE `key` = 'gmail_refresh_token'"
+      );
+      res.json({ connected: !!row?.value });
+    } catch (e) {
+      res.json({ connected: false, error: String(e) });
+    } finally {
+      if (conn) await conn.end();
+    }
+  });
 
   // Aircall recording proxy — accepts ?url=<encoded assets.aircall.io URL> or ?callId=<id>
   // Resolves the Aircall asset URL to a fresh signed S3 URL via the Aircall API, then

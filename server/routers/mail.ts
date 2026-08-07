@@ -14,6 +14,10 @@ import {
 } from '../../drizzle/schema.js';
 import { eq, and, or, inArray, isNull, isNotNull, lt, desc, asc, sql, gte, lte } from 'drizzle-orm';
 import { storageGetSignedUrl } from '../storage.js';
+import { createHeartbeatJob, listHeartbeatJobs } from '../_core/heartbeat.js';
+import { parse as parseCookie } from 'cookie';
+import { COOKIE_NAME } from '../../shared/const.js';
+import mysql from 'mysql2/promise';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -458,5 +462,87 @@ export const mailRouter = router({
       .orderBy(desc(mailQaSnapshots.periodStart))
       .limit(52); // 1 year of weekly snapshots
     return { snapshots: rows };
+  }),
+
+  // ─── Cron management ───────────────────────────────────────────────────────
+
+  /** Register all three mail Heartbeat crons (idempotent — safe to call again) */
+  setupCrons: adminProcedure.mutation(async ({ ctx }) => {
+    const sessionToken = parseCookie(ctx.req.headers.cookie ?? '')[COOKIE_NAME] ?? '';
+    const results: Record<string, string> = {};
+    const jobs = [
+      { name: 'mail-ingest-gmail', cron: '0 */5 * * * *', path: '/api/scheduled/mailIngestGmail', description: 'Poll claims@ Gmail every 5 min' },
+      { name: 'mail-process',      cron: '0 2/5 * * * *', path: '/api/scheduled/mailProcess',      description: 'Classify + assign new mail_items every 5 min' },
+      { name: 'mail-reminders',    cron: '0 0 * * * *',   path: '/api/scheduled/mailReminders',    description: 'Send overdue/reminder DMs every hour' },
+    ];
+    for (const job of jobs) {
+      try {
+        const created = await createHeartbeatJob(job, sessionToken);
+        results[job.name] = created.taskUid;
+      } catch (e) {
+        results[job.name] = `error: ${String(e)}`;
+      }
+    }
+    return { ok: true, taskUids: results };
+  }),
+
+  /** List current mail cron jobs */
+  listCrons: adminProcedure.query(async ({ ctx }) => {
+    const sessionToken = parseCookie(ctx.req.headers.cookie ?? '')[COOKIE_NAME] ?? '';
+    try {
+      const jobs = await listHeartbeatJobs(sessionToken);
+      const mailJobs = jobs.jobs.filter(j =>
+        ['mail-ingest-gmail', 'mail-process', 'mail-reminders'].includes(j.name)
+      );
+      return { ok: true, jobs: mailJobs };
+    } catch (e) {
+      return { ok: false, jobs: [], error: String(e) };
+    }
+  }),
+
+  /** Manual one-shot: ingest Gmail + process unclassified items immediately */
+  triggerNow: adminProcedure.mutation(async () => {
+    const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+    const results: Record<string, unknown> = {};
+    try {
+      // Step 1: Ingest Gmail (OAuth — refresh_token from mail_settings)
+      try {
+        const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
+        const gmail = buildRealGmailFetch(conn);
+        results.ingest = await ingestGmail(conn, gmail);
+      } catch (ingestErr) {
+        results.ingest = { skipped: true, reason: String(ingestErr) };
+      }
+      // Step 2: Classify + assign pending items
+      const { classify } = await import('../mail/classify.js');
+      const { route } = await import('../mail/route.js');
+      const [items] = await conn.execute<any[]>(
+        `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
+                GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names
+         FROM mail_items mi
+         LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
+         WHERE mi.category IS NULL AND mi.status = 'new'
+         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 20`
+      );
+      let processed = 0, errors = 0;
+      for (const item of items) {
+        try {
+          const cl = await classify({ subject: item.subject ?? undefined, bodyText: item.body_text ?? undefined, attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined });
+          const patch = await route(conn, cl);
+          await conn.execute(
+            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=? WHERE id=?`,
+            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,item.id]
+          );
+          for (const h of patch.historyActions) {
+            await conn.execute(`INSERT INTO mail_routing_history (item_id,action,to_handler_id,reason) VALUES (?,?,?,?)`, [item.id,h.action,h.toHandlerId??null,h.reason]);
+          }
+          processed++;
+        } catch { errors++; }
+      }
+      results.process = { processed, errors, total: (items as any[]).length };
+    } finally {
+      await conn.end();
+    }
+    return { ok: true, results };
   }),
 });

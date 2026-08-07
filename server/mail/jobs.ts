@@ -14,6 +14,7 @@ import type { Request, Response } from 'express';
 import mysql from 'mysql2/promise';
 import { classify } from './classify.js';
 import { route } from './route.js';
+import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
 
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
 
@@ -257,4 +258,19 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
 export async function mailQaWeeklyHandler(req: Request, res: Response): Promise<void> {
   // Stub: will compute routing accuracy, SLA %, backlog, overdue buckets in phase-3
   res.json({ ok: true, message: 'mailQaWeekly stub — not yet implemented (phase-3)' });
+}
+
+// ─── mailIngestGmail ──────────────────────────────────────────────────────────
+export async function mailIngestGmailHandler(req: Request, res: Response): Promise<void> {
+  const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+  try {
+    const gmail = buildRealGmailFetch(conn);
+    const result = await ingestGmail(conn, gmail);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('[mailIngestGmail] error:', e);
+    res.status(500).json({ ok: false, error: String(e) });
+  } finally {
+    await conn.end();
+  }
 }

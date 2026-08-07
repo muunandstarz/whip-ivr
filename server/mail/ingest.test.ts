@@ -99,7 +99,9 @@ describe('ingestGmail() — mocked HTTP', () => {
     listMessages: vi.fn().mockResolvedValue({ messages: [{ id: GMAIL_MESSAGE_ID }] }),
     getMessage: vi.fn().mockResolvedValue(CANNED_GMAIL_MESSAGE),
     getAttachment: vi.fn().mockResolvedValue(CANNED_ATTACHMENT_DATA),
-    markRead: vi.fn().mockResolvedValue(undefined),
+    addLabel: vi.fn().mockResolvedValue(undefined),
+    getOrCreateLabel: vi.fn().mockResolvedValue('mock-label-id'),
+    markRead: vi.fn().mockResolvedValue(undefined), // no-op compat
   };
 
   it('G1: inserts a mail_items row with correct fields', async () => {
@@ -136,8 +138,8 @@ describe('ingestGmail() — mocked HTTP', () => {
     expect(row.content_type, 'content_type').toBe('application/pdf');
   });
 
-  it('G3: called markRead after successful insert', () => {
-    expect(mockGmail.markRead).toHaveBeenCalledWith('mock-access-token', GMAIL_MESSAGE_ID);
+  it('G3: called addLabel with mailroom-done after successful insert', () => {
+    expect(mockGmail.addLabel).toHaveBeenCalledWith('mock-access-token', GMAIL_MESSAGE_ID, 'mock-label-id');
   });
 
   it('G4: dedupe — inserting the same message twice yields exactly one row', async () => {
