@@ -179,6 +179,19 @@ export async function ingestGmail(
       const receivedAt = dateRaw ? new Date(dateRaw) : new Date(Number(msg.internalDate));
 
       // Sender extraction: Reply-To > From (carrier sends to claims@, owner inbox is just a copy)
+
+      // Filter: only process messages addressed to claims@drivewhip.com
+      // Check Delivered-To, To, CC headers — catches forwarded mail where To: shows jasminea@
+      const deliveredTo = getHeader('Delivered-To') ?? '';
+      const toHeader = getHeader('To') ?? '';
+      const ccHeader = getHeader('CC') ?? '';
+      const allRecipients = `${deliveredTo} ${toHeader} ${ccHeader}`.toLowerCase();
+      if (!allRecipients.includes(claimEmail.toLowerCase())) {
+        // Not addressed to claims@ — skip without labeling (personal mail)
+        result.skipped++;
+        continue;
+      }
+
       const replyToRaw = getHeader('Reply-To');
       const fromRaw = getHeader('From') ?? '';
       const senderRaw = replyToRaw || fromRaw;
@@ -328,11 +341,12 @@ export async function refreshGmailToken(refreshToken: string): Promise<string> {
  * - Adds the "mailroom-done" label after processing (never marks read)
  */
 export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
-  // Query catches:
-  // 1. Mail directly addressed to claims@drivewhip.com
-  // 2. Mail forwarded from claims@ (subject may contain "Fwd:" or original headers intact)
-  // Using OR to catch both direct delivery and forwarded copies
-  const CLAIMS_QUERY = '(to:claims@drivewhip.com OR deliveredto:claims@drivewhip.com) -label:mailroom-done';
+  // Broad query: get all mail in the last 90 days not yet labeled mailroom-done.
+  // We then check the Delivered-To or To header of each message to confirm it was
+  // addressed to claims@drivewhip.com (catches forwarded mail where To: shows jasminea@).
+  // The mailroom-done label is the only dedup guard — no is:unread dependency.
+  const CLAIMS_QUERY = 'newer_than:90d -label:mailroom-done';
+  const CLAIMS_ADDRESS = 'claims@drivewhip.com';
 
   return {
     async getAccessToken() {
