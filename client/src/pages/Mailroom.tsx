@@ -6,7 +6,7 @@ import WhipLayout from "@/components/WhipLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Mail, Inbox, AlertTriangle, Scale, BarChart3, Filter, Download,
   MoreHorizontal, ArrowRight, CheckCircle, AlertCircle, Clock,
@@ -32,7 +33,8 @@ import {
   Settings2, Zap, Wifi, WifiOff, PlusCircle, Paperclip,
   TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight,
   Bell, Edit2, Mail as MailIcon,
-  Upload, CheckCircle2,
+  Upload, CheckCircle2, BookOpen, CalendarOff, PlayCircle, Users,
+  Trash2, Save, X, Search, XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isToday, isPast } from "date-fns";
@@ -767,7 +769,15 @@ function AdminStats() {
 function AdminMailSetup() {
   const [gmailStatus, setGmailStatus] = useState<"unknown" | "connected" | "disconnected">("unknown");
   const [triggerResult, setTriggerResult] = useState<any>(null);
+  const [editingAgentId, setEditingAgentId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{ name: string; slackId: string; role: string; dailyCap: number; isActive: boolean }>({ name: "", slackId: "", role: "general_roundrobin", dailyCap: 3, isActive: true });
+  const [ptoForm, setPtoForm] = useState({ agentId: "", startDate: "", endDate: "", note: "" });
+  const utils = trpc.useUtils();
+
   const { data: cronList, refetch: refetchCrons } = trpc.mail.listCrons.useQuery();
+  const { data: agents, isLoading: agentsLoading } = trpc.mailBot.listAgents.useQuery();
+  const { data: ptoList } = trpc.mailBot.listPto.useQuery();
+
   const setupCrons = trpc.mail.setupCrons.useMutation({
     onSuccess: () => { toast.success("Crons registered"); refetchCrons(); },
     onError: (e) => toast.error(e.message),
@@ -776,6 +786,19 @@ function AdminMailSetup() {
     onSuccess: (data) => { setTriggerResult(data); toast.success("Manual run complete"); },
     onError: (e) => toast.error(e.message),
   });
+  const updateAgent = trpc.mailBot.updateAgent.useMutation({
+    onSuccess: () => { toast.success("Agent updated"); utils.mailBot.listAgents.invalidate(); setEditingAgentId(null); },
+    onError: (e) => toast.error(e.message),
+  });
+  const addPto = trpc.mailBot.addPto.useMutation({
+    onSuccess: () => { toast.success("PTO added"); utils.mailBot.listPto.invalidate(); setPtoForm({ agentId: "", startDate: "", endDate: "", note: "" }); },
+    onError: (e) => toast.error(e.message),
+  });
+  const removePto = trpc.mailBot.removePto.useMutation({
+    onSuccess: () => { toast.success("PTO removed"); utils.mailBot.listPto.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+
   const checkGmailStatus = () => {
     fetch("/api/mail/gmail-status")
       .then(r => r.json())
@@ -783,61 +806,232 @@ function AdminMailSetup() {
       .catch(() => setGmailStatus("disconnected"));
   };
   useState(() => { checkGmailStatus(); });
+
+  const roleLabels: Record<string, string> = {
+    legal: "Legal", lor_roundrobin: "LOR Round-Robin", bi_injury: "BI / Injury",
+    pd: "PD", general_roundrobin: "General Round-Robin", total_loss: "Total Loss", subro_docs: "Subro Docs",
+  };
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
+
+      {/* ── Protocol Overview ─────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            {gmailStatus === "connected" ? <Wifi className="h-4 w-4 text-green-500" /> : <WifiOff className="h-4 w-4 text-red-500" />}
-            Gmail Connection
+            <BookOpen className="h-4 w-4 text-primary" /> How the Mailroom Works
           </CardTitle>
+          <CardDescription>What each automated job does and when it runs</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-3">
-            <span className={`text-sm font-medium ${gmailStatus === "connected" ? "text-green-600" : gmailStatus === "disconnected" ? "text-red-600" : "text-muted-foreground"}`}>
-              {gmailStatus === "connected" ? "Connected" : gmailStatus === "disconnected" ? "Not connected" : "Checking…"}
-            </span>
-            <Button size="sm" variant="outline" onClick={checkGmailStatus}>Refresh</Button>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3">
+            {[
+              {
+                icon: "📥", label: "Ingest Gmail", schedule: "Every 5 min (Tue–Fri, 1 PM ET on schedule)",
+                desc: "Polls the connected Gmail account for messages addressed to claims@drivewhip.com that have not yet been labeled mailroom-done. Each message is saved as a new mail item with its attachments. The mailroom-done label is applied after processing so the message is never re-ingested.",
+              },
+              {
+                icon: "📨", label: "Ingest Slack", schedule: "Every 5 min (runs with Gmail ingest)",
+                desc: "Polls #claims-mail for file messages that do not have a reviewed emoji (✅ / 👀 / ✔). Each unreviewed file is saved as a mail item. Items already marked reviewed are logged as pre-reviewed and not routed.",
+              },
+              {
+                icon: "🤖", label: "Classify & Assign", schedule: "Every 5 min +2 (runs after ingest)",
+                desc: "Runs the AI classifier on every new item (category IS NULL). Determines category, urgency, claim number, and whether it is a demand. Then routes to the correct team and assigns to the least-loaded active handler on that team. Batch limit: 3 items per handler per run. Items beyond the limit are classified but held for the next run.",
+              },
+              {
+                icon: "🔔", label: "Reminders", schedule: "Hourly",
+                desc: "Checks for overdue items (dueAt < now) and items with a remindAt timestamp that has passed. Sends a Slack DM to the assigned handler. Throttled to once per 24 hours per item to avoid spam.",
+              },
+            ].map(job => (
+              <div key={job.label} className="rounded-lg border border-border/50 p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">{job.icon} {job.label}</p>
+                  <Badge variant="outline" className="text-xs font-mono">{job.schedule}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{job.desc}</p>
+              </div>
+            ))}
           </div>
-          {gmailStatus !== "connected" && (
-            <Button size="sm" onClick={() => window.location.href = "/api/mail/gmail-oauth-start"}>
-              Connect Gmail Account
-            </Button>
-          )}
+          <p className="text-xs text-muted-foreground border-t pt-3">
+            <strong>Assignment rules:</strong> Items are routed to teams via the category_routing table. Within each team, the handler with the fewest open items is assigned. Handlers on PTO or marked inactive are skipped. Legal/high-risk items go to the Review lane (needs_review=1) regardless of team.
+          </p>
         </CardContent>
       </Card>
+
+      {/* ── Gmail + Cron Controls ─────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {gmailStatus === "connected" ? <Wifi className="h-4 w-4 text-green-500" /> : <WifiOff className="h-4 w-4 text-red-500" />}
+              Gmail Connection
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className={`text-sm font-medium ${gmailStatus === "connected" ? "text-green-600" : gmailStatus === "disconnected" ? "text-red-600" : "text-muted-foreground"}`}>
+                {gmailStatus === "connected" ? "Connected" : gmailStatus === "disconnected" ? "Not connected" : "Checking…"}
+              </span>
+              <Button size="sm" variant="outline" onClick={checkGmailStatus}>Refresh</Button>
+            </div>
+            {gmailStatus !== "connected" && (
+              <Button size="sm" onClick={() => window.location.href = "/api/mail/gmail-oauth-start"}>
+                Connect Gmail Account
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Zap className="h-4 w-4" /> Scheduled Jobs
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" onClick={() => setupCrons.mutate()} disabled={setupCrons.isPending}>
+                {setupCrons.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                Setup Crons
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => triggerNow.mutate()} disabled={triggerNow.isPending}>
+                {triggerNow.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <PlayCircle className="h-3.5 w-3.5 mr-1.5" />}
+                Trigger Now
+              </Button>
+            </div>
+            {cronList?.jobs && cronList.jobs.length > 0 && (
+              <div className="space-y-1">
+                {cronList.jobs.map((j: any) => (
+                  <div key={j.name} className="text-xs text-muted-foreground flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                    {j.name}
+                  </div>
+                ))}
+              </div>
+            )}
+            {triggerResult && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-primary hover:underline">View last run result</summary>
+                <pre className="bg-muted p-2 rounded overflow-auto max-h-48 mt-1">{JSON.stringify(triggerResult, null, 2)}</pre>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Agent Management ─────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="h-4 w-4" /> Scheduled Jobs
+            <Users className="h-4 w-4" /> Agent Roster
           </CardTitle>
+          <CardDescription>Toggle active status, set daily caps, and manage roles. Changes apply immediately to the next assignment run.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setupCrons.mutate()} disabled={setupCrons.isPending}>
-              {setupCrons.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-              Setup Crons
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => triggerNow.mutate()} disabled={triggerNow.isPending}>
-              {triggerNow.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-              Trigger Now
+          {agentsLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : agents?.map((agent: any) => (
+            <div key={agent.id} className={`rounded-lg border border-border/50 p-3 ${!agent.isActive ? "opacity-50" : ""}`}>
+              {editingAgentId === agent.id ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Name</Label><Input className="h-8 mt-1 text-sm" value={editForm.name} onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
+                    <div><Label className="text-xs">Slack ID</Label><Input className="h-8 mt-1 text-sm font-mono" value={editForm.slackId} onChange={(e) => setEditForm(f => ({ ...f, slackId: e.target.value }))} /></div>
+                    <div>
+                      <Label className="text-xs">Role</Label>
+                      <Select value={editForm.role} onValueChange={(v) => setEditForm(f => ({ ...f, role: v }))}>
+                        <SelectTrigger className="h-8 mt-1 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(roleLabels).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div><Label className="text-xs">Daily Cap (items/run)</Label><Input type="number" className="h-8 mt-1 text-sm" value={editForm.dailyCap} onChange={(e) => setEditForm(f => ({ ...f, dailyCap: Number(e.target.value) }))} /></div>
+                    <div className="flex items-end gap-3 pb-1">
+                      <div className="flex items-center gap-2"><Switch checked={editForm.isActive} onCheckedChange={(v) => setEditForm(f => ({ ...f, isActive: v }))} /><Label className="text-xs">Active</Label></div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => updateAgent.mutate({ id: agent.id, ...editForm, role: editForm.role as any })} disabled={updateAgent.isPending}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingAgentId(null)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-bold shrink-0">
+                      {agent.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{agent.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono truncate">{agent.slackId}</p>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0">{roleLabels[agent.role] ?? agent.role}</Badge>
+                    <span className="text-xs text-muted-foreground shrink-0">Cap: {agent.dailyCap}/run</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Switch checked={agent.isActive} onCheckedChange={(v) => updateAgent.mutate({ id: agent.id, isActive: v })} />
+                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditingAgentId(agent.id); setEditForm({ name: agent.name, slackId: agent.slackId, role: agent.role, dailyCap: agent.dailyCap, isActive: agent.isActive }); }}>
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* ── PTO / Out of Office ──────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarOff className="h-4 w-4" /> PTO / Out of Office
+          </CardTitle>
+          <CardDescription>Handlers on PTO are skipped during assignment. Items are routed to the next available handler on their team.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <Label className="text-xs">Handler</Label>
+              <Select value={ptoForm.agentId} onValueChange={(v) => setPtoForm(f => ({ ...f, agentId: v }))}>
+                <SelectTrigger className="h-8 mt-1 text-xs"><SelectValue placeholder="Select handler" /></SelectTrigger>
+                <SelectContent>
+                  {agents?.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Start Date</Label>
+              <Input type="date" className="h-8 mt-1 text-sm" value={ptoForm.startDate} onChange={(e) => setPtoForm(f => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs">End Date</Label>
+              <Input type="date" className="h-8 mt-1 text-sm" value={ptoForm.endDate} onChange={(e) => setPtoForm(f => ({ ...f, endDate: e.target.value }))} />
+            </div>
+            <Button size="sm" className="h-8" onClick={() => addPto.mutate({ agentId: Number(ptoForm.agentId), startDate: ptoForm.startDate, endDate: ptoForm.endDate, note: ptoForm.note })} disabled={!ptoForm.agentId || !ptoForm.startDate || !ptoForm.endDate || addPto.isPending}>
+              Add PTO
             </Button>
           </div>
-          {cronList?.jobs && cronList.jobs.length > 0 && (
-            <div className="space-y-1">
-              {cronList.jobs.map((j: any) => (
-                <div key={j.name} className="text-xs text-muted-foreground flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                  {j.name} — {j.cron}
+          {ptoList && ptoList.length > 0 ? (
+            <div className="space-y-2">
+              {ptoList.map((pto: any) => (
+                <div key={pto.id} className="flex items-center justify-between border border-border/40 rounded-lg px-3 py-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">{agents?.find((a: any) => a.id === pto.agentId)?.name ?? `Agent ${pto.agentId}`}</span>
+                    <span className="text-muted-foreground text-xs">{pto.startDate} → {pto.endDate}</span>
+                    {pto.note && <span className="text-xs text-muted-foreground italic">"{pto.note}"</span>}
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={() => removePto.mutate({ id: pto.id })}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 </div>
               ))}
             </div>
-          )}
-          {triggerResult && (
-            <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32">{JSON.stringify(triggerResult, null, 2)}</pre>
+          ) : (
+            <p className="text-sm text-muted-foreground">No PTO scheduled.</p>
           )}
         </CardContent>
       </Card>
+
     </div>
   );
 }
