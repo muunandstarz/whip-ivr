@@ -124,7 +124,7 @@ export async function ingestGmail(
   gmail: GmailFetchFn,
   claimEmail = 'claims@drivewhip.com',
 ): Promise<IngestGmailResult> {
-  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'to:claims@drivewhip.com newer_than:90d' } };
+  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'to:claims@drivewhip.com' } };
 
   // 0. Get access token
   let token: string;
@@ -350,7 +350,8 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
   // addressed to claims@drivewhip.com (catches forwarded mail where To: shows jasminea@).
   // The mailroom-done label is the only dedup guard — no is:unread dependency.
   // Query: all mail to claims@ in last 90 days; dedupe by message-ID is the safety net
-  const CLAIMS_QUERY = 'to:claims@drivewhip.com newer_than:90d';
+  // No time filter — pull ALL mail to claims@ regardless of timestamp
+  const CLAIMS_QUERY = 'to:claims@drivewhip.com';
   const CLAIMS_ADDRESS = 'claims@drivewhip.com';
 
   return {
@@ -366,7 +367,7 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
 
     async listMessages(token) {
       const q = encodeURIComponent(CLAIMS_QUERY);
-      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=100`, {
+      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=500`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();
