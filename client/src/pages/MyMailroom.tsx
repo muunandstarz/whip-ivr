@@ -353,18 +353,36 @@ function MailDrawer({
                   </label>
                 </div>
                 {files.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {files.map((f: any) => (
-                      <div key={f.id} className="flex items-center justify-between text-xs bg-muted/30 rounded px-2 py-1.5">
-                        <span className="truncate flex-1 mr-2">{f.filename || f.storageKey?.split("/").pop() || "File"}</span>
-                        {f.signedUrl && (
-                          <a href={f.signedUrl} target="_blank" rel="noopener noreferrer"
-                            className="text-primary hover:underline flex items-center gap-1 shrink-0">
-                            <Download className="w-3 h-3" /> Download
-                          </a>
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    {files.map((f: any) => {
+                      const name = f.filename || f.storageKey?.split("/").pop() || "File";
+                      const isPdf = f.contentType?.includes("pdf") || name.toLowerCase().endsWith(".pdf");
+                      const isImage = f.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(name);
+                      return (
+                        <div key={f.id} className="border rounded-lg overflow-hidden bg-muted/20">
+                          <div className="flex items-center justify-between px-2.5 py-1.5 border-b bg-background">
+                            <span className="truncate text-xs font-medium flex-1 mr-2">{name}</span>
+                            {f.signedUrl && (
+                              <a href={f.signedUrl} target="_blank" rel="noopener noreferrer"
+                                className="text-primary hover:underline flex items-center gap-1 shrink-0 text-xs">
+                                <Download className="w-3 h-3" /> Download
+                              </a>
+                            )}
+                          </div>
+                          {f.signedUrl && isPdf && (
+                            <iframe src={f.signedUrl} className="w-full" style={{ height: "480px", border: "none" }} title={name} />
+                          )}
+                          {f.signedUrl && isImage && (
+                            <img src={f.signedUrl} alt={name} className="w-full max-h-96 object-contain bg-white p-2" />
+                          )}
+                          {f.signedUrl && !isPdf && !isImage && (
+                            <div className="px-3 py-4 text-xs text-muted-foreground text-center">
+                              Preview not available — use Download above
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">No attachments yet.</p>
