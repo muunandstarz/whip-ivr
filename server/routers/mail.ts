@@ -598,8 +598,16 @@ export const mailRouter = router({
 
       // Step 1b: Poll Slack #claims-mail for unreviewed file messages
       try {
-        const slackToken = process.env.SLACK_BOT_TOKEN ?? '';
-        const CLAIMS_MAIL_CHANNEL = 'C07R60KAC2C';
+        // Read token from mail_bot_config (same token the mail bot uses) — fall back to env
+        let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
+        let CLAIMS_MAIL_CHANNEL = 'C07R60KAC2C';
+        try {
+          const [[botCfg]] = await conn.execute<any[]>(
+            'SELECT slack_bot_token, claims_mail_channel_id FROM mail_bot_config LIMIT 1'
+          );
+          if (botCfg?.slack_bot_token) slackToken = botCfg.slack_bot_token;
+          if (botCfg?.claims_mail_channel_id) CLAIMS_MAIL_CHANNEL = botCfg.claims_mail_channel_id;
+        } catch { /* mail_bot_config may not exist — use env fallback */ }
         const REVIEWED_EMOJIS = ['white_check_mark', 'eyes', 'heavy_check_mark'];
         
         if (!slackToken) {
@@ -900,7 +908,19 @@ Return ONLY valid JSON with these exact keys. No markdown fences.`;
       ];
       
       if (isPdf) {
-        userContent.push({ type: 'file_url', file_url: { url: input.fileUrl, mime_type: 'application/pdf' } });
+        // Download PDF and send as base64 data URL — supports scanned/image-based PDFs
+        try {
+          const dlRes = await fetch(input.fileUrl);
+          if (dlRes.ok) {
+            const buf = Buffer.from(await dlRes.arrayBuffer());
+            const b64 = buf.toString('base64');
+            userContent.push({ type: 'file_url', file_url: { url: `data:application/pdf;base64,${b64}`, mime_type: 'application/pdf' } });
+          } else {
+            userContent.push({ type: 'file_url', file_url: { url: input.fileUrl, mime_type: 'application/pdf' } });
+          }
+        } catch {
+          userContent.push({ type: 'file_url', file_url: { url: input.fileUrl, mime_type: 'application/pdf' } });
+        }
       } else if (isImage) {
         userContent.push({ type: 'image_url', image_url: { url: input.fileUrl, detail: 'high' } });
       } else {
@@ -913,7 +933,7 @@ Return ONLY valid JSON with these exact keys. No markdown fences.`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
-        maxTokens: 1000,
+        maxTokens: 1500,
       });
 
       const msgContent = result.choices[0]?.message?.content ?? '';
@@ -926,7 +946,11 @@ Return ONLY valid JSON with these exact keys. No markdown fences.`;
         extracted = JSON.parse(cleaned);
       } catch {
         // Best-effort parse failed — return empty
-        console.error('[extractMailDocument] JSON parse failed:', cleaned.slice(0, 200));
+        console.error('[extractMailDocument] JSON parse failed. Raw response:', cleaned.slice(0, 500));
+        // If we got something back but it's not JSON, try to use it as bodyText
+        if (cleaned.length > 10) {
+          extracted = { bodyText: cleaned.slice(0, 500) };
+        }
       }
 
       return {

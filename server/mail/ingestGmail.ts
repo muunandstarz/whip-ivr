@@ -64,6 +64,7 @@ export interface IngestGmailResult {
   inserted: number;
   skipped: number;
   errors: string[];
+  debug?: { listed: number; filteredOut: number; query: string };
 }
 
 // ─── MIME helpers ─────────────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ export async function ingestGmail(
   gmail: GmailFetchFn,
   claimEmail = 'claims@drivewhip.com',
 ): Promise<IngestGmailResult> {
-  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [] };
+  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'newer_than:90d -label:mailroom-done' } };
 
   // 0. Get access token
   let token: string;
@@ -153,6 +154,7 @@ export async function ingestGmail(
   }
 
   const ids = messageList.messages ?? [];
+  if (result.debug) result.debug.listed = ids.length;
 
   for (const { id: messageId } of ids) {
     try {
@@ -189,6 +191,7 @@ export async function ingestGmail(
       if (!allRecipients.includes(claimEmail.toLowerCase())) {
         // Not addressed to claims@ — skip without labeling (personal mail)
         result.skipped++;
+        if (result.debug) result.debug.filteredOut++;
         continue;
       }
 

@@ -860,6 +860,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [uploadingFile, setUploadingFile] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractedFromFile, setExtractedFromFile] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
   const { data: handlers } = trpc.handlers.list.useQuery();
   const utils = trpc.useUtils();
   const extractDoc = trpc.mail.extractMailDocument.useMutation();
@@ -875,8 +876,15 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
   });
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    // Process all files — extract from the first one, attach all
+    for (const file of files) {
+      await handleSingleFileUpload(file, file === files[0]);
+    }
+    e.target.value = "";
+  }
+  async function handleSingleFileUpload(file: File, shouldExtract: boolean) {
     setUploadingFile(true);
     try {
       const fd = new FormData();
@@ -886,8 +894,13 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
       if (!resp.ok) throw new Error(result.error ?? "Upload failed");
       const fileEntry = { storageKey: result.key, filename: file.name, contentType: file.type || "application/octet-stream", sizeBytes: file.size, url: result.url };
       setPendingFiles(prev => [...prev, fileEntry]);
-      toast.success(`${file.name} uploaded — extracting info…`);
-      // Auto-extract immediately after upload
+      if (shouldExtract) {
+        toast.success(`${file.name} uploaded — extracting info…`);
+      } else {
+        toast.success(`${file.name} attached`);
+      }
+      // Auto-extract only from the first file
+      if (!shouldExtract) return;
       setExtracting(true);
       try {
         const extracted = await extractDoc.mutateAsync({ fileUrl: result.signedUrl ?? result.url, mimeType: file.type || "application/pdf" });
@@ -903,12 +916,14 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
         setExtractedFromFile(file.name);
         toast.success("Fields auto-filled from document — review and adjust as needed");
       } catch (extractErr: any) {
-        toast.error("Could not extract info from document — please fill fields manually");
+        // Don't close dialog — show error inline so user can fill manually
+        setExtractError("Could not extract info from this document. Please fill the fields manually below.");
+        toast.error("Extraction failed — please fill fields manually");
       } finally {
         setExtracting(false);
       }
     } catch (err: any) { toast.error(err.message ?? "Upload failed"); }
-    finally { setUploadingFile(false); e.target.value = ""; }
+    finally { setUploadingFile(false); }
   }
 
   function handleSubmit() {
@@ -949,7 +964,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
                 <p className="text-sm text-green-700 font-medium">Fields auto-filled from <span className="font-semibold">{extractedFromFile}</span></p>
                 <label className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1">
                   <Paperclip className="h-3 w-3" /> Upload another document
-                  <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.tiff,.gif" onChange={handleFileSelect} disabled={uploadingFile || extracting} />
+                  <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.tiff,.gif" multiple onChange={handleFileSelect} disabled={uploadingFile || extracting} />
                 </label>
               </div>
             ) : (
