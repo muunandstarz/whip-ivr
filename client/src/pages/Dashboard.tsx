@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 const CALLER_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; chartColor: string }> = {
   carrier:          { label: "Carrier",    icon: Building2,   color: "bg-blue-500/15 text-blue-700 dark:text-blue-400",    chartColor: "#3b82f6" },
@@ -103,6 +104,7 @@ function ChartSkeleton({ height = 120 }: { height?: number }) {
 
 export default function Dashboard() {
   // ── Data queries ──────────────────────────────────────────────────────────
+  const { isImpersonating } = useImpersonation();
   const { data: openData }   = trpc.intake.list.useQuery({ status: "open",   limit: 1, offset: 0 });
   const { data: mailAdminStats } = trpc.mail.adminStats.useQuery();
   const mailAllPending = (mailAdminStats?.allPending as any)?.count ?? 0;
@@ -287,7 +289,7 @@ export default function Dashboard() {
             <p className="text-muted-foreground text-sm mt-0.5">AI-powered call intake management for Whip Claims</p>
           </div>
           {/* Mailroom icon */}
-          <a href="/mailroom" className="relative flex items-center justify-center w-11 h-11 rounded-lg hover:bg-muted transition-colors mt-0.5" title={mailAllPending > 0 ? `${mailAllPending} pending mail items` : "Mailroom"}>
+          <a href={isImpersonating ? "/my-mailroom" : "/mailroom"} className="relative flex items-center justify-center w-11 h-11 rounded-lg hover:bg-muted transition-colors mt-0.5" title={mailAllPending > 0 ? `${mailAllPending} pending mail items` : "Mailroom"}>
             <img src="/manus-storage/mailbox-new_7d868b27.png" alt="Mailroom" className="w-9 h-9 object-contain" />
             {mailAllPending > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none shadow">
