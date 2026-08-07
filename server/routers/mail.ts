@@ -138,7 +138,7 @@ export const mailRouter = router({
     }),
 
   /** Get a single item with presigned file URLs, notes, and history */
-  getItem: handlerProcedure
+  getItem: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -165,7 +165,7 @@ export const mailRouter = router({
     }),
 
   /** Reroute an item to a different handler */
-  reroute: handlerProcedure
+  reroute: protectedProcedure
     .input(z.object({
       itemId: z.number(),
       toHandlerId: z.number(),
@@ -187,7 +187,7 @@ export const mailRouter = router({
     }),
 
   /** Resolve an item */
-  resolve: handlerProcedure
+  resolve: protectedProcedure
     .input(z.object({
       itemId: z.number(),
       note: z.string().optional(),
@@ -219,7 +219,7 @@ export const mailRouter = router({
     }),
 
   /** Escalate an item */
-  escalate: handlerProcedure
+  escalate: protectedProcedure
     .input(z.object({
       itemId: z.number(),
       reason: z.string(),
@@ -239,7 +239,7 @@ export const mailRouter = router({
     }),
 
   /** Add a note to an item */
-  addNote: handlerProcedure
+  addNote: protectedProcedure
     .input(z.object({
       itemId: z.number(),
       note: z.string().min(1),
@@ -258,7 +258,7 @@ export const mailRouter = router({
     }),
 
   /** Set a reminder datetime on an item */
-  setReminder: handlerProcedure
+  setReminder: protectedProcedure
     .input(z.object({
       itemId: z.number(),
       remindAt: z.date(),
@@ -686,7 +686,8 @@ export const mailRouter = router({
       // Get all unprocessed items (no limit — we'll apply per-handler limit below)
       const [allItems] = await conn.execute<any[]>(
         `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
-                GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names
+                GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
+                GROUP_CONCAT(mif.storage_key SEPARATOR '|||') AS storage_keys
          FROM mail_items mi
          LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
          WHERE mi.category IS NULL AND mi.status = 'new'
@@ -698,7 +699,18 @@ export const mailRouter = router({
 
       for (const item of allItems) {
         try {
-          const cl = await classify({ subject: item.subject ?? undefined, bodyText: item.body_text ?? undefined, attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined });
+          // For items with attached files (fax scans), get presigned URLs for PDF reading
+          let fileUrls: string[] = [];
+          if (item.storage_keys) {
+            const keys = item.storage_keys.split('|||').filter(Boolean).slice(0, 2);
+            fileUrls = (await Promise.all(keys.map((k: string) => storageGetSignedUrl(k).catch(() => null)))).filter(Boolean) as string[];
+          }
+          const cl = await classify({
+            subject: item.subject ?? undefined,
+            bodyText: item.body_text ?? undefined,
+            attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined,
+            fileUrls: fileUrls.length > 0 ? fileUrls : undefined,
+          });
           const patch = await route(conn, cl);
 
           // Apply per-handler batch limit (3 per handler per run)

@@ -104,6 +104,8 @@ export interface ClassifyInput {
   attachmentNames?: string[];
   /** For Slack mail items: presigned image URLs for vision */
   imageUrls?: string[];
+  /** Presigned S3 URLs for attached PDFs — downloaded and sent as base64 file_url */
+  fileUrls?: string[];
 }
 
 export async function classify(input: ClassifyInput): Promise<ClassificationResult> {
@@ -115,10 +117,34 @@ export async function classify(input: ClassifyInput): Promise<ClassificationResu
   }
   const userText = parts.join('\n\n') || '(no content)';
 
+  // Build multipart user content if we have file URLs to read
+  const hasFiles = (input.fileUrls?.length ?? 0) > 0 || (input.imageUrls?.length ?? 0) > 0;
+  let userContent: any;
+  if (hasFiles) {
+    const contentParts: any[] = [{ type: 'text', text: userText }];
+    // Download PDFs and send as base64 data URLs for direct LLM reading
+    for (const url of (input.fileUrls ?? [])) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          const b64 = buf.toString('base64');
+          contentParts.push({ type: 'file_url', file_url: { url: `data:application/pdf;base64,${b64}`, mime_type: 'application/pdf' } });
+        }
+      } catch { /* skip failed downloads */ }
+    }
+    for (const url of (input.imageUrls ?? [])) {
+      contentParts.push({ type: 'image_url', image_url: { url, detail: 'high' } });
+    }
+    userContent = contentParts;
+  } else {
+    userContent = userText;
+  }
+
   const result = await invokeLLM({
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userText },
+      { role: 'user', content: userContent },
     ],
   });
 
