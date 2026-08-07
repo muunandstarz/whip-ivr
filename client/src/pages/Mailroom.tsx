@@ -248,7 +248,7 @@ function AdminDrawer({
                   <div className="border rounded-lg p-3 bg-muted/20">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Routing</p>
-                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditHandlerId(String(item.assignedHandlerId ?? "")); setEditDueDate(item.dueAt ? format(new Date(item.dueAt), "yyyy-MM-dd") : ""); setShowEditRouting(true); }}>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditHandlerId(String(item.assignedHandlerId ?? "unassigned")); setEditDueDate(item.dueAt ? format(new Date(item.dueAt), "yyyy-MM-dd") : ""); setShowEditRouting(true); }}>
                         <Edit2 className="w-3 h-3 mr-1" /> Edit Routing
                       </Button>
                     </div>
@@ -406,7 +406,7 @@ function AdminDrawer({
                 <Select value={editHandlerId} onValueChange={setEditHandlerId}>
                   <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Select handler…" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
                     {handlers?.map(h => <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -419,7 +419,7 @@ function AdminDrawer({
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowEditRouting(false)}>Cancel</Button>
               <Button onClick={() => {
-                if (editHandlerId && editHandlerId !== String(item.assignedHandlerId)) {
+                if (editHandlerId && editHandlerId !== "unassigned" && editHandlerId !== String(item.assignedHandlerId)) {
                   rerouteMut.mutate({ itemId: item.id, toHandlerId: Number(editHandlerId), reason: "Routing edit by admin" });
                 }
                 setShowEditRouting(false);
@@ -849,7 +849,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [fromEmail, setFromEmail] = useState("");
   const [claimNumber, setClaimNumber] = useState("");
   const [category, setCategory] = useState<string>("");
-  const [assignedHandlerId, setAssignedHandlerId] = useState<string>("");
+  const [assignedHandlerId, setAssignedHandlerId] = useState<string>("unassigned");
   const [urgency, setUrgency] = useState<"low" | "normal" | "high" | "urgent">("normal");
   const [receivedAt, setReceivedAt] = useState(new Date().toISOString().slice(0, 10));
   const [dateOfLoss, setDateOfLoss] = useState("");
@@ -904,7 +904,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   function handleSubmit() {
     if (!subject.trim()) { toast.error("Subject is required"); return; }
-    createItem.mutate({ source, subject, fromName: fromName || undefined, fromEmail: fromEmail || undefined, claimNumber: claimNumber || undefined, category: category as any || undefined, assignedHandlerId: assignedHandlerId ? Number(assignedHandlerId) : undefined, urgency, receivedAt: receivedAt || undefined, dateOfLoss: dateOfLoss || undefined, responseDueDate: responseDueDate || undefined, bodyText: bodyText || undefined, files: pendingFiles.length > 0 ? pendingFiles : undefined });
+    createItem.mutate({ source, subject, fromName: fromName || undefined, fromEmail: fromEmail || undefined, claimNumber: claimNumber || undefined, category: category as any || undefined, assignedHandlerId: (assignedHandlerId && assignedHandlerId !== "unassigned") ? Number(assignedHandlerId) : undefined, urgency, receivedAt: receivedAt || undefined, dateOfLoss: dateOfLoss || undefined, responseDueDate: responseDueDate || undefined, bodyText: bodyText || undefined, files: pendingFiles.length > 0 ? pendingFiles : undefined });
   }
 
   return (
@@ -964,7 +964,7 @@ function NewIntakeForm({ onClose, onCreated }: { onClose: () => void; onCreated:
               <Select value={assignedHandlerId} onValueChange={setAssignedHandlerId}>
                 <SelectTrigger className="mt-1 h-8"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {handlers?.map(h => <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>)}
                 </SelectContent>
               </Select>

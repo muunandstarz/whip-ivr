@@ -55,6 +55,7 @@ import {
   Minus,
 } from "lucide-react";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const CALLER_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; chartColor: string }> = {
   carrier:          { label: "Carrier",    icon: Building2,   color: "bg-blue-500/15 text-blue-700 dark:text-blue-400",    chartColor: "#3b82f6" },
@@ -103,6 +104,8 @@ function ChartSkeleton({ height = 120 }: { height?: number }) {
 export default function Dashboard() {
   // ── Data queries ──────────────────────────────────────────────────────────
   const { data: openData }   = trpc.intake.list.useQuery({ status: "open",   limit: 1, offset: 0 });
+  const { data: mailAdminStats } = trpc.mail.adminStats.useQuery();
+  const mailAllPending = (mailAdminStats?.allPending as any)?.count ?? 0;
   const { data: urgentData } = trpc.intake.list.useQuery({ status: "open", priority: "urgent", limit: 1, offset: 0 });
   const { data: closedData } = trpc.intake.list.useQuery({ status: "closed", limit: 1, offset: 0 });
   const { data: analyticsData } = trpc.intake.analytics.useQuery();
@@ -283,6 +286,24 @@ export default function Dashboard() {
           <p className="text-muted-foreground text-sm mt-0.5">AI-powered call intake management for Whip Claims</p>
         </div>
 
+        {/* ── Mailroom shortcut ── */}
+        <a href="/mailroom" className="flex items-center gap-3 rounded-xl border border-border hover:border-primary/40 hover:shadow-sm transition-all px-4 py-3 bg-card group cursor-pointer w-fit">
+          <div className="relative flex-shrink-0">
+            <img src="/manus-storage/mailbox-badge_8b85da0d.png" alt="Mailroom" className="w-12 h-12 object-contain" />
+            {mailAllPending > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center px-1 leading-none shadow">
+                {mailAllPending > 99 ? "99+" : mailAllPending}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Mailroom</div>
+            <div className="text-xs text-muted-foreground">
+              {mailAllPending === 0 ? "Queue is clear" : `${mailAllPending} pending item${mailAllPending !== 1 ? "s" : ""} org-wide`}
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+        </a>
         {/* ── Top Banner: Today tiles + 7-day Sparkline ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Today tiles */}

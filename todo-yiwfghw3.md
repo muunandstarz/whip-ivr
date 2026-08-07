@@ -330,3 +330,9 @@
 - [x] Dec Page fix: right-align Limits/Deductible/Premium columns, navy premium amounts
 - [x] Dec Page fix: sidebar blue left-border accents, online claim address as blue link
 - [x] Dec Page fix: page 2 conditions as bold lead-in + paragraph bullets
+- [x] Purge demo mail data (mail_items, files, notes, history) — keep config tables
+- [x] Update mail tests to self-fixture (no reliance on seeded rows)
+- [x] Upload mailbox PNG as static asset
+- [x] Add mailbox widget to handler home dashboard (myPendingCount, links to /my-mailroom)
+- [x] Add mailbox widget to admin home dashboard (adminStats allPending, links to /mailroom)
+- [x] Fix New Intake Select empty-string crash (remove value="" items, use sentinel/undefined)
