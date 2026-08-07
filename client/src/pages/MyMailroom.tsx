@@ -459,7 +459,7 @@ export default function MyMailroom() {
   const { data: stats } = trpc.mail.myMailroomStats.useQuery(undefined, {
     refetchInterval: 60_000,
   });
-  const { data: pendingData } = trpc.mail.myPendingCount.useQuery();
+  const { data: pendingData } = trpc.mail.myPendingCount.useQuery(undefined, { refetchInterval: 30000 });
 
   // Client-side filter for urgent tab and search
   const filteredItems = useMemo(() => {

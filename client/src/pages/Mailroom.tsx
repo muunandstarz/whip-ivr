@@ -473,7 +473,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     return base;
   }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo]);
 
-  const { data, isLoading, refetch } = trpc.mail.adminQueue.useQuery(queryInput);
+  const { data, isLoading, refetch } = trpc.mail.adminQueue.useQuery(queryInput, { refetchInterval: 30000 });
   const items = useMemo(() => {
     let list = data?.items ?? [];
     if (activeTab === "demands") list = list.filter(i => i.isDemand === 1);
@@ -1078,7 +1078,7 @@ export default function Mailroom() {
   const [showNewIntake, setShowNewIntake] = useState(false);
   const utils = trpc.useUtils();
 
-  const { data: statsData, refetch: refetchStats } = trpc.mail.adminStats.useQuery(undefined, { enabled: isAdmin });
+  const { data: statsData, refetch: refetchStats } = trpc.mail.adminStats.useQuery(undefined, { enabled: isAdmin, refetchInterval: 30000 });
   const { data: pendingData } = trpc.mail.myPendingCount.useQuery(undefined, { enabled: !isAdmin });
   const pendingCount = pendingData?.count ?? 0;
 

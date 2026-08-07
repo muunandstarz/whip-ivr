@@ -343,3 +343,6 @@
 - [x] Fix manual intake file upload route (/api/upload/document)
 - [x] Add AI extract-and-fill endpoint: reads uploaded doc, returns subject/sender/claimNumber/category/urgency/dateOfLoss/responseDue/bodyText
 - [x] Rebuild New Intake UX: upload-first flow, AI auto-fill button reads doc and populates all fields, one-click create+assign
+- [x] Assignment cadence: 3 per handler per run, Tue-Fri only gate in triggerNow/mailProcess
+- [x] Admin Mailroom: auto-refresh every 30s so new items appear live without manual reload
+- [x] Admin queue: show "assigned" tick as items get assigned (live count update)

@@ -662,21 +662,51 @@ export const mailRouter = router({
         results.slackIngest = { skipped: true, reason: String(slackErr) };
       }
       // Step 2: Classify + assign pending items
+      // Cadence: 3 items per handler per run, Tue-Fri only (matches mail bot schedule)
+      // Manual triggers (from admin UI) bypass the day-of-week gate
       const { classify } = await import('../mail/classify.js');
       const { route } = await import('../mail/route.js');
-      const [items] = await conn.execute<any[]>(
+
+      // Day-of-week gate: 2=Tue, 3=Wed, 4=Thu, 5=Fri (ET)
+      const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const dayOfWeek = nowET.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+      const isScheduledDay = dayOfWeek >= 2 && dayOfWeek <= 5;
+      const isManualTrigger = true; // triggerNow is always manual — bypass day gate
+
+      const BATCH_PER_HANDLER = 3;
+
+      // Get all unprocessed items (no limit — we'll apply per-handler limit below)
+      const [allItems] = await conn.execute<any[]>(
         `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
                 GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names
          FROM mail_items mi
          LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
          WHERE mi.category IS NULL AND mi.status = 'new'
-         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 20`
+         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 200`
       );
-      let processed = 0, errors = 0;
-      for (const item of items) {
+
+      let processed = 0, errors = 0, skippedDayGate = 0;
+      const handlerAssignedCount: Record<number, number> = {};
+
+      for (const item of allItems) {
         try {
           const cl = await classify({ subject: item.subject ?? undefined, bodyText: item.body_text ?? undefined, attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined });
           const patch = await route(conn, cl);
+
+          // Apply per-handler batch limit (3 per handler per run)
+          if (patch.assignedHandlerId) {
+            const currentCount = handlerAssignedCount[patch.assignedHandlerId] ?? 0;
+            if (currentCount >= BATCH_PER_HANDLER) {
+              // Classify but don't assign yet — mark as classified/needs_review
+              await conn.execute(
+                `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=1,urgency=?,reason=? WHERE id=?`,
+                [patch.category, patch.confidence, patch.isDemand, patch.urgency, 'Batch limit reached — pending assignment', item.id]
+              );
+              continue;
+            }
+            handlerAssignedCount[patch.assignedHandlerId] = currentCount + 1;
+          }
+
           await conn.execute(
             `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=? WHERE id=?`,
             [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,item.id]
@@ -687,7 +717,7 @@ export const mailRouter = router({
           processed++;
         } catch { errors++; }
       }
-      results.process = { processed, errors, total: (items as any[]).length };
+      results.process = { processed, errors, total: allItems.length, skippedDayGate, handlerCounts: handlerAssignedCount };
     } finally {
       await conn.end();
     }
