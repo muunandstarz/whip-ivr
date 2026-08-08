@@ -351,9 +351,9 @@ function AdminDrawer({
                               )}
                             </div>
                             {/* Inline preview */}
-                            {f.signedUrl && isPdf && (
+                            {(f.proxyUrl || f.signedUrl) && isPdf && (
                               <iframe
-                                src={f.signedUrl}
+                                src={f.proxyUrl ?? f.signedUrl}
                                 className="w-full"
                                 style={{ height: "480px", border: "none" }}
                                 title={name}
@@ -888,7 +888,10 @@ function AdminMailSetup() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {/* ── LEFT COLUMN: Protocol + Controls ──────────────────────── */}
+      <div className="space-y-6">
 
       {/* ── Protocol Overview ─────────────────────────────────────────── */}
       <Card>
@@ -1106,7 +1109,8 @@ function AdminMailSetup() {
           )}
         </CardContent>
       </Card>
-
+      </div>{/* end right column */}
+      </div>{/* end grid */}
     </div>
   );
 }

@@ -153,6 +153,8 @@ export const mailRouter = router({
         files.map(async f => ({
           ...f,
           signedUrl: await storageGetSignedUrl(f.storageKey).catch(() => null),
+          // proxyUrl: use server-side proxy for iframe preview (avoids S3 X-Frame-Options)
+          proxyUrl: `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}`,
         }))
       );
 
@@ -695,6 +697,16 @@ export const mailRouter = router({
               }
               const alreadyReviewed = reactions.some(r => allReviewed.includes(r.name));
               if (alreadyReviewed) { skipped++; continue; }
+              // Pre-2025 filter: only ingest legal/injury-related mail from before 2025
+              // (post-2025 mail is ingested regardless of category)
+              const PRE_2025_CUTOFF = 1735689600; // 2025-01-01 00:00:00 UTC
+              const fileTimestamp = Number(file.timestamp ?? 0);
+              if (fileTimestamp > 0 && fileTimestamp < PRE_2025_CUTOFF) {
+                // Pre-2025 mail: only ingest if filename suggests legal/injury content
+                const fname = (file.name ?? file.title ?? '').toLowerCase();
+                const isLegalOrInjury = /demand|lawsuit|complaint|summons|legal|attorney|counsel|injury|medical|pip|bodily|claim|subrog|lien|arbitration|litigation|settlement|release|judgment/.test(fname);
+                if (!isLegalOrInjury) { skipped++; continue; }
+              }
               try {
                 const result = await handleSlackFileEvent(conn, {
                   fileId: file.id,

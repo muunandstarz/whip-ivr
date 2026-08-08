@@ -183,6 +183,28 @@ async function startServer() {
   const GMAIL_REDIRECT_URI = `${process.env.VITE_APP_URL ?? "https://whipivr-tyswfku7.manus.space"}/api/mail/gmail-oauth-callback`;
 
   /** Step 1: redirect admin to Google consent screen */
+  // File proxy: stream S3 file to browser without X-Frame-Options blocking iframe preview
+  app.get("/api/mail/file-proxy", async (req, res) => {
+    try {
+      const { storageKey } = req.query as { storageKey?: string };
+      if (!storageKey) { res.status(400).json({ error: 'storageKey required' }); return; }
+      const { storageGetSignedUrl } = await import('../storage.js');
+      const signedUrl = await storageGetSignedUrl(storageKey);
+      const upstream = await fetch(signedUrl);
+      if (!upstream.ok) { res.status(upstream.status).json({ error: 'File not found' }); return; }
+      const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', 'inline');
+      // Remove X-Frame-Options to allow iframe preview
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      const buffer = Buffer.from(await upstream.arrayBuffer());
+      res.send(buffer);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   app.get("/api/mail/gmail-oauth-start", (req, res) => {
     const url = buildGmailOAuthUrl(GMAIL_REDIRECT_URI);
     res.redirect(url);
