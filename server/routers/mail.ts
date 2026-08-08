@@ -768,6 +768,40 @@ export const mailRouter = router({
           if (item.storage_keys) {
             const keys = item.storage_keys.split('|||').filter(Boolean).slice(0, 2);
             fileUrls = (await Promise.all(keys.map((k: string) => storageGetSignedUrl(k).catch(() => null)))).filter(Boolean) as string[];
+          } else if (item.slack_message_ts && item.slack_channel_id) {
+            // No files stored yet — try to backfill from Slack
+            try {
+              let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
+              try {
+                const [[botCfg]] = await conn.execute<any[]>('SELECT slack_bot_token FROM mail_bot_config LIMIT 1');
+                if (botCfg?.slack_bot_token) slackToken = botCfg.slack_bot_token;
+              } catch {}
+              if (slackToken) {
+                const msgRes = await fetch(`https://slack.com/api/conversations.replies?channel=${item.slack_channel_id}&ts=${item.slack_message_ts}&limit=1`, {
+                  headers: { Authorization: `Bearer ${slackToken}` }
+                });
+                const msgData = await msgRes.json() as { ok: boolean; messages?: any[] };
+                const msg = msgData.messages?.[0];
+                const fileObj = msg?.files?.[0];
+                if (fileObj?.url_private_download) {
+                  const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
+                  const slackFetch = buildRealSlackFetch(slackToken);
+                  await handleSlackFileEvent(conn, {
+                    fileId: fileObj.id,
+                    messageTs: item.slack_message_ts,
+                    channelId: item.slack_channel_id,
+                    filename: fileObj.name ?? fileObj.title,
+                    mimeType: fileObj.mimetype,
+                    urlPrivateDownload: fileObj.url_private_download,
+                    reactions: [],
+                  }, slackFetch, { reviewedEmoji: 'white_check_mark', addBotMarker: false });
+                  // Re-fetch storage keys after backfill
+                  const [newFiles] = await conn.execute<any[]>('SELECT storage_key FROM mail_item_files WHERE item_id=?', [item.id]);
+                  const newKeys = newFiles.map((f: any) => f.storage_key).slice(0, 2);
+                  fileUrls = (await Promise.all(newKeys.map((k: string) => storageGetSignedUrl(k).catch(() => null)))).filter(Boolean) as string[];
+                }
+              }
+            } catch { /* non-fatal — classify without file content */ }
           }
           const cl = await classify({
             subject: item.subject ?? undefined,
@@ -791,9 +825,17 @@ export const mailRouter = router({
             handlerAssignedCount[patch.assignedHandlerId] = currentCount + 1;
           }
 
+          // Build a brief summary note from the classification
+          const summaryNote = [
+            cl.claim_number ? `Claim: ${cl.claim_number}` : null,
+            cl.claimant_or_member_name ? `Claimant: ${cl.claimant_or_member_name}` : null,
+            cl.adverse_carrier ? `Carrier: ${cl.adverse_carrier}` : null,
+            cl.requested_action ? cl.requested_action : null,
+            cl.reason ? cl.reason.slice(0, 120) : null,
+          ].filter(Boolean).join(' · ').slice(0, 255) || null;
           await conn.execute(
-            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=? WHERE id=?`,
-            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,item.id]
+            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=? WHERE id=?`,
+            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,item.id]
           );
           for (const h of patch.historyActions) {
             await conn.execute(`INSERT INTO mail_routing_history (item_id,action,to_handler_id,reason) VALUES (?,?,?,?)`, [item.id,h.action,h.toHandlerId??null,h.reason]);
