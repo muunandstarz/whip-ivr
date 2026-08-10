@@ -371,7 +371,7 @@ function AdminDrawer({
                                   <ExternalLink className="w-3 h-3" /> Open
                                 </a>
                                 <a
-                                  href={f.storageKey ? `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}&download=1` : openUrl}
+                                  href={f.downloadUrl ?? (f.storageKey ? `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}&download=1` : '#')}
                                   download={name}
                                   className="text-green-600 hover:underline flex items-center gap-1 text-xs"
                                 >

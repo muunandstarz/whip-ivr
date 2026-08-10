@@ -149,14 +149,13 @@ export const mailRouter = router({
 
       const files = await db!.select().from(mailItemFiles)
         .where(eq(mailItemFiles.itemId, input.id));
-      const signedFiles = await Promise.all(
-        files.map(async f => ({
-          ...f,
-          signedUrl: await storageGetSignedUrl(f.storageKey).catch(() => null),
-          // proxyUrl: use server-side proxy for iframe preview (avoids S3 X-Frame-Options)
-          proxyUrl: `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}`,
-        }))
-      );
+      // Only return proxyUrl — never expose raw S3 presigned URLs to the frontend
+      // The proxy handles lazy re-download from Slack when S3 key is stale
+      const signedFiles = files.map(f => ({
+        ...f,
+        proxyUrl: `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}`,
+        downloadUrl: `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}&download=1`,
+      }));
 
       const notes = await db!.select().from(mailItemNotes)
         .where(eq(mailItemNotes.itemId, input.id))

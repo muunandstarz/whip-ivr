@@ -240,9 +240,9 @@ export default function MailroomItem() {
                             </a>
                           </Button>
                         )}
-                        {f.signedUrl && (
+                        {f.proxyUrl && (
                           <Button size="sm" variant="ghost" asChild>
-                            <a href={f.signedUrl} target="_blank" rel="noreferrer" download>
+                            <a href={f.downloadUrl ?? f.proxyUrl} target="_blank" rel="noreferrer" download>
                               <Download className="h-3.5 w-3.5 mr-1" /> Download
                             </a>
                           </Button>
