@@ -344,6 +344,18 @@ export const mailRouter = router({
           (i.claimNumber ?? '').toLowerCase().includes(q)
         );
       }
+      // Add fileCount for each item via a batch query
+      if (rows.length > 0) {
+        const ids = rows.map(r => r.id);
+        const fileCounts = await db
+          .select({ itemId: mailItemFiles.itemId, cnt: sql<number>`COUNT(*)` })
+          .from(mailItemFiles)
+          .where(inArray(mailItemFiles.itemId, ids))
+          .groupBy(mailItemFiles.itemId);
+        const fileCountMap = new Map(fileCounts.map(f => [f.itemId, Number(f.cnt)]));
+        const itemsWithFiles = rows.map(r => ({ ...r, fileCount: fileCountMap.get(r.id) ?? 0 }));
+        return { items: itemsWithFiles, total: Number(total ?? 0) };
+      }
       return { items: rows, total: Number(total ?? 0) };
     }),
   /** Official mail log — one row per piece with full metadata */

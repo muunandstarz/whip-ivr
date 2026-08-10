@@ -105,11 +105,31 @@ function rowBorderClass(item: any) {
 
 // Source type icon
 function SourceIcon({ source }: { source: string }) {
-  if (source === "email") return <MailIcon className="w-3.5 h-3.5 text-blue-500" aria-label="Email" />;
-  if (source === "fax") return <span className="text-xs text-gray-500 font-mono">FAX</span>;
-  return <span className="text-xs text-gray-500">📄</span>;
+  if (source === "email") return (
+    <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+      <MailIcon className="w-3 h-3" />Email
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-gray-500 font-medium">
+      <FileText className="w-3 h-3" />Reg Mail
+    </span>
+  );
 }
 
+// Format subject: parse Slack fax filenames into readable titles
+function formatSubject(subject: string | null | undefined, source: string): string {
+  if (!subject) return "(no subject)";
+  // Parse "Claims Mail_2026-0728.pdf" → "Fax — Jul 28, 2026"
+  const faxMatch = subject.match(/Claims Mail[_\s]+(\d{4})-(\d{2})(\d{2})/i);
+  if (faxMatch && source === "mail") {
+    try {
+      const d = new Date(parseInt(faxMatch[1]), parseInt(faxMatch[2]) - 1, parseInt(faxMatch[3]));
+      return `Fax — ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    } catch { /* fall through */ }
+  }
+  return subject;
+}
 // Delta indicator
 function Delta({ n }: { n: number }) {
   if (n === 0) return <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Minus className="w-3 h-3" />0</span>;
@@ -609,7 +629,10 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                   <TableCell className="py-2"><StatusPill item={item} /></TableCell>
                   <TableCell className="py-2"><SourceIcon source={item.source} /></TableCell>
                   <TableCell className="py-2 max-w-xs">
-                    <div className="font-medium text-xs line-clamp-1">{item.subject ?? "(no subject)"}</div>
+                    <div className="font-medium text-xs line-clamp-1 flex items-center gap-1">
+                      {formatSubject(item.subject, item.source)}
+                      {(item as any).fileCount > 0 && <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" aria-label="Has attachment" />}
+                    </div>
                     <div className="text-xs text-muted-foreground mt-0.5 truncate">{item.fromEmail ?? item.fromName ?? "—"}</div>
                   </TableCell>
                   <TableCell className="py-2 max-w-[200px]">
