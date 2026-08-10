@@ -337,40 +337,18 @@ function AdminDrawer({
                     <div className="space-y-3">
                       {files.map((f: any) => {
                         const name = f.filename || f.storageKey?.split("/").pop() || "File";
-                        const isPdf = f.contentType?.includes("pdf") || name.toLowerCase().endsWith(".pdf");
-                        const isImage = f.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(name);
+                        // Always use proxyUrl for access — it generates a fresh signed URL on each request
+                        const openUrl = f.proxyUrl ?? (f.storageKey ? `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}` : null);
                         return (
-                          <div key={f.id} className="border rounded-lg overflow-hidden bg-muted/20">
-                            {/* File header row */}
-                            <div className="flex items-center justify-between px-2.5 py-1.5 border-b bg-background">
-                              <span className="truncate text-xs font-medium flex-1 mr-2">{name}</span>
-                              {f.signedUrl && (
-                                <a href={f.signedUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 shrink-0 text-xs">
-                                  <Download className="w-3 h-3" /> Download
-                                </a>
-                              )}
+                          <div key={f.id} className="flex items-center justify-between border rounded-lg px-3 py-2 bg-muted/20">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <span className="truncate text-sm font-medium">{name}</span>
                             </div>
-                            {/* Inline preview */}
-                            {(f.proxyUrl || f.signedUrl) && isPdf && (
-                              <iframe
-                                src={f.proxyUrl ?? f.signedUrl}
-                                className="w-full"
-                                style={{ height: "480px", border: "none" }}
-                                title={name}
-                              />
-                            )}
-                            {f.signedUrl && isImage && (
-                              <img
-                                src={f.signedUrl}
-                                alt={name}
-                                className="w-full max-h-96 object-contain bg-white p-2"
-                              />
-                            )}
-                            {f.signedUrl && !isPdf && !isImage && (
-                              <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                                <FileText className="w-8 h-8 mx-auto mb-1 opacity-40" />
-                                Preview not available — use Download above
-                              </div>
+                            {openUrl && (
+                              <a href={openUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 shrink-0 text-xs ml-2">
+                                <Download className="w-3 h-3" /> Open
+                              </a>
                             )}
                           </div>
                         );
