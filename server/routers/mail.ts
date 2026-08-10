@@ -845,9 +845,32 @@ export const mailRouter = router({
             cl.requested_action ? cl.requested_action : null,
             cl.reason ? cl.reason.slice(0, 120) : null,
           ].filter(Boolean).join(' · ').slice(0, 255) || null;
+          // Build a descriptive subject/title from the AI output
+          // e.g. "Demand Letter — Progressive — CLM-1234" or "PIP Application — Jayla Bernard"
+          const CATEGORY_TITLE_MAP: Record<string, string> = {
+            legal_or_high_risk: 'Legal / High Risk',
+            demand_letter: 'Demand Letter',
+            pip_application: 'PIP Application',
+            medical_records: 'Medical Records',
+            subro_demand: 'Subro Demand',
+            total_loss: 'Total Loss Document',
+            general_correspondence: 'General Correspondence',
+            other_or_unclear: 'Correspondence',
+          };
+          const catLabel = CATEGORY_TITLE_MAP[cl.category as string] ?? 'Correspondence';
+          const subjectParts = [catLabel];
+          if (cl.adverse_carrier) subjectParts.push(cl.adverse_carrier);
+          else if (cl.sender_organization) subjectParts.push(cl.sender_organization);
+          if (cl.claimant_or_member_name) subjectParts.push(cl.claimant_or_member_name);
+          if (cl.claim_number) subjectParts.push(cl.claim_number);
+          const aiSubject = subjectParts.join(' — ').slice(0, 255);
+          // Only update subject if the current subject is a generic fax filename
+          const currentSubject = (item as any).subject ?? '';
+          const isGenericSubject = /^Claims Mail[_\s]/i.test(currentSubject) || currentSubject === '' || currentSubject === '(no subject)';
+          const newSubject = isGenericSubject ? aiSubject : currentSubject;
           await conn.execute(
-            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=? WHERE id=?`,
-            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,item.id]
+            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=? WHERE id=?`,
+            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,item.id]
           );
           for (const h of patch.historyActions) {
             await conn.execute(`INSERT INTO mail_routing_history (item_id,action,to_handler_id,reason) VALUES (?,?,?,?)`, [item.id,h.action,h.toHandlerId??null,h.reason]);

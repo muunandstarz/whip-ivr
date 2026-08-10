@@ -480,6 +480,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [sortOrder, setSortOrder] = useState<'receivedAt_desc' | 'receivedAt_asc' | 'dueAt_asc' | 'dueAt_desc'>('receivedAt_desc');
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const { data: handlers } = trpc.handlers.list.useQuery();
 
   // Build query input from active tab + filters
@@ -492,6 +493,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
       handlerId: handlerFilter !== "all" ? Number(handlerFilter) : undefined,
       from: dateFrom ? new Date(dateFrom) : undefined,
       to: dateTo ? new Date(dateTo) : undefined,
+      source: sourceFilter !== "all" ? sourceFilter as any : undefined,
     };
     if (activeTab === "overdue") base.overdue = true;
     else if (activeTab === "urgent") base.urgent = true;
@@ -502,7 +504,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     if (activeTab === "all" && statusFilter !== "all") base.status = statusFilter;
     // demands tab: filter by isDemand — we'll filter client-side since adminQueue doesn't have isDemand filter
     return base;
-  }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo, sortOrder]);
+  }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo, sortOrder, sourceFilter]);
 
   const { data, isLoading, refetch } = trpc.mail.adminQueue.useQuery(queryInput, { refetchInterval: 30000 });
   const items = useMemo(() => {
@@ -546,6 +548,16 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={sourceFilter} onValueChange={v => { setSourceFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="email">Email</SelectItem>
+            <SelectItem value="mail">Reg Mail</SelectItem>
+            <SelectItem value="fax">Fax</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
           </SelectContent>
         </Select>
         <Select value={handlerFilter} onValueChange={v => { setHandlerFilter(v); setPage(1); }}>
