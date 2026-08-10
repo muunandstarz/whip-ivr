@@ -366,9 +366,18 @@ function AdminDrawer({
                               <span className="truncate text-sm font-medium">{name}</span>
                             </div>
                             {openUrl && (
-                              <a href={openUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 shrink-0 text-xs ml-2">
-                                <Download className="w-3 h-3" /> Open
-                              </a>
+                              <div className="flex items-center gap-2 shrink-0 ml-2">
+                                <a href={openUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 text-xs">
+                                  <ExternalLink className="w-3 h-3" /> Open
+                                </a>
+                                <a
+                                  href={f.storageKey ? `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}&download=1` : openUrl}
+                                  download={name}
+                                  className="text-green-600 hover:underline flex items-center gap-1 text-xs"
+                                >
+                                  <Download className="w-3 h-3" /> Download
+                                </a>
+                              </div>
                             )}
                           </div>
                         );

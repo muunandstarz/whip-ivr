@@ -186,14 +186,19 @@ async function startServer() {
   // File proxy: stream S3 file to browser without X-Frame-Options blocking iframe preview
   app.get("/api/mail/file-proxy", async (req, res) => {
     try {
-      const { storageKey } = req.query as { storageKey?: string };
+      const { storageKey, download } = req.query as { storageKey?: string; download?: string };
       if (!storageKey) { res.status(400).json({ error: 'storageKey required' }); return; }
       const { storageGetSignedUrl, storagePut } = await import('../storage.js');
       let finalStorageKey = storageKey;
-      let signedUrl = await storageGetSignedUrl(finalStorageKey);
-      let upstream = await fetch(signedUrl);
-      // If S3 returns 403/404 (file was stored in a different environment), try lazy re-download from Slack
-      if (!upstream.ok && (upstream.status === 403 || upstream.status === 404)) {
+      let upstream: Response | null = null;
+      // Try to get from S3 first — wrap in try-catch since presign may fail for dev-env keys
+      try {
+        const signedUrl = await storageGetSignedUrl(finalStorageKey);
+        const resp = await fetch(signedUrl);
+        if (resp.ok) upstream = resp;
+      } catch { /* fall through to Slack re-download */ }
+      // If S3 failed (file was stored in a different environment), try lazy re-download from Slack
+      if (!upstream) {
         try {
           const conn = await mysql.createConnection(process.env.DATABASE_URL!);
           // Look up the file record to get slackFileId
@@ -224,8 +229,8 @@ async function startServer() {
                   // Update the storage_key in the DB
                   await conn.execute('UPDATE mail_item_files SET storage_key = ? WHERE storage_key = ?', [newKey, storageKey]);
                   finalStorageKey = newKey;
-                  signedUrl = await storageGetSignedUrl(finalStorageKey);
-                  upstream = await fetch(signedUrl);
+                  const newSignedUrl = await storageGetSignedUrl(finalStorageKey);
+                  upstream = await fetch(newSignedUrl);
                 }
               }
             }
@@ -234,12 +239,17 @@ async function startServer() {
           console.error('[file-proxy] Re-download failed:', redownloadErr);
         }
       }
-      if (!upstream.ok) { res.status(upstream.status).json({ error: 'File not found' }); return; }
+      if (!upstream) { res.status(404).json({ error: 'File not found' }); return; }
       const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream';
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', 'inline');
-      res.removeHeader('X-Frame-Options');
-      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      const filename = finalStorageKey.split('/').pop() ?? 'file.pdf';
+      if (download === '1') {
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      } else {
+        res.setHeader('Content-Disposition', 'inline');
+        res.removeHeader('X-Frame-Options');
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      }
       const buffer = Buffer.from(await upstream.arrayBuffer());
       res.send(buffer);
     } catch (err) {
