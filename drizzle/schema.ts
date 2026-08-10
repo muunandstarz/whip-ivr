@@ -774,6 +774,7 @@ export const mailItemFiles = mysqlTable('mail_item_files', {
   filename: varchar('filename', { length: 255 }),
   contentType: varchar('content_type', { length: 128 }),
   sizeBytes: int('size_bytes'),
+  slackFileId: varchar('slack_file_id', { length: 64 }),
   createdAt: timestamp('created_at').defaultNow(),
 });
 export type MailItemFile = typeof mailItemFiles.$inferSelect;

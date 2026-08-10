@@ -123,9 +123,9 @@ export async function handleSlackFileEvent(
         const key = `mail/slack/${channelId}/${messageTs}/${filename ?? fileId}`;
         const { key: storageKey } = await storagePut(key, buffer, contentType);
         await conn.execute(
-          `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes)
-           VALUES (?, ?, ?, ?, ?)`,
-          [itemId, storageKey, filename ?? fileId, contentType, buffer.length]
+          `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [itemId, storageKey, filename ?? fileId, contentType, buffer.length, fileId]
         );
       } catch (dlErr) {
         // Non-fatal: stub row is already inserted, file can be re-fetched later

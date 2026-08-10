@@ -6789,328 +6789,328 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   };
 
   const handleDownload = () => {
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
 
-  // ── Exact palette from the approved dec page ──────────────────────────────
-  const ACCENT = [26, 63, 111];     // #1A3F6F headings, premiums, total, side bars
-  const INK = [17, 17, 17];         // #111111 title, labels, values, body
-  const GRAY = [68, 68, 68];        // #444444 small-caps labels, descriptors
-  const WHITE = [255, 255, 255];
-  const BAND = [245, 245, 245];     // group-band rows + notice-box backgrounds
-  const ACCENTBAR = [136, 136, 136];// gray left bar on notice boxes
-  const RULE = [204, 204, 204];     // rules + main|sidebar divider
-  const BOXBORDER = [221, 221, 221];
-  const BOXBG = [250, 250, 250];
-  const C = (c: number[]) => doc.setTextColor(c[0], c[1], c[2]);
-  const F = (c: number[]) => doc.setFillColor(c[0], c[1], c[2]);
-  const D = (c: number[]) => doc.setDrawColor(c[0], c[1], c[2]);
+    // ── Exact palette from the approved dec page ──────────────────────────────
+    const ACCENT = [26, 63, 111];     // #1A3F6F headings, premiums, total, side bars
+    const INK = [17, 17, 17];         // #111111 title, labels, values, body
+    const GRAY = [68, 68, 68];        // #444444 small-caps labels, descriptors
+    const WHITE = [255, 255, 255];
+    const BAND = [245, 245, 245];     // group-band rows + notice-box backgrounds
+    const ACCENTBAR = [136, 136, 136];// gray left bar on notice boxes
+    const RULE = [204, 204, 204];     // rules + main|sidebar divider
+    const BOXBORDER = [221, 221, 221];
+    const BOXBG = [250, 250, 250];
+    const C = (c: number[]) => doc.setTextColor(c[0], c[1], c[2]);
+    const F = (c: number[]) => doc.setFillColor(c[0], c[1], c[2]);
+    const D = (c: number[]) => doc.setDrawColor(c[0], c[1], c[2]);
 
-  // ── Geometry: main = 0.75 of usable, sidebar = 0.22, gutter between ────────
-  const lm = 14, rm = W - 14;
-  const usable = W - 28;
-  const mainW = usable * 0.75;
-  const gutter = usable * 0.03;
-  const sideW = usable * 0.22;
-  const sideX = lm + mainW + gutter;
-  const dividerX = sideX - gutter / 2;
-  // coverage value columns — all RIGHT-aligned to these fixed edges
-  const limRX = lm + mainW * 0.636;
-  const dedRX = lm + mainW * 0.797;
-  const premRX = lm + mainW;
-  let y = 10;
-  let sy = 0;
+    // ── Geometry: main = 0.75 of usable, sidebar = 0.22, gutter between ────────
+    const lm = 14, rm = W - 14;
+    const usable = W - 28;
+    const mainW = usable * 0.75;
+    const gutter = usable * 0.03;
+    const sideW = usable * 0.22;
+    const sideX = lm + mainW + gutter;
+    const dividerX = sideX - gutter / 2;
+    // coverage value columns — all RIGHT-aligned to these fixed edges
+    const limRX = lm + mainW * 0.636;
+    const dedRX = lm + mainW * 0.797;
+    const premRX = lm + mainW;
+    let y = 10;
+    let sy = 0;
 
-  // ── Sidebar helpers ───────────────────────────────────────────────────────
-  const sideBar = (title: string) => {
-    F(ACCENT); doc.rect(sideX, sy, sideW, 7, "F");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); C(WHITE);
-    doc.text(title, sideX + 2.5, sy + 4.8);
-    sy += 7;
-  };
-  const noticeBox = (title: string, body: string) => {
-    doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
-    const lines = doc.splitTextToSize(body, sideW - 6);
-    const h = 6.5 + lines.length * 3 + 1.5;
-    F(BAND); doc.rect(sideX, sy, sideW, h, "F");
-    D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(sideX, sy, sideW, h);
-    F(ACCENTBAR); doc.rect(sideX, sy, 0.7, h, "F");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); C(INK);
-    doc.text(title, sideX + 3, sy + 4);
+    // ── Sidebar helpers ───────────────────────────────────────────────────────
+    const sideBar = (title: string) => {
+      F(ACCENT); doc.rect(sideX, sy, sideW, 7, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); C(WHITE);
+      doc.text(title, sideX + 2.5, sy + 4.8);
+      sy += 7;
+    };
+    const noticeBox = (title: string, body: string) => {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
+      const lines = doc.splitTextToSize(body, sideW - 6);
+      const h = 6.5 + lines.length * 3 + 1.5;
+      F(BAND); doc.rect(sideX, sy, sideW, h, "F");
+      D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(sideX, sy, sideW, h);
+      F(ACCENTBAR); doc.rect(sideX, sy, 0.7, h, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); C(INK);
+      doc.text(title, sideX + 3, sy + 4);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
+      doc.text(lines, sideX + 3, sy + 8);
+      sy += h + 3;
+    };
+
+    // ══ PAGE 1 ════════════════════════════════════════════════════════════════
+    // Header
+    doc.setFont("helvetica", "bold"); doc.setFontSize(17); C(INK);
+    doc.text("Policy Declarations", lm, y + 5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); C(GRAY);
+    doc.text("Policy number:", lm, y + 10);
+    let lw = doc.getTextWidth("Policy number:  ");
+    doc.setFont("helvetica", "bold"); C(INK);
+    doc.text(form.policyNumber || "—", lm + lw, y + 10);
+    doc.setFont("helvetica", "normal"); C(GRAY);
+    doc.text("Policy effective date:", lm, y + 14.5);
+    lw = doc.getTextWidth("Policy effective date:  ");
+    doc.setFont("helvetica", "bold"); C(INK);
+    doc.text(fmtDate(form.effectiveDate), lm + lw, y + 14.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
+    doc.text("Page 1 of 2", rm, y + 3, { align: "right" });
+    try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
+    y += 22;
+    D(RULE); doc.setLineWidth(0.3); doc.line(lm, y, rm, y);
+    y += 5;
+    const colTop = y;
+    D(RULE); doc.setLineWidth(0.3); doc.line(dividerX, colTop, dividerX, H - 14);
+
+    // "What does my policy cover?"
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(ACCENT);
+    doc.text("What does my policy cover?", lm, y);
+    y += 5;
+
+    // Named insured / operator box
+    const boxH = 22;
+    F(BOXBG); doc.rect(lm, y, mainW, boxH, "F");
+    D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(lm, y, mainW, boxH);
+    D(RULE); doc.line(lm + mainW * 0.5, y, lm + mainW * 0.5, y + boxH);
     doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
-    doc.text(lines, sideX + 3, sy + 8);
-    sy += h + 3;
-  };
+    doc.text("NAMED INSURED / VEHICLE OWNER & LESSOR", lm + 2.5, y + 4);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
+    doc.text("Metrocars Leasing Corp", lm + 2.5, y + 8.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
+    doc.text("INSURED'S MAILING ADDRESS", lm + 2.5, y + 13);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); C(INK);
+    doc.text(form.memberAddress || "14670 Southlawn Lane, Rockville, MD 20850", lm + 2.5, y + 17.5, { maxWidth: mainW * 0.5 - 5 });
+    const rx = lm + mainW * 0.5 + 2.5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
+    doc.text("NAMED OPERATOR / LESSEE (MEMBER)", rx, y + 4);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
+    doc.text(form.memberName || "—", rx, y + 8.5);
+    y += boxH + 4;
 
-  // ══ PAGE 1 ════════════════════════════════════════════════════════════════
-  // Header
-  doc.setFont("helvetica", "bold"); doc.setFontSize(17); C(INK);
-  doc.text("Policy Declarations", lm, y + 5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); C(GRAY);
-  doc.text("Policy number:", lm, y + 10);
-  let lw = doc.getTextWidth("Policy number:  ");
-  doc.setFont("helvetica", "bold"); C(INK);
-  doc.text(form.policyNumber || "—", lm + lw, y + 10);
-  doc.setFont("helvetica", "normal"); C(GRAY);
-  doc.text("Policy effective date:", lm, y + 14.5);
-  lw = doc.getTextWidth("Policy effective date:  ");
-  doc.setFont("helvetica", "bold"); C(INK);
-  doc.text(fmtDate(form.effectiveDate), lm + lw, y + 14.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
-  doc.text("Page 1 of 2", rm, y + 3, { align: "right" });
-  try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
-  y += 22;
-  D(RULE); doc.setLineWidth(0.3); doc.line(lm, y, rm, y);
-  y += 5;
-  const colTop = y;
-  D(RULE); doc.setLineWidth(0.3); doc.line(dividerX, colTop, dividerX, H - 14);
+    // Vehicle line
+    const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(INK);
+    doc.text(vehicleStr, lm, y + 4);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
+    doc.text(`Vehicle Type: ${form.vehicleType || "Auto"}`, premRX, y + 4, { align: "right" });
+    y += 7;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
+    doc.text(`VIN: ${form.vin || "—"}`, lm, y);
+    y += 6;
 
-  // "What does my policy cover?"
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(ACCENT);
-  doc.text("What does my policy cover?", lm, y);
-  y += 5;
-
-  // Named insured / operator box
-  const boxH = 22;
-  F(BOXBG); doc.rect(lm, y, mainW, boxH, "F");
-  D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(lm, y, mainW, boxH);
-  D(RULE); doc.line(lm + mainW * 0.5, y, lm + mainW * 0.5, y + boxH);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
-  doc.text("NAMED INSURED / VEHICLE OWNER & LESSOR", lm + 2.5, y + 4);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
-  doc.text("Metrocars Leasing Corp", lm + 2.5, y + 8.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
-  doc.text("INSURED'S MAILING ADDRESS", lm + 2.5, y + 13);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); C(INK);
-  doc.text(form.memberAddress || "14670 Southlawn Lane, Rockville, MD 20850", lm + 2.5, y + 17.5, { maxWidth: mainW * 0.5 - 5 });
-  const rx = lm + mainW * 0.5 + 2.5;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); C(GRAY);
-  doc.text("NAMED OPERATOR / LESSEE (MEMBER)", rx, y + 4);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
-  doc.text(form.memberName || "—", rx, y + 8.5);
-  y += boxH + 4;
-
-  // Vehicle line
-  const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(INK);
-  doc.text(vehicleStr, lm, y + 4);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
-  doc.text(`Vehicle Type: ${form.vehicleType || "Auto"}`, premRX, y + 4, { align: "right" });
-  y += 7;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
-  doc.text(`VIN: ${form.vin || "—"}`, lm, y);
-  y += 6;
-
-  // Coverage table header — all three value columns right-aligned
-  D(RULE); doc.setLineWidth(0.2); doc.line(lm, y, premRX, y);
-  y += 3.5;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
-  doc.text("Coverages", lm, y);
-  doc.text("Limits", limRX, y, { align: "right" });
-  doc.text("Deductible", dedRX, y, { align: "right" });
-  doc.text("Premium", premRX, y, { align: "right" });
-  y += 3;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6); C(GRAY);
-  doc.text("What Klutch pays", limRX, y, { align: "right" });
-  doc.text("What you pay", dedRX, y, { align: "right" });
-  doc.text("Cost for 6-month policy period", premRX, y, { align: "right" });
-  y += 3;
-  D(RULE); doc.line(lm, y, premRX, y);
-  y += 4;
-
-  // Coverage row — limits wrap on " / ", every value right-aligned to its edge
-  const covRow = (label: string, sublabel: string, limits: string, deductible: string, premium: string | null) => {
+    // Coverage table header — all three value columns right-aligned
+    D(RULE); doc.setLineWidth(0.2); doc.line(lm, y, premRX, y);
+    y += 3.5;
     doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
-    doc.text(label, lm, y);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(INK);
-    const limParts = String(limits).split(" / ");
-    limParts.forEach((p, i) => doc.text(p, limRX, y + i * 3.4, { align: "right" }));
-    doc.text(String(deductible), dedRX, y, { align: "right" });
-    if (premium) {
-      doc.setFont("helvetica", "bold"); C(ACCENT);
-      doc.text(premium, premRX, y, { align: "right" });
-    } else {
-      C(GRAY); doc.text("—", premRX, y, { align: "right" });
+    doc.text("Coverages", lm, y);
+    doc.text("Limits", limRX, y, { align: "right" });
+    doc.text("Deductible", dedRX, y, { align: "right" });
+    doc.text("Premium", premRX, y, { align: "right" });
+    y += 3;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6); C(GRAY);
+    doc.text("What Klutch pays", limRX, y, { align: "right" });
+    doc.text("What you pay", dedRX, y, { align: "right" });
+    doc.text("Cost for 6-month policy period", premRX, y, { align: "right" });
+    y += 3;
+    D(RULE); doc.line(lm, y, premRX, y);
+    y += 4;
+
+    // Coverage row — limits wrap on " / ", every value right-aligned to its edge
+    const covRow = (label: string, sublabel: string, limits: string, deductible: string, premium: string | null) => {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
+      doc.text(label, lm, y);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(INK);
+      const limParts = String(limits).split(" / ");
+      limParts.forEach((p, i) => doc.text(p, limRX, y + i * 3.4, { align: "right" }));
+      doc.text(String(deductible), dedRX, y, { align: "right" });
+      if (premium) {
+        doc.setFont("helvetica", "bold"); C(ACCENT);
+        doc.text(premium, premRX, y, { align: "right" });
+      } else {
+        C(GRAY); doc.text("—", premRX, y, { align: "right" });
+      }
+      if (sublabel) {
+        doc.setFont("helvetica", "italic"); doc.setFontSize(6.5); C(GRAY);
+        doc.text(sublabel, lm, y + 3.6);
+      }
+      const rowH = Math.max(sublabel ? 8 : 5.5, 1.5 + limParts.length * 3.4);
+      y += rowH;
+      D([230, 230, 230]); doc.setLineWidth(0.1); doc.line(lm, y - 1.5, premRX, y - 1.5);
+      y += 1;
+    };
+    const sectionHeader = (title: string) => {
+      F(BAND); doc.rect(lm, y, mainW, 5.5, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); C(INK);
+      doc.text(title, lm + 2, y + 3.8);
+      y += 6.5;
+    };
+
+    sectionHeader("Coverage for when you're at fault");
+    covRow("Liability Coverage - Bodily Injury", "Covers injuries to others when you are at fault", `${rules.biPP} per person / ${rules.biPO} per occurrence`, "Not applicable", calcPremium("bi"));
+    covRow("Liability Coverage - Property Damage", "Covers damage to others' property when you are at fault", `${rules.pdLimit} per occurrence`, "Not applicable", calcPremium("pd"));
+
+    sectionHeader("Coverage for you and your vehicle");
+    covRow("Collision Coverage", "Damage to the covered vehicle from a collision", "Actual cash value", form.collisionDeductible || "$1,000", calcPremium("coll"));
+    covRow("Comprehensive Coverage", "Non-collision losses including theft, fire, and weather", "Actual cash value", form.compDeductible || "$1,000", calcPremium("comp"));
+
+    if (rules.pip) {
+      const pipPrem = pipWaived ? null : calcPremium("pip");
+      const pipLimits = pipWaived ? "Waived" : `${rules.pipLimit} per person`;
+      covRow("Personal Injury Protection (PIP)", pipWaived ? "Waived per Maryland Transportation Article" : "", pipLimits, "Not applicable", pipPrem);
     }
-    if (sublabel) {
-      doc.setFont("helvetica", "italic"); doc.setFontSize(6.5); C(GRAY);
-      doc.text(sublabel, lm, y + 3.6);
-    }
-    const rowH = Math.max(sublabel ? 8 : 5.5, 1.5 + limParts.length * 3.4);
-    y += rowH;
-    D([230, 230, 230]); doc.setLineWidth(0.1); doc.line(lm, y - 1.5, premRX, y - 1.5);
-    y += 1;
-  };
-  const sectionHeader = (title: string) => {
-    F(BAND); doc.rect(lm, y, mainW, 5.5, "F");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); C(INK);
-    doc.text(title, lm + 2, y + 3.8);
-    y += 6.5;
-  };
 
-  sectionHeader("Coverage for when you're at fault");
-  covRow("Liability Coverage - Bodily Injury", "Covers injuries to others when you are at fault", `${rules.biPP} per person / ${rules.biPO} per occurrence`, "Not applicable", calcPremium("bi"));
-  covRow("Liability Coverage - Property Damage", "Covers damage to others' property when you are at fault", `${rules.pdLimit} per occurrence`, "Not applicable", calcPremium("pd"));
+    sectionHeader("Coverage if you're hit by an uninsured or underinsured driver");
+    const umPrem = umRejected ? null : calcPremium("um");
+    const umLimits = umRejected ? "Rejected by named insured" : `${rules.umPP} per person / ${rules.umPO} per occurrence`;
+    covRow("Uninsured Motorist - Bodily Injury", "Applies per state law", umLimits, "Not applicable", umPrem);
+    const uimPrem = umRejected ? null : calcPremium("uim");
+    const uimLimits = umRejected ? "Rejected" : (rules.uimPP ? `${rules.uimPP} per person / ${rules.uimPO} per occurrence` : "Not applicable");
+    covRow("Underinsured Motorist - Bodily Injury", "Applies per state law", uimLimits, "Not applicable", uimPrem);
 
-  sectionHeader("Coverage for you and your vehicle");
-  covRow("Collision Coverage", "Damage to the covered vehicle from a collision", "Actual cash value", form.collisionDeductible || "$1,000", calcPremium("coll"));
-  covRow("Comprehensive Coverage", "Non-collision losses including theft, fire, and weather", "Actual cash value", form.compDeductible || "$1,000", calcPremium("comp"));
+    // Total
+    y += 2;
+    D(ACCENT); doc.setLineWidth(0.6); doc.line(lm, y - 1, premRX, y - 1);
+    y += 3.5;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
+    doc.text("Total Premium for Policy Period", lm, y);
+    doc.setFontSize(11.5); C(ACCENT);
+    doc.text(totalPremium() || "—", premRX, y, { align: "right" });
+    y += 7;
 
-  if (rules.pip) {
-    const pipPrem = pipWaived ? null : calcPremium("pip");
-    const pipLimits = pipWaived ? "Waived" : `${rules.pipLimit} per person`;
-    covRow("Personal Injury Protection (PIP)", pipWaived ? "Waived per Maryland Transportation Article" : "", pipLimits, "Not applicable", pipPrem);
-  }
+    // Footnote
+    doc.setFont("helvetica", "italic"); doc.setFontSize(6.3); C(GRAY);
+    doc.text("* Coverage limits apply per occurrence. Physical damage deductibles reflect the Member Damage Fee as defined in the Membership Agreement. Premium for all coverages is included in the member's weekly Membership Fee under the active Membership Agreement with Metrocars Leasing Corp. Limits shown may have been reduced by paid claims.", lm, y, { maxWidth: mainW });
+    y += 12;
 
-  sectionHeader("Coverage if you're hit by an uninsured or underinsured driver");
-  const umPrem = umRejected ? null : calcPremium("um");
-  const umLimits = umRejected ? "Rejected by named insured" : `${rules.umPP} per person / ${rules.umPO} per occurrence`;
-  covRow("Uninsured Motorist - Bodily Injury", "Applies per state law", umLimits, "Not applicable", umPrem);
-  const uimPrem = umRejected ? null : calcPremium("uim");
-  const uimLimits = umRejected ? "Rejected" : (rules.uimPP ? `${rules.uimPP} per person / ${rules.uimPO} per occurrence` : "Not applicable");
-  covRow("Underinsured Motorist - Bodily Injury", "Applies per state law", uimLimits, "Not applicable", uimPrem);
+    // "Who is covered?"
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(ACCENT);
+    doc.text("Who is covered?", lm, y);
+    y += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
+    const wc = doc.splitTextToSize("Coverage applies to the named operator (lessee) operating the listed vehicle under an active Membership Agreement with Metrocars Leasing Corp. Metrocars Leasing Corp is covered as vehicle owner and lessor. Unauthorized or unlisted operators are excluded.", mainW);
+    doc.text(wc, lm, y); y += wc.length * 3.4 + 4;
+    const miniHead = (h: string) => { doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); C(INK); doc.text(h, lm, y); y += 4; };
+    const miniVal = (v: string) => { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); C(GRAY); const l = doc.splitTextToSize(v, mainW); doc.text(l, lm, y); y += l.length * 3.6 + 3; };
+    miniHead("Named Insured (Vehicle Owner / Lessor)"); miniVal("Metrocars Leasing Corp");
+    miniHead("Named Operator / Lessee on this policy"); miniVal(form.memberName || "—");
+    miniHead("Excluded operators"); miniVal("Any operator not named above or not authorized under the Membership Agreement");
 
-  // Total
-  y += 2;
-  D(ACCENT); doc.setLineWidth(0.6); doc.line(lm, y - 1, premRX, y - 1);
-  y += 3.5;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
-  doc.text("Total Premium for Policy Period", lm, y);
-  doc.setFontSize(11.5); C(ACCENT);
-  doc.text(totalPremium() || "—", premRX, y, { align: "right" });
-  y += 7;
-
-  // Footnote
-  doc.setFont("helvetica", "italic"); doc.setFontSize(6.3); C(GRAY);
-  doc.text("* Coverage limits apply per occurrence. Physical damage deductibles reflect the Member Damage Fee as defined in the Membership Agreement. Premium for all coverages is included in the member's weekly Membership Fee under the active Membership Agreement with Metrocars Leasing Corp. Limits shown may have been reduced by paid claims.", lm, y, { maxWidth: mainW });
-  y += 12;
-
-  // "Who is covered?"
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(ACCENT);
-  doc.text("Who is covered?", lm, y);
-  y += 5;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
-  const wc = doc.splitTextToSize("Coverage applies to the named operator (lessee) operating the listed vehicle under an active Membership Agreement with Metrocars Leasing Corp. Metrocars Leasing Corp is covered as vehicle owner and lessor. Unauthorized or unlisted operators are excluded.", mainW);
-  doc.text(wc, lm, y); y += wc.length * 3.4 + 4;
-  const miniHead = (h: string) => { doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); C(INK); doc.text(h, lm, y); y += 4; };
-  const miniVal = (v: string) => { doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); C(GRAY); const l = doc.splitTextToSize(v, mainW); doc.text(l, lm, y); y += l.length * 3.6 + 3; };
-  miniHead("Named Insured (Vehicle Owner / Lessor)"); miniVal("Metrocars Leasing Corp");
-  miniHead("Named Operator / Lessee on this policy"); miniVal(form.memberName || "—");
-  miniHead("Excluded operators"); miniVal("Any operator not named above or not authorized under the Membership Agreement");
-
-  // ── Sidebar page 1 ────────────────────────────────────────────────────────
-  sy = colTop;
-  sideBar("Summary");
-  const sumH = 84;
-  F(BOXBG); doc.rect(sideX, sy, sideW, sumH, "F");
-  D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(sideX, sy, sideW, sumH);
-  let syi = sy + 5;
-  const sumLine = (label: string, value: string) => {
+    // ── Sidebar page 1 ────────────────────────────────────────────────────────
+    sy = colTop;
+    sideBar("Summary");
+    const sumH = 84;
+    F(BOXBG); doc.rect(sideX, sy, sideW, sumH, "F");
+    D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(sideX, sy, sideW, sumH);
+    let syi = sy + 5;
+    const sumLine = (label: string, value: string) => {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
+      doc.text(label.toUpperCase(), sideX + 3, syi); syi += 3.4;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
+      const vs = doc.splitTextToSize(value, sideW - 6);
+      doc.text(vs, sideX + 3, syi); syi += vs.length * 3.4 + 2.5;
+    };
+    sumLine("Named Insured", "Metrocars Leasing Corp");
+    sumLine("Named Operator / Lessee", form.memberName || "—");
+    sumLine("Policy Number", form.policyNumber || "—");
     doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
-    doc.text(label.toUpperCase(), sideX + 3, syi); syi += 3.4;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
-    const vs = doc.splitTextToSize(value, sideW - 6);
-    doc.text(vs, sideX + 3, syi); syi += vs.length * 3.4 + 2.5;
-  };
-  sumLine("Named Insured", "Metrocars Leasing Corp");
-  sumLine("Named Operator / Lessee", form.memberName || "—");
-  sumLine("Policy Number", form.policyNumber || "—");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
-  doc.text("CONTACT INFORMATION", sideX + 3, syi); syi += 3.4;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(7); C(INK);
-  doc.text("Klutch Insurance Company", sideX + 3, syi); syi += 3.2;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); C(GRAY);
-  doc.text("P.O. Box 10622", sideX + 3, syi); syi += 3;
-  doc.text("Rockville, MD 20850", sideX + 3, syi); syi += 3;
-  doc.text("(855) 906-5949", sideX + 3, syi); syi += 4;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
-  doc.text("POLICY PERIOD (MEMBERSHIP TERM)", sideX + 3, syi); syi += 3.4;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); C(INK);
-  if (form.effectiveDate && form.expirationDate) {
-    doc.text(`Effective: ${fmtDateShort(form.effectiveDate)}`, sideX + 3, syi); syi += 3.2;
-    doc.text(`Expiration: ${fmtDateShort(form.expirationDate)}`, sideX + 3, syi); syi += 4;
-  } else { doc.text("—", sideX + 3, syi); syi += 4; }
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
-  doc.text("YOUR POLICY IS WRITTEN BY", sideX + 3, syi); syi += 3.4;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); C(INK);
-  doc.text("Klutch Insurance Company", sideX + 3, syi);
-  sy += sumH + 4;
-
-  sideBar("How to Report a Claim");
-  const rptH = 36;
-  F(BOXBG); doc.rect(sideX, sy, sideW, rptH, "F");
-  D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(sideX, sy, sideW, rptH);
-  let ry = sy + 4.5;
-  const rptLine = (lbl: string, val: string, link = false) => {
+    doc.text("CONTACT INFORMATION", sideX + 3, syi); syi += 3.4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7); C(INK);
+    doc.text("Klutch Insurance Company", sideX + 3, syi); syi += 3.2;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); C(GRAY);
+    doc.text("P.O. Box 10622", sideX + 3, syi); syi += 3;
+    doc.text("Rockville, MD 20850", sideX + 3, syi); syi += 3;
+    doc.text("(855) 906-5949", sideX + 3, syi); syi += 4;
     doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
-    doc.text(lbl, sideX + 3, ry); ry += 3.3;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); C(link ? ACCENT : INK);
-    doc.text(val, sideX + 3, ry); ry += 4.5;
-  };
-  rptLine("ONLINE", "klutchinsurance.com/claims", true);
-  rptLine("PHONE", "(855) 906-5949");
-  rptLine("EMAIL", "claims@klutchinsurance.com");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
-  doc.text("MAILING", sideX + 3, ry); ry += 3.3;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); C(INK);
-  doc.text("Klutch Insurance Company", sideX + 3, ry); ry += 3.1;
-  doc.setFontSize(6.8); C(GRAY);
-  doc.text("P.O. Box 10622, Rockville, MD 20850", sideX + 3, ry);
-  sy += rptH + 4;
+    doc.text("POLICY PERIOD (MEMBERSHIP TERM)", sideX + 3, syi); syi += 3.4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); C(INK);
+    if (form.effectiveDate && form.expirationDate) {
+      doc.text(`Effective: ${fmtDateShort(form.effectiveDate)}`, sideX + 3, syi); syi += 3.2;
+      doc.text(`Expiration: ${fmtDateShort(form.expirationDate)}`, sideX + 3, syi); syi += 4;
+    } else { doc.text("—", sideX + 3, syi); syi += 4; }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
+    doc.text("YOUR POLICY IS WRITTEN BY", sideX + 3, syi); syi += 3.4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); C(INK);
+    doc.text("Klutch Insurance Company", sideX + 3, syi);
+    sy += sumH + 4;
 
-  noticeBox("Cancellation notice", "Coverage under this policy will terminate upon cancellation or non-renewal of your Membership Agreement. Written notice will be provided in accordance with applicable statutory requirements.");
-  noticeBox("Fraud warning", "Any person who knowingly and willfully presents false information on this declaration or in connection with any claim for the purpose of defrauding an insurer may be subject to civil penalties and criminal prosecution under applicable state law.");
-  noticeBox("Renewal", "This policy renews for successive terms coinciding with your active Membership Agreement unless cancelled. Coverage terms and limits are subject to change upon renewal.");
+    sideBar("How to Report a Claim");
+    const rptH = 36;
+    F(BOXBG); doc.rect(sideX, sy, sideW, rptH, "F");
+    D(BOXBORDER); doc.setLineWidth(0.2); doc.rect(sideX, sy, sideW, rptH);
+    let ry = sy + 4.5;
+    const rptLine = (lbl: string, val: string, link = false) => {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
+      doc.text(lbl, sideX + 3, ry); ry += 3.3;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); C(link ? ACCENT : INK);
+      doc.text(val, sideX + 3, ry); ry += 4.5;
+    };
+    rptLine("ONLINE", "klutchinsurance.com/claims", true);
+    rptLine("PHONE", "(855) 906-5949");
+    rptLine("EMAIL", "claims@klutchinsurance.com");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
+    doc.text("MAILING", sideX + 3, ry); ry += 3.3;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); C(INK);
+    doc.text("Klutch Insurance Company", sideX + 3, ry); ry += 3.1;
+    doc.setFontSize(6.8); C(GRAY);
+    doc.text("P.O. Box 10622, Rockville, MD 20850", sideX + 3, ry);
+    sy += rptH + 4;
 
-  // Footer page 1
-  D(RULE); doc.setLineWidth(0.3); doc.line(lm, H - 10, rm, H - 10);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7); C([120, 120, 120]);
-  doc.text("Klutch Insurance Company  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949", lm, H - 6);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(ACCENT);
-  doc.text("KLUTCH INSURANCE COMPANY", rm, H - 6, { align: "right" });
+    noticeBox("Cancellation notice", "Coverage under this policy will terminate upon cancellation or non-renewal of your Membership Agreement. Written notice will be provided in accordance with applicable statutory requirements.");
+    noticeBox("Fraud warning", "Any person who knowingly and willfully presents false information on this declaration or in connection with any claim for the purpose of defrauding an insurer may be subject to civil penalties and criminal prosecution under applicable state law.");
+    noticeBox("Renewal", "This policy renews for successive terms coinciding with your active Membership Agreement unless cancelled. Coverage terms and limits are subject to change upon renewal.");
 
-  // ══ PAGE 2 ════════════════════════════════════════════════════════════════
-  doc.addPage();
-  y = 10;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(17); C(INK);
-  doc.text("Policy Declarations", lm, y + 5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); C(GRAY);
-  doc.text("Policy number:", lm, y + 10);
-  lw = doc.getTextWidth("Policy number:  ");
-  doc.setFont("helvetica", "bold"); C(INK);
-  doc.text(form.policyNumber || "—", lm + lw, y + 10);
-  doc.setFont("helvetica", "normal"); C(GRAY);
-  doc.text("Policy effective date:", lm, y + 14.5);
-  lw = doc.getTextWidth("Policy effective date:  ");
-  doc.setFont("helvetica", "bold"); C(INK);
-  doc.text(fmtDate(form.effectiveDate), lm + lw, y + 14.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
-  doc.text("2 of 2", rm, y + 3, { align: "right" });
-  try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
-  y += 22;
-  D(RULE); doc.setLineWidth(0.3); doc.line(lm, y, rm, y);
-  y += 5;
-  const colTop2 = y;
-  D(RULE); doc.setLineWidth(0.3); doc.line(dividerX, colTop2, dividerX, H - 14);
+    // Footer page 1
+    D(RULE); doc.setLineWidth(0.3); doc.line(lm, H - 10, rm, H - 10);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); C([120, 120, 120]);
+    doc.text("Klutch Insurance Company  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949", lm, H - 6);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(ACCENT);
+    doc.text("KLUTCH INSURANCE COMPANY", rm, H - 6, { align: "right" });
 
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(ACCENT);
-  doc.text("Policy conditions & important notices", lm, y);
-  y += 5;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
-  const intro = doc.splitTextToSize("The following conditions govern coverage under this policy. All terms are subject to the master policy and applicable state law.", mainW);
-  doc.text(intro, lm, y); y += intro.length * 3.4 + 4;
+    // ══ PAGE 2 ════════════════════════════════════════════════════════════════
+    doc.addPage();
+    y = 10;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(17); C(INK);
+    doc.text("Policy Declarations", lm, y + 5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); C(GRAY);
+    doc.text("Policy number:", lm, y + 10);
+    lw = doc.getTextWidth("Policy number:  ");
+    doc.setFont("helvetica", "bold"); C(INK);
+    doc.text(form.policyNumber || "—", lm + lw, y + 10);
+    doc.setFont("helvetica", "normal"); C(GRAY);
+    doc.text("Policy effective date:", lm, y + 14.5);
+    lw = doc.getTextWidth("Policy effective date:  ");
+    doc.setFont("helvetica", "bold"); C(INK);
+    doc.text(fmtDate(form.effectiveDate), lm + lw, y + 14.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
+    doc.text("2 of 2", rm, y + 3, { align: "right" });
+    try { doc.addImage(KLUTCH_LOGO_B64, "PNG", rm - 40, y, 40, 10); } catch {}
+    y += 22;
+    D(RULE); doc.setLineWidth(0.3); doc.line(lm, y, rm, y);
+    y += 5;
+    const colTop2 = y;
+    D(RULE); doc.setLineWidth(0.3); doc.line(dividerX, colTop2, dividerX, H - 14);
 
-  const condition = (num: string, title: string, text: string) => {
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
-    doc.text("•", lm, y);
-    doc.text(`${num}. ${title}`, lm + 4, y);
-    y += 3.8;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); C(GRAY);
-    const ls = doc.splitTextToSize(text, mainW - 4);
-    doc.text(ls, lm + 4, y);
-    y += ls.length * 3.3 + 3;
-  };
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); C(ACCENT);
+    doc.text("Policy conditions & important notices", lm, y);
+    y += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); C(GRAY);
+    const intro = doc.splitTextToSize("The following conditions govern coverage under this policy. All terms are subject to the master policy and applicable state law.", mainW);
+    doc.text(intro, lm, y); y += intro.length * 3.4 + 4;
+
+    const condition = (num: string, title: string, text: string) => {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); C(INK);
+      doc.text("•", lm, y);
+      doc.text(`${num}. ${title}`, lm + 4, y);
+      y += 3.8;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); C(GRAY);
+      const ls = doc.splitTextToSize(text, mainW - 4);
+      doc.text(ls, lm + 4, y);
+      y += ls.length * 3.3 + 3;
+    };
   condition("1", "Insuring Agreement.", "This policy is issued by Klutch Insurance Company to Metrocars Leasing Corp (named insured and vehicle owner/lessor). The named operator is an insured while operating the covered vehicle pursuant to an active Membership Agreement with Metrocars Leasing Corp.");
   condition("2", "Premium.", "Premium for all coverages is included in the member's weekly Membership Fee paid to Metrocars Leasing Corp. No separate premium invoice is issued.");
   condition("3", "Physical Damage Deductibles.", "Collision and comprehensive deductibles correspond to the Member Damage Fee defined in the Membership Agreement between the named operator and Metrocars Leasing Corp.");

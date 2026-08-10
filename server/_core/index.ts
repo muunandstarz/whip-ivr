@@ -188,14 +188,56 @@ async function startServer() {
     try {
       const { storageKey } = req.query as { storageKey?: string };
       if (!storageKey) { res.status(400).json({ error: 'storageKey required' }); return; }
-      const { storageGetSignedUrl } = await import('../storage.js');
-      const signedUrl = await storageGetSignedUrl(storageKey);
-      const upstream = await fetch(signedUrl);
+      const { storageGetSignedUrl, storagePut } = await import('../storage.js');
+      let finalStorageKey = storageKey;
+      let signedUrl = await storageGetSignedUrl(finalStorageKey);
+      let upstream = await fetch(signedUrl);
+      // If S3 returns 403/404 (file was stored in a different environment), try lazy re-download from Slack
+      if (!upstream.ok && (upstream.status === 403 || upstream.status === 404)) {
+        try {
+          const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+          // Look up the file record to get slackFileId
+          const [fileRow] = await conn.execute<any[]>(
+            'SELECT mf.slack_file_id, mf.filename, mf.content_type FROM mail_item_files mf WHERE mf.storage_key = ? LIMIT 1',
+            [storageKey]
+          );
+          const fileRec = Array.isArray(fileRow) ? fileRow[0] : null;
+          if (fileRec?.slack_file_id) {
+            // Get the Slack bot token
+            const [cfgRow] = await conn.execute<any[]>('SELECT slack_bot_token FROM mail_bot_config LIMIT 1');
+            const cfg = Array.isArray(cfgRow) ? cfgRow[0] : null;
+            const slackToken = cfg?.slack_bot_token || process.env.SLACK_BOT_TOKEN;
+            if (slackToken) {
+              // Fetch fresh download URL from Slack
+              const infoResp = await fetch(`https://slack.com/api/files.info?file=${fileRec.slack_file_id}`, {
+                headers: { Authorization: `Bearer ${slackToken}` }
+              });
+              const infoData = await infoResp.json() as any;
+              const dlUrl = infoData?.file?.url_private_download || infoData?.file?.url_private;
+              if (dlUrl) {
+                const dlResp = await fetch(dlUrl, { headers: { Authorization: `Bearer ${slackToken}` } });
+                if (dlResp.ok) {
+                  const buf = Buffer.from(await dlResp.arrayBuffer());
+                  const ct = fileRec.content_type || dlResp.headers.get('content-type') || 'application/pdf';
+                  const fname = fileRec.filename || storageKey.split('/').pop() || 'file.pdf';
+                  const { key: newKey } = await storagePut(`mail/slack/redownload/${fname}`, buf, ct);
+                  // Update the storage_key in the DB
+                  await conn.execute('UPDATE mail_item_files SET storage_key = ? WHERE storage_key = ?', [newKey, storageKey]);
+                  finalStorageKey = newKey;
+                  signedUrl = await storageGetSignedUrl(finalStorageKey);
+                  upstream = await fetch(signedUrl);
+                }
+              }
+            }
+          }
+        } catch (redownloadErr) {
+          console.error('[file-proxy] Re-download failed:', redownloadErr);
+        }
+      }
       if (!upstream.ok) { res.status(upstream.status).json({ error: 'File not found' }); return; }
       const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream';
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', 'inline');
-      // Remove X-Frame-Options to allow iframe preview
       res.removeHeader('X-Frame-Options');
       res.setHeader('X-Frame-Options', 'SAMEORIGIN');
       const buffer = Buffer.from(await upstream.arrayBuffer());
