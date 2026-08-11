@@ -15,8 +15,7 @@ import mysql from 'mysql2/promise';
 import { classify } from './classify.js';
 import { route } from './route.js';
 import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
-import { storageGetSignedUrl } from '../storage.js';
-import { buildAiSubject, buildMailSummary, refreshIncompleteMailContent } from './contentRefresh.js';
+import { buildAiSubject, buildMailSummary, createMailContentReader, parseMailContentFiles, refreshIncompleteMailContent } from './contentRefresh.js';
 import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
 
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
@@ -166,10 +165,10 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
   try {
     // Select unprocessed items (category IS NULL, status='new')
     const [items] = await conn.execute<any[]>(
-      `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
+      `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source,
               mi.slack_channel_id, mi.slack_message_ts,
               GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
-              GROUP_CONCAT(mif.storage_key SEPARATOR '|||') AS storage_keys
+              GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
        FROM mail_items mi
        LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
        WHERE mi.category IS NULL AND mi.status = 'new'
@@ -178,21 +177,32 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
        LIMIT 20`
     );
 
+    const readMailContent = await createMailContentReader(conn);
     let processed = 0, errors = 0;
     for (const item of items) {
       try {
-        const keys = String(item.storage_keys ?? '').split('|||').filter(Boolean).slice(0, 2);
-        const fileUrls = (await Promise.all(
-          keys.map((key: string) => storageGetSignedUrl(key).catch(() => null)),
-        )).filter(Boolean) as string[];
-        // Classify with PDF content when stored attachments are available.
+        const content = await readMailContent(
+          item.source,
+          item.external_id,
+          item.body_text,
+          parseMailContentFiles(item.file_entries),
+        );
+        if (!content.hasReadableContent) {
+          await conn.execute(
+            `UPDATE mail_items
+             SET needs_review=1,
+                 reason=COALESCE(NULLIF(reason, ''), 'Awaiting readable email body or attachment content before assignment')
+             WHERE id=?`,
+            [item.id],
+          );
+          continue;
+        }
         const classification = await classify({
           subject: item.subject ?? undefined,
-          bodyText: item.body_text ?? undefined,
+          bodyText: content.indexedBody,
           attachmentNames: item.attachment_names
             ? item.attachment_names.split(', ').filter(Boolean)
             : undefined,
-          fileUrls: fileUrls.length ? fileUrls : undefined,
         });
 
         // Route
@@ -208,7 +218,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
              assigned_team_id = ?, assigned_handler_id = ?, status = ?,
              assigned_at = ?, due_at = ?,
              initial_category = ?, initial_handler_id = ?, initial_confidence = ?,
-             summary_note = ?, subject = ?
+             summary_note = ?, subject = ?, body_text = ?
            WHERE id = ?`,
           [
             patch.category, patch.confidence, patch.isDemand, patch.needsReview,
@@ -218,7 +228,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
             patch.assignedTeamId, patch.assignedHandlerId, patch.status,
             patch.assignedAt, patch.dueAt,
             patch.initialCategory, patch.initialHandlerId, patch.initialConfidence,
-            buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null),
+            buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null), content.indexedBody,
             item.id,
           ]
         );

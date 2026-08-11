@@ -14,11 +14,17 @@ const CATEGORY_TITLE_MAP: Record<string, string> = {
   other_or_unclear: 'Claims Correspondence',
 };
 
-interface MailFileRef {
+export interface MailContentFile {
   contentType: string;
   storageKey: string;
   slackFileId: string | null;
   filename: string | null;
+}
+
+export interface MailContentRead {
+  attachmentText: string;
+  indexedBody: string;
+  hasReadableContent: boolean;
 }
 
 function isUsableFileResponse(response: Response): boolean {
@@ -34,6 +40,20 @@ function findAttachment(part: GmailPart | undefined, filename: string): GmailPar
     if (match) return match;
   }
   return null;
+}
+
+export function parseMailContentFiles(rawEntries: string | null | undefined): MailContentFile[] {
+  return String(rawEntries ?? '')
+    .split('|||')
+    .map((entry) => {
+      const [contentType, storageKey, slackFileId, filename] = entry.split(':::');
+      return { contentType, storageKey, slackFileId: slackFileId || null, filename: filename || null };
+    })
+    .filter((file) =>
+      Boolean(file.storageKey) &&
+      (file.contentType.toLowerCase().includes('pdf') || file.storageKey.toLowerCase().endsWith('.pdf')),
+    )
+    .slice(0, 2);
 }
 
 export function buildMailSummary(classification: ClassificationResult): string | null {
@@ -57,12 +77,6 @@ export function buildAiSubject(classification: ClassificationResult, currentSubj
   if (classification.claimant_or_member_name) parts.push(classification.claimant_or_member_name);
   if (classification.claim_number) parts.push(classification.claim_number);
   return parts.join(' — ').slice(0, 255);
-}
-
-export interface ContentRefreshResult {
-  refreshed: number;
-  errors: number;
-  total: number;
 }
 
 async function extractPdfText(bytes: Buffer): Promise<string> {
@@ -91,13 +105,77 @@ async function downloadSlackFile(slackFileId: string, token: string): Promise<Bu
 }
 
 /**
- * Re-read unresolved, already-classified mail that lacks a useful summary or title.
- * It deliberately preserves category, assignee, status, and routing history.
+ * Build a single batch-scoped reader for source mail. It uses Gmail/Slack as the
+ * source of truth and only falls back to storage URLs when direct retrieval is not
+ * available. This avoids assigning work based solely on a filename.
  */
-export async function refreshIncompleteMailContent(
-  conn: Connection,
-  limit = 50,
-): Promise<ContentRefreshResult> {
+export async function createMailContentReader(conn: Connection) {
+  const [[mailBotConfig]] = await conn.execute<any[]>(
+    'SELECT slack_bot_token FROM mail_bot_config ORDER BY id ASC LIMIT 1',
+  );
+  const slackToken = mailBotConfig?.slack_bot_token || process.env.SLACK_BOT_TOKEN || '';
+  const gmail = buildRealGmailFetch(conn);
+  const gmailToken = await gmail.getAccessToken().catch(() => null);
+  const gmailMessages = new Map<string, Awaited<ReturnType<typeof gmail.getMessage>>>();
+
+  return async function readMailContent(
+    source: string,
+    externalId: string,
+    bodyText: string | null | undefined,
+    files: MailContentFile[],
+  ): Promise<MailContentRead> {
+    const extractedChunks: string[] = [];
+    for (const file of files) {
+      let bytes: Buffer | null = null;
+      if (source === 'mail' && file.slackFileId) {
+        bytes = await downloadSlackFile(file.slackFileId, slackToken);
+      } else if (source === 'email' && gmailToken && file.filename) {
+        let message = gmailMessages.get(externalId);
+        if (!message) {
+          message = await gmail.getMessage(gmailToken, externalId);
+          gmailMessages.set(externalId, message);
+        }
+        const attachment = findAttachment(message.payload as GmailPart | undefined, file.filename);
+        if (attachment?.body?.attachmentId || attachment?.body?.data) {
+          const encoded = attachment.body.attachmentId
+            ? (await gmail.getAttachment(gmailToken, externalId, attachment.body.attachmentId)).data
+            : attachment.body.data!;
+          bytes = Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+        }
+      }
+      if (!bytes) {
+        const signedUrl = await storageGetSignedUrl(file.storageKey).catch(() => null);
+        if (signedUrl) {
+          const response = await fetch(signedUrl);
+          if (isUsableFileResponse(response)) bytes = Buffer.from(await response.arrayBuffer());
+        }
+      }
+      if (bytes?.length) {
+        const text = await extractPdfText(bytes).catch((error) => {
+          console.warn(`[mailContentRefresh] PDF text extraction skipped for ${externalId}:`, error instanceof Error ? error.message : String(error));
+          return '';
+        });
+        if (text) extractedChunks.push(text);
+      }
+    }
+
+    const attachmentText = extractedChunks.join('\n\n').slice(0, 50000);
+    const indexedBody = [bodyText?.trim(), attachmentText]
+      .filter(Boolean)
+      .join('\n\nAttachment text:\n')
+      .slice(0, 60000);
+    return { attachmentText, indexedBody, hasReadableContent: indexedBody.trim().length > 0 };
+  };
+}
+
+export interface ContentRefreshResult {
+  refreshed: number;
+  errors: number;
+  total: number;
+}
+
+/** Re-read unresolved, already-classified mail that lacks a useful summary or title. */
+export async function refreshIncompleteMailContent(conn: Connection, limit = 50): Promise<ContentRefreshResult> {
   const batchLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
   const [items] = await conn.execute<any[]>(
     `SELECT mi.id, mi.source, mi.external_id, mi.subject, mi.body_text,
@@ -118,75 +196,17 @@ export async function refreshIncompleteMailContent(
      LIMIT ${batchLimit}`,
   );
 
-  const [[mailBotConfig]] = await conn.execute<any[]>(
-    'SELECT slack_bot_token FROM mail_bot_config ORDER BY id ASC LIMIT 1',
-  );
-  const slackToken = mailBotConfig?.slack_bot_token || process.env.SLACK_BOT_TOKEN || '';
-  const gmail = buildRealGmailFetch(conn);
-  const gmailToken = await gmail.getAccessToken().catch(() => null);
-  const gmailMessages = new Map<string, Awaited<ReturnType<typeof gmail.getMessage>>>();
-
+  const readMailContent = await createMailContentReader(conn);
   let refreshed = 0;
   let errors = 0;
   for (const item of items) {
     try {
-      const files: MailFileRef[] = String(item.file_entries ?? '')
-        .split('|||')
-        .map((entry: string) => {
-          const [contentType, storageKey, slackFileId, filename] = entry.split(':::');
-          return { contentType, storageKey, slackFileId: slackFileId || null, filename: filename || null };
-        })
-        .filter((file: MailFileRef) =>
-          file.contentType.toLowerCase().includes('pdf') || file.storageKey.toLowerCase().endsWith('.pdf'),
-        )
-        .slice(0, 2);
-
-      const extractedChunks: string[] = [];
-      for (const file of files) {
-        let bytes: Buffer | null = null;
-        if (item.source === 'mail' && file.slackFileId) {
-          bytes = await downloadSlackFile(file.slackFileId, slackToken);
-        } else if (item.source === 'email' && gmailToken && file.filename) {
-          let message = gmailMessages.get(item.external_id);
-          if (!message) {
-            message = await gmail.getMessage(gmailToken, item.external_id);
-            gmailMessages.set(item.external_id, message);
-          }
-          const attachment = findAttachment(message.payload as GmailPart | undefined, file.filename);
-          if (attachment?.body?.attachmentId || attachment?.body?.data) {
-            const encoded = attachment.body.attachmentId
-              ? (await gmail.getAttachment(gmailToken, item.external_id, attachment.body.attachmentId)).data
-              : attachment.body.data!;
-            bytes = Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-          }
-        }
-        if (!bytes) {
-          const signedUrl = await storageGetSignedUrl(file.storageKey).catch(() => null);
-          if (signedUrl) {
-            const response = await fetch(signedUrl);
-            if (isUsableFileResponse(response)) bytes = Buffer.from(await response.arrayBuffer());
-          }
-        }
-        if (bytes?.length) {
-          const text = await extractPdfText(bytes).catch((error) => {
-            console.warn(`[mailContentRefresh] PDF text extraction skipped for item ${item.id}:`, error instanceof Error ? error.message : String(error));
-            return '';
-          });
-          if (text) extractedChunks.push(text);
-        }
-      }
-
-      const attachmentText = extractedChunks.join('\n\n').slice(0, 50000);
-      const indexedBody = [item.body_text, attachmentText]
-        .filter(Boolean)
-        .join('\n\nAttachment text:\n')
-        .slice(0, 60000);
+      const content = await readMailContent(item.source, item.external_id, item.body_text, parseMailContentFiles(item.file_entries));
+      if (!content.hasReadableContent) continue;
       const classification = await classify({
         subject: item.subject ?? undefined,
-        bodyText: indexedBody || undefined,
-        attachmentNames: item.attachment_names
-          ? String(item.attachment_names).split(', ').filter(Boolean)
-          : undefined,
+        bodyText: content.indexedBody,
+        attachmentNames: item.attachment_names ? String(item.attachment_names).split(', ').filter(Boolean) : undefined,
       });
       await conn.execute(
         `UPDATE mail_items
@@ -200,17 +220,11 @@ export async function refreshIncompleteMailContent(
              reason = COALESCE(NULLIF(reason, ''), ?)
          WHERE id = ?`,
         [
-          buildMailSummary(classification),
-          buildAiSubject(classification, item.subject ?? null),
-          attachmentText,
-          indexedBody,
-          classification.claim_number ?? null,
-          classification.sender_organization ?? null,
-          classification.adverse_carrier ?? null,
-          classification.claimant_or_member_name ?? null,
-          classification.requested_action ?? null,
-          classification.reason ?? null,
-          item.id,
+          buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null),
+          content.attachmentText, content.indexedBody,
+          classification.claim_number ?? null, classification.sender_organization ?? null,
+          classification.adverse_carrier ?? null, classification.claimant_or_member_name ?? null,
+          classification.requested_action ?? null, classification.reason ?? null, item.id,
         ],
       );
       refreshed++;
@@ -219,6 +233,5 @@ export async function refreshIncompleteMailContent(
       errors++;
     }
   }
-
   return { refreshed, errors, total: items.length };
 }

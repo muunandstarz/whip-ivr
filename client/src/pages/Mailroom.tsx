@@ -507,21 +507,16 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     if (activeTab === "overdue") base.overdue = true;
     else if (activeTab === "urgent") base.urgent = true;
     else if (activeTab === "legal") base.category = 'legal_or_high_risk';
-    else if (activeTab === "demands") base.status = undefined, base.legalOnly = undefined;
+    else if (activeTab === "demands") base.isDemand = true;
     else if (activeTab === "resolved") base.status = "resolved";
     // status filter from dropdown (only applies on "all" tab)
     if (activeTab === "all" && statusFilter !== "all") base.status = statusFilter;
-    // demands tab: filter by isDemand — we'll filter client-side since adminQueue doesn't have isDemand filter
     return base;
   }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo, sortOrder, sourceFilter]);
 
   const { data, isLoading, refetch } = trpc.mail.adminQueue.useQuery(queryInput, { refetchInterval: 30000 });
-  const items = useMemo(() => {
-    let list = data?.items ?? [];
-    if (activeTab === "demands") list = list.filter(i => i.isDemand === 1);
-    return list;
-  }, [data?.items, activeTab]);
-  const total = activeTab === "demands" ? items.length : (data?.total ?? 0);
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const utils = trpc.useUtils();
   const resolveMut = trpc.mail.resolve.useMutation({ onSuccess: () => { toast.success("Resolved"); utils.mail.adminQueue.invalidate(); utils.mail.adminStats.invalidate(); refetch(); }, onError: (e) => toast.error(e.message) });

@@ -382,6 +382,12 @@
 - [x] Extend the Mailroom search bar to find text in subject, summary, email body, and extracted document content
 - [ ] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
 
+## Session 2026-08-11 Assignment Quality and Demand Queue
+- [x] Require an unresolved, unreviewed source and successful content capture before Mailroom assignment
+- [x] Keep items with unreadable or missing source content in the unassigned review lane rather than auto-assigning them
+- [x] Fix the Admin Mailroom Demands card so it opens the populated demand-filtered queue
+- [x] Measure the legacy Mailroom content backlog and estimate its completion timeline under the safe refresh throughput (797 items; approximately 159.4 minutes at 25 items per five-minute pass)
+
 ## Session 2026-08-11 Mailroom Assignment Boundary
 - [x] Prevent Mailroom ingest, classification, routing, and reassignments from creating Slack assignment posts
 - [x] Preserve Mailroom internal assignment records and existing Slack reviewed-marker behavior

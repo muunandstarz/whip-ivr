@@ -337,6 +337,7 @@ export const mailRouter = router({
       overdue: z.boolean().optional(),
       urgent: z.boolean().optional(),
       legalOnly: z.boolean().optional(),
+      isDemand: z.boolean().optional(),
       needsReview: z.boolean().optional(),
       search: z.string().optional(),
       from: z.date().optional(),
@@ -361,6 +362,7 @@ export const mailRouter = router({
       if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.urgent) filters.push(eq(mailItems.urgency, 'urgent'));
       if (input?.legalOnly) filters.push(or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!);
+      if (input?.isDemand) filters.push(eq(mailItems.isDemand, 1));
       if (input?.needsReview) filters.push(eq(mailItems.needsReview, 1));
       if (input?.from) filters.push(gte(mailItems.receivedAt, input.from));
       if (input?.to) filters.push(lte(mailItems.receivedAt, input.to));
@@ -838,6 +840,8 @@ export const mailRouter = router({
       // Manual triggers (from admin UI) bypass the day-of-week gate
       const { classify } = await import('../mail/classify.js');
       const { route } = await import('../mail/route.js');
+      const { createMailContentReader, parseMailContentFiles } = await import('../mail/contentRefresh.js');
+      const readMailContent = await createMailContentReader(conn);
 
       // Day-of-week gate: 2=Tue, 3=Wed, 4=Thu, 5=Fri (ET)
       const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
@@ -849,10 +853,10 @@ export const mailRouter = router({
 
       // Get all unprocessed items (no limit — we'll apply per-handler limit below)
       const [allItems] = await conn.execute<any[]>(
-        `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
+        `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source,
                 mi.slack_message_ts, mi.slack_channel_id,
                 GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
-                GROUP_CONCAT(mif.storage_key SEPARATOR '|||') AS storage_keys
+                GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
          FROM mail_items mi
          LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
          WHERE mi.category IS NULL AND mi.status = 'new'
@@ -864,12 +868,8 @@ export const mailRouter = router({
 
       for (const item of allItems) {
         try {
-          // For items with attached files (fax scans), get presigned URLs for PDF reading
-          let fileUrls: string[] = [];
-          if (item.storage_keys) {
-            const keys = item.storage_keys.split('|||').filter(Boolean).slice(0, 2);
-            fileUrls = (await Promise.all(keys.map((k: string) => storageGetSignedUrl(k).catch(() => null)))).filter(Boolean) as string[];
-          } else if (item.slack_message_ts && item.slack_channel_id) {
+          let fileEntries = item.file_entries;
+          if (!fileEntries && item.slack_message_ts && item.slack_channel_id) {
             // No files stored yet — try to backfill from Slack
             try {
               let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
@@ -896,19 +896,39 @@ export const mailRouter = router({
                     urlPrivateDownload: fileObj.url_private_download,
                     reactions: [],
                   }, slackFetch, { reviewedEmoji: 'white_check_mark', addBotMarker: false });
-                  // Re-fetch storage keys after backfill
-                  const [newFiles] = await conn.execute<any[]>('SELECT storage_key FROM mail_item_files WHERE item_id=?', [item.id]);
-                  const newKeys = newFiles.map((f: any) => f.storage_key).slice(0, 2);
-                  fileUrls = (await Promise.all(newKeys.map((k: string) => storageGetSignedUrl(k).catch(() => null)))).filter(Boolean) as string[];
+                  // Re-fetch complete file metadata after recovery.
+                  const [newFiles] = await conn.execute<any[]>(
+                    `SELECT content_type, storage_key, slack_file_id, filename
+                     FROM mail_item_files WHERE item_id=?`,
+                    [item.id],
+                  );
+                  fileEntries = newFiles.map((f: any) =>
+                    `${f.content_type ?? ''}:::${f.storage_key}:::${f.slack_file_id ?? ''}:::${f.filename ?? ''}`,
+                  ).join('|||');
                 }
               }
             } catch { /* non-fatal — classify without file content */ }
           }
+          const content = await readMailContent(
+            item.source,
+            item.external_id,
+            item.body_text,
+            parseMailContentFiles(fileEntries),
+          );
+          if (!content.hasReadableContent) {
+            await conn.execute(
+              `UPDATE mail_items
+               SET needs_review=1,
+                   reason=COALESCE(NULLIF(reason, ''), 'Awaiting readable email body or attachment content before assignment')
+               WHERE id=?`,
+              [item.id],
+            );
+            continue;
+          }
           const cl = await classify({
             subject: item.subject ?? undefined,
-            bodyText: item.body_text ?? undefined,
+            bodyText: content.indexedBody,
             attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined,
-            fileUrls: fileUrls.length > 0 ? fileUrls : undefined,
           });
           const patch = await route(conn, cl);
 
@@ -929,8 +949,8 @@ export const mailRouter = router({
           const summaryNote = buildMailSummary(cl);
           const newSubject = buildAiSubject(cl, item.subject ?? null);
           await conn.execute(
-            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=? WHERE id=?`,
-            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,item.id]
+            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=?,body_text=? WHERE id=?`,
+            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,content.indexedBody,item.id]
           );
           for (const h of patch.historyActions) {
             await conn.execute(`INSERT INTO mail_routing_history (item_id,action,to_handler_id,reason) VALUES (?,?,?,?)`, [item.id,h.action,h.toHandlerId??null,h.reason]);
