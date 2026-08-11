@@ -1,6 +1,7 @@
 import type { Connection } from 'mysql2/promise';
 import { PDFParse } from 'pdf-parse';
 import { storageGetSignedUrl } from '../storage.js';
+import { buildRealGmailFetch, type GmailPart } from './ingestGmail.js';
 import { classify, type ClassificationResult } from './classify.js';
 
 const CATEGORY_TITLE_MAP: Record<string, string> = {
@@ -12,6 +13,28 @@ const CATEGORY_TITLE_MAP: Record<string, string> = {
   legal_or_high_risk: 'Legal / High Risk',
   other_or_unclear: 'Claims Correspondence',
 };
+
+interface MailFileRef {
+  contentType: string;
+  storageKey: string;
+  slackFileId: string | null;
+  filename: string | null;
+}
+
+function isUsableFileResponse(response: Response): boolean {
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  return response.ok && !contentType.includes('xml') && !contentType.includes('text/html');
+}
+
+function findAttachment(part: GmailPart | undefined, filename: string): GmailPart | null {
+  if (!part) return null;
+  if (part.filename === filename && part.body) return part;
+  for (const child of part.parts ?? []) {
+    const match = findAttachment(child, filename);
+    if (match) return match;
+  }
+  return null;
+}
 
 export function buildMailSummary(classification: ClassificationResult): string | null {
   return [
@@ -42,26 +65,34 @@ export interface ContentRefreshResult {
   total: number;
 }
 
-async function extractPdfText(urls: string[]): Promise<string> {
-  const chunks: string[] = [];
-  for (const url of urls.slice(0, 2)) {
-    let parser: PDFParse | undefined;
-    try {
-      parser = new PDFParse({ url });
-      const parsed = await parser.getText({ partial: [1, 2, 3, 4, 5] });
-      if (parsed.text?.trim()) chunks.push(parsed.text.trim());
-    } catch (error) {
-      console.warn('[mailContentRefresh] PDF text extraction skipped:', error instanceof Error ? error.message : String(error));
-    } finally {
-      await parser?.destroy().catch(() => undefined);
-    }
+async function extractPdfText(bytes: Buffer): Promise<string> {
+  let parser: PDFParse | undefined;
+  try {
+    parser = new PDFParse({ data: bytes });
+    const parsed = await parser.getText({ partial: [1, 2, 3, 4, 5] });
+    return parsed.text?.trim().slice(0, 50000) ?? '';
+  } finally {
+    await parser?.destroy().catch(() => undefined);
   }
-  return chunks.join('\n\n').slice(0, 50000);
+}
+
+async function downloadSlackFile(slackFileId: string, token: string): Promise<Buffer | null> {
+  if (!token) return null;
+  const infoResponse = await fetch(`https://slack.com/api/files.info?file=${encodeURIComponent(slackFileId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const info = await infoResponse.json().catch(() => null) as any;
+  if (!info?.ok) return null;
+  const fileUrl = info.file?.url_private_download || info.file?.url_private;
+  if (!fileUrl) return null;
+  const fileResponse = await fetch(fileUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!isUsableFileResponse(fileResponse)) return null;
+  return Buffer.from(await fileResponse.arrayBuffer());
 }
 
 /**
  * Re-read unresolved, already-classified mail that lacks a useful summary or title.
- * This deliberately leaves category, assignee, status, and all routing history intact.
+ * It deliberately preserves category, assignee, status, and routing history.
  */
 export async function refreshIncompleteMailContent(
   conn: Connection,
@@ -69,9 +100,9 @@ export async function refreshIncompleteMailContent(
 ): Promise<ContentRefreshResult> {
   const batchLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
   const [items] = await conn.execute<any[]>(
-    `SELECT mi.id, mi.subject, mi.body_text,
+    `SELECT mi.id, mi.source, mi.external_id, mi.subject, mi.body_text,
             GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
-            GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key) SEPARATOR '|||') AS file_entries
+            GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
      FROM mail_items mi
      LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
      WHERE mi.status IN ('new', 'assigned', 'escalated')
@@ -87,26 +118,65 @@ export async function refreshIncompleteMailContent(
      LIMIT ${batchLimit}`,
   );
 
+  const [[mailBotConfig]] = await conn.execute<any[]>(
+    'SELECT slack_bot_token FROM mail_bot_config ORDER BY id ASC LIMIT 1',
+  );
+  const slackToken = mailBotConfig?.slack_bot_token || process.env.SLACK_BOT_TOKEN || '';
+  const gmail = buildRealGmailFetch(conn);
+  const gmailToken = await gmail.getAccessToken().catch(() => null);
+  const gmailMessages = new Map<string, Awaited<ReturnType<typeof gmail.getMessage>>>();
+
   let refreshed = 0;
   let errors = 0;
   for (const item of items) {
     try {
-      const keys = String(item.file_entries ?? '')
+      const files: MailFileRef[] = String(item.file_entries ?? '')
         .split('|||')
         .map((entry: string) => {
-          const [contentType, ...keyParts] = entry.split(':::');
-          return { contentType, key: keyParts.join(':::') };
+          const [contentType, storageKey, slackFileId, filename] = entry.split(':::');
+          return { contentType, storageKey, slackFileId: slackFileId || null, filename: filename || null };
         })
-        .filter((entry: { contentType: string; key: string }) =>
-          entry.contentType.toLowerCase().includes('pdf') || entry.key.toLowerCase().endsWith('.pdf'),
+        .filter((file: MailFileRef) =>
+          file.contentType.toLowerCase().includes('pdf') || file.storageKey.toLowerCase().endsWith('.pdf'),
         )
-        .map((entry: { key: string }) => entry.key)
-        .filter(Boolean)
         .slice(0, 2);
-      const fileUrls = (await Promise.all(
-        keys.map((key: string) => storageGetSignedUrl(key).catch(() => null)),
-      )).filter(Boolean) as string[];
-      const attachmentText = await extractPdfText(fileUrls);
+
+      const extractedChunks: string[] = [];
+      for (const file of files) {
+        let bytes: Buffer | null = null;
+        if (item.source === 'mail' && file.slackFileId) {
+          bytes = await downloadSlackFile(file.slackFileId, slackToken);
+        } else if (item.source === 'email' && gmailToken && file.filename) {
+          let message = gmailMessages.get(item.external_id);
+          if (!message) {
+            message = await gmail.getMessage(gmailToken, item.external_id);
+            gmailMessages.set(item.external_id, message);
+          }
+          const attachment = findAttachment(message.payload as GmailPart | undefined, file.filename);
+          if (attachment?.body?.attachmentId || attachment?.body?.data) {
+            const encoded = attachment.body.attachmentId
+              ? (await gmail.getAttachment(gmailToken, item.external_id, attachment.body.attachmentId)).data
+              : attachment.body.data!;
+            bytes = Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+          }
+        }
+        if (!bytes) {
+          const signedUrl = await storageGetSignedUrl(file.storageKey).catch(() => null);
+          if (signedUrl) {
+            const response = await fetch(signedUrl);
+            if (isUsableFileResponse(response)) bytes = Buffer.from(await response.arrayBuffer());
+          }
+        }
+        if (bytes?.length) {
+          const text = await extractPdfText(bytes).catch((error) => {
+            console.warn(`[mailContentRefresh] PDF text extraction skipped for item ${item.id}:`, error instanceof Error ? error.message : String(error));
+            return '';
+          });
+          if (text) extractedChunks.push(text);
+        }
+      }
+
+      const attachmentText = extractedChunks.join('\n\n').slice(0, 50000);
       const indexedBody = [item.body_text, attachmentText]
         .filter(Boolean)
         .join('\n\nAttachment text:\n')
@@ -117,7 +187,6 @@ export async function refreshIncompleteMailContent(
         attachmentNames: item.attachment_names
           ? String(item.attachment_names).split(', ').filter(Boolean)
           : undefined,
-        fileUrls: attachmentText ? undefined : (fileUrls.length ? fileUrls : undefined),
       });
       await conn.execute(
         `UPDATE mail_items

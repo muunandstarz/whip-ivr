@@ -385,7 +385,7 @@
 ## Session 2026-08-11 Mailroom Assignment Boundary
 - [x] Prevent Mailroom ingest, classification, routing, and reassignments from creating Slack assignment posts
 - [x] Preserve Mailroom internal assignment records and existing Slack reviewed-marker behavior
-- [ ] Verify a live Mailroom processing run creates no Slack assignment messages
+- [x] Verify a live Mailroom processing run creates no Slack assignment messages
 
 ## Session 2026-08-11 Mailroom Repairs
 - [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
