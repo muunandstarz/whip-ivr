@@ -15,6 +15,9 @@ import mysql from 'mysql2/promise';
 import { classify } from './classify.js';
 import { route } from './route.js';
 import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
+import { storageGetSignedUrl } from '../storage.js';
+import { buildAiSubject, buildMailSummary, refreshIncompleteMailContent } from './contentRefresh.js';
+import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
 
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
 
@@ -165,7 +168,8 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
     const [items] = await conn.execute<any[]>(
       `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
               mi.slack_channel_id, mi.slack_message_ts,
-              GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names
+              GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
+              GROUP_CONCAT(mif.storage_key SEPARATOR '|||') AS storage_keys
        FROM mail_items mi
        LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
        WHERE mi.category IS NULL AND mi.status = 'new'
@@ -177,13 +181,18 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
     let processed = 0, errors = 0;
     for (const item of items) {
       try {
-        // Classify
+        const keys = String(item.storage_keys ?? '').split('|||').filter(Boolean).slice(0, 2);
+        const fileUrls = (await Promise.all(
+          keys.map((key: string) => storageGetSignedUrl(key).catch(() => null)),
+        )).filter(Boolean) as string[];
+        // Classify with PDF content when stored attachments are available.
         const classification = await classify({
           subject: item.subject ?? undefined,
           bodyText: item.body_text ?? undefined,
           attachmentNames: item.attachment_names
             ? item.attachment_names.split(', ').filter(Boolean)
             : undefined,
+          fileUrls: fileUrls.length ? fileUrls : undefined,
         });
 
         // Route
@@ -198,7 +207,8 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
              urgency = ?, reason = ?, demand_date = ?, response_due_date = ?,
              assigned_team_id = ?, assigned_handler_id = ?, status = ?,
              assigned_at = ?, due_at = ?,
-             initial_category = ?, initial_handler_id = ?, initial_confidence = ?
+             initial_category = ?, initial_handler_id = ?, initial_confidence = ?,
+             summary_note = ?, subject = ?
            WHERE id = ?`,
           [
             patch.category, patch.confidence, patch.isDemand, patch.needsReview,
@@ -208,6 +218,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
             patch.assignedTeamId, patch.assignedHandlerId, patch.status,
             patch.assignedAt, patch.dueAt,
             patch.initialCategory, patch.initialHandlerId, patch.initialConfidence,
+            buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null),
             item.id,
           ]
         );
@@ -245,7 +256,8 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
       }
     }
 
-    res.json({ ok: true, processed, errors, total: items.length });
+    const contentRefresh = await refreshIncompleteMailContent(conn, 25);
+    res.json({ ok: true, processed, errors, total: items.length, contentRefresh });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
   } finally {
@@ -266,7 +278,8 @@ export async function mailIngestGmailHandler(req: Request, res: Response): Promi
   try {
     const gmail = buildRealGmailFetch(conn);
     const result = await ingestGmail(conn, gmail);
-    res.json({ ok: true, ...result });
+    const attachmentRecovery = await recoverStaleGmailAttachments(conn, 30);
+    res.json({ ok: true, ...result, attachmentRecovery });
   } catch (e) {
     console.error('[mailIngestGmail] error:', e);
     res.status(500).json({ ok: false, error: String(e) });

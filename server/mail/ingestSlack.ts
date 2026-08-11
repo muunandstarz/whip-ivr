@@ -67,6 +67,7 @@ export async function handleSlackFileEvent(
   }
 ): Promise<IngestSlackResult> {
   let { fileId, messageTs, channelId, filename, mimeType, urlPrivateDownload } = event;
+  let receivedAt = event.receivedAt;
 
   try {
     // 1. Check reactions on the parent message
@@ -78,6 +79,7 @@ export async function handleSlackFileEvent(
         mimeType = mimeType ?? fileInfo.mimeType;
         urlPrivateDownload = urlPrivateDownload ?? fileInfo.urlPrivateDownload;
         messageTs = event.messageTs || fileInfo.messageTs || messageTs;
+        receivedAt = receivedAt ?? fileInfo.receivedAt;
       }
     }
 
@@ -100,7 +102,7 @@ export async function handleSlackFileEvent(
            (source, external_id, received_at, status, pre_reviewed,
             slack_channel_id, slack_message_ts, slack_permalink)
          VALUES ('mail', ?, ?, 'resolved', 1, ?, ?, ?)`,
-        [fileId, event.receivedAt ?? new Date(), channelId, messageTs, permalink ?? null]
+        [fileId, receivedAt ?? new Date(), channelId, messageTs, permalink ?? null]
       );
       // Add a system note
       await conn.execute(
@@ -113,10 +115,30 @@ export async function handleSlackFileEvent(
 
     // 2. Dedupe check
     const [existing] = await conn.execute<any[]>(
-      "SELECT id FROM mail_items WHERE source = 'mail' AND external_id = ?",
+      `SELECT mi.id, COUNT(mif.id) AS file_count
+       FROM mail_items mi
+       LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
+       WHERE mi.source = 'mail' AND mi.external_id = ?
+       GROUP BY mi.id`,
       [fileId]
     );
     if (existing.length > 0) {
+      // A prior run may have inserted the Mailroom row while a file download failed.
+      // Rehydrate the attachment instead of preserving a permanently file-less record.
+      if (Number(existing[0].file_count ?? 0) === 0 && urlPrivateDownload) {
+        try {
+          const { buffer, contentType } = await slack.downloadFile(urlPrivateDownload);
+          const key = `mail/slack/${channelId}/${messageTs}/${filename ?? fileId}`;
+          const { key: storageKey } = await storagePut(key, buffer, contentType);
+          await conn.execute(
+            `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [existing[0].id, storageKey, filename ?? fileId, contentType, buffer.length, fileId]
+          );
+        } catch (recoveryErr) {
+          console.error(`[ingestSlack] attachment recovery failed for ${fileId}: ${recoveryErr}`);
+        }
+      }
       return { action: 'skipped_dedupe', itemId: existing[0].id };
     }
 
@@ -129,7 +151,7 @@ export async function handleSlackFileEvent(
          (source, external_id, received_at, status,
           slack_channel_id, slack_message_ts, slack_permalink, subject)
          VALUES ('mail', ?, ?, 'new', ?, ?, ?, ?)`,
-      [fileId, event.receivedAt ?? new Date(), channelId, messageTs, permalink ?? null, filename ?? null]
+      [fileId, receivedAt ?? new Date(), channelId, messageTs, permalink ?? null, filename ?? null]
     );
     const itemId = (ins as any).insertId;
 

@@ -141,24 +141,39 @@ export async function classify(input: ClassifyInput): Promise<ClassificationResu
     userContent = userText;
   }
 
-  const result = await invokeLLM({
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userContent },
-    ],
-  });
-
-  const raw = (() => {
+  const extractRaw = (result: Awaited<ReturnType<typeof invokeLLM>>): string | null => {
     const choice = result.choices?.[0];
-    if (!choice) throw new Error('classify: empty LLM response');
+    if (!choice) return null;
     const content = choice.message.content;
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
       const textPart = content.find((c: { type: string }) => c.type === 'text') as { text: string } | undefined;
       if (textPart) return textPart.text;
     }
-    throw new Error('classify: unexpected content shape');
-  })();
+    return null;
+  };
+
+  let result = await invokeLLM({
+    model: 'gpt-5-mini',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userContent },
+    ],
+  });
+  let raw = extractRaw(result);
+  // Some providers decline rich PDF inputs without a visible text response.
+  // Retry the same classification from the persisted subject/body/attachment metadata.
+  if (!raw && hasFiles) {
+    result = await invokeLLM({
+      model: 'gpt-5-mini',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userText },
+      ],
+    });
+    raw = extractRaw(result);
+  }
+  if (!raw) throw new Error('classify: empty LLM response');
 
   return parseClassification(raw);
 }

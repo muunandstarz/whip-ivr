@@ -191,11 +191,15 @@ async function startServer() {
       const { storageGetSignedUrl, storagePut } = await import('../storage.js');
       let finalStorageKey = storageKey;
       let upstream: Response | null = null;
+      const isUsableFileResponse = (response: Response) => {
+        const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+        return response.ok && !contentType.includes('xml') && !contentType.includes('text/html');
+      };
       // Try to get from S3 first — wrap in try-catch since presign may fail for dev-env keys
       try {
         const signedUrl = await storageGetSignedUrl(finalStorageKey);
         const resp = await fetch(signedUrl);
-        if (resp.ok) upstream = resp;
+        if (isUsableFileResponse(resp)) upstream = resp;
       } catch { /* fall through to Slack re-download */ }
       // If S3 failed (file was stored in a different environment), try lazy re-download from Slack
       if (!upstream) {
@@ -203,7 +207,11 @@ async function startServer() {
           const conn = await mysql.createConnection(process.env.DATABASE_URL!);
           // Look up the file record to get slackFileId
           const [fileRow] = await conn.execute<any[]>(
-            'SELECT mf.slack_file_id, mf.filename, mf.content_type FROM mail_item_files mf WHERE mf.storage_key = ? LIMIT 1',
+            `SELECT mf.id, mf.slack_file_id, mf.filename, mf.content_type,
+                    mi.source, mi.external_id
+             FROM mail_item_files mf
+             JOIN mail_items mi ON mi.id = mf.item_id
+             WHERE mf.storage_key = ? LIMIT 1`,
             [storageKey]
           );
           const fileRec = Array.isArray(fileRow) ? fileRow[0] : null;
@@ -230,16 +238,52 @@ async function startServer() {
                   await conn.execute('UPDATE mail_item_files SET storage_key = ? WHERE storage_key = ?', [newKey, storageKey]);
                   finalStorageKey = newKey;
                   const newSignedUrl = await storageGetSignedUrl(finalStorageKey);
-                  upstream = await fetch(newSignedUrl);
+                  const recoveredResponse = await fetch(newSignedUrl);
+                  if (isUsableFileResponse(recoveredResponse)) upstream = recoveredResponse;
                 }
               }
             }
           }
+          // Email attachments can also be stranded after a preview/prod storage boundary.
+          // Re-fetch the original Gmail attachment by message ID and filename, then replace
+          // its stale key so all subsequent opens use the live project bucket.
+          if (!upstream && fileRec?.source === 'email' && fileRec.external_id) {
+            const { buildRealGmailFetch } = await import('../mail/ingestGmail.js');
+            const gmail = buildRealGmailFetch(conn);
+            const token = await gmail.getAccessToken();
+            const message = await gmail.getMessage(token, fileRec.external_id);
+            const findAttachment = (parts: any[]): any | null => {
+              for (const part of parts ?? []) {
+                if (part.filename === fileRec.filename && part.body) return part;
+                const nested = findAttachment(part.parts ?? []);
+                if (nested) return nested;
+              }
+              return null;
+            };
+            const part = findAttachment(message.payload?.parts ?? []);
+            if (part?.body?.attachmentId || part?.body?.data) {
+              const encoded = part.body.attachmentId
+                ? (await gmail.getAttachment(token, fileRec.external_id, part.body.attachmentId)).data
+                : part.body.data;
+              const buffer = Buffer.from(String(encoded).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+              const contentType = fileRec.content_type || part.mimeType || 'application/octet-stream';
+              const { key: newKey } = await storagePut(
+                `mail/email/recovered/${fileRec.external_id}/${fileRec.filename || 'attachment'}`,
+                buffer,
+                contentType,
+              );
+              await conn.execute('UPDATE mail_item_files SET storage_key = ? WHERE id = ?', [newKey, fileRec.id]);
+              finalStorageKey = newKey;
+              const recoveredResponse = await fetch(await storageGetSignedUrl(finalStorageKey));
+              if (isUsableFileResponse(recoveredResponse)) upstream = recoveredResponse;
+            }
+          }
+          await conn.end();
         } catch (redownloadErr) {
           console.error('[file-proxy] Re-download failed:', redownloadErr);
         }
       }
-      if (!upstream) { res.status(404).json({ error: 'File not found' }); return; }
+      if (!upstream) { res.status(404).json({ error: 'File not found or could not be recovered' }); return; }
       const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream';
       res.setHeader('Content-Type', contentType);
       const filename = finalStorageKey.split('/').pop() ?? 'file.pdf';

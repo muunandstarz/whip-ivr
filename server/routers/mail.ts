@@ -20,6 +20,7 @@ import { COOKIE_NAME } from '../../shared/const.js';
 import mysql from 'mysql2/promise';
 import { randomUUID } from 'crypto';
 import { invokeLLM } from '../_core/llm.js';
+import type { ClassificationResult } from '../mail/classify.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -64,6 +65,39 @@ async function parseExternalJson(response: Response, stage: string): Promise<any
   } catch {
     throw new Error(`${stage} returned non-JSON: ${raw.slice(0, 240).replace(/\s+/g, ' ')}`);
   }
+}
+
+const CATEGORY_TITLE_MAP: Record<string, string> = {
+  injury_pip_bi: 'Injury / PIP / BI Mail',
+  inbound_subro: 'Inbound Subrogation',
+  existing_claim_followup: 'Claim Follow-up',
+  outbound_subro: 'Outbound Subrogation',
+  total_loss: 'Total Loss Document',
+  legal_or_high_risk: 'Legal / High Risk',
+  other_or_unclear: 'Claims Correspondence',
+};
+
+function buildMailSummary(classification: ClassificationResult): string | null {
+  return [
+    classification.claim_number ? `Claim: ${classification.claim_number}` : null,
+    classification.claimant_or_member_name ? `Person: ${classification.claimant_or_member_name}` : null,
+    classification.adverse_carrier ? `Carrier: ${classification.adverse_carrier}` : null,
+    classification.requested_action ?? null,
+    classification.reason ? classification.reason.slice(0, 120) : null,
+  ].filter(Boolean).join(' · ').slice(0, 255) || null;
+}
+
+function buildAiSubject(classification: ClassificationResult, currentSubject: string | null): string {
+  const genericCurrentTitle = !currentSubject
+    || currentSubject === '(no subject)'
+    || /^Claims Mail[_\s]/i.test(currentSubject);
+  if (!genericCurrentTitle) return currentSubject;
+  const parts = [CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence'];
+  if (classification.adverse_carrier) parts.push(classification.adverse_carrier);
+  else if (classification.sender_organization) parts.push(classification.sender_organization);
+  if (classification.claimant_or_member_name) parts.push(classification.claimant_or_member_name);
+  if (classification.claim_number) parts.push(classification.claim_number);
+  return parts.join(' — ').slice(0, 255);
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -330,6 +364,20 @@ export const mailRouter = router({
       if (input?.needsReview) filters.push(eq(mailItems.needsReview, 1));
       if (input?.from) filters.push(gte(mailItems.receivedAt, input.from));
       if (input?.to) filters.push(lte(mailItems.receivedAt, input.to));
+      if (input?.search?.trim()) {
+        const searchTerm = `%${input.search.trim().toLowerCase()}%`;
+        filters.push(sql`(
+          LOWER(COALESCE(${mailItems.subject}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.summaryNote}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.bodyText}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.reason}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.claimantName}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.requestedAction}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.fromName}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.fromEmail}, '')) LIKE ${searchTerm}
+          OR LOWER(COALESCE(${mailItems.claimNumber}, '')) LIKE ${searchTerm}
+        )`);
+      }
       const pageSize = input?.pageSize ?? 200;
       const page = input?.page ?? 1;
       const offset = (page - 1) * pageSize;
@@ -345,16 +393,6 @@ export const mailRouter = router({
         .orderBy(orderByClause)
         .limit(input?.limit ?? pageSize)
         .offset(offset);
-      // Server-side search filter
-      if (input?.search?.trim()) {
-        const q = input.search.toLowerCase();
-        rows = rows.filter(i =>
-          (i.subject ?? '').toLowerCase().includes(q) ||
-          (i.fromEmail ?? '').toLowerCase().includes(q) ||
-          (i.fromName ?? '').toLowerCase().includes(q) ||
-          (i.claimNumber ?? '').toLowerCase().includes(q)
-        );
-      }
       // Add fileCount for each item via a batch query
       if (rows.length > 0) {
         const ids = rows.map(r => r.id);
@@ -644,6 +682,8 @@ export const mailRouter = router({
         const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
         const gmail = buildRealGmailFetch(conn);
         results.ingest = await ingestGmail(conn, gmail);
+        const { recoverStaleGmailAttachments } = await import('../mail/gmailAttachmentRecovery.js');
+        results.gmailAttachmentRecovery = await recoverStaleGmailAttachments(conn, 30);
       } catch (ingestErr) {
         results.ingest = { skipped: true, reason: String(ingestErr) };
       }
@@ -810,6 +850,7 @@ export const mailRouter = router({
       // Get all unprocessed items (no limit — we'll apply per-handler limit below)
       const [allItems] = await conn.execute<any[]>(
         `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
+                mi.slack_message_ts, mi.slack_channel_id,
                 GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
                 GROUP_CONCAT(mif.storage_key SEPARATOR '|||') AS storage_keys
          FROM mail_items mi
@@ -885,37 +926,8 @@ export const mailRouter = router({
             handlerAssignedCount[patch.assignedHandlerId] = currentCount + 1;
           }
 
-          // Build a brief summary note from the classification
-          const summaryNote = [
-            cl.claim_number ? `Claim: ${cl.claim_number}` : null,
-            cl.claimant_or_member_name ? `Claimant: ${cl.claimant_or_member_name}` : null,
-            cl.adverse_carrier ? `Carrier: ${cl.adverse_carrier}` : null,
-            cl.requested_action ? cl.requested_action : null,
-            cl.reason ? cl.reason.slice(0, 120) : null,
-          ].filter(Boolean).join(' · ').slice(0, 255) || null;
-          // Build a descriptive subject/title from the AI output
-          // e.g. "Demand Letter — Progressive — CLM-1234" or "PIP Application — Jayla Bernard"
-          const CATEGORY_TITLE_MAP: Record<string, string> = {
-            legal_or_high_risk: 'Legal / High Risk',
-            demand_letter: 'Demand Letter',
-            pip_application: 'PIP Application',
-            medical_records: 'Medical Records',
-            subro_demand: 'Subro Demand',
-            total_loss: 'Total Loss Document',
-            general_correspondence: 'General Correspondence',
-            other_or_unclear: 'Correspondence',
-          };
-          const catLabel = CATEGORY_TITLE_MAP[cl.category as string] ?? 'Correspondence';
-          const subjectParts = [catLabel];
-          if (cl.adverse_carrier) subjectParts.push(cl.adverse_carrier);
-          else if (cl.sender_organization) subjectParts.push(cl.sender_organization);
-          if (cl.claimant_or_member_name) subjectParts.push(cl.claimant_or_member_name);
-          if (cl.claim_number) subjectParts.push(cl.claim_number);
-          const aiSubject = subjectParts.join(' — ').slice(0, 255);
-          // Only update subject if the current subject is a generic fax filename
-          const currentSubject = (item as any).subject ?? '';
-          const isGenericSubject = /^Claims Mail[_\s]/i.test(currentSubject) || currentSubject === '' || currentSubject === '(no subject)';
-          const newSubject = isGenericSubject ? aiSubject : currentSubject;
+          const summaryNote = buildMailSummary(cl);
+          const newSubject = buildAiSubject(cl, item.subject ?? null);
           await conn.execute(
             `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=? WHERE id=?`,
             [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,item.id]
@@ -927,6 +939,10 @@ export const mailRouter = router({
         } catch { errors++; }
       }
       results.process = { processed, errors, total: allItems.length, skippedDayGate, handlerCounts: handlerAssignedCount };
+      // Existing items may pre-date content summaries or have recovered attachments.
+      // Enrich a bounded batch without changing their existing routing decisions.
+      const { refreshIncompleteMailContent } = await import('../mail/contentRefresh.js');
+      results.contentRefresh = await refreshIncompleteMailContent(conn, 50);
     } finally {
       await conn.end();
     }

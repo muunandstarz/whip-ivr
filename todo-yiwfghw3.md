@@ -373,6 +373,15 @@
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
 
+## Session 2026-08-11 Published Mailroom Verification
+- [ ] Verify the published Trigger Now response is valid JSON and its live run completes
+- [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
+- [x] Recover missing attachment rows through Slack and Gmail recovery paths
+- [x] Re-run AI classification for unresolved items missing summaries or descriptive titles
+- [ ] Verify the record drawer displays the stored email body and generated summary
+- [x] Extend the Mailroom search bar to find text in subject, summary, email body, and extracted document content
+- [ ] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
+
 ## Session 2026-08-11 Mailroom Repairs
 - [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
 - [x] Correct Slack assignment posts: resolve readable agent mentions, remove/correct the six incorrect posts, and preserve valid links

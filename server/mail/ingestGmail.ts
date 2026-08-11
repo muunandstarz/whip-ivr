@@ -125,6 +125,16 @@ function extractMessageBody(payload: GmailMessage['payload']): string {
   return extractTextBody({ mimeType: payload.mimeType ?? 'multipart/mixed', body: payload.body, parts: payload.parts });
 }
 
+/** Gmail's internalDate is the mailbox receipt time; the Date header is sender-provided. */
+function resolveReceivedAt(message: GmailMessage, dateHeader: string | null): Date {
+  const internalTimestamp = Number(message.internalDate);
+  if (Number.isFinite(internalTimestamp) && internalTimestamp > 0) {
+    return new Date(internalTimestamp);
+  }
+  const headerTimestamp = dateHeader ? new Date(dateHeader).getTime() : NaN;
+  return Number.isFinite(headerTimestamp) ? new Date(headerTimestamp) : new Date();
+}
+
 function collectAttachments(part: GmailPart): Array<{ filename: string; mimeType: string; attachmentId?: string; data?: string }> {
   const result: Array<{ filename: string; mimeType: string; attachmentId?: string; data?: string }> = [];
   if (part.filename && part.body) {
@@ -225,7 +235,7 @@ export async function ingestGmail(
 
       const subject = getHeader('Subject');
       const dateRaw = getHeader('Date');
-      const receivedAt = dateRaw ? new Date(dateRaw) : new Date(Number(msg.internalDate));
+      const receivedAt = resolveReceivedAt(msg, dateRaw);
 
       // Sender extraction: Reply-To > From (carrier sends to claims@, owner inbox is just a copy)
 
@@ -341,7 +351,7 @@ export async function ingestGmail(
             headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value ?? null;
           const subject = getHdr('Subject');
           const dateRaw = getHdr('Date');
-          const receivedAt = dateRaw ? new Date(dateRaw) : new Date(Number(msg.internalDate));
+          const receivedAt = resolveReceivedAt(msg, dateRaw);
           const deliveredTo = getHdr('Delivered-To') ?? '';
           const toHdr = getHdr('To') ?? '';
           const ccHdr = getHdr('CC') ?? '';

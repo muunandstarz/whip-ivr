@@ -126,6 +126,10 @@ describe('ingestGmail() — mocked HTTP', () => {
     expect(row.from_name, 'from_name').toBe('Attorney Smith');
     expect(row.gmail_thread_id, 'gmail_thread_id').toBe(GMAIL_THREAD_ID);
     expect(row.body_text, 'body_text').toContain('CLM-TEST-001');
+    expect(new Date(row.received_at).getTime(), 'uses Gmail internal received time').toBeCloseTo(
+      Number(CANNED_GMAIL_MESSAGE.internalDate),
+      -3,
+    );
   });
 
   it('G2: inserts a mail_item_files row for the PDF attachment', async () => {
@@ -206,6 +210,7 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     filename: 'subro_demand.pdf',
     mimeType: 'application/pdf',
     urlPrivateDownload: 'https://files.slack.com/files-pri/T-test/subro_demand.pdf',
+    receivedAt: new Date('2026-08-06T12:00:00.000Z'),
   };
 
   const opts = {
@@ -231,6 +236,7 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     expect(row.slack_channel_id, 'slack_channel_id').toBe(SLACK_CHANNEL);
     expect(row.slack_message_ts, 'slack_message_ts').toBe(SLACK_MSG_TS);
     expect(row.slack_permalink, 'slack_permalink').toContain('slack.com');
+    expect(new Date(row.received_at).toISOString(), 'uses the original Slack upload time').toBe('2026-08-06T12:00:00.000Z');
   });
 
   it('S2: inserts a mail_item_files row for the downloaded file', async () => {
