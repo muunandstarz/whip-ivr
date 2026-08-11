@@ -353,3 +353,13 @@
 - [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment
 - [ ] Bulk archive: checkbox column, select-all, archive button in admin Mailroom
 - [ ] Summary column in All Mail table showing brief note of what the mail is
+
+## Session 2026-08-10 Tasks
+- [x] Gmail ingest: fix query to is:unread to:claims@drivewhip.com (was querying all mail without is:unread)
+- [x] Gmail ingest: add Pass 2 — also query is:read to:claims@drivewhip.com and insert those with status=resolved (auto-resolve already-read emails)
+- [x] Gmail ingest: add resolvedInserted to IngestGmailResult interface and result tracking
+- [x] Gmail ingest: add listReadMessages to GmailFetchFn interface and real implementation
+- [x] Dec Page: verified handleDownload matches approved format; states MD/VA/FL/GA/IL/MA/PA/TX only confirmed
+- [ ] Slack backfill: re-fetch 139 Slack files into production S3 bucket (running in background)
+- [ ] Verify file proxy works after backfill (open 3-4 items in admin Mailroom drawer, click Open)
+- [ ] Trigger Now on deployed site after publishing to ingest Gmail + Slack + classify items

@@ -58,12 +58,15 @@ export interface GmailFetchFn {
   getOrCreateLabel(token: string, labelName: string): Promise<string>;
   /** @deprecated kept for test compatibility — no-op in production */
   markRead(token: string, messageId: string): Promise<void>;
+  /** List already-read messages addressed to claims@ (for auto-resolve pass) */
+  listReadMessages?(token: string): Promise<{ messages?: Array<{ id: string }> }>;
 }
 
 export interface IngestGmailResult {
   inserted: number;
   skipped: number;
   errors: string[];
+  resolvedInserted?: number;
   debug?: { listed: number; filteredOut: number; query: string };
 }
 
@@ -124,7 +127,7 @@ export async function ingestGmail(
   gmail: GmailFetchFn,
   claimEmail = 'claims@drivewhip.com',
 ): Promise<IngestGmailResult> {
-  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'to:claims@drivewhip.com' } };
+  const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], resolvedInserted: 0, debug: { listed: 0, filteredOut: 0, query: 'to:claims@drivewhip.com is:unread' } };
 
   // 0. Get access token
   let token: string;
@@ -272,6 +275,93 @@ export async function ingestGmail(
       result.errors.push(`message ${messageId}: ${String(e)}`);
     }
   }
+  // ── Pass 2: ingest already-read emails as auto-resolved ──────────────────────
+  if (gmail.listReadMessages) {
+    try {
+      const readResult = await gmail.listReadMessages(token);
+      const readIds = readResult.messages ?? [];
+      for (const { id: messageId } of readIds) {
+        try {
+          const [existingRows] = await conn.execute<any[]>(
+            "SELECT id FROM mail_items WHERE source = 'email' AND external_id = ?",
+            [messageId]
+          );
+          if ((existingRows as any[]).length > 0) {
+            try { await gmail.addLabel(token, messageId, mailroomDoneLabelId); } catch {}
+            result.skipped++;
+            continue;
+          }
+          const msg = await gmail.getMessage(token, messageId);
+          const headers = msg.payload?.headers ?? [];
+          const getHdr = (name: string) =>
+            headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value ?? null;
+          const subject = getHdr('Subject');
+          const dateRaw = getHdr('Date');
+          const receivedAt = dateRaw ? new Date(dateRaw) : new Date(Number(msg.internalDate));
+          const deliveredTo = getHdr('Delivered-To') ?? '';
+          const toHdr = getHdr('To') ?? '';
+          const ccHdr = getHdr('CC') ?? '';
+          const allRecipients = `${deliveredTo} ${toHdr} ${ccHdr}`.toLowerCase();
+          if (!allRecipients.includes(claimEmail.toLowerCase())) {
+            result.skipped++;
+            if (result.debug) result.debug.filteredOut++;
+            continue;
+          }
+          const replyToRaw = getHdr('Reply-To');
+          const fromRaw = getHdr('From') ?? '';
+          const senderRaw = replyToRaw || fromRaw;
+          const { name: fromName, email: fromEmail } = parseAddress(senderRaw);
+          let bodyText = '';
+          if (msg.payload) {
+            if (msg.payload.mimeType === 'text/plain' && msg.payload.body?.data) {
+              bodyText = b64urlToString(msg.payload.body.data);
+            } else if (msg.payload.parts) {
+              for (const part of msg.payload.parts) {
+                const text = extractTextBody(part);
+                if (text) { bodyText = text; break; }
+              }
+            }
+          }
+          const [insertResult] = await conn.execute<any>(
+            `INSERT INTO mail_items
+               (source, external_id, received_at, status, resolved_at, subject, body_text,
+                from_name, from_email, gmail_thread_id, claim_email)
+             VALUES ('email', ?, ?, 'resolved', NOW(), ?, ?, ?, ?, ?, ?)`,
+            [messageId, receivedAt, subject, bodyText.slice(0, 65535), fromName, fromEmail, msg.threadId ?? null, claimEmail]
+          );
+          const itemId = (insertResult as any).insertId;
+          const attachments = msg.payload?.parts
+            ? collectAttachments({ mimeType: 'multipart/mixed', parts: msg.payload.parts } as any)
+            : [];
+          for (const att of attachments) {
+            try {
+              let buffer: Buffer;
+              if (att.attachmentId) {
+                const attData = await gmail.getAttachment(token, messageId, att.attachmentId);
+                buffer = b64urlToBuffer(attData.data);
+              } else if (att.data) {
+                buffer = b64urlToBuffer(att.data);
+              } else { continue; }
+              const key = `mail/email/${messageId}/${att.filename}`;
+              const { key: storageKey } = await storagePut(key, buffer, att.mimeType);
+              await conn.execute(
+                `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [itemId, storageKey, att.filename, att.mimeType, buffer.length]
+              );
+            } catch {}
+          }
+          try { await gmail.addLabel(token, messageId, mailroomDoneLabelId); } catch {}
+          result.resolvedInserted = (result.resolvedInserted ?? 0) + 1;
+        } catch (e) {
+          result.errors.push(`read-msg ${messageId}: ${String(e)}`);
+        }
+      }
+    } catch (e) {
+      result.errors.push(`read-pass: ${String(e)}`);
+    }
+  }
+
   return result;
 }
 
@@ -351,7 +441,8 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
   // The mailroom-done label is the only dedup guard — no is:unread dependency.
   // Query: all mail to claims@ in last 90 days; dedupe by message-ID is the safety net
   // No time filter — pull ALL mail to claims@ regardless of timestamp
-  const CLAIMS_QUERY = 'to:claims@drivewhip.com';
+  const CLAIMS_QUERY = 'to:claims@drivewhip.com is:unread';
+  const CLAIMS_READ_QUERY = 'to:claims@drivewhip.com is:read';
   const CLAIMS_ADDRESS = 'claims@drivewhip.com';
 
   return {
@@ -413,5 +504,13 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
 
     /** No-op — kept for test compatibility */
     async markRead(_token, _messageId) {},
+
+    async listReadMessages(token) {
+      const q = encodeURIComponent(CLAIMS_READ_QUERY);
+      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=500`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.json();
+    },
   };
 }
