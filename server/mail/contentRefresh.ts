@@ -25,6 +25,7 @@ export interface MailContentRead {
   attachmentText: string;
   indexedBody: string;
   hasReadableContent: boolean;
+  imageDataUrls: string[];
 }
 
 function isUsableFileResponse(response: Response): boolean {
@@ -74,7 +75,7 @@ export function buildMailSummary(classification: ClassificationResult): string |
 export function buildAiSubject(classification: ClassificationResult, currentSubject: string | null): string {
   const isGeneric = !currentSubject
     || currentSubject === '(no subject)'
-    || /^Claims Mail[_\s]/i.test(currentSubject);
+    || /^(Claims Mail|FAX)[_\s]/i.test(currentSubject);
   if (!isGeneric) return currentSubject;
   const parts = [CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence'];
   if (classification.adverse_carrier) parts.push(classification.adverse_carrier);
@@ -95,18 +96,29 @@ async function extractPdfText(bytes: Buffer): Promise<string> {
   }
 }
 
-async function downloadSlackFile(slackFileId: string, token: string): Promise<Buffer | null> {
-  if (!token) return null;
+async function downloadSlackFile(slackFileId: string, token: string): Promise<{ bytes: Buffer | null; imageDataUrl: string | null }> {
+  if (!token) return { bytes: null, imageDataUrl: null };
   const infoResponse = await fetch(`https://slack.com/api/files.info?file=${encodeURIComponent(slackFileId)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const info = await infoResponse.json().catch(() => null) as any;
-  if (!info?.ok) return null;
+  if (!info?.ok) return { bytes: null, imageDataUrl: null };
   const fileUrl = info.file?.url_private_download || info.file?.url_private;
-  if (!fileUrl) return null;
-  const fileResponse = await fetch(fileUrl, { headers: { Authorization: `Bearer ${token}` } });
-  if (!isUsableFileResponse(fileResponse)) return null;
-  return Buffer.from(await fileResponse.arrayBuffer());
+  let bytes: Buffer | null = null;
+  if (fileUrl) {
+    const fileResponse = await fetch(fileUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (isUsableFileResponse(fileResponse)) bytes = Buffer.from(await fileResponse.arrayBuffer());
+  }
+  const previewUrl = info.file?.thumb_pdf || info.file?.thumb_720 || info.file?.thumb_480 || null;
+  let imageDataUrl: string | null = null;
+  if (previewUrl) {
+    const previewResponse = await fetch(previewUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (previewResponse.ok && previewResponse.headers.get('content-type')?.toLowerCase().startsWith('image/')) {
+      const mime = previewResponse.headers.get('content-type')?.split(';')[0] || 'image/jpeg';
+      imageDataUrl = `data:${mime};base64,${Buffer.from(await previewResponse.arrayBuffer()).toString('base64')}`;
+    }
+  }
+  return { bytes, imageDataUrl };
 }
 
 /**
@@ -130,10 +142,13 @@ export async function createMailContentReader(conn: Connection) {
     files: MailContentFile[],
   ): Promise<MailContentRead> {
     const extractedChunks: string[] = [];
+    const imageDataUrls: string[] = [];
     for (const file of files) {
       let bytes: Buffer | null = null;
       if (source === 'mail' && file.slackFileId) {
-        bytes = await downloadSlackFile(file.slackFileId, slackToken);
+        const slackFile = await downloadSlackFile(file.slackFileId, slackToken);
+        bytes = slackFile.bytes;
+        if (slackFile.imageDataUrl) imageDataUrls.push(slackFile.imageDataUrl);
       } else if (source === 'email' && gmailToken && file.filename) {
         let message = gmailMessages.get(externalId);
         if (!message) {
@@ -169,7 +184,7 @@ export async function createMailContentReader(conn: Connection) {
       .filter(Boolean)
       .join('\n\nAttachment text:\n')
       .slice(0, 60000);
-    return { attachmentText, indexedBody, hasReadableContent: indexedBody.trim().length > 0 };
+    return { attachmentText, indexedBody, hasReadableContent: indexedBody.trim().length > 0 || imageDataUrls.length > 0, imageDataUrls };
   };
 }
 
@@ -194,7 +209,7 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
          COALESCE(mi.summary_note, '') = ''
          OR COALESCE(mi.subject, '') = ''
          OR mi.subject = '(no subject)'
-         OR mi.subject REGEXP '^Claims Mail[_ ]'
+         OR mi.subject REGEXP '^(Claims Mail|FAX)[_ ]'
        )
      GROUP BY mi.id
      ORDER BY mi.received_at ASC
@@ -204,15 +219,18 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
   const readMailContent = await createMailContentReader(conn);
   let refreshed = 0;
   let errors = 0;
-  for (const item of items) {
+  let cursor = 0;
+  const workerCount = Math.min(2, items.length);
+  const refreshOne = async (item: any) => {
     try {
       const content = await readMailContent(item.source, item.external_id, item.body_text, parseMailContentFiles(item.file_entries));
-      if (!content.hasReadableContent) continue;
+      if (!content.hasReadableContent) return;
       const classification = await classify({
         subject: item.subject ?? undefined,
         bodyText: content.indexedBody,
         receivedAt: item.received_at,
         attachmentNames: item.attachment_names ? String(item.attachment_names).split(', ').filter(Boolean) : undefined,
+        imageUrls: content.imageDataUrls,
       });
       await conn.execute(
         `UPDATE mail_items
@@ -242,6 +260,13 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
       console.error(`[mailContentRefresh] item ${item.id} failed:`, error);
       errors++;
     }
-  }
+  };
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const item = items[cursor++];
+      if (!item) return;
+      await refreshOne(item);
+    }
+  }));
   return { refreshed, errors, total: items.length };
 }

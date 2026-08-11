@@ -161,6 +161,7 @@ export async function classify(input: ClassifyInput): Promise<ClassificationResu
 
   let result = await invokeLLM({
     model: 'gpt-5-mini',
+    timeoutMs: hasFiles ? 30_000 : 45_000,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userContent },
@@ -172,6 +173,7 @@ export async function classify(input: ClassifyInput): Promise<ClassificationResu
   if (!raw && hasFiles) {
     result = await invokeLLM({
       model: 'gpt-5-mini',
+      timeoutMs: 30_000,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userText },
