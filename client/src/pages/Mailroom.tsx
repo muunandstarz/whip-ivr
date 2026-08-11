@@ -278,7 +278,8 @@ function AdminDrawer({
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                       <div><span className="text-muted-foreground">Handler</span><div className="font-medium">{handlerName}</div></div>
                       <div><span className="text-muted-foreground">Assigned On</span><div className="font-medium">{item.assignedAt ? fmtDate(item.assignedAt) : "—"}</div></div>
-                      <div><span className="text-muted-foreground">Due Date</span><div className={`font-medium ${item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved" ? "text-red-600" : ""}`}>{fmtDate(item.dueAt)}</div></div>
+                      <div><span className="text-muted-foreground">Review Due</span><div className={`font-medium ${item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved" ? "text-red-600" : ""}`}>{fmtDate(item.dueAt)}</div></div>
+                      {item.isDemand === 1 && <div><span className="text-muted-foreground">Demand Due</span><div className={`font-medium ${item.responseDueDate && new Date(`${item.responseDueDate}T23:59:59`) < new Date() && item.status !== "resolved" ? "text-red-600" : ""}`}>{item.responseDueDate ?? "—"}</div></div>}
                       <div><span className="text-muted-foreground">Status</span><div className="font-medium capitalize">{item.status}</div></div>
                     </div>
                   </div>
@@ -288,10 +289,23 @@ function AdminDrawer({
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowRerouteDialog(true)}>
                       <ArrowRight className="w-3.5 h-3.5 mr-1.5" /> Reroute
                     </Button>
-                    <Button size="sm" variant="outline" className="h-8 text-xs text-green-700 border-green-200 hover:bg-green-50"
-                      onClick={() => resolveMut.mutate({ itemId: item.id })} disabled={resolveMut.isPending}>
-                      <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Resolve
-                    </Button>
+                    {item.isDemand === 1 ? (
+                      <>
+                        <Button size="sm" variant="outline" className="h-8 text-xs text-green-700 border-green-200 hover:bg-green-50"
+                          onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "settled" })} disabled={resolveMut.isPending}>
+                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Settled
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 text-xs text-red-700 border-red-200 hover:bg-red-50"
+                          onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "denied" })} disabled={resolveMut.isPending}>
+                          <XCircle className="w-3.5 h-3.5 mr-1.5" /> Denied
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-8 text-xs text-green-700 border-green-200 hover:bg-green-50"
+                        onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "other" })} disabled={resolveMut.isPending}>
+                        <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Resolve
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" className="h-8 text-xs text-orange-700 border-orange-200 hover:bg-orange-50"
                       onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated by admin" })} disabled={escalateMut.isPending}>
                       <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Escalate
@@ -631,7 +645,8 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
             ) : items.length === 0 ? (
               <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground text-sm">No items found.</TableCell></TableRow>
             ) : items.map(item => {
-              const isOverdue = item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved";
+              const isOverdue = Boolean(item.assignedHandlerId && item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved");
+              const demandDueReached = Boolean(item.isDemand === 1 && item.responseDueDate && new Date(`${item.responseDueDate}T23:59:59`) < new Date() && item.status !== "resolved");
               const handlerName = handlers?.find(h => h.id === item.assignedHandlerId)?.name;
               return (
                 <TableRow
@@ -667,6 +682,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                     <div className={`text-xs ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>{fmtDate(item.dueAt)}</div>
                     {isOverdue && <div className="text-xs text-red-500">Overdue</div>}
                     {!isOverdue && item.dueAt && isToday(new Date(item.dueAt)) && <div className="text-xs text-amber-600">Due today</div>}
+                    {item.isDemand === 1 && item.responseDueDate && <div className={`text-xs mt-0.5 ${demandDueReached ? "text-red-600 font-medium" : "text-muted-foreground"}`}>Demand: {item.responseDueDate}</div>}
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">{fmtRelative(item.receivedAt)}</TableCell>
                   <TableCell className="py-2" onClick={e => e.stopPropagation()}>
@@ -678,7 +694,12 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => { setSelectedItemId(item.id); setDrawerOpen(true); }}>Open</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id })}>Resolve</DropdownMenuItem>
+                        {item.isDemand === 1 ? (
+                          <>
+                            <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "settled" })}>Resolve as Settled</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "denied" })}>Resolve as Denied</DropdownMenuItem>
+                          </>
+                        ) : <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "other" })}>Resolve</DropdownMenuItem>}
                         <DropdownMenuItem onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated by admin" })}>Escalate</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

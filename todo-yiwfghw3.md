@@ -391,6 +391,24 @@
 ## Session 2026-08-11 Mailroom Pagination
 - [x] Make the displayed result range update when the rows-per-page selection changes
 
+## Session 2026-08-11 Mailroom Audit and Summary Quality
+- [x] Audit all active email, mail, and fax records; resolve any source item already read, reviewed, or checked
+- [x] Ensure active Mailroom records represent only unread/unreviewed source mail with complete captured content
+- [x] Make the row summary action-oriented, including category, document type, and applicable action such as an attached demand
+- [x] Use on-demand parsing updates at the user’s request instead of adding a recurring chat schedule
+
+## Session 2026-08-11 Mailroom Assignment Source Marking
+- [x] Mark Gmail claims messages read after a successful Mailroom assignment
+- [x] Add the configured checked marker to the originating #claims-mail post after a successful Mailroom assignment
+
+## Session 2026-08-11 Mailroom SLA and Demand Deadlines
+- [x] Fix Admin Mailroom Assigned filtering so only records with a real assignee appear
+- [x] Define overdue as a missed Mailroom review deadline, not merely an assigned status
+- [x] Calculate four business review hours in Tuesday–Friday, 1:00–6:00 PM Eastern for ordinary assigned mail
+- [x] Set LOR review deadlines to one business day after assignment
+- [x] Store a distinct demand deadline calculated from the demand's stated timing and received date
+- [x] Continue demand reminders until the assigned handler records a settled or denied resolution
+
 ## Session 2026-08-11 Mailroom Assignment Boundary
 - [x] Prevent Mailroom ingest, classification, routing, and reassignments from creating Slack assignment posts
 - [x] Preserve Mailroom internal assignment records and existing Slack reviewed-marker behavior

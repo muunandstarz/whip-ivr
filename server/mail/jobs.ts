@@ -17,6 +17,7 @@ import { route } from './route.js';
 import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
 import { buildAiSubject, buildMailSummary, createMailContentReader, parseMailContentFiles, refreshIncompleteMailContent } from './contentRefresh.js';
 import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
+import { markAssignedMailSource } from './sourceMarking.js';
 
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
 
@@ -90,10 +91,11 @@ export async function runMailReminders(
   const now = new Date();
   const throttleCutoff = new Date(now.getTime() - REMINDER_THROTTLE_HOURS * 3600 * 1000);
 
-  // Select overdue items (dueAt < NOW()) OR remindAt-due items, unresolved, assigned
+  // Select missed review deadlines, explicit reminders, or demand deadlines.
   const [items] = await conn.execute<any[]>(
     `SELECT mi.id, mi.assigned_handler_id, mi.due_at, mi.remind_at,
-            mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date,
+            mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date, mi.is_demand,
+            mi.resolution_outcome,
             h.email AS handler_email, h.name AS handler_name
      FROM mail_items mi
      JOIN handlers h ON h.id = mi.assigned_handler_id
@@ -103,11 +105,13 @@ export async function runMailReminders(
          (mi.due_at IS NOT NULL AND mi.due_at < ?)
          OR
          (mi.remind_at IS NOT NULL AND mi.remind_at <= ?)
+         OR
+         (mi.is_demand = 1 AND mi.response_due_date IS NOT NULL AND DATE(mi.response_due_date) <= DATE(?))
        )
        AND (mi.last_reminded_at IS NULL OR mi.last_reminded_at < ?)
      ORDER BY mi.due_at ASC
      LIMIT 100`,
-    [now, now, throttleCutoff]
+    [now, now, now, throttleCutoff]
   );
 
   for (const item of items) {
@@ -121,8 +125,11 @@ export async function runMailReminders(
 
       const overdue = item.due_at && new Date(item.due_at) < now;
       const reminderDue = item.remind_at && new Date(item.remind_at) <= now;
-      const due = item.response_due_date ? ` Response due: *${item.response_due_date}*` : '';
-      const prefix = overdue ? '⏰ *Overdue mail item*' : '🔔 *Reminder: mail item due*';
+      const demandDue = item.is_demand === 1 && item.response_due_date && new Date(`${item.response_due_date}T23:59:59`) <= now;
+      const due = item.response_due_date ? ` Demand deadline: *${item.response_due_date}*` : '';
+      const prefix = demandDue
+        ? '🚨 *Demand deadline reached — record settled or denied outcome*'
+        : overdue ? '⏰ *Mail review overdue*' : '🔔 *Mailroom reminder*';
       const text = [
         prefix,
         `*Item #${item.id}* — ${item.subject ?? '(no subject)'}`,
@@ -165,7 +172,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
   try {
     // Select unprocessed items (category IS NULL, status='new')
     const [items] = await conn.execute<any[]>(
-      `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source,
+      `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
               mi.slack_channel_id, mi.slack_message_ts,
               GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
               GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
@@ -200,6 +207,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
         const classification = await classify({
           subject: item.subject ?? undefined,
           bodyText: content.indexedBody,
+          receivedAt: item.received_at,
           attachmentNames: item.attachment_names
             ? item.attachment_names.split(', ').filter(Boolean)
             : undefined,
@@ -232,6 +240,18 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
             item.id,
           ]
         );
+        if (patch.assignedHandlerId) {
+          const sourceResult = await markAssignedMailSource(conn, {
+            id: item.id,
+            source: item.source,
+            externalId: item.external_id,
+            slackChannelId: item.slack_channel_id,
+            slackMessageTs: item.slack_message_ts,
+          });
+          if (sourceResult.errors.length) {
+            console.warn(`[mailProcess] source marking failed for ${item.id}: ${sourceResult.errors.join('; ')}`);
+          }
+        }
 
         // Append routing history
         for (const h of patch.historyActions) {

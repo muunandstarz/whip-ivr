@@ -56,7 +56,7 @@ export interface GmailFetchFn {
   addLabel(token: string, messageId: string, labelId: string): Promise<void>;
   /** Get or create a label by name, returning its ID */
   getOrCreateLabel(token: string, labelName: string): Promise<string>;
-  /** @deprecated kept for test compatibility — no-op in production */
+  /** Remove Gmail's UNREAD label after a successful Mailroom assignment. */
   markRead(token: string, messageId: string): Promise<void>;
   /** List already-read messages addressed to claims@ (for auto-resolve pass) */
   listReadMessages?(token: string): Promise<{ messages?: Array<{ id: string }> }>;
@@ -546,8 +546,16 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
       return created.id;
     },
 
-    /** No-op — kept for test compatibility */
-    async markRead(_token, _messageId) {},
+    async markRead(token, messageId) {
+      const response = await fetch(`${GMAIL_BASE}/messages/${messageId}/modify`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ removeLabelIds: ['UNREAD'] }),
+      });
+      if (!response.ok) {
+        throw new Error(`Gmail mark-read failed (${response.status})`);
+      }
+    },
 
     async listReadMessages(token) {
       const q = encodeURIComponent(CLAIMS_READ_QUERY);

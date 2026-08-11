@@ -12,6 +12,7 @@
 
 import type { Connection } from 'mysql2/promise';
 import type { ClassificationResult } from './classify.js';
+import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } from './businessTime.js';
 
 export interface RoutingPatch {
   // classification fields
@@ -35,8 +36,8 @@ export interface RoutingPatch {
   assignedTeamId: number;
   assignedHandlerId: number | null;
   status: 'new' | 'assigned' | 'escalated';
-  assignedAt: Date;
-  dueAt: Date;
+  assignedAt: Date | null;
+  dueAt: Date | null;
 
   // QA snapshot (never overwritten after first write)
   initialCategory: string;
@@ -130,15 +131,14 @@ export async function route(
     }
   }
 
-  // 5. Compute dueAt
+  // 5. Compute the internal review deadline. Demand deadlines remain in
+  // responseDueDate so an item can display and remind against both clocks.
   const now = new Date();
-  let dueAt: Date;
-  if (classification.response_due_date) {
-    const parsed = new Date(classification.response_due_date);
-    dueAt = isNaN(parsed.getTime()) ? addHours(now, team.slaHours) : parsed;
-  } else {
-    dueAt = addHours(now, team.slaHours);
-  }
+  const dueAt = assignedHandlerId
+    ? (isLetterOfRepresentation(classification.requested_action, classification.reason)
+      ? addMailBusinessDays(now, 1)
+      : addMailBusinessHours(now, 4))
+    : null;
 
   // 6. Build history actions
   const historyActions: RoutingPatch['historyActions'] = [
@@ -170,7 +170,7 @@ export async function route(
     assignedTeamId: team.id,
     assignedHandlerId,
     status: assignedHandlerId ? baseStatus : 'new',
-    assignedAt: assignedHandlerId ? now : null as any,
+    assignedAt: assignedHandlerId ? now : null,
     dueAt,
 
     initialCategory: classification.category,
@@ -179,8 +179,4 @@ export async function route(
 
     historyActions,
   };
-}
-
-function addHours(date: Date, hours: number): Date {
-  return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }

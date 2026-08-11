@@ -220,7 +220,7 @@ function MailDrawer({
                       {item.status}
                     </span>
                   )}
-                  {item.dueAt && isPast(new Date(item.dueAt)) && !isToday(new Date(item.dueAt)) && (
+                  {item.assignedHandlerId && item.dueAt && isPast(new Date(item.dueAt)) && !isToday(new Date(item.dueAt)) && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Overdue</span>
                   )}
                   {item.urgency === "urgent" && (
@@ -274,11 +274,26 @@ function MailDrawer({
                     onClick={() => setShowRerouteDialog(true)}>
                     <ArrowRight className="w-3.5 h-3.5" /> Reroute
                   </Button>
-                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
-                    onClick={() => resolveMut.mutate({ itemId: item.id })}
-                    disabled={resolveMut.isPending}>
-                    <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Resolve
-                  </Button>
+                  {item.isDemand === 1 ? (
+                    <>
+                      <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs text-green-700"
+                        onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "settled" })}
+                        disabled={resolveMut.isPending}>
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Settled
+                      </Button>
+                      <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs text-red-700"
+                        onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "denied" })}
+                        disabled={resolveMut.isPending}>
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600" /> Denied
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                      onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "other" })}
+                      disabled={resolveMut.isPending}>
+                      <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Resolve
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
                     onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated from mailroom" })}
                     disabled={escalateMut.isPending}>

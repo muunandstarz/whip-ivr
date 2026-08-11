@@ -81,6 +81,7 @@ export default function MailroomItem() {
   const [rerouteHandlerId, setRerouteHandlerId] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
   const [resolveNote, setResolveNote] = useState("");
+  const [resolveOutcome, setResolveOutcome] = useState<"settled" | "denied" | "other">("other");
   const [reminderDate, setReminderDate] = useState("");
 
   const { data: handlers } = trpc.handlers.list.useQuery();
@@ -408,13 +409,27 @@ export default function MailroomItem() {
         <DialogContent>
           <DialogHeader><DialogTitle>Resolve Item</DialogTitle></DialogHeader>
           <div className="py-2">
+            {item.isDemand === 1 && (
+              <>
+                <Label>Demand outcome</Label>
+                <select
+                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                  value={resolveOutcome === "other" ? "" : resolveOutcome}
+                  onChange={e => setResolveOutcome(e.target.value as "settled" | "denied")}
+                >
+                  <option value="">Select settled or denied…</option>
+                  <option value="settled">Settled</option>
+                  <option value="denied">Denied</option>
+                </select>
+              </>
+            )}
             <Label>Resolution note (optional)</Label>
             <Textarea className="mt-1" value={resolveNote} onChange={e => setResolveNote(e.target.value)} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResolveOpen(false)}>Cancel</Button>
-            <Button disabled={resolve.isPending}
-              onClick={() => resolve.mutate({ itemId, note: resolveNote || undefined })}>
+            <Button disabled={resolve.isPending || (item.isDemand === 1 && !["settled", "denied"].includes(resolveOutcome))}
+              onClick={() => resolve.mutate({ itemId, note: resolveNote || undefined, outcome: item.isDemand === 1 ? resolveOutcome : "other" })}>
               {resolve.isPending ? "Resolving…" : "Mark Resolved"}
             </Button>
           </DialogFooter>

@@ -219,13 +219,15 @@ describe('route() — mocked LLM', () => {
       // isDemand
       expect(patch.isDemand, `${fx.id}: isDemand`).toBe(fx.expectedIsDemand);
 
-      // dueAt: legal/demand cases must have a dueAt derived from response_due_date
-      if (fx.expectedHasDueDate && fx.classification.response_due_date) {
-        const expectedDue = new Date(fx.classification.response_due_date);
-        expect(
-          Math.abs(patch.dueAt.getTime() - expectedDue.getTime()),
-          `${fx.id}: dueAt within 1s of response_due_date`
-        ).toBeLessThan(1000);
+      // dueAt is the internal handler review deadline. A demand deadline stays
+      // separately in responseDueDate so the two clocks are never conflated.
+      if (fx.expectedStatus === 'new') {
+        expect(patch.dueAt, `${fx.id}: no review deadline without a handler`).toBeNull();
+      } else {
+        expect(patch.dueAt, `${fx.id}: assigned item has review deadline`).toBeInstanceOf(Date);
+      }
+      if (fx.classification.response_due_date) {
+        expect(patch.responseDueDate, `${fx.id}: preserves demand deadline`).toBe(fx.classification.response_due_date);
       }
 
       // initial* snapshot

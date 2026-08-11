@@ -57,12 +57,17 @@ export function parseMailContentFiles(rawEntries: string | null | undefined): Ma
 }
 
 export function buildMailSummary(classification: ClassificationResult): string | null {
+  const category = CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence';
+  const action = classification.is_demand
+    ? 'Demand attached'
+    : classification.requested_action?.trim() || null;
+  const headline = [category, action].filter(Boolean).join(' — ');
   return [
-    classification.claim_number ? `Claim: ${classification.claim_number}` : null,
-    classification.claimant_or_member_name ? `Person: ${classification.claimant_or_member_name}` : null,
-    classification.adverse_carrier ? `Carrier: ${classification.adverse_carrier}` : null,
-    classification.requested_action ?? null,
-    classification.reason ? classification.reason.slice(0, 120) : null,
+    headline,
+    classification.claim_number ? `Claim ${classification.claim_number}` : null,
+    classification.claimant_or_member_name ?? null,
+    classification.adverse_carrier ?? classification.sender_organization ?? null,
+    classification.reason ? classification.reason.replace(/\s+/g, ' ').trim().slice(0, 105) : null,
   ].filter(Boolean).join(' · ').slice(0, 255) || null;
 }
 
@@ -178,7 +183,7 @@ export interface ContentRefreshResult {
 export async function refreshIncompleteMailContent(conn: Connection, limit = 50): Promise<ContentRefreshResult> {
   const batchLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
   const [items] = await conn.execute<any[]>(
-    `SELECT mi.id, mi.source, mi.external_id, mi.subject, mi.body_text,
+    `SELECT mi.id, mi.source, mi.external_id, mi.subject, mi.body_text, mi.received_at,
             GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
             GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
      FROM mail_items mi
@@ -206,12 +211,16 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
       const classification = await classify({
         subject: item.subject ?? undefined,
         bodyText: content.indexedBody,
+        receivedAt: item.received_at,
         attachmentNames: item.attachment_names ? String(item.attachment_names).split(', ').filter(Boolean) : undefined,
       });
       await conn.execute(
         `UPDATE mail_items
          SET summary_note = ?, subject = ?,
              body_text = CASE WHEN ? = '' THEN body_text ELSE ? END,
+             is_demand = CASE WHEN is_demand = 1 OR ? = 1 THEN 1 ELSE 0 END,
+             demand_date = COALESCE(NULLIF(demand_date, ''), ?),
+             response_due_date = COALESCE(NULLIF(response_due_date, ''), ?),
              claim_number = COALESCE(NULLIF(claim_number, ''), ?),
              sender_org = COALESCE(NULLIF(sender_org, ''), ?),
              adverse_carrier = COALESCE(NULLIF(adverse_carrier, ''), ?),
@@ -222,6 +231,7 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
         [
           buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null),
           content.attachmentText, content.indexedBody,
+          classification.is_demand ? 1 : 0, classification.demand_date ?? null, classification.response_due_date ?? null,
           classification.claim_number ?? null, classification.sender_organization ?? null,
           classification.adverse_carrier ?? null, classification.claimant_or_member_name ?? null,
           classification.requested_action ?? null, classification.reason ?? null, item.id,

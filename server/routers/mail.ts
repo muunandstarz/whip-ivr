@@ -21,6 +21,7 @@ import mysql from 'mysql2/promise';
 import { randomUUID } from 'crypto';
 import { invokeLLM } from '../_core/llm.js';
 import type { ClassificationResult } from '../mail/classify.js';
+import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } from '../mail/businessTime.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -225,10 +226,31 @@ export const mailRouter = router({
       const db = await getDb();
       const item = await requireItem(db, input.itemId);
       const fromHandlerId = item.assignedHandlerId;
+      const assignedAt = new Date();
+      const dueAt = isLetterOfRepresentation(item.requestedAction, item.reason)
+        ? addMailBusinessDays(assignedAt, 1)
+        : addMailBusinessHours(assignedAt, 4);
 
       await db!.update(mailItems)
-        .set({ assignedHandlerId: input.toHandlerId, assignedAt: new Date() })
+        .set({ assignedHandlerId: input.toHandlerId, assignedAt, dueAt, status: 'assigned' })
         .where(eq(mailItems.id, input.itemId));
+
+      if (!item.sourceHandledAt && (item.source === 'email' || item.source === 'mail')) {
+        const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+        try {
+          const { markAssignedMailSource } = await import('../mail/sourceMarking.js');
+          const marked = await markAssignedMailSource(conn, {
+            id: item.id,
+            source: item.source,
+            externalId: item.externalId,
+            slackChannelId: item.slackChannelId,
+            slackMessageTs: item.slackMessageTs,
+          });
+          if (marked.errors.length) console.warn(`[mail.reroute] source marking failed for ${item.id}: ${marked.errors.join('; ')}`);
+        } finally {
+          await conn.end();
+        }
+      }
 
       await appendHistory(db, input.itemId, 'rerouted',
         fromHandlerId, input.toHandlerId, ctx.user.id, input.reason ?? null);
@@ -241,16 +263,22 @@ export const mailRouter = router({
     .input(z.object({
       itemId: z.number(),
       note: z.string().optional(),
+      outcome: z.enum(['settled', 'denied', 'other']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      await requireItem(db, input.itemId);
+      const item = await requireItem(db, input.itemId);
+      if (item.isDemand === 1 && !['settled', 'denied'].includes(input.outcome ?? '')) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Demand items must be resolved as settled or denied.' });
+      }
 
       await db!.update(mailItems)
         .set({
           status: 'resolved',
           resolvedAt: new Date(),
           resolvedByHandlerId: ctx.user.handlerProfileId ?? null,
+          resolutionOutcome: input.outcome ?? 'other',
+          remindAt: null,
         })
         .where(eq(mailItems.id, input.itemId));
 
@@ -263,7 +291,7 @@ export const mailRouter = router({
       }
 
       await appendHistory(db, input.itemId, 'resolved',
-        null, null, ctx.user.id, input.note ?? null);
+        null, null, ctx.user.id, [input.outcome ? `Outcome: ${input.outcome}` : null, input.note].filter(Boolean).join(' — ') || null);
 
       return { success: true };
     }),
@@ -352,12 +380,21 @@ export const mailRouter = router({
       const db = await getDb();
       if (!db) return { items: [], total: 0 };
       const filters: Parameters<typeof and>[0][] = [];
-      if (input?.status) filters.push(eq(mailItems.status, input.status));
+      if (input?.status) {
+        filters.push(eq(mailItems.status, input.status));
+        if (input.status === 'assigned') filters.push(isNotNull(mailItems.assignedHandlerId));
+      }
       if (input?.category) filters.push(eq(mailItems.category, input.category as any));
       if (input?.teamId) filters.push(eq(mailItems.assignedTeamId, input.teamId));
       if (input?.handlerId) filters.push(eq(mailItems.assignedHandlerId, input.handlerId));
       if (input?.source) filters.push(eq(mailItems.source, input.source));
-      if (input?.overdue) filters.push(and(lt(mailItems.dueAt, new Date()), isNull(mailItems.resolvedAt))!);
+      if (input?.overdue) filters.push(and(
+        inArray(mailItems.status, ['assigned', 'escalated']),
+        isNotNull(mailItems.assignedHandlerId),
+        isNotNull(mailItems.dueAt),
+        lt(mailItems.dueAt, new Date()),
+        isNull(mailItems.resolvedAt),
+      )!);
       // Exclude archived items by default unless explicitly requested
       if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.urgent) filters.push(eq(mailItems.urgency, 'urgent'));
@@ -433,9 +470,18 @@ export const mailRouter = router({
       if (input?.category) filters.push(eq(mailItems.category, input.category as any));
       if (input?.teamId) filters.push(eq(mailItems.assignedTeamId, input.teamId));
       if (input?.handlerId) filters.push(eq(mailItems.assignedHandlerId, input.handlerId));
-      if (input?.status) filters.push(eq(mailItems.status, input.status as any));
+      if (input?.status) {
+        filters.push(eq(mailItems.status, input.status as any));
+        if (input.status === 'assigned') filters.push(isNotNull(mailItems.assignedHandlerId));
+      }
       if (input?.source) filters.push(eq(mailItems.source, input.source));
-      if (input?.overdue) filters.push(and(lt(mailItems.dueAt, new Date()), isNull(mailItems.resolvedAt))!);
+      if (input?.overdue) filters.push(and(
+        inArray(mailItems.status, ['assigned', 'escalated']),
+        isNotNull(mailItems.assignedHandlerId),
+        isNotNull(mailItems.dueAt),
+        lt(mailItems.dueAt, new Date()),
+        isNull(mailItems.resolvedAt),
+      )!);
       // Exclude archived items by default unless explicitly requested
       if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.legalOnly) filters.push(or(eq(mailItems.isDemand, 1), eq(mailItems.category, 'legal_or_high_risk'))!);
@@ -510,11 +556,18 @@ export const mailRouter = router({
     const [allPendingYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
       .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), lte(mailItems.createdAt, yesterdayStart)));
 
-    // Overdue
+    // Overdue means an assigned handler missed the internal review deadline.
+    const overdueFilter = and(
+      inArray(mailItems.status, ['assigned', 'escalated']),
+      isNotNull(mailItems.assignedHandlerId),
+      isNotNull(mailItems.dueAt),
+      lt(mailItems.dueAt, now),
+      isNull(mailItems.resolvedAt),
+    );
     const [overdue] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
-      .where(and(unresolved!, lt(mailItems.dueAt, now)));
+      .where(overdueFilter);
     const [overdueYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
-      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), lt(mailItems.dueAt, yesterdayStart)));
+      .where(and(inArray(mailItems.status, ['assigned', 'escalated']), isNotNull(mailItems.assignedHandlerId), isNotNull(mailItems.dueAt), lt(mailItems.dueAt, yesterdayStart), isNull(mailItems.resolvedAt)));
 
     // Urgent
     const [urgent] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
@@ -841,6 +894,7 @@ export const mailRouter = router({
       const { classify } = await import('../mail/classify.js');
       const { route } = await import('../mail/route.js');
       const { createMailContentReader, parseMailContentFiles } = await import('../mail/contentRefresh.js');
+      const { markAssignedMailSource } = await import('../mail/sourceMarking.js');
       const readMailContent = await createMailContentReader(conn);
 
       // Day-of-week gate: 2=Tue, 3=Wed, 4=Thu, 5=Fri (ET)
@@ -853,7 +907,7 @@ export const mailRouter = router({
 
       // Get all unprocessed items (no limit — we'll apply per-handler limit below)
       const [allItems] = await conn.execute<any[]>(
-        `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source,
+        `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
                 mi.slack_message_ts, mi.slack_channel_id,
                 GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
                 GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
@@ -928,6 +982,7 @@ export const mailRouter = router({
           const cl = await classify({
             subject: item.subject ?? undefined,
             bodyText: content.indexedBody,
+            receivedAt: item.received_at,
             attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined,
           });
           const patch = await route(conn, cl);
@@ -952,6 +1007,18 @@ export const mailRouter = router({
             `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=?,body_text=? WHERE id=?`,
             [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,content.indexedBody,item.id]
           );
+          if (patch.assignedHandlerId) {
+            const sourceResult = await markAssignedMailSource(conn, {
+              id: item.id,
+              source: item.source,
+              externalId: item.external_id,
+              slackChannelId: item.slack_channel_id,
+              slackMessageTs: item.slack_message_ts,
+            });
+            if (sourceResult.errors.length) {
+              console.warn(`[mail.triggerNow] source marking failed for ${item.id}: ${sourceResult.errors.join('; ')}`);
+            }
+          }
           for (const h of patch.historyActions) {
             await conn.execute(`INSERT INTO mail_routing_history (item_id,action,to_handler_id,reason) VALUES (?,?,?,?)`, [item.id,h.action,h.toHandlerId??null,h.reason]);
           }
