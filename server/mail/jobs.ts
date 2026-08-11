@@ -232,22 +232,8 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
           );
         }
 
-        // Send urgent DM if urgency='urgent' and handler is assigned
-        if (patch.urgency === 'urgent' && patch.assignedHandlerId) {
-          const [[handlerRow]] = await conn.execute<any[]>(
-            'SELECT email FROM handlers WHERE id = ?', [patch.assignedHandlerId]
-          );
-          if (handlerRow?.email) {
-            const token = process.env.SLACK_BOT_TOKEN ?? '';
-            const slack = buildRealSlackDM(token);
-            await sendUrgentAssignmentDM(handlerRow.email, {
-              id: item.id,
-              subject: item.subject,
-              category: patch.category,
-              responseDueDate: patch.responseDueDate,
-            }, slack).catch(e => console.error('[mailProcess] urgent DM failed:', e));
-          }
-        }
+        // Mailroom routing is intentionally internal-only. Slack is reserved for
+        // user-initiated Mail Bot operations and overdue reminders, not assignments.
 
         processed++;
       } catch (e) {

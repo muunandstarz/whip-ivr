@@ -382,6 +382,11 @@
 - [x] Extend the Mailroom search bar to find text in subject, summary, email body, and extracted document content
 - [ ] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
 
+## Session 2026-08-11 Mailroom Assignment Boundary
+- [x] Prevent Mailroom ingest, classification, routing, and reassignments from creating Slack assignment posts
+- [x] Preserve Mailroom internal assignment records and existing Slack reviewed-marker behavior
+- [ ] Verify a live Mailroom processing run creates no Slack assignment messages
+
 ## Session 2026-08-11 Mailroom Repairs
 - [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
 - [x] Correct Slack assignment posts: resolve readable agent mentions, remove/correct the six incorrect posts, and preserve valid links
