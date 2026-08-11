@@ -27,6 +27,7 @@ const CANNED_GMAIL_MESSAGE = {
     headers: [
       { name: 'Subject', value: 'Demand Letter — CLM-TEST-001' },
       { name: 'From', value: 'Attorney Smith <attorney@lawfirm.com>' },
+      { name: 'To', value: 'claims@drivewhip.com' },
       { name: 'Date', value: 'Wed, 06 Aug 2026 12:00:00 +0000' },
     ],
     parts: [
@@ -102,6 +103,7 @@ describe('ingestGmail() — mocked HTTP', () => {
     addLabel: vi.fn().mockResolvedValue(undefined),
     getOrCreateLabel: vi.fn().mockResolvedValue('mock-label-id'),
     markRead: vi.fn().mockResolvedValue(undefined), // no-op compat
+    listReadMessages: vi.fn().mockResolvedValue({ messages: [] }),
   };
 
   it('G1: inserts a mail_items row with correct fields', async () => {
@@ -154,6 +156,33 @@ describe('ingestGmail() — mocked HTTP', () => {
     );
     expect(rows[0].cnt, 'exactly one row').toBe(1);
   });
+
+  it('G5: converts an HTML-only email body into readable Mailroom text', async () => {
+    const htmlId = 'test-gmail-html-001';
+    await conn.execute('DELETE FROM mail_items WHERE external_id=?', [htmlId]);
+    const htmlMessage = {
+      ...CANNED_GMAIL_MESSAGE,
+      id: htmlId,
+      payload: {
+        ...CANNED_GMAIL_MESSAGE.payload,
+        parts: [{
+          mimeType: 'text/html',
+          body: { data: Buffer.from('<p>Carrier <strong>follow-up</strong><br>Claim CLM-HTML-001</p>').toString('base64url') },
+        }],
+      },
+    };
+    const htmlGmail: GmailFetchFn = {
+      ...mockGmail,
+      listMessages: vi.fn().mockResolvedValue({ messages: [{ id: htmlId }] }),
+      getMessage: vi.fn().mockResolvedValue(htmlMessage),
+    };
+    const result = await ingestGmail(conn, htmlGmail);
+    expect(result.inserted).toBe(1);
+    const [[row]] = await conn.execute<any[]>('SELECT body_text FROM mail_items WHERE external_id=?', [htmlId]);
+    expect(row.body_text).toContain('Carrier follow-up');
+    expect(row.body_text).toContain('CLM-HTML-001');
+    await conn.execute('DELETE FROM mail_items WHERE external_id=?', [htmlId]);
+  });
 });
 
 // ─── Slack ingestion tests ────────────────────────────────────────────────────
@@ -167,6 +196,7 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     }),
     addReaction: vi.fn().mockResolvedValue(undefined),
     getPermalink: vi.fn().mockResolvedValue('https://slack.com/archives/C07R60KAC2C/p1722960000000001'),
+    getFileInfo: vi.fn().mockResolvedValue(null),
   };
 
   const baseEvent = {
@@ -272,5 +302,28 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
 
     // Clean up
     await conn.execute("DELETE FROM mail_items WHERE external_id = ?", [PRE_REVIEWED_FILE_ID]);
+  });
+
+  it('S6: hydrates file_shared events that arrive with only a Slack file ID', async () => {
+    const hydratedId = 'F_HYDRATED_SLACK_001';
+    await conn.execute('DELETE FROM mail_items WHERE external_id=?', [hydratedId]);
+    const hydratedSlack: SlackFetchFn = {
+      ...mockSlack,
+      getFileInfo: vi.fn().mockResolvedValue({
+        filename: 'hydrated.pdf',
+        mimeType: 'application/pdf',
+        urlPrivateDownload: 'https://files.slack.com/files-pri/T-test/hydrated.pdf',
+        messageTs: '1722960002.000001',
+      }),
+    };
+    const result = await handleSlackFileEvent(conn, {
+      fileId: hydratedId,
+      messageTs: '1722960002.000001',
+      channelId: SLACK_CHANNEL,
+    }, hydratedSlack, opts);
+    expect(result.action).toBe('inserted');
+    const [[file]] = await conn.execute<any[]>('SELECT filename FROM mail_item_files WHERE item_id=?', [result.itemId]);
+    expect(file.filename).toBe('hydrated.pdf');
+    await conn.execute('DELETE FROM mail_items WHERE external_id=?', [hydratedId]);
   });
 });

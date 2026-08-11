@@ -176,6 +176,10 @@ export async function resolveAssignee(mailType: MailType, isLegal: boolean): Pro
   return overflow ? { name: overflow.name, slackId: overflow.slackId } : null;
 }
 
+function isSlackUserId(value: string): boolean {
+  return /^[UW][A-Z0-9]+$/.test(value);
+}
+
 // ─── Slack API ─────────────────────────────────────────────────────────────────
 
 async function slackPost(token: string, channel: string, blocks: object[], text: string): Promise<{ ts?: string; ok: boolean }> {
@@ -201,6 +205,37 @@ async function slackReply(token: string, channel: string, ts: string, text: stri
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ channel, thread_ts: ts, text }),
   });
+}
+
+export async function postMailBotReassignment(input: {
+  token: string;
+  hubChannelId: string;
+  fileName: string | null;
+  mailType: string;
+  sourceChannelId: string | null;
+  sourceMessageTs: string | null;
+  assigneeName: string;
+  assigneeSlackId: string;
+  reason?: string;
+}): Promise<void> {
+  if (!isSlackUserId(input.assigneeSlackId)) {
+    throw new Error(`Cannot mention ${input.assigneeName}: the agent record does not contain a Slack user ID`);
+  }
+  const sourceLink = input.sourceChannelId && input.sourceMessageTs
+    ? `https://slack.com/archives/${input.sourceChannelId}/p${input.sourceMessageTs.replace('.', '')}`
+    : null;
+  const message = [
+    `:arrows_counterclockwise: *MAIL TRIAGE — REASSIGNED*`,
+    `Assigned to: <@${input.assigneeSlackId}>`,
+    `File: \`${input.fileName ?? '(unnamed file)'}\``,
+    `Type: ${input.mailType}`,
+    input.reason ? `Reason: ${input.reason}` : null,
+    sourceLink ? `<${sourceLink}|View in #claims-mail>` : null,
+  ].filter(Boolean).join('\n');
+  const response = await slackPost(input.token, input.hubChannelId, [
+    { type: 'section', text: { type: 'mrkdwn', text: message } },
+  ], `MAIL TRIAGE — REASSIGNED → ${input.assigneeName}`);
+  if (!response.ok) throw new Error('Slack rejected the reassignment post');
 }
 
 async function slackGetMessages(token: string, channelId: string, oldest?: string): Promise<SlackMessage[]> {
@@ -342,6 +377,11 @@ export async function runMailBot(options: BotRunOptions): Promise<{ runId: strin
           const assignee = await resolveAssignee(mailType, isLegal);
 
           if (!assignee) {
+            itemsSkipped++;
+            continue;
+          }
+          if (!isSlackUserId(assignee.slackId)) {
+            errors.push(`Agent ${assignee.name} has an invalid Slack user ID (${assignee.slackId})`);
             itemsSkipped++;
             continue;
           }

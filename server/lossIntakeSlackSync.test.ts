@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
   finishLossIntakeSyncRun: vi.fn(),
+  getLossIntakeClaimBySlackKey: vi.fn(),
   getLossIntakeSettings: vi.fn(),
   listLossIntakeClaims: vi.fn(),
   startLossIntakeSyncRun: vi.fn(),
@@ -52,6 +53,7 @@ describe("runLossIntakeSlackSync", () => {
       ],
     });
     dbMocks.listLossIntakeClaims.mockResolvedValue({ claims: [], total: 0 });
+    dbMocks.getLossIntakeClaimBySlackKey.mockResolvedValue(null);
     dbMocks.upsertLossIntakeClaimBundle.mockResolvedValue(99);
   });
 

@@ -363,3 +363,21 @@
 - [ ] Slack backfill: re-fetch 139 Slack files into production S3 bucket (running in background)
 - [ ] Verify file proxy works after backfill (open 3-4 items in admin Mailroom drawer, click Open)
 - [ ] Trigger Now on deployed site after publishing to ingest Gmail + Slack + classify items
+
+## Session 2026-08-11 Mailroom Repairs
+- [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
+- [x] Correct Slack assignment posts: resolve readable agent mentions, remove/correct the six incorrect posts, and preserve valid links
+- [x] Add admin reassignment for individual Mailroom items and post the updated assignment to Slack
+- [x] Restrict Slack ingest to unreviewed claims-mail files; record reviewed/checkmarked items as resolved only
+- [x] Restore attachment records and proxy access for ingested Slack files
+- [x] Persist and render Gmail email bodies in the Mailroom record drawer
+- [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
+
+## Session 2026-08-11 Mailroom Repairs
+- [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
+- [x] Correct Slack assignment posts: resolve readable agent mentions, remove/correct the six incorrect posts, and preserve valid links
+- [x] Add admin reassignment for individual Mailroom items and post the updated assignment to Slack
+- [x] Restrict Slack ingest to unreviewed claims-mail files; record reviewed/checkmarked items as resolved only
+- [x] Restore attachment records and proxy access for ingested Slack files
+- [x] Persist and render Gmail email bodies in the Mailroom record drawer
+- [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records

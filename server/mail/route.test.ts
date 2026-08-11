@@ -18,7 +18,7 @@ const FIXTURES: Array<{
   classification: ClassificationResult;
   expectedTeam: string;
   expectedHandlerEmail: string | null;
-  expectedStatus: 'assigned' | 'escalated';
+  expectedStatus: 'new' | 'assigned' | 'escalated';
   expectedNeedsReview: number;
   expectedIsDemand: number;
   expectedHasDueDate: boolean;
@@ -120,7 +120,7 @@ const FIXTURES: Array<{
     },
     expectedTeam: 'Review',
     expectedHandlerEmail: null,
-    expectedStatus: 'escalated',
+    expectedStatus: 'new',
     expectedNeedsReview: 1,
     expectedIsDemand: 0,
     expectedHasDueDate: true,
@@ -137,7 +137,7 @@ const FIXTURES: Array<{
     },
     expectedTeam: 'Review',
     expectedHandlerEmail: null,
-    expectedStatus: 'escalated',
+    expectedStatus: 'new',
     expectedNeedsReview: 1,
     expectedIsDemand: 1,
     expectedHasDueDate: true,
@@ -154,7 +154,7 @@ const FIXTURES: Array<{
     },
     expectedTeam: 'Review',
     expectedHandlerEmail: null,
-    expectedStatus: 'assigned',
+    expectedStatus: 'new',
     expectedNeedsReview: 1,
     expectedIsDemand: 0,
     expectedHasDueDate: false,
@@ -172,7 +172,7 @@ const FIXTURES: Array<{
     },
     expectedTeam: 'Review',
     expectedHandlerEmail: null,
-    expectedStatus: 'assigned',
+    expectedStatus: 'new',
     expectedNeedsReview: 1,
     expectedIsDemand: 0,
     expectedHasDueDate: false,
@@ -232,13 +232,18 @@ describe('route() — mocked LLM', () => {
       expect(patch.initialCategory, `${fx.id}: initialCategory`).toBe(fx.classification.category);
       expect(patch.initialConfidence, `${fx.id}: initialConfidence`).toBe(fx.classification.confidence);
 
-      // history actions: must have at least 'classified' + ('assigned'|'escalated')
+      // An unassigned review-lane item has only classification history; otherwise it is routed.
       const actions = patch.historyActions.map(h => h.action);
       expect(actions, `${fx.id}: history has classified`).toContain('classified');
-      expect(
-        actions.includes('assigned') || actions.includes('escalated'),
-        `${fx.id}: history has assigned or escalated`
-      ).toBe(true);
+      if (fx.expectedStatus === 'new') {
+        expect(actions, `${fx.id}: history has no false assignment`).not.toContain('assigned');
+        expect(actions, `${fx.id}: history has no false escalation`).not.toContain('escalated');
+      } else {
+        expect(
+          actions.includes('assigned') || actions.includes('escalated'),
+          `${fx.id}: history has assigned or escalated`
+        ).toBe(true);
+      }
     });
   }
 });

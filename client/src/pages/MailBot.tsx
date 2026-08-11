@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   Bot, Play, RefreshCw, Users, Calendar, Settings2, ClipboardList,
-  Mail, FileText, AlertTriangle, CheckCircle2, Clock, Zap, Plus, Trash2, Edit2, Save, X, Archive,
+  Mail, FileText, AlertTriangle, CheckCircle2, Clock, Zap, Plus, Trash2, Edit2, Save, X, Archive, ArrowRightLeft,
 } from "lucide-react";
 
 type SubPage = "control" | "log" | "agents" | "pto" | "schedule";
@@ -282,8 +282,13 @@ function AssignmentLog() {
   });
 
   const utils = trpc.useUtils();
+  const { data: agents } = trpc.mailBot.listAgents.useQuery();
   const updateMutation = trpc.mailBot.updateAssignment.useMutation({
     onSuccess: () => { toast.success("Updated"); utils.mailBot.listAssignments.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const reassignMutation = trpc.mailBot.reassignAssignment.useMutation({
+    onSuccess: () => { toast.success("Reassigned and posted to Claims Hub"); utils.mailBot.listAssignments.invalidate(); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -360,7 +365,15 @@ function AssignmentLog() {
                 ) : !assignments?.length ? (
                   <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">No assignments found.</td></tr>
                 ) : assignments.map((a) => (
-                  <AssignmentRow key={a.id} assignment={a} statusColor={statusColor} onUpdate={(updates) => updateMutation.mutate({ id: a.id, ...updates })} />
+                  <AssignmentRow
+                    key={a.id}
+                    assignment={a}
+                    statusColor={statusColor}
+                    agents={agents ?? []}
+                    reassignPending={reassignMutation.isPending}
+                    onUpdate={(updates) => updateMutation.mutate({ id: a.id, ...updates })}
+                    onReassign={(toAgentId, reason) => reassignMutation.mutate({ id: a.id, toAgentId, reason })}
+                  />
                 ))}
               </tbody>
             </table>
@@ -377,19 +390,25 @@ function AssignmentLog() {
   );
 }
 
-function AssignmentRow({ assignment: a, statusColor, onUpdate }: {
+function AssignmentRow({ assignment: a, statusColor, agents, reassignPending, onUpdate, onReassign }: {
   assignment: {
     id: number; processedAt: Date; mailType: string; assignedTo: string; source: string;
     claimNumber: string | null; status: string; notes: string | null; isLegal: boolean;
     actionTaken: string | null;
   };
   statusColor: Record<string, string>;
+  agents: Array<{ id: number; name: string; slackId: string; isActive: boolean }>;
+  reassignPending: boolean;
   onUpdate: (updates: { status?: "open" | "in_review" | "actioned" | "closed"; notes?: string; claimNumber?: string; actionTaken?: string }) => void;
+  onReassign: (toAgentId: number, reason?: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState(a.notes ?? "");
   const [claimNumber, setClaimNumber] = useState(a.claimNumber ?? "");
   const [status, setStatus] = useState(a.status as "open" | "in_review" | "actioned" | "closed");
+  const [showReassign, setShowReassign] = useState(false);
+  const [targetAgentId, setTargetAgentId] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
 
   function save() {
     onUpdate({ status, notes, claimNumber });
@@ -448,8 +467,27 @@ function AssignmentRow({ assignment: a, statusColor, onUpdate }: {
             <Button size="sm" className="h-6 px-2 text-xs" onClick={save}><Save className="w-3 h-3" /></Button>
             <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setEditing(false)}><X className="w-3 h-3" /></Button>
           </div>
+        ) : showReassign ? (
+          <div className="flex flex-col gap-1 min-w-40">
+            <Select value={targetAgentId} onValueChange={setTargetAgentId}>
+              <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Reassign to…" /></SelectTrigger>
+              <SelectContent>
+                {agents.filter(agent => agent.isActive && /^[UW][A-Z0-9]+$/.test(agent.slackId)).map(agent => (
+                  <SelectItem key={agent.id} value={String(agent.id)}>{agent.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input value={reassignReason} onChange={(event) => setReassignReason(event.target.value)} placeholder="Reason (optional)" className="h-7 text-xs" />
+            <div className="flex gap-1">
+              <Button size="sm" className="h-7 text-xs" disabled={!targetAgentId || reassignPending} onClick={() => onReassign(Number(targetAgentId), reassignReason || undefined)}>Assign</Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowReassign(false)}>Cancel</Button>
+            </div>
+          </div>
         ) : (
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setEditing(true)}><Edit2 className="w-3 h-3" /></Button>
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setEditing(true)} title="Edit assignment"><Edit2 className="w-3 h-3" /></Button>
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setShowReassign(true)} title="Reassign"><ArrowRightLeft className="w-3 h-3" /></Button>
+          </div>
         )}
       </td>
     </tr>

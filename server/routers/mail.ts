@@ -54,6 +54,18 @@ async function appendHistory(
   });
 }
 
+async function parseExternalJson(response: Response, stage: string): Promise<any> {
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`${stage} HTTP ${response.status}: ${raw.slice(0, 240).replace(/\s+/g, ' ')}`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`${stage} returned non-JSON: ${raw.slice(0, 240).replace(/\s+/g, ' ')}`);
+  }
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const mailRouter = router({
@@ -664,7 +676,7 @@ export const mailRouter = router({
           // Use files.list API with pagination to get ALL files in the channel
           let page = 1;
           let hasMore = true;
-          while (hasMore && page <= 20) {
+          while (hasMore) {
             const params = new URLSearchParams({
               channel: CLAIMS_MAIL_CHANNEL,
               count: '100',
@@ -675,7 +687,7 @@ export const mailRouter = router({
               `https://slack.com/api/files.list?${params}`,
               { headers: { Authorization: `Bearer ${slackToken}` } }
             );
-            const filesData = await filesRes.json() as { ok: boolean; files?: any[]; paging?: { pages: number } };
+            const filesData = await parseExternalJson(filesRes, `Slack files.list page ${page}`) as { ok: boolean; files?: any[]; paging?: { pages: number } };
             if (!filesData.ok) {
               errors.push(`files.list page ${page}: ${JSON.stringify(filesData)}`);
               break;
@@ -685,12 +697,6 @@ export const mailRouter = router({
             hasMore = page < (filesData.paging?.pages ?? 1);
             page++;
             for (const file of files) {
-              // Dedupe by file ID
-              const [existing] = await conn.execute<any[]>(
-                "SELECT id FROM mail_items WHERE source = 'mail' AND external_id = ?",
-                [file.id]
-              );
-              if (existing.length > 0) { skipped++; continue; }
               // Get message ts from file shares
               const shares = (file.shares?.public?.[CLAIMS_MAIL_CHANNEL] ?? file.shares?.private?.[CLAIMS_MAIL_CHANNEL] ?? []) as any[];
               const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
@@ -702,17 +708,55 @@ export const mailRouter = router({
                   const reactRes = await fetch(`https://slack.com/api/reactions.get?${reactParams}`, {
                     headers: { Authorization: `Bearer ${slackToken}` },
                   });
-                  const reactData = await reactRes.json() as { ok: boolean; message?: { reactions?: Array<{ name: string }> } };
+                  const reactData = await parseExternalJson(reactRes, `Slack reactions.get ${file.id}`) as { ok: boolean; message?: { reactions?: Array<{ name: string }> } };
                   reactions = reactData.message?.reactions ?? [];
                 } catch { /* non-fatal */ }
               }
               const alreadyReviewed = reactions.some(r => allReviewed.includes(r.name));
-              if (alreadyReviewed) { skipped++; continue; }
+              // Existing files remain deduped. If a prior item has since been marked reviewed,
+              // preserve it in history as resolved instead of leaving a stale pending item.
+              const [existing] = await conn.execute<any[]>(
+                `SELECT mi.id, mi.status,
+                        (SELECT COUNT(*) FROM mail_item_files mif WHERE mif.item_id = mi.id) AS file_count
+                 FROM mail_items mi WHERE mi.source = 'mail' AND mi.external_id = ?`,
+                [file.id]
+              );
+              if (existing.length > 0) {
+                if (alreadyReviewed && existing[0].status !== 'resolved') {
+                  await conn.execute(
+                    "UPDATE mail_items SET pre_reviewed=1, status='resolved', resolved_at=COALESCE(resolved_at, NOW()) WHERE id=?",
+                    [existing[0].id]
+                  );
+                }
+                if (!alreadyReviewed && Number(existing[0].file_count ?? 0) === 0) {
+                  try {
+                    const hydrated = await slackFetch.getFileInfo(file.id);
+                    const downloadUrl = file.url_private_download ?? hydrated?.urlPrivateDownload;
+                    if (!downloadUrl) throw new Error('Slack did not provide a download URL');
+                    const downloaded = await slackFetch.downloadFile(downloadUrl);
+                    const storageName = file.name ?? file.title ?? hydrated?.filename ?? `${file.id}.bin`;
+                    const { key: storageKey } = await storagePut(
+                      `mail/slack/${CLAIMS_MAIL_CHANNEL}/${messageTs}/${storageName}`,
+                      downloaded.buffer,
+                      downloaded.contentType,
+                    );
+                    await conn.execute(
+                      `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
+                       VALUES (?, ?, ?, ?, ?, ?)`,
+                      [existing[0].id, storageKey, storageName, downloaded.contentType, downloaded.buffer.length, file.id]
+                    );
+                  } catch (recoveryError) {
+                    errors.push(`attachment recovery ${file.id}: ${String(recoveryError)}`);
+                  }
+                }
+                skipped++;
+                continue;
+              }
               // Pre-2025 filter: only ingest legal/injury-related mail from before 2025
               // (post-2025 mail is ingested regardless of category)
               const PRE_2025_CUTOFF = 1735689600; // 2025-01-01 00:00:00 UTC
               const fileTimestamp = Number(file.timestamp ?? 0);
-              if (fileTimestamp > 0 && fileTimestamp < PRE_2025_CUTOFF) {
+              if (!alreadyReviewed && fileTimestamp > 0 && fileTimestamp < PRE_2025_CUTOFF) {
                 // Pre-2025 mail: only ingest if filename suggests legal/injury content
                 const fname = (file.name ?? file.title ?? '').toLowerCase();
                 const isLegalOrInjury = /demand|lawsuit|complaint|summons|legal|attorney|counsel|injury|medical|pip|bodily|claim|subrog|lien|arbitration|litigation|settlement|release|judgment/.test(fname);
@@ -727,21 +771,26 @@ export const mailRouter = router({
                   mimeType: file.mimetype,
                   urlPrivateDownload: file.url_private_download,
                   reactions,
+                  receivedAt: fileTimestamp > 0 ? new Date(fileTimestamp * 1000) : new Date(),
                 }, slackFetch, {
                   reviewedEmoji,
+                  reviewedEmojis: allReviewed,
                   addBotMarker: false,
                 });
                 if (result.action === 'inserted') inserted++;
-                else skipped++;
+                else if (result.action === 'pre_reviewed') {
+                  const current = results.slackIngest as { resolved?: number } | undefined;
+                  results.slackIngest = { ...(current ?? {}), resolved: (current?.resolved ?? 0) + 1 };
+                } else skipped++;
               } catch (e) {
                 errors.push(String(e));
               }
             }
           }
-          results.slackIngest = { inserted, skipped, errors: errors.slice(0, 5), total: totalFiles };
+          const prior = results.slackIngest as { resolved?: number } | undefined;
+          results.slackIngest = { inserted, skipped, resolved: prior?.resolved ?? 0, errors: errors.slice(0, 5), total: totalFiles };
         }
       } catch (slackErr) {
-        results.slackIngest = { skipped: true, reason: String(slackErr) };
         results.slackIngest = { skipped: true, reason: String(slackErr) };
       }
       // Step 2: Classify + assign pending items

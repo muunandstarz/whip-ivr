@@ -97,10 +97,18 @@ async function processMailEvent(body: Record<string, unknown>): Promise<void> {
 
   const token = process.env.SLACK_BOT_TOKEN ?? '';
   const slack = buildRealSlackFetch(token);
+  let claimsMailChannelId = 'C07R60KAC2C';
 
   // Get the DB connection for raw SQL
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
+    try {
+      const [[config]] = await conn.execute<any[]>(
+        'SELECT claims_mail_channel_id FROM mail_bot_config LIMIT 1'
+      );
+      claimsMailChannelId = config?.claims_mail_channel_id || claimsMailChannelId;
+    } catch { /* use canonical fallback */ }
+    if (channelId !== claimsMailChannelId) return;
     // Handle file_shared event
     if (eventType === 'file_shared') {
       const fileId = event.file_id as string;
@@ -109,7 +117,12 @@ async function processMailEvent(body: Record<string, unknown>): Promise<void> {
         fileId,
         messageTs,
         channelId,
-      }, slack, { reviewedEmoji, botMarkerEmoji, addBotMarker });
+      }, slack, {
+        reviewedEmoji,
+        reviewedEmojis: ['white_check_mark', 'eyes', 'heavy_check_mark'],
+        botMarkerEmoji,
+        addBotMarker,
+      });
       return;
     }
 
@@ -125,7 +138,12 @@ async function processMailEvent(body: Record<string, unknown>): Promise<void> {
         mimeType: file.mimetype as string | undefined,
         urlPrivateDownload: file.url_private_download as string | undefined,
         permalink: file.permalink as string | undefined,
-      }, slack, { reviewedEmoji, botMarkerEmoji, addBotMarker });
+      }, slack, {
+        reviewedEmoji,
+        reviewedEmojis: ['white_check_mark', 'eyes', 'heavy_check_mark'],
+        botMarkerEmoji,
+        addBotMarker,
+      });
     }
   } finally {
     await conn.end();

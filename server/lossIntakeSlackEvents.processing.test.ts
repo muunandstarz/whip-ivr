@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
+  getActiveInStoreAgents: vi.fn(),
   getLossIntakeSettings: vi.fn(),
   getLossIntakeThreadState: vi.fn(),
   upsertLossIntakeClaimBundle: vi.fn(),
@@ -100,6 +101,7 @@ const storedThread = {
 describe("Slack Loss Intake same-thread processing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbMocks.getActiveInStoreAgents.mockResolvedValue(new Set());
     dbMocks.getLossIntakeSettings.mockResolvedValue({
       firstContactSlaMinutes: 10,
       atRiskMinutes: 7,
@@ -137,8 +139,8 @@ describe("Slack Loss Intake same-thread processing", () => {
 
     releaseParentUpsert?.();
 
-    await expect(parentResultPromise).resolves.toEqual({ status: "created" });
-    await expect(replyResultPromise).resolves.toEqual({ status: "updated" });
+    await expect(parentResultPromise).resolves.toMatchObject({ status: "created", overflowRouted: false });
+    await expect(replyResultPromise).resolves.toMatchObject({ status: "updated" });
     expect(dbMocks.getLossIntakeThreadState).toHaveBeenCalledTimes(2);
     expect(dbMocks.upsertLossIntakeClaimBundle).toHaveBeenCalledTimes(2);
   });

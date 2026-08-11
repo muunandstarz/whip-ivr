@@ -80,9 +80,31 @@ function b64urlToBuffer(data: string): Buffer {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
 
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*\/p\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 function extractTextBody(part: GmailPart): string {
   if (part.mimeType === 'text/plain' && part.body?.data) {
     return b64urlToString(part.body.data);
+  }
+  if (part.mimeType === 'text/html' && part.body?.data) {
+    return htmlToText(b64urlToString(part.body.data));
   }
   if (part.parts) {
     for (const child of part.parts) {
@@ -91,6 +113,16 @@ function extractTextBody(part: GmailPart): string {
     }
   }
   return '';
+}
+
+function extractMessageBody(payload: GmailMessage['payload']): string {
+  if (!payload) return '';
+  if ((payload.mimeType === 'text/plain' || payload.mimeType === 'text/html') && payload.body?.data) {
+    return payload.mimeType === 'text/html'
+      ? htmlToText(b64urlToString(payload.body.data))
+      : b64urlToString(payload.body.data);
+  }
+  return extractTextBody({ mimeType: payload.mimeType ?? 'multipart/mixed', body: payload.body, parts: payload.parts });
 }
 
 function collectAttachments(part: GmailPart): Array<{ filename: string; mimeType: string; attachmentId?: string; data?: string }> {
@@ -164,10 +196,21 @@ export async function ingestGmail(
     try {
       // 2. Dedupe safety net
       const [existing] = await conn.execute<any[]>(
-        "SELECT id FROM mail_items WHERE source = 'email' AND external_id = ?",
+        "SELECT id, body_text FROM mail_items WHERE source = 'email' AND external_id = ?",
         [messageId]
       );
       if (existing.length > 0) {
+        if (!existing[0].body_text) {
+          try {
+            const existingMessage = await gmail.getMessage(token, messageId);
+            const recoveredBody = extractMessageBody(existingMessage.payload);
+            if (recoveredBody) {
+              await conn.execute('UPDATE mail_items SET body_text=? WHERE id=?', [recoveredBody.slice(0, 65535), existing[0].id]);
+            }
+          } catch (bodyRecoveryError) {
+            result.errors.push(`body recovery ${messageId}: ${String(bodyRecoveryError)}`);
+          }
+        }
         // Already in DB — still add the label so it drops out of next poll
         try { await gmail.addLabel(token, messageId, mailroomDoneLabelId); } catch {}
         result.skipped++;
@@ -205,17 +248,7 @@ export async function ingestGmail(
       const { name: fromName, email: fromEmail } = parseAddress(senderRaw);
 
       // 4. Extract body text
-      let bodyText = '';
-      if (msg.payload) {
-        if (msg.payload.mimeType === 'text/plain' && msg.payload.body?.data) {
-          bodyText = b64urlToString(msg.payload.body.data);
-        } else if (msg.payload.parts) {
-          for (const part of msg.payload.parts) {
-            const text = extractTextBody(part);
-            if (text) { bodyText = text; break; }
-          }
-        }
-      }
+      const bodyText = extractMessageBody(msg.payload);
 
       // 5. Insert mail_items row
       const [insertResult] = await conn.execute<any>(
@@ -283,10 +316,21 @@ export async function ingestGmail(
       for (const { id: messageId } of readIds) {
         try {
           const [existingRows] = await conn.execute<any[]>(
-            "SELECT id FROM mail_items WHERE source = 'email' AND external_id = ?",
+            "SELECT id, body_text FROM mail_items WHERE source = 'email' AND external_id = ?",
             [messageId]
           );
           if ((existingRows as any[]).length > 0) {
+            if (!existingRows[0].body_text) {
+              try {
+                const existingMessage = await gmail.getMessage(token, messageId);
+                const recoveredBody = extractMessageBody(existingMessage.payload);
+                if (recoveredBody) {
+                  await conn.execute('UPDATE mail_items SET body_text=? WHERE id=?', [recoveredBody.slice(0, 65535), existingRows[0].id]);
+                }
+              } catch (bodyRecoveryError) {
+                result.errors.push(`read body recovery ${messageId}: ${String(bodyRecoveryError)}`);
+              }
+            }
             try { await gmail.addLabel(token, messageId, mailroomDoneLabelId); } catch {}
             result.skipped++;
             continue;
@@ -311,17 +355,7 @@ export async function ingestGmail(
           const fromRaw = getHdr('From') ?? '';
           const senderRaw = replyToRaw || fromRaw;
           const { name: fromName, email: fromEmail } = parseAddress(senderRaw);
-          let bodyText = '';
-          if (msg.payload) {
-            if (msg.payload.mimeType === 'text/plain' && msg.payload.body?.data) {
-              bodyText = b64urlToString(msg.payload.body.data);
-            } else if (msg.payload.parts) {
-              for (const part of msg.payload.parts) {
-                const text = extractTextBody(part);
-                if (text) { bodyText = text; break; }
-              }
-            }
-          }
+          const bodyText = extractMessageBody(msg.payload);
           const [insertResult] = await conn.execute<any>(
             `INSERT INTO mail_items
                (source, external_id, received_at, status, resolved_at, subject, body_text,

@@ -6,7 +6,7 @@ import {
   mailBotConfig, mailBotAgents, mailBotPto, mailBotAssignments, mailBotRuns,
 } from "../../drizzle/schema";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
-import { runMailBot } from "../mailBot";
+import { runMailBot, postMailBotReassignment } from "../mailBot";
 
 function adminOnly(role: string) {
   if (role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -199,6 +199,50 @@ export const mailBotRouter = router({
       }
       const { id, ...updates } = input;
       await db.update(mailBotAssignments).set(updates).where(eq(mailBotAssignments.id, id));
+      return { success: true };
+    }),
+
+  reassignAssignment: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      toAgentId: z.number(),
+      reason: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      adminOnly(ctx.user.role);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [assignment] = await db.select().from(mailBotAssignments)
+        .where(eq(mailBotAssignments.id, input.id)).limit(1);
+      const [agent] = await db.select().from(mailBotAgents)
+        .where(eq(mailBotAgents.id, input.toAgentId)).limit(1);
+      const [config] = await db.select().from(mailBotConfig)
+        .where(eq(mailBotConfig.id, 1)).limit(1);
+      if (!assignment) throw new TRPCError({ code: "NOT_FOUND", message: "Assignment not found" });
+      if (!agent || !agent.isActive) throw new TRPCError({ code: "BAD_REQUEST", message: "Select an active agent" });
+      if (!config?.slackBotToken || !config.claimsHubChannelId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Slack hub configuration is incomplete" });
+      }
+      if (!/^[UW][A-Z0-9]+$/.test(agent.slackId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `${agent.name} needs a valid Slack user ID before reassignment` });
+      }
+      await db.update(mailBotAssignments).set({
+        assignedTo: agent.name,
+        assignedSlackId: agent.slackId,
+        status: "in_review",
+        notes: [assignment.notes, input.reason ? `Reassigned by ${ctx.user.name ?? 'admin'}: ${input.reason}` : `Reassigned by ${ctx.user.name ?? 'admin'}`].filter(Boolean).join("\n"),
+      }).where(eq(mailBotAssignments.id, input.id));
+      await postMailBotReassignment({
+        token: config.slackBotToken,
+        hubChannelId: config.claimsHubChannelId,
+        fileName: assignment.fileName,
+        mailType: assignment.mailType,
+        sourceChannelId: assignment.slackChannelId,
+        sourceMessageTs: assignment.slackMessageTs,
+        assigneeName: agent.name,
+        assigneeSlackId: agent.slackId,
+        reason: input.reason,
+      });
       return { success: true };
     }),
 

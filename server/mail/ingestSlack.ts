@@ -32,6 +32,8 @@ export interface SlackFileEvent {
   urlPrivateDownload?: string;
   /** Reactions already on the parent message */
   reactions?: Array<{ name: string }>;
+  /** Original Slack file timestamp, preserved as the Mailroom received date */
+  receivedAt?: Date;
 }
 
 export interface SlackFetchFn {
@@ -43,6 +45,8 @@ export interface SlackFetchFn {
   addReaction(channelId: string, messageTs: string, emoji: string): Promise<void>;
   /** Get message permalink */
   getPermalink(channelId: string, messageTs: string): Promise<string | null>;
+  /** Get complete file metadata when a file_shared webhook carries only an ID */
+  getFileInfo(fileId: string): Promise<Partial<SlackFileEvent> | null>;
 }
 
 export interface IngestSlackResult {
@@ -57,16 +61,29 @@ export async function handleSlackFileEvent(
   slack: SlackFetchFn,
   opts: {
     reviewedEmoji: string;
+    reviewedEmojis?: string[];
     botMarkerEmoji?: string;
     addBotMarker?: boolean;
   }
 ): Promise<IngestSlackResult> {
-  const { fileId, messageTs, channelId, filename, mimeType, urlPrivateDownload } = event;
+  let { fileId, messageTs, channelId, filename, mimeType, urlPrivateDownload } = event;
 
   try {
     // 1. Check reactions on the parent message
+    // file_shared webhooks carry an ID only; hydrate it before attempting a download.
+    if (!urlPrivateDownload || !filename || !mimeType) {
+      const fileInfo = await slack.getFileInfo(fileId);
+      if (fileInfo) {
+        filename = filename ?? fileInfo.filename;
+        mimeType = mimeType ?? fileInfo.mimeType;
+        urlPrivateDownload = urlPrivateDownload ?? fileInfo.urlPrivateDownload;
+        messageTs = event.messageTs || fileInfo.messageTs || messageTs;
+      }
+    }
+
     const reactions = event.reactions ?? await slack.getReactions(channelId, messageTs);
-    const alreadyReviewed = reactions.some(r => r.name === opts.reviewedEmoji);
+    const reviewMarkers = new Set([opts.reviewedEmoji, ...(opts.reviewedEmojis ?? [])]);
+    const alreadyReviewed = reactions.some(r => reviewMarkers.has(r.name));
 
     if (alreadyReviewed) {
       // Insert a pre_reviewed=1, status='resolved' row (for the log) but do not route
@@ -82,8 +99,8 @@ export async function handleSlackFileEvent(
         `INSERT INTO mail_items
            (source, external_id, received_at, status, pre_reviewed,
             slack_channel_id, slack_message_ts, slack_permalink)
-         VALUES ('mail', ?, NOW(), 'resolved', 1, ?, ?, ?)`,
-        [fileId, channelId, messageTs, permalink ?? null]
+         VALUES ('mail', ?, ?, 'resolved', 1, ?, ?, ?)`,
+        [fileId, event.receivedAt ?? new Date(), channelId, messageTs, permalink ?? null]
       );
       // Add a system note
       await conn.execute(
@@ -111,8 +128,8 @@ export async function handleSlackFileEvent(
       `INSERT INTO mail_items
          (source, external_id, received_at, status,
           slack_channel_id, slack_message_ts, slack_permalink, subject)
-       VALUES ('mail', ?, NOW(), 'new', ?, ?, ?, ?)`,
-      [fileId, channelId, messageTs, permalink ?? null, filename ?? null]
+         VALUES ('mail', ?, ?, 'new', ?, ?, ?, ?)`,
+      [fileId, event.receivedAt ?? new Date(), channelId, messageTs, permalink ?? null, filename ?? null]
     );
     const itemId = (ins as any).insertId;
 
@@ -161,6 +178,7 @@ export function buildRealSlackFetch(token: string): SlackFetchFn {
     },
     async downloadFile(url) {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`Slack file download failed (${res.status})`);
       const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
       const buffer = Buffer.from(await res.arrayBuffer());
       return { buffer, contentType };
@@ -179,6 +197,23 @@ export function buildRealSlackFetch(token: string): SlackFetchFn {
       });
       const data = await res.json() as { ok: boolean; permalink?: string };
       return data.permalink ?? null;
+    },
+    async getFileInfo(fileId) {
+      const res = await fetch(`https://slack.com/api/files.info?file=${encodeURIComponent(fileId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json() as { ok: boolean; file?: any };
+      if (!data.ok || !data.file) return null;
+      const file = data.file;
+      const shares = file.shares?.public ?? file.shares?.private ?? {};
+      const firstShare = Object.values(shares).flat()[0] as { ts?: string } | undefined;
+      return {
+        filename: file.name ?? file.title,
+        mimeType: file.mimetype,
+        urlPrivateDownload: file.url_private_download ?? file.url_private,
+        messageTs: firstShare?.ts,
+        receivedAt: file.timestamp ? new Date(Number(file.timestamp) * 1000) : undefined,
+      };
     },
   };
 }
