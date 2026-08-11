@@ -762,16 +762,17 @@ export default function MyMailroom() {
               disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
-            <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-              <SelectTrigger className="h-7 w-24 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[10, 25, 50].map(s => (
-                  <SelectItem key={s} value={String(s)} className="text-xs">{s} / page</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              aria-label="Rows per page"
+              value={pageSize}
+              onChange={(event) => {
+                setPage(1);
+                setPageSize(Number(event.currentTarget.value));
+              }}
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {[10, 25, 50].map(s => <option key={s} value={s}>{s} / page</option>)}
+            </select>
           </div>
         </div>
       </div>

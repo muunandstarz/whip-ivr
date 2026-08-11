@@ -388,6 +388,9 @@
 - [x] Fix the Admin Mailroom Demands card so it opens the populated demand-filtered queue
 - [x] Measure the legacy Mailroom content backlog and estimate its completion timeline under the safe refresh throughput (797 items; approximately 159.4 minutes at 25 items per five-minute pass)
 
+## Session 2026-08-11 Mailroom Pagination
+- [x] Make the displayed result range update when the rows-per-page selection changes
+
 ## Session 2026-08-11 Mailroom Assignment Boundary
 - [x] Prevent Mailroom ingest, classification, routing, and reassignments from creating Slack assignment posts
 - [x] Preserve Mailroom internal assignment records and existing Slack reviewed-marker behavior

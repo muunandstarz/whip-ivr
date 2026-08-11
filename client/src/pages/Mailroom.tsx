@@ -694,15 +694,20 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>Showing {total === 0 ? 0 : startIdx}–{endIdx} of {total} results</span>
         <div className="flex items-center gap-2">
-          <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-            <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 / page</SelectItem>
-              <SelectItem value="25">25 / page</SelectItem>
-              <SelectItem value="50">50 / page</SelectItem>
-              <SelectItem value="100">100 / page</SelectItem>
-            </SelectContent>
-          </Select>
+          <select
+            aria-label="Rows per page"
+            value={pageSize}
+            onChange={(event) => {
+              setPage(1);
+              setPageSize(Number(event.currentTarget.value));
+            }}
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
           <div className="flex items-center gap-1">
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
               <ChevronLeft className="h-3.5 w-3.5" />
