@@ -404,6 +404,15 @@
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane
 
+## Session 2026-08-12 Klutch Policy Declarations
+- [x] Serve the approved Klutch Policy Declarations HTML verbatim at its own application route
+- [x] Add a Document Generator entry that opens the verbatim policy declarations page
+- [x] Verify state application and native browser Print / Save PDF behavior without altering the source layout
+
+## Session 2026-08-12 Denial and Acknowledgment Claim Heading
+- [x] Replace the served Policy Declarations source with the corrected approved HTML verbatim
+- [x] Add date, claim, loss, vehicle, VIN, driver, and professional reference fields to every Denial and Acknowledgment letter
+
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date

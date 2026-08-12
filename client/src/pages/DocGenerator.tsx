@@ -86,6 +86,7 @@ type DocGenTab =
   | "coi-klutch"
   | "dec-page-whip"
   | "dec-page-klutch"
+  | "klutch-policy-declarations"
   | "dv-calculator";
 
 interface NavGroup {
@@ -110,6 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
       { id: "coi-whip", label: "Certificate of Coverage", icon: Shield },
       { id: "dec-page-klutch", label: "Klutch Dec Page", icon: FileText },
+      { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText },
     ],
   },
   {
@@ -1857,10 +1859,25 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
   const [claimNumber, setClaimNumber] = useState("");
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const todayISO = new Date().toISOString().split("T")[0];
-  const [dateOfLoss, setDateOfLoss] = useState(todayISO);
+  const [letterDate, setLetterDate] = useState(todayISO);
+  const [dateOfLoss, setDateOfLoss] = useState("");
+  const [vehicle, setVehicle] = useState("");
+  const [vin, setVin] = useState("");
+  const [driverName, setDriverName] = useState("");
+  const [reference, setReference] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
 
   const template = DENIAL_TEMPLATES[selectedTemplate];
+  const formatHeadingDate = (value: string) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date]";
+  const claimHeading = template ? `${formatHeadingDate(letterDate)}
+
+Claim #${claimNumber || "[Claim Number]"}
+Date of Loss: ${dateOfLoss || "[Date of Loss]"}
+Vehicle: ${vehicle || "[Year Make Model]"}
+VIN: ${vin || "[VIN]"}
+Driver: ${driverName || "[Driver Name]"}
+
+RE: ${reference || template.label}` : "";
 
   const setField = (k: string) => (v: string) =>
     setFields((p) => ({ ...p, [k]: v }));
@@ -1882,7 +1899,7 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
   };
 
   const preview = template
-    ? `CLAIM #${claimNumber || "[Claim Number]"} — DATE OF LOSS: ${dateOfLoss || "[Date of Loss]"}\n\n${template.build({ ...fields, dol: fields.dol || dateOfLoss })}`
+    ? `${claimHeading}\n\n${template.build({ ...fields, dol: dateOfLoss })}`
     : "";
 
   const handleDownload = (shouldDownload = true) => {
@@ -1892,7 +1909,7 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
-    const body = template?.build({ ...fields, dol: fields.dol || "" }) || "";
+    const body = template ? `${claimHeading}\n\n${template.build({ ...fields, dol: dateOfLoss })}` : "";
     y = wrapText(doc, body, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
@@ -1963,14 +1980,19 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
         </Panel>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid2>
+            <Field label="Letter Date" id="den-letter-date" value={letterDate} onChange={setLetterDate} type="date" />
             <Field label="Claim Number" id="den-claim" value={claimNumber} onChange={setClaimNumber} placeholder="e.g. PF438367" />
-            <Field label="Letter Date" id="den-letter-date" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
+            <Field label="Date of Loss" id="den-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
+            <Field label="Vehicle" id="den-vehicle" value={vehicle} onChange={setVehicle} placeholder="Year Make Model" />
+            <Field label="VIN" id="den-vin" value={vin} onChange={setVin} placeholder="17-character VIN" />
+            <Field label="Driver Name" id="den-driver" value={driverName} onChange={setDriverName} placeholder="First Last" />
+            <Field label="Reference" id="den-reference" value={reference} onChange={setReference} placeholder="e.g. Notice of TNC PIP Denial" />
           </Grid2>
         </Panel>
         {template && (
           <Panel title="Template Fields">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {template.fields.map((f) => {
+              {template.fields.filter((f) => f !== "dol").map((f) => {
                 const meta = FIELD_LABELS[f];
                 if (!meta) return null;
                 return (
@@ -7515,6 +7537,7 @@ export default function DocGenerator() {
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "dec-page-whip": return <KlutchDecPageTab initialState={initialMemberState} />;
       case "dec-page-klutch": return <KlutchDecPageTab initialState={initialMemberState} />;
+      case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;
       case "dv-calculator": return <DVCalculatorTab />;
       default: return null;
     }
