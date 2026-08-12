@@ -223,10 +223,14 @@ function addSOLNotice(doc: jsPDF, state?: string) {
   doc.text(lines, 14, yStart);
 }
 
-function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, lineH: number): number {
+function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, lineH: number, lineHeightFactor = 1.15): number {
   const lines = doc.splitTextToSize(text, maxW);
-  doc.text(lines, x, y);
+  doc.text(lines, x, y, { lineHeightFactor });
   return y + lines.length * lineH;
+}
+
+function wrapLetterText(doc: jsPDF, text: string, x: number, y: number, maxW: number, baseLineH = 6): number {
+  return wrapText(doc, text, x, y, maxW, baseLineH * 1.5, 1.5);
 }
 
 function downloadPDF(doc: jsPDF, filename: string) {
@@ -753,7 +757,7 @@ function BlankLetterheadTab() {
     y += 6;
     y = wrapText(doc, `Dear ${form.recipient || "[Recipient]"},`, 14, y, W - 28, 6.5);
     y += 4;
-    y = wrapText(doc, form.body || "[Letter body]", 14, y, W - 28, 6.5);
+    y = wrapLetterText(doc, form.body || "[Letter body]", 14, y, W - 28, 6.5);
     y += 8;
     doc.text("Sincerely,", 14, y);
     y += 10;
@@ -889,7 +893,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, preview, 14, y, W - 28, 6);
+    y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1007,7 +1011,7 @@ Whip Claims Management`;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, preview, 14, y, W - 28, 6);
+    y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1106,17 +1110,17 @@ Notice Regarding Vehicle Storage and Duty to Mitigate
 
 Dear ${form.recipientName || "[RECIPIENT NAME]"},
 
-As part of the claims process, we are providing this notice regarding your responsibility to take reasonable steps to minimize damages associated with your claim.
+As part of the claims process, Whip Claims Management provides this notice to all claimants regarding vehicle storage charges. If your vehicle is not currently incurring storage charges, no action is required.
 
-If your vehicle is currently being held at a tow yard, repair facility, storage facility, or any other location where storage charges are accruing, you should take reasonable and timely steps to prevent unnecessary charges from accumulating. This may include arranging for the vehicle to be released or relocated to a location where additional storage charges will not accrue.
+If your vehicle is being held at a tow yard, repair facility, storage facility, or other location where storage charges are accruing, you are expected to take reasonable steps to prevent unnecessary charges from continuing to accumulate. This may include arranging for the vehicle to be released or relocated to a location where additional storage charges will not accrue.
 
-Please be advised that Whip Claims Management's receipt, acknowledgment, or investigation of a claim does not constitute an acceptance of liability or an agreement to pay towing, storage, or other charges. Any charges submitted for consideration will be evaluated based on the circumstances of the loss, applicable coverage and liability, and the reasonableness and necessity of the charges incurred.
+Please be advised that Whip Claims Management's receipt, acknowledgment, or investigation of a claim does not constitute an acceptance of liability or an agreement to pay towing, storage, or other charges.
 
-Claimants are expected to make reasonable efforts to mitigate their damages. Storage charges that continue to accrue after a reasonable opportunity to mitigate may not be reimbursed, in whole or in part.
+Any storage charges submitted for consideration will be evaluated based on the circumstances of the claim, applicable coverage and liability, and the reasonableness and necessity of the charges incurred. Charges that continue to accrue after a reasonable opportunity to mitigate may not be reimbursed, in whole or in part.
 
-If circumstances beyond your control prevent you from moving or releasing your vehicle, please contact us promptly so the circumstances can be documented and reviewed.
+If your vehicle is incurring storage charges and circumstances outside of your control prevent you from moving or releasing it, please contact Whip Claims Management promptly so that the circumstances can be documented and reviewed.
 
-If you have questions regarding this notice, please contact Whip Claims Management at (855) 906-5949.
+If you have questions regarding this notice, please contact us at (855) 906-5949.
 
 Sincerely,
 
@@ -1129,7 +1133,7 @@ Whip Claims Management`;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, preview, 14, y, W - 28, 6);
+    y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1754,7 +1758,7 @@ Email: ${form.adjusterEmail || "[claim email]"}`;
 
     // ── Body ── (1.5 line spacing = 9pt * 1.5 = ~6.75mm, use 6.5)
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, preview, lm, y, tw, 6.5);
+    y = wrapLetterText(doc, preview, lm, y, tw, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -1910,7 +1914,7 @@ RE: ${reference || template.label}` : "";
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
     const body = template ? `${claimHeading}\n\n${template.build({ ...fields, dol: dateOfLoss })}` : "";
-    y = wrapText(doc, body, 14, y, W - 28, 6);
+    y = wrapLetterText(doc, body, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2098,7 +2102,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, preview, 14, y, W - 28, 6);
+    y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -2251,7 +2255,7 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, preview, 14, y, W - 28, 6);
+    y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -3551,7 +3555,7 @@ function CarrierRebuttalTab() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, draft || "(No draft yet)", 14, y, W - 28, 6.5);
+    y = wrapLetterText(doc, draft || "(No draft yet)", 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));

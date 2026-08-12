@@ -400,6 +400,10 @@
 ## Session 2026-08-12 Storage Mitigation Letter
 - [x] Replace the Storage Mitigation Letter body with the approved notice language
 
+## Session 2026-08-12 Revised Storage Letter and Spacing
+- [x] Replace the Storage Mitigation Letter body with the latest approved notice language
+- [x] Apply 1.5 line spacing to applicable Document Generator letter bodies
+
 ## Session 2026-08-12 Coverage Position and PDF Preview
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane
