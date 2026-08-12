@@ -131,6 +131,7 @@ function MailDrawer({
     { id: itemId! },
     { enabled: open && itemId != null }
   );
+  const { data: handlers } = trpc.handlers.list.useQuery();
 
   const utils = trpc.useUtils();
   const invalidate = useCallback(() => {
@@ -422,9 +423,15 @@ function MailDrawer({
           <DialogHeader><DialogTitle>Reroute Mail Item</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Handler ID</Label>
-              <Input placeholder="Handler ID (number)" value={rerouteHandlerId}
-                onChange={e => setRerouteHandlerId(e.target.value)} className="mt-1" />
+              <Label className="text-xs">Assign to</Label>
+              <Select value={rerouteHandlerId} onValueChange={setRerouteHandlerId}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select a handler" /></SelectTrigger>
+                <SelectContent>
+                  {(handlers ?? []).filter((handler: any) => handler.active !== false).map((handler: any) => (
+                    <SelectItem key={handler.id} value={String(handler.id)}>{handler.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs">Reason (optional)</Label>

@@ -389,6 +389,9 @@
 - [x] Surface urgent-alarm records in the Urgent queue and send repeated handler reminders until resolved
 - [x] Reconcile existing active priority legal mail into the urgent alarm path (47 records)
 
+## Session 2026-08-12 Mailroom Reroute Usability
+- [x] Replace numeric handler-ID entry with a named handler dropdown in all Mailroom reroute controls
+
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
