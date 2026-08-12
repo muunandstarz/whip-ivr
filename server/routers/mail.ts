@@ -383,6 +383,11 @@ export const mailRouter = router({
       if (input?.status) {
         filters.push(eq(mailItems.status, input.status));
         if (input.status === 'assigned') filters.push(isNotNull(mailItems.assignedHandlerId));
+      } else {
+        // The operational queue is unresolved work only. Historical items are
+        // intentionally visible only when the admin selects the Resolved filter.
+        filters.push(isNull(mailItems.resolvedAt));
+        filters.push(sql`${mailItems.status} <> 'resolved'`);
       }
       if (input?.category) filters.push(eq(mailItems.category, input.category as any));
       if (input?.teamId) filters.push(eq(mailItems.assignedTeamId, input.teamId));
@@ -988,7 +993,7 @@ export const mailRouter = router({
           const patch = await route(conn, cl);
 
           // Apply per-handler batch limit (3 per handler per run)
-          if (patch.assignedHandlerId) {
+          if (patch.assignedHandlerId && !patch.priorityAssignment) {
             const currentCount = handlerAssignedCount[patch.assignedHandlerId] ?? 0;
             if (currentCount >= BATCH_PER_HANDLER) {
               // Classify but don't assign yet — mark as classified/needs_review

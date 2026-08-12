@@ -35,6 +35,7 @@ export interface RoutingPatch {
   // assignment
   assignedTeamId: number;
   assignedHandlerId: number | null;
+  priorityAssignment: boolean;
   status: 'new' | 'assigned' | 'escalated';
   assignedAt: Date | null;
   dueAt: Date | null;
@@ -57,6 +58,18 @@ interface HandlerRow { id: number; name: string; openCount: number; }
 
 const CONFIDENCE_AUTO   = 90;
 const CONFIDENCE_REVIEW = 75;
+
+/** Priority inbound mail goes directly to the attorney / demand owner, Jayla. */
+export function isJaylaPriority(classification: ClassificationResult): boolean {
+  const text = [
+    classification.requested_action,
+    classification.reason,
+    classification.sender_organization,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return classification.is_demand
+    || isLetterOfRepresentation(classification.requested_action, classification.reason)
+    || /\b(attorney|attorney's|attorneys|counsel|law firm|legal representative|esq\.?|lor)\b/.test(text);
+}
 
 export async function route(
   conn: Connection,
@@ -97,7 +110,13 @@ export async function route(
   //    - Normal lane: least-loaded active member (fewest open mail_items)
   let assignedHandlerId: number | null = null;
 
-  if (team.isReviewLane === 1 || lowConf) {
+  const priorityAssignment = isJaylaPriority(classification);
+  if (priorityAssignment) {
+    const [[jayla]] = await conn.execute<any[]>(
+      `SELECT id FROM handlers WHERE active = 1 AND LOWER(name) = 'jayla bernard' LIMIT 1`,
+    );
+    assignedHandlerId = jayla?.id ?? null;
+  } else if (team.isReviewLane === 1 || lowConf) {
     // Route to review lane
     const [[reviewTeam]] = await conn.execute<any[]>(
       `SELECT id, sla_hours FROM teams WHERE is_review_lane = 1 LIMIT 1`
@@ -169,6 +188,7 @@ export async function route(
 
     assignedTeamId: team.id,
     assignedHandlerId,
+    priorityAssignment,
     status: assignedHandlerId ? baseStatus : 'new',
     assignedAt: assignedHandlerId ? now : null,
     dueAt,

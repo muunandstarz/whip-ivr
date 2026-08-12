@@ -373,6 +373,17 @@
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
 
+## Session 2026-08-11 Mailroom Legacy Completion
+- [ ] Quantify active records missing attachments, extracted content, actionable titles, or AI summaries
+- [ ] Recover source attachments and extract content for all recoverable active legacy records
+- [ ] Populate actionable title and summary text for all recoverable active legacy records
+- [ ] Re-audit Gmail read state and Claims Mail reviewed markers after the legacy completion pass
+
+## Session 2026-08-11 Default Queue and Priority Routing
+- [x] Keep resolved records out of the default Admin Mailroom view; display them only via the Resolved filter
+- [x] Immediately assign LORs, attorney correspondence, and demands to Jayla on receipt
+- [x] Preserve the Tuesday–Friday cadence for all non-priority Mailroom work
+
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
