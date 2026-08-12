@@ -400,6 +400,10 @@
 ## Session 2026-08-12 Storage Mitigation Letter
 - [x] Replace the Storage Mitigation Letter body with the approved notice language
 
+## Session 2026-08-12 Coverage Position and PDF Preview
+- [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
+- [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane
+
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date

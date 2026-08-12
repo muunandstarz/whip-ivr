@@ -722,7 +722,7 @@ function BlankLetterheadTab() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -761,9 +761,9 @@ function BlankLetterheadTab() {
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_Letter_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Letter_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -880,7 +880,7 @@ Whip Claims Management
 Phone: ${form.adjusterPhone || "(xxx) xxx-xxxx"}
 Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -891,9 +891,9 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_Contact_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Contact_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -998,7 +998,7 @@ Sincerely,
 ${form.adjusterName || "[Adjuster Name]"}
 Whip Claims Management`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -1009,9 +1009,9 @@ Whip Claims Management`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_FailedContact_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_FailedContact_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1120,7 +1120,7 @@ Sincerely,
 
 Whip Claims Management`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -1131,9 +1131,9 @@ Whip Claims Management`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_StorageMitigation_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_StorageMitigation_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1271,7 +1271,7 @@ function CertOfCoverageTab({ initialState = "MD" }: { initialState?: string }) {
   const vehicleDesc = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "[Vehicle Year Make Model]";
   const certNum = form.certNumber || (form.stateOfCoverage + "000S0137");
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth(); // 216mm
     const H = doc.internal.pageSize.getHeight(); // 279mm
@@ -1544,7 +1544,7 @@ function CertOfCoverageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.text("Klutch Insurance Company  |  MD-" + certNum + "  |  P.O. Box 10622, Rockville, MD 20850  |  (855) 906-5949", W / 2, H - 4, { align: "center" });
 
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Klutch_COI_${form.memberName || "Member"}_${certNum}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Klutch_COI_${form.memberName || "Member"}_${certNum}.pdf`);
   };
 
   const handlePreviewOnly = () => {
@@ -1686,36 +1686,42 @@ function CoverageTNCTab() {
 
   const preview = `${today}
 
-Re: Coverage Position — TNC Primary Coverage
-    Claim #${form.claimNumber || "[Claim Number]"}
-    Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-    Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}
+Re: Claim #${form.claimNumber || "[Claim Number]"}
+Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
+Vehicle: ${form.vehicle || "[Year Make Model]"}
+VIN: ${form.vin || "[VIN]"}
+Driver: ${form.adjusterName || "[Driver Name]"}
+
+RE: Notice of TNC Primary Coverage
 
 Dear ${form.recipientName || "[Recipient Name]"},
 
-We are writing to advise you of the applicable coverage position for the above-referenced claim.
+Whip Claims Management is providing notice of the above-referenced loss and our coverage position based on the information obtained during our investigation.
 
-Our investigation has confirmed that at the time of loss, the vehicle was engaged in active Transportation Network Company (TNC) activity with ${form.tncPlatform || "[TNC Platform]"} during Period ${form.tncPeriod || "2"}. During this period, the TNC platform's insurance is the primary coverage for third-party claims.
+Our investigation confirms that, at the time of the loss, the driver was actively engaged in Transportation Network Company (TNC) activity through ${form.tncPlatform || "[Uber/Lyft]"} and was operating within TNC Period ${form.tncPeriod || "[Period]"}.
 
-APPLICABLE TNC COVERAGE:
-TNC Platform: ${form.tncPlatform || "[TNC Platform]"}
-TNC Period: ${form.tncPeriod || "2"}
-TNC Insurance Carrier: ${form.tncCarrier || "[TNC Carrier Name]"}
-TNC Claim Number: ${form.tncClaimNumber || "[TNC Claim Number]"}
-TNC Carrier Contact: ${form.tncContact || "[TNC Carrier Contact]"}
+Based on the driver's TNC status at the time of loss, ${form.tncPlatform || "[Uber/Lyft]"}'s applicable TNC insurance coverage is primary for this loss. Accordingly, we are tendering the claim to the applicable TNC carrier for handling under its policy.
 
-We recommend directing your claim to the TNC platform's insurance carrier as the primary insurer for this loss.
+Platform: ${form.tncPlatform || "[Uber/Lyft]"}
+Period: ${form.tncPeriod || "[Period]"}
+Carrier: ${form.tncCarrier || "[TNC Carrier Name]"}
+Claim Number: ${form.tncClaimNumber || "[TNC Claim Number]"}
+Contact: ${form.tncContact || "[TNC Carrier Contact]"}
 
-Whip Claims Management will cooperate with the TNC carrier's investigation and provide any documentation in our possession upon request.
+Please confirm receipt of this notice and acceptance of primary handling. If additional information or documentation is required to evaluate coverage, please advise us promptly.
+
+Whip Claims Management will cooperate with the TNC carrier's investigation and provide relevant documentation in our possession upon request.
+
+Nothing in this correspondence should be construed as a waiver of any rights, defenses, or coverage positions available to Whip Claims Management or any applicable party.
 
 Sincerely,
 
 ${form.adjusterName || "[Adjuster Name]"}
 Whip Claims Management
-Phone: ${form.adjusterPhone || "(xxx) xxx-xxxx"}
-Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
+Phone: ${form.adjusterPhone || "[Adjuster Phone]"}
+Email: ${form.adjusterEmail || "[claim email]"}`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     const lm = 14, rm = W - 14, tw = W - 28;
@@ -1750,9 +1756,9 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_CoveragePosition_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_CoveragePosition_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1879,7 +1885,7 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
     ? `CLAIM #${claimNumber || "[Claim Number]"} — DATE OF LOSS: ${dateOfLoss || "[Date of Loss]"}\n\n${template.build({ ...fields, dol: fields.dol || dateOfLoss })}`
     : "";
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -1891,9 +1897,9 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_Denial_${claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Denial_${claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2063,7 +2069,7 @@ Whip Claims Management
 Phone: ${form.adjusterPhone || "(xxx) xxx-xxxx"}
 Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -2074,9 +2080,9 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_DamageDenial_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_DamageDenial_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2216,7 +2222,7 @@ Whip Claims Management
 Phone: ${form.handlerPhone || "(xxx) xxx-xxxx"}
 Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -2227,9 +2233,9 @@ Email: ${form.handlerEmail || "claims@drivewhip.com"}`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_ROR_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_ROR_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2385,7 +2391,7 @@ function ReleaseBITab() {
   };
 
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = 14; // No letterhead on releases
@@ -2396,9 +2402,9 @@ function ReleaseBITab() {
     addSOLNotice(doc, form.state);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2588,7 +2594,7 @@ function ReleasePDTab() {
   };
 
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = 14; // No letterhead on releases
@@ -2599,9 +2605,9 @@ function ReleasePDTab() {
     addSOLNotice(doc, form.state);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2795,7 +2801,7 @@ function TLSettlementTab() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -2873,9 +2879,9 @@ function TLSettlementTab() {
     }
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -3265,10 +3271,10 @@ This demand is made without waiver of any rights or remedies available to Metroc
     const doc = buildSubroDoc();
     setPreviewPdfUrl(getPDFDataUrl(doc));
   };
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = buildSubroDoc();
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_SubroDemand_${form.ourClaim || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_SubroDemand_${form.ourClaim || "Draft"}.pdf`);
   };
 
   return (
@@ -3516,7 +3522,7 @@ function CarrierRebuttalTab() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -3527,9 +3533,9 @@ function CarrierRebuttalTab() {
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_Rebuttal_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Rebuttal_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="space-y-4">
@@ -3805,7 +3811,7 @@ Whip Claims Management
 P.O. Box 10622, Rockville, MD 20849
 claims@drivewhip.com`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc, "PAYMENT RECEIPT", `Claim #${form.claimNumber || "[Claim Number]"} — ${form.paymentDate || today}`);
@@ -3852,9 +3858,9 @@ claims@drivewhip.com`;
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_PaymentReceipt_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_PaymentReceipt_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -4036,7 +4042,7 @@ ${form.notes ? `\nNotes: ${form.notes}\n` : ""}
 Authorized By: ${form.adjusterName || "[Adjuster Name]"}
 Whip Claims Management`;
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
 
@@ -4128,9 +4134,9 @@ Whip Claims Management`;
 
     addSOLNotice(doc);
     addLetterFooter(doc);
-    downloadPDF(doc, `${selectedProvider.id === "local" || selectedProvider.id === "other" ? (form.customProviderName || "Towing") : selectedProvider.name}_Invoice_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `${selectedProvider.id === "local" || selectedProvider.id === "other" ? (form.customProviderName || "Towing") : selectedProvider.name}_Invoice_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="space-y-4">
@@ -4415,7 +4421,7 @@ Whip Claims Management`;
 
   const preview = buildPreview();
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const stateLabel = state === "fl" ? "Florida" : state === "pa" ? "Pennsylvania" : state === "ma" ? "Massachusetts" : "Virginia";
     let y = addWhipLetterhead(doc, `PIP Exhaustion Notice — ${stateLabel}`, `Claim #${form.claimNo || "[CLAIM NUMBER]"}`);
@@ -4433,9 +4439,9 @@ Whip Claims Management`;
     addSOLNotice(doc, state.toUpperCase());
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `pip-exhaustion-${state}-${form.claimNo || "claim"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `pip-exhaustion-${state}-${form.claimNo || "claim"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   const STATE_CHIPS: { id: "fl" | "pa" | "va" | "ma"; label: string; sub: string }[] = [
     { id: "fl", label: "Florida", sub: "§627.736" },
@@ -4633,7 +4639,7 @@ Whip Claims Management`;
   };
 
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = 14; // No letterhead on releases
@@ -4644,9 +4650,9 @@ Whip Claims Management`;
     addSOLNotice(doc, "Georgia");
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_LimitedLiability_BI_${form.claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_LimitedLiability_BI_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -4916,7 +4922,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     if (onNavigate) onNavigate("subro-demand");
   };
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc, "LOSS OF USE CALCULATION", `Claim #${claimNumber || "[Claim Number]"}`);
@@ -5153,9 +5159,9 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -5295,7 +5301,7 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
             <Button
               size="sm"
               className="gap-1.5 bg-[#ff6221] hover:bg-[#e5541a] text-white"
-              onClick={handleDownload}
+              onClick={() => handleDownload()}
             >
               <Download className="w-3.5 h-3.5" /> Download PDF
             </Button>
@@ -6055,7 +6061,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     return `${months[parseInt(m)-1]} ${parseInt(day)}, ${y}`;
   };
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
@@ -6461,10 +6467,10 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     }
 
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    downloadPDF(doc, `COI_${isKlutch ? "Klutch" : "Metrocars"}_${form.certNumber || "Draft"}_${form.namedOperator || "Operator"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `COI_${isKlutch ? "Klutch" : "Metrocars"}_${form.certNumber || "Draft"}_${form.namedOperator || "Operator"}.pdf`);
   };
 
-  const handlePreviewOnly = () => { handleDownload(); };
+  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="space-y-6">
@@ -6780,7 +6786,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     return `$${(weekly * weeks).toFixed(2)}`;
   };
 
-  const handleDownload = () => {
+  const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
@@ -7165,7 +7171,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   doc.text("KLUTCH INSURANCE COMPANY", rm, H - 6, { align: "right" });
 
   setPreviewPdfUrl(getPDFDataUrl(doc));
-  downloadPDF(doc, `KlutchDecPage_${form.policyNumber || "Draft"}_${form.memberName || "Member"}.pdf`);
+  if (shouldDownload) downloadPDF(doc, `KlutchDecPage_${form.policyNumber || "Draft"}_${form.memberName || "Member"}.pdf`);
 };
 
 
@@ -7322,7 +7328,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
           onCopy={() => { toast.success("Copied"); }}
           onDownload={handleDownload}
           pdfUrl={previewPdfUrl}
-          onPreview={handleDownload}
+          onPreview={() => handleDownload(false)}
         />
       </div>
     </div>
