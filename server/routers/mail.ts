@@ -990,7 +990,7 @@ export const mailRouter = router({
             receivedAt: item.received_at,
             attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined,
           });
-          const patch = await route(conn, cl);
+          const patch = await route(conn, cl, { sourceText: content.indexedBody });
 
           // Apply per-handler batch limit (3 per handler per run)
           if (patch.assignedHandlerId && !patch.priorityAssignment) {

@@ -248,4 +248,17 @@ describe('route() — mocked LLM', () => {
       }
     });
   }
+
+  it('routes non-priority mail addressed to an active handler directly to that handler', async () => {
+    const patch = await route(conn, {
+      category: 'existing_claim_followup', confidence: 96, is_demand: false,
+      demand_date: null, response_due_date: null, claim_number: 'MD-TEST-1',
+      sender_organization: 'Member', claimant_or_member_name: null, adverse_carrier: null,
+      date_of_loss: null, requested_action: 'Claim status update', urgency: 'normal',
+      reason: 'Routine claim correspondence',
+    }, { sourceText: 'Hello Natashia Edulan, please review the claim status update.' });
+    const [[handler]] = await conn.execute<any[]>('SELECT email FROM handlers WHERE id=?', [patch.assignedHandlerId]);
+    expect(handler?.email).toBe('natashiae@drivewhip.com');
+    expect(patch.status).toBe('assigned');
+  });
 });

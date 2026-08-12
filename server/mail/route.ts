@@ -83,11 +83,26 @@ export function isUrgentMailClassification(classification: ClassificationResult)
     || /\b(holt|time[ -]?limit|policy[ -]?limit|court|summons|complaint|subpoena|lawsuit|litigation|hearing|answer due)\b/.test(text);
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function findAddressedHandler(conn: Connection, sourceText?: string): Promise<number | null> {
+  if (!sourceText?.trim()) return null;
+  const [handlers] = await conn.execute<any[]>('SELECT id, name FROM handlers WHERE active = 1 AND name IS NOT NULL');
+  const normalized = sourceText.replace(/\s+/g, ' ');
+  for (const handler of handlers) {
+    const escapedName = escapeRegex(String(handler.name)).replace(/\\ /g, '\\s+');
+    if (new RegExp(`\\b${escapedName}\\b`, 'i').test(normalized)) return handler.id;
+  }
+  return null;
+}
+
 export async function route(
   conn: Connection,
   classification: ClassificationResult,
   /** Pass overrides for confidence thresholds in tests */
-  opts?: { confidenceAuto?: number; confidenceReview?: number }
+  opts?: { confidenceAuto?: number; confidenceReview?: number; sourceText?: string }
 ): Promise<RoutingPatch> {
   const confAuto   = opts?.confidenceAuto   ?? CONFIDENCE_AUTO;
   const confReview = opts?.confidenceReview ?? CONFIDENCE_REVIEW;
@@ -123,11 +138,18 @@ export async function route(
   let assignedHandlerId: number | null = null;
 
   const priorityAssignment = isJaylaPriority(classification);
+  const addresseeEligible = !priorityAssignment
+    && classification.category !== 'legal_or_high_risk'
+    && classification.category !== 'injury_pip_bi'
+    && !classification.is_demand;
+  const addressedHandlerId = addresseeEligible ? await findAddressedHandler(conn, opts?.sourceText) : null;
   if (priorityAssignment) {
     const [[jayla]] = await conn.execute<any[]>(
       `SELECT id FROM handlers WHERE active = 1 AND LOWER(name) = 'jayla bernard' LIMIT 1`,
     );
     assignedHandlerId = jayla?.id ?? null;
+  } else if (addressedHandlerId) {
+    assignedHandlerId = addressedHandlerId;
   } else if (team.isReviewLane === 1 || lowConf) {
     // Route to review lane
     const [[reviewTeam]] = await conn.execute<any[]>(

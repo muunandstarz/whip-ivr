@@ -218,7 +218,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
         });
 
         // Route
-        const patch = await route(conn, classification);
+        const patch = await route(conn, classification, { sourceText: content.indexedBody });
 
         // Apply patch to mail_items
         await conn.execute(

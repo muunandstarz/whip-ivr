@@ -1100,33 +1100,25 @@ function StorageMitigationTab() {
 
   const preview = `${today}
 
-Re: URGENT — Storage Mitigation Notice
-    Claim #${form.claimNumber || "[Claim Number]"}
-    Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}
-    Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
+Notice Regarding Vehicle Storage and Duty to Mitigate
 
-Dear ${form.recipientName || "[Recipient Name]"},
+Dear ${form.recipientName || "[RECIPIENT NAME]"},
 
-This letter is to notify you that the above-referenced vehicle is currently in storage at:
+As part of the claims process, we are providing this notice regarding your responsibility to take reasonable steps to minimize damages associated with your claim.
 
-${form.storageFacility || "[Storage Facility Name]"}
-${form.storageAddress || "[Storage Address]"}
-${form.storagePhone ? `Phone: ${form.storagePhone}` : ""}
+If your vehicle is currently being held at a tow yard, repair facility, storage facility, or any other location where storage charges are accruing, you should take reasonable and timely steps to prevent unnecessary charges from accumulating. This may include arranging for the vehicle to be released or relocated to a location where additional storage charges will not accrue.
 
-The vehicle has been in storage since ${form.towDate || "[Tow Date]"}${form.dailyRate ? ` at a rate of $${form.dailyRate}/day` : ""}. Storage charges are accruing daily.
+Please be advised that Whip Claims Management's receipt, acknowledgment, or investigation of a claim does not constitute an acceptance of liability or an agreement to pay towing, storage, or other charges. Any charges submitted for consideration will be evaluated based on the circumstances of the loss, applicable coverage and liability, and the reasonableness and necessity of the charges incurred.
 
-You are hereby notified that you have ${form.deadline || "5"} business days from the date of this letter to make arrangements for the vehicle. Failure to act within this timeframe may result in the following:
+Claimants are expected to make reasonable efforts to mitigate their damages. Storage charges that continue to accrue after a reasonable opportunity to mitigate may not be reimbursed, in whole or in part.
 
-• Storage charges being assessed against any settlement proceeds
-• The vehicle being deemed abandoned per applicable state law
-• Additional administrative and disposal fees
+If circumstances beyond your control prevent you from moving or releasing your vehicle, please contact us promptly so the circumstances can be documented and reviewed.
 
-Please contact our office immediately to coordinate vehicle release or provide authorization for vehicle disposition.
+If you have questions regarding this notice, please contact Whip Claims Management at (855) 906-5949.
 
-${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management
-Phone: ${form.adjusterPhone || "(xxx) xxx-xxxx"}
-Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
+Sincerely,
+
+Whip Claims Management`;
 
   const handleDownload = () => {
     const doc = new jsPDF();

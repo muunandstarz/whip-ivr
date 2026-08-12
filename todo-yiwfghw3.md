@@ -392,6 +392,14 @@
 ## Session 2026-08-12 Mailroom Reroute Usability
 - [x] Replace numeric handler-ID entry with a named handler dropdown in all Mailroom reroute controls
 
+## Session 2026-08-12 Handler-Addressee Routing
+- [x] Route non-legal, non-injury, non-demand mail addressed to an active handler directly to that handler
+- [x] Preserve priority legal, injury, demand, court, Holt, and time-limit routing over addressee routing
+- [x] Correct the Alfred Ofili claim mail from Jovel to Natashia when the source confirms her as the addressee
+
+## Session 2026-08-12 Storage Mitigation Letter
+- [x] Replace the Storage Mitigation Letter body with the approved notice language
+
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
