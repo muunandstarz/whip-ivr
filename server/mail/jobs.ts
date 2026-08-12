@@ -94,7 +94,7 @@ export async function runMailReminders(
   // Select missed review deadlines, explicit reminders, or demand deadlines.
   const [items] = await conn.execute<any[]>(
     `SELECT mi.id, mi.assigned_handler_id, mi.due_at, mi.remind_at,
-            mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date, mi.is_demand,
+            mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date, mi.is_demand, mi.urgency,
             mi.resolution_outcome,
             h.email AS handler_email, h.name AS handler_name
      FROM mail_items mi
@@ -107,6 +107,8 @@ export async function runMailReminders(
          (mi.remind_at IS NOT NULL AND mi.remind_at <= ?)
          OR
          (mi.is_demand = 1 AND mi.response_due_date IS NOT NULL AND DATE(mi.response_due_date) <= DATE(?))
+         OR
+         mi.urgency = 'urgent'
        )
        AND (mi.last_reminded_at IS NULL OR mi.last_reminded_at < ?)
      ORDER BY mi.due_at ASC
@@ -126,9 +128,11 @@ export async function runMailReminders(
       const overdue = item.due_at && new Date(item.due_at) < now;
       const reminderDue = item.remind_at && new Date(item.remind_at) <= now;
       const demandDue = item.is_demand === 1 && item.response_due_date && new Date(`${item.response_due_date}T23:59:59`) <= now;
+      const urgentAlarm = item.urgency === 'urgent';
       const due = item.response_due_date ? ` Demand deadline: *${item.response_due_date}*` : '';
       const prefix = demandDue
         ? '🚨 *Demand deadline reached — record settled or denied outcome*'
+        : urgentAlarm ? '🚨 *Urgent Mailroom alarm — immediate review required*'
         : overdue ? '⏰ *Mail review overdue*' : '🔔 *Mailroom reminder*';
       const text = [
         prefix,

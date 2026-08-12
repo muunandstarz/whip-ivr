@@ -384,6 +384,11 @@
 - [x] Immediately assign LORs, attorney correspondence, and demands to Jayla on receipt
 - [x] Preserve the Tuesday–Friday cadence for all non-priority Mailroom work
 
+## Session 2026-08-12 Mailroom Urgent Alarm Rules
+- [x] Treat escalated records, all demands, time-limit demands, Holt matters, and court documents as urgent
+- [x] Surface urgent-alarm records in the Urgent queue and send repeated handler reminders until resolved
+- [x] Reconcile existing active priority legal mail into the urgent alarm path (47 records)
+
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date

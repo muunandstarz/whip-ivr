@@ -71,6 +71,18 @@ export function isJaylaPriority(classification: ClassificationResult): boolean {
     || /\b(attorney|attorney's|attorneys|counsel|law firm|legal representative|esq\.?|lor)\b/.test(text);
 }
 
+/** Urgent alarms cover escalations, demands, Holt matters, and court filings. */
+export function isUrgentMailClassification(classification: ClassificationResult): boolean {
+  const text = [
+    classification.requested_action,
+    classification.reason,
+    classification.sender_organization,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return classification.is_demand
+    || classification.category === 'legal_or_high_risk'
+    || /\b(holt|time[ -]?limit|policy[ -]?limit|court|summons|complaint|subpoena|lawsuit|litigation|hearing|answer due)\b/.test(text);
+}
+
 export async function route(
   conn: Connection,
   classification: ClassificationResult,
@@ -181,7 +193,7 @@ export async function route(
     claimantName: classification.claimant_or_member_name ?? null,
     dateOfLoss: classification.date_of_loss ?? null,
     requestedAction: classification.requested_action ?? null,
-    urgency: classification.urgency ?? 'normal',
+    urgency: isUrgentMailClassification(classification) ? 'urgent' : (classification.urgency ?? 'normal'),
     reason: classification.reason ?? null,
     demandDate: classification.demand_date ?? null,
     responseDueDate: classification.response_due_date ?? null,
