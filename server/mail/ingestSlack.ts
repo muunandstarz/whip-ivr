@@ -15,6 +15,18 @@
 import type { Connection } from 'mysql2/promise';
 import { storagePut } from '../storage.js';
 
+const SLACK_REQUEST_TIMEOUT_MS = 20_000;
+
+async function slackRequest(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SLACK_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface SlackFileEvent {
   /** The Slack file ID */
   fileId: string;
@@ -87,6 +99,49 @@ export async function handleSlackFileEvent(
     const reviewMarkers = new Set([opts.reviewedEmoji, ...(opts.reviewedEmojis ?? [])]);
     const alreadyReviewed = reactions.some(r => reviewMarkers.has(r.name));
 
+    /**
+     * Store the attachment, retrying with a newly issued files.info download URL when
+     * the URL supplied by the webhook/files.list payload has expired or is incomplete.
+     */
+    const persistAttachment = async (itemId: number) => {
+      let lastError: unknown;
+      const attempt = async (downloadUrl?: string) => {
+        if (!downloadUrl) throw new Error('Slack did not provide a private download URL');
+        const { buffer, contentType } = await slack.downloadFile(downloadUrl);
+        const key = `mail/slack/${channelId}/${messageTs}/${filename ?? fileId}`;
+        const { key: storageKey } = await storagePut(key, buffer, contentType);
+        await conn.execute(
+          `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [itemId, storageKey, filename ?? fileId, contentType, buffer.length, fileId]
+        );
+      };
+
+      try {
+        await attempt(urlPrivateDownload);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+
+      // Slack's event/list URLs can expire; always obtain a fresh URL before declaring failure.
+      const fresh = await slack.getFileInfo(fileId);
+      if (fresh) {
+        filename = fresh.filename ?? filename;
+        mimeType = fresh.mimeType ?? mimeType;
+        urlPrivateDownload = fresh.urlPrivateDownload ?? urlPrivateDownload;
+        messageTs = fresh.messageTs ?? messageTs;
+        receivedAt = fresh.receivedAt ?? receivedAt;
+      }
+      try {
+        await attempt(urlPrivateDownload);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    };
+
     if (alreadyReviewed) {
       // Insert a pre_reviewed=1, status='resolved' row (for the log) but do not route
       const permalink = event.permalink ?? await slack.getPermalink(channelId, messageTs);
@@ -125,16 +180,9 @@ export async function handleSlackFileEvent(
     if (existing.length > 0) {
       // A prior run may have inserted the Mailroom row while a file download failed.
       // Rehydrate the attachment instead of preserving a permanently file-less record.
-      if (Number(existing[0].file_count ?? 0) === 0 && urlPrivateDownload) {
+      if (Number(existing[0].file_count ?? 0) === 0) {
         try {
-          const { buffer, contentType } = await slack.downloadFile(urlPrivateDownload);
-          const key = `mail/slack/${channelId}/${messageTs}/${filename ?? fileId}`;
-          const { key: storageKey } = await storagePut(key, buffer, contentType);
-          await conn.execute(
-            `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [existing[0].id, storageKey, filename ?? fileId, contentType, buffer.length, fileId]
-          );
+          await persistAttachment(existing[0].id);
         } catch (recoveryErr) {
           console.error(`[ingestSlack] attachment recovery failed for ${fileId}: ${recoveryErr}`);
         }
@@ -155,21 +203,12 @@ export async function handleSlackFileEvent(
     );
     const itemId = (ins as any).insertId;
 
-    // 5. Download file and store
-    if (urlPrivateDownload) {
-      try {
-        const { buffer, contentType } = await slack.downloadFile(urlPrivateDownload);
-        const key = `mail/slack/${channelId}/${messageTs}/${filename ?? fileId}`;
-        const { key: storageKey } = await storagePut(key, buffer, contentType);
-        await conn.execute(
-          `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [itemId, storageKey, filename ?? fileId, contentType, buffer.length, fileId]
-        );
-      } catch (dlErr) {
-        // Non-fatal: stub row is already inserted, file can be re-fetched later
-        console.error(`[ingestSlack] file download failed for ${fileId}: ${dlErr}`);
-      }
+    // 5. Download and persist file. A fresh files.info URL is retried on any failure.
+    try {
+      await persistAttachment(itemId);
+    } catch (dlErr) {
+      // Non-fatal: stub row is already inserted and a future dedupe pass will retry recovery.
+      console.error(`[ingestSlack] file download failed after fresh-url retry for ${fileId}: ${dlErr}`);
     }
 
     // 6. Optionally add bot marker emoji
@@ -192,21 +231,21 @@ export function buildRealSlackFetch(token: string): SlackFetchFn {
   return {
     async getReactions(channelId, messageTs) {
       const params = new URLSearchParams({ channel: channelId, timestamp: messageTs, full: 'true' });
-      const res = await fetch(`https://slack.com/api/reactions.get?${params}`, {
+      const res = await slackRequest(`https://slack.com/api/reactions.get?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json() as { ok: boolean; message?: { reactions?: Array<{ name: string }> } };
       return data.message?.reactions ?? [];
     },
     async downloadFile(url) {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await slackRequest(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error(`Slack file download failed (${res.status})`);
       const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
       const buffer = Buffer.from(await res.arrayBuffer());
       return { buffer, contentType };
     },
     async addReaction(channelId, messageTs, emoji) {
-      await fetch('https://slack.com/api/reactions.add', {
+      await slackRequest('https://slack.com/api/reactions.add', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: channelId, timestamp: messageTs, name: emoji }),
@@ -214,14 +253,14 @@ export function buildRealSlackFetch(token: string): SlackFetchFn {
     },
     async getPermalink(channelId, messageTs) {
       const params = new URLSearchParams({ channel: channelId, message_ts: messageTs });
-      const res = await fetch(`https://slack.com/api/chat.getPermalink?${params}`, {
+      const res = await slackRequest(`https://slack.com/api/chat.getPermalink?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json() as { ok: boolean; permalink?: string };
       return data.permalink ?? null;
     },
     async getFileInfo(fileId) {
-      const res = await fetch(`https://slack.com/api/files.info?file=${encodeURIComponent(fileId)}`, {
+      const res = await slackRequest(`https://slack.com/api/files.info?file=${encodeURIComponent(fileId)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json() as { ok: boolean; file?: any };

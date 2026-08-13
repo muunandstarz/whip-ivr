@@ -4,6 +4,18 @@
 
 import { ENV } from "./_core/env";
 
+const STORAGE_REQUEST_TIMEOUT_MS = 30_000;
+
+async function storageRequest(url: string | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STORAGE_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;
   const forgeKey = ENV.forgeApiKey;
@@ -40,7 +52,7 @@ export async function storagePut(
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
   presignUrl.searchParams.set("path", key);
 
-  const presignResp = await fetch(presignUrl, {
+  const presignResp = await storageRequest(presignUrl, {
     headers: { Authorization: `Bearer ${forgeKey}` },
   });
 
@@ -58,7 +70,7 @@ export async function storagePut(
       ? new Blob([data], { type: contentType })
       : new Blob([data as any], { type: contentType });
 
-  const uploadResp = await fetch(s3Url, {
+  const uploadResp = await storageRequest(s3Url, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: blob,
@@ -83,7 +95,7 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const getUrl = new URL("v1/storage/presign/get", forgeUrl + "/");
   getUrl.searchParams.set("path", key);
 
-  const resp = await fetch(getUrl, {
+  const resp = await storageRequest(getUrl, {
     headers: { Authorization: `Bearer ${forgeKey}` },
   });
 
