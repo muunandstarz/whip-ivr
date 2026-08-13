@@ -155,6 +155,9 @@ function AdminDrawer({
   const [editHandlerId, setEditHandlerId] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
+  const [forwardRecipient, setForwardRecipient] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
 
   const { data, isLoading, refetch } = trpc.mail.getItem.useQuery(
     { id: itemId! },
@@ -173,6 +176,17 @@ function AdminDrawer({
   const rerouteMut = trpc.mail.reroute.useMutation({ onSuccess: () => { toast.success("Rerouted"); invalidate(); setShowRerouteDialog(false); }, onError: (e) => toast.error(e.message) });
   const addNoteMut = trpc.mail.addNote.useMutation({ onSuccess: () => { toast.success("Note added"); setNoteText(""); refetch(); }, onError: (e) => toast.error(e.message) });
   const reminderMut = trpc.mail.setReminder.useMutation({ onSuccess: () => { toast.success("Reminder set"); setShowReminderInput(false); setReminderDate(""); }, onError: (e) => toast.error(e.message) });
+  const forwardMut = trpc.mail.forwardToClaim.useMutation({
+    onSuccess: (result) => {
+      const skipped = result.skippedAttachments?.length ? ` ${result.skippedAttachments.length} attachment(s) could not be included.` : "";
+      toast.success(`Forwarded with ${result.attachmentCount} attachment(s).${skipped}`);
+      setShowForwardDialog(false);
+      setForwardRecipient("");
+      setForwardNote("");
+      refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -288,6 +302,9 @@ function AdminDrawer({
                   <div className="grid grid-cols-2 gap-2">
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowRerouteDialog(true)}>
                       <ArrowRight className="w-3.5 h-3.5 mr-1.5" /> Reroute
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs text-sky-700 border-sky-200 hover:bg-sky-50" onClick={() => { setForwardRecipient(""); setForwardNote(""); setShowForwardDialog(true); }}>
+                      <Mail className="w-3.5 h-3.5 mr-1.5" /> Forward to Claim
                     </Button>
                     {item.isDemand === 1 ? (
                       <>
@@ -444,6 +461,35 @@ function AdminDrawer({
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowRerouteDialog(false)}>Cancel</Button>
               <Button onClick={() => rerouteMut.mutate({ itemId: item!.id, toHandlerId: Number(rerouteHandlerId), reason: rerouteReason || undefined })} disabled={!rerouteHandlerId || rerouteMut.isPending}>Reroute</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {showForwardDialog && item && (
+        <Dialog open onOpenChange={() => setShowForwardDialog(false)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Forward to Claim</DialogTitle></DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground text-xs">This sends the captured message and all recoverable attachments from the connected Claims mailbox. Confirm the intended claim recipient before sending.</p>
+              <div className="rounded border bg-muted/30 px-3 py-2 text-xs space-y-1">
+                <div><span className="text-muted-foreground">Claim #:</span> {item.claimNumber ?? "Not identified"}</div>
+                <div><span className="text-muted-foreground">Subject:</span> {item.subject ?? "(no subject)"}</div>
+              </div>
+              <div>
+                <Label className="text-xs">Claim recipient email</Label>
+                <Input className="mt-1" type="email" placeholder="recipient@example.com" value={forwardRecipient} onChange={(e) => setForwardRecipient(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Forwarding note (optional)</Label>
+                <Textarea className="mt-1 min-h-[72px] text-sm" value={forwardNote} onChange={(e) => setForwardNote(e.target.value)} placeholder="Add context for the claim file…" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowForwardDialog(false)}>Cancel</Button>
+              <Button onClick={() => forwardMut.mutate({ itemId: item.id, recipient: forwardRecipient.trim(), note: forwardNote.trim() || undefined })} disabled={!/^\S+@\S+\.\S+$/.test(forwardRecipient.trim()) || forwardMut.isPending}>
+                <Mail className="w-3.5 h-3.5 mr-1.5" /> {forwardMut.isPending ? "Forwarding…" : "Confirm & Forward"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

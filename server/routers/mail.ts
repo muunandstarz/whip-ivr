@@ -22,6 +22,7 @@ import { randomUUID } from 'crypto';
 import { invokeLLM } from '../_core/llm.js';
 import type { ClassificationResult } from '../mail/classify.js';
 import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } from '../mail/businessTime.js';
+import { forwardMailToClaim } from '../mail/forwardToClaim.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -213,6 +214,52 @@ export const mailRouter = router({
         .orderBy(asc(mailRoutingHistory.createdAt));
 
       return { item, files: signedFiles, notes, history };
+    }),
+
+  /** Forward the original Mailroom email/body and recoverable attachments to a confirmed claim recipient. */
+  forwardToClaim: protectedProcedure
+    .input(z.object({
+      itemId: z.number(),
+      recipient: z.string().trim().email(),
+      note: z.string().trim().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const item = await requireItem(db, input.itemId);
+      const files = await db!.select().from(mailItemFiles).where(eq(mailItemFiles.itemId, input.itemId));
+      const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      try {
+        const result = await forwardMailToClaim({
+          conn,
+          recipient: input.recipient,
+          note: input.note,
+          item: {
+            id: item.id,
+            subject: item.subject,
+            bodyText: item.bodyText,
+            fromName: item.fromName,
+            fromEmail: item.fromEmail,
+            claimNumber: item.claimNumber,
+          },
+          files: files.map((file) => ({
+            filename: file.filename,
+            contentType: file.contentType,
+            storageKey: file.storageKey,
+            sizeBytes: file.sizeBytes,
+          })),
+        });
+        const skipped = result.skippedAttachments.length
+          ? ` Skipped: ${result.skippedAttachments.join(', ')}.`
+          : '';
+        await db!.insert(mailItemNotes).values({
+          itemId: item.id,
+          byUserId: ctx.user.id,
+          note: `Forwarded to claim recipient ${input.recipient}. Attached ${result.attachmentCount} file${result.attachmentCount === 1 ? '' : 's'}.${skipped}`,
+        });
+        return result;
+      } finally {
+        await conn.end();
+      }
     }),
 
   /** Reroute an item to a different handler */

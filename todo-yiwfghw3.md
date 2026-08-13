@@ -404,6 +404,13 @@
 - [x] Replace the Storage Mitigation Letter body with the latest approved notice language
 - [x] Apply 1.5 line spacing to applicable Document Generator letter bodies
 
+## Session 2026-08-12 Mailroom Forward to Claim
+- [x] Verify claim-email data and Gmail sending authorization for controlled Mailroom forwarding
+- [x] Implement forwarding of original Mailroom content and recoverable attachments to a selected claim email with an audit record
+- [x] Add a recipient-confirmed Forward to Claim action in the Mailroom record drawer
+- [ ] Reconnect Gmail from Mailroom Setup to grant the newly requested Gmail send permission before sending live email
+- [ ] Verify one recipient-confirmed live forwarding action after Gmail reauthorization
+
 ## Session 2026-08-12 Coverage Position and PDF Preview
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane
