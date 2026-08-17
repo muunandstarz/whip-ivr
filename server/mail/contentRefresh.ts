@@ -33,6 +33,16 @@ function isUsableFileResponse(response: Response): boolean {
   return response.ok && !contentType.includes('xml') && !contentType.includes('text/html');
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function findAttachment(part: GmailPart | undefined, filename: string): GmailPart | null {
   if (!part) return null;
   if (part.filename === filename && part.body) return part;
@@ -104,7 +114,7 @@ async function extractPdfText(bytes: Buffer): Promise<string> {
 
 async function downloadSlackFile(slackFileId: string, token: string): Promise<{ bytes: Buffer | null; imageDataUrl: string | null }> {
   if (!token) return { bytes: null, imageDataUrl: null };
-  const infoResponse = await fetch(`https://slack.com/api/files.info?file=${encodeURIComponent(slackFileId)}`, {
+  const infoResponse = await fetchWithTimeout(`https://slack.com/api/files.info?file=${encodeURIComponent(slackFileId)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const info = await infoResponse.json().catch(() => null) as any;
@@ -112,13 +122,13 @@ async function downloadSlackFile(slackFileId: string, token: string): Promise<{ 
   const fileUrl = info.file?.url_private_download || info.file?.url_private;
   let bytes: Buffer | null = null;
   if (fileUrl) {
-    const fileResponse = await fetch(fileUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const fileResponse = await fetchWithTimeout(fileUrl, { headers: { Authorization: `Bearer ${token}` } });
     if (isUsableFileResponse(fileResponse)) bytes = Buffer.from(await fileResponse.arrayBuffer());
   }
   const previewUrl = info.file?.thumb_pdf || info.file?.thumb_720 || info.file?.thumb_480 || null;
   let imageDataUrl: string | null = null;
   if (previewUrl) {
-    const previewResponse = await fetch(previewUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const previewResponse = await fetchWithTimeout(previewUrl, { headers: { Authorization: `Bearer ${token}` } });
     if (previewResponse.ok && previewResponse.headers.get('content-type')?.toLowerCase().startsWith('image/')) {
       const mime = previewResponse.headers.get('content-type')?.split(';')[0] || 'image/jpeg';
       imageDataUrl = `data:${mime};base64,${Buffer.from(await previewResponse.arrayBuffer()).toString('base64')}`;

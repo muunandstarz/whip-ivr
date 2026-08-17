@@ -671,8 +671,14 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
-              <TableHead className="w-8 py-2" onClick={toggleSelectAll}>
-                <input type="checkbox" className="cursor-pointer" checked={items.length > 0 && selectedIds.size === items.length} onChange={toggleSelectAll} />
+              <TableHead className="w-8 py-2" onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className="cursor-pointer"
+                  checked={items.length > 0 && selectedIds.size === items.length}
+                  onClick={e => e.stopPropagation()}
+                  onChange={toggleSelectAll}
+                />
               </TableHead>
               <TableHead className="w-8 py-2 text-xs">Status</TableHead>
               <TableHead className="w-8 py-2 text-xs">Type</TableHead>
@@ -701,8 +707,14 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                   className={`cursor-pointer hover:bg-muted/30 ${rowBorderClass(item)} ${selectedIds.has(item.id) ? "bg-blue-50/50" : ""}`}
                   onClick={() => { setSelectedItemId(item.id); setDrawerOpen(true); }}
                 >
-                  <TableCell className="py-2" onClick={e => { e.stopPropagation(); toggleSelect(item.id); }}>
-                    <input type="checkbox" className="cursor-pointer" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} />
+                  <TableCell className="py-2" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="cursor-pointer"
+                      checked={selectedIds.has(item.id)}
+                      onClick={e => e.stopPropagation()}
+                      onChange={() => toggleSelect(item.id)}
+                    />
                   </TableCell>
                   <TableCell className="py-2"><StatusPill item={item} /></TableCell>
                   <TableCell className="py-2"><SourceIcon source={item.source} /></TableCell>

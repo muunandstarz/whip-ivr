@@ -421,6 +421,10 @@
 - [x] Add Bills queue visibility in Admin Mailroom and Jayla’s myMailroom
 - [ ] Classify and place recoverable existing medical bill records into the Bills queue
 
+## Session 2026-08-17 Bills Backfill and Record Selection
+- [ ] Retroactively classify recoverable existing medical bills and route confirmed bills to Jayla
+- [x] Repair Mailroom selection checkboxes so clicks toggle selection without opening the record drawer
+
 ## Session 2026-08-12 Coverage Position and PDF Preview
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane
