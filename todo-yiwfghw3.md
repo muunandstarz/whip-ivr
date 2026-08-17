@@ -415,6 +415,12 @@
 - [x] Retry fresh Slack file metadata and bounded storage uploads when newly ingested fax attachment persistence fails
 - [ ] Verify a newly received Claims Mail fax displays and forwards its original attachment after deployment
 
+## Session 2026-08-17 Medical Bills Queue
+- [x] Detect medical bill, provider invoice, and medical demand mail from Claims Mail and eFax
+- [x] Route medical bills and all demands exclusively to Jayla
+- [x] Add Bills queue visibility in Admin Mailroom and Jayla’s myMailroom
+- [ ] Classify and place recoverable existing medical bill records into the Bills queue
+
 ## Session 2026-08-12 Coverage Position and PDF Preview
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane

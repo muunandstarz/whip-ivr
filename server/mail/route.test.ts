@@ -261,4 +261,18 @@ describe('route() — mocked LLM', () => {
     expect(handler?.email).toBe('natashiae@drivewhip.com');
     expect(patch.status).toBe('assigned');
   });
+
+  it('routes a medical bill directly to Jayla regardless of its general injury category', async () => {
+    const patch = await route(conn, {
+      category: 'injury_pip_bi', confidence: 96, is_demand: false, is_medical_bill: true,
+      demand_date: null, response_due_date: null, claim_number: 'MD-BILL-1',
+      sender_organization: 'Provider Billing', claimant_or_member_name: 'Claimant', adverse_carrier: null,
+      date_of_loss: null, requested_action: 'Review provider invoice', urgency: 'normal',
+      reason: 'Medical provider invoice and itemized bill attached',
+    });
+    const [[handler]] = await conn.execute<any[]>('SELECT email FROM handlers WHERE id=?', [patch.assignedHandlerId]);
+    expect(handler?.email).toBe('jayla.bernard@drivewhip.com');
+    expect(patch.isMedicalBill).toBe(1);
+    expect(patch.status).toBe('assigned');
+  });
 });

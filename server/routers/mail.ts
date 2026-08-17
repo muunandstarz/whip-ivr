@@ -80,7 +80,13 @@ const CATEGORY_TITLE_MAP: Record<string, string> = {
 };
 
 function buildMailSummary(classification: ClassificationResult): string | null {
+  const workType = classification.is_medical_bill
+    ? 'Medical Bill — Provider invoice attached'
+    : classification.is_demand
+      ? 'Demand attached'
+      : (CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence');
   return [
+    workType,
     classification.claim_number ? `Claim: ${classification.claim_number}` : null,
     classification.claimant_or_member_name ? `Person: ${classification.claimant_or_member_name}` : null,
     classification.adverse_carrier ? `Carrier: ${classification.adverse_carrier}` : null,
@@ -94,7 +100,9 @@ function buildAiSubject(classification: ClassificationResult, currentSubject: st
     || currentSubject === '(no subject)'
     || /^Claims Mail[_\s]/i.test(currentSubject);
   if (!genericCurrentTitle) return currentSubject;
-  const parts = [CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence'];
+  const parts = [classification.is_medical_bill
+    ? 'Medical Bill'
+    : (CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence')];
   if (classification.adverse_carrier) parts.push(classification.adverse_carrier);
   else if (classification.sender_organization) parts.push(classification.sender_organization);
   if (classification.claimant_or_member_name) parts.push(classification.claimant_or_member_name);
@@ -128,7 +136,7 @@ export const mailRouter = router({
   /** Five stat-card counts for the handler's mailroom summary strip */
   myMailroomStats: handlerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) return { overdue: 0, urgent: 0, legal: 0, demands: 0, allPending: 0 };
+    if (!db) return { overdue: 0, urgent: 0, legal: 0, demands: 0, bills: 0, allPending: 0 };
     const hid = ctx.user.handlerProfileId!;
     const now = new Date();
     const base = and(
@@ -141,14 +149,15 @@ export const mailRouter = router({
         .where(and(base, extra));
       return Number(r[0]?.c ?? 0);
     };
-    const [overdue, urgent, legal, demands, allPending] = await Promise.all([
+    const [overdue, urgent, legal, demands, bills, allPending] = await Promise.all([
       cnt(lt(mailItems.dueAt, now)),
       cnt(eq(mailItems.urgency, 'urgent')),
       cnt(or(eq(mailItems.isDemand, 1), eq(mailItems.category, 'legal_or_high_risk'))!),
       cnt(eq(mailItems.isDemand, 1)),
+      cnt(eq(mailItems.isMedicalBill, 1)),
       cnt(sql`1=1`),
     ]);
-    return { overdue, urgent, legal, demands, allPending };
+    return { overdue, urgent, legal, demands, bills, allPending };
   }),
 
 
@@ -160,6 +169,7 @@ export const mailRouter = router({
       source: z.enum(['email', 'mail', 'fax', 'manual']).optional(),
       overdue: z.boolean().optional(),
       legalOnly: z.boolean().optional(),
+      medicalBills: z.boolean().optional(),
       showResolved: z.boolean().optional(),
       sort: z.enum(['receivedAt', 'dueAt', 'urgency']).optional(),
       includeArchived: z.boolean().optional(),
@@ -180,6 +190,7 @@ export const mailRouter = router({
       // Exclude archived items by default unless explicitly requested
       if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.legalOnly) filters.push(or(eq(mailItems.isDemand, 1), eq(mailItems.category, 'legal_or_high_risk'))!);
+      if (input?.medicalBills) filters.push(eq(mailItems.isMedicalBill, 1));
 
       const rows = await db.select().from(mailItems)
         .where(and(...filters))
@@ -413,6 +424,7 @@ export const mailRouter = router({
       urgent: z.boolean().optional(),
       legalOnly: z.boolean().optional(),
       isDemand: z.boolean().optional(),
+      medicalBills: z.boolean().optional(),
       needsReview: z.boolean().optional(),
       search: z.string().optional(),
       from: z.date().optional(),
@@ -452,6 +464,7 @@ export const mailRouter = router({
       if (input?.urgent) filters.push(eq(mailItems.urgency, 'urgent'));
       if (input?.legalOnly) filters.push(or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!);
       if (input?.isDemand) filters.push(eq(mailItems.isDemand, 1));
+      if (input?.medicalBills) filters.push(eq(mailItems.isMedicalBill, 1));
       if (input?.needsReview) filters.push(eq(mailItems.needsReview, 1));
       if (input?.from) filters.push(gte(mailItems.receivedAt, input.from));
       if (input?.to) filters.push(lte(mailItems.receivedAt, input.to));
@@ -639,6 +652,12 @@ export const mailRouter = router({
     const [demandsYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
       .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), eq(mailItems.isDemand, 1), lte(mailItems.createdAt, yesterdayStart)));
 
+    // Medical bills only
+    const [bills] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(unresolved!, eq(mailItems.isMedicalBill, 1)));
+    const [billsYest] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
+      .where(and(inArray(mailItems.status, ['new', 'assigned', 'escalated']), eq(mailItems.isMedicalBill, 1), lte(mailItems.createdAt, yesterdayStart)));
+
     // Resolved today
     const [resolvedToday] = await db.select({ count: sql<number>`COUNT(*)` }).from(mailItems)
       .where(and(eq(mailItems.status, 'resolved'), gte(mailItems.resolvedAt, todayStart)));
@@ -653,6 +672,7 @@ export const mailRouter = router({
       urgent: { count: Number(urgent?.count ?? 0), delta: delta(Number(urgent?.count ?? 0), Number(urgentYest?.count ?? 0)) },
       legalDemands: { count: Number(legalDemands?.count ?? 0), delta: delta(Number(legalDemands?.count ?? 0), Number(legalDemYest?.count ?? 0)) },
       demands: { count: Number(demands?.count ?? 0), delta: delta(Number(demands?.count ?? 0), Number(demandsYest?.count ?? 0)) },
+      bills: { count: Number(bills?.count ?? 0), delta: delta(Number(bills?.count ?? 0), Number(billsYest?.count ?? 0)) },
       resolvedToday: { count: Number(resolvedToday?.count ?? 0), delta: delta(Number(resolvedToday?.count ?? 0), Number(resolvedYest?.count ?? 0)) },
     };
   }),
@@ -1045,8 +1065,8 @@ export const mailRouter = router({
             if (currentCount >= BATCH_PER_HANDLER) {
               // Classify but don't assign yet — mark as classified/needs_review
               await conn.execute(
-                `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=1,urgency=?,reason=? WHERE id=?`,
-                [patch.category, patch.confidence, patch.isDemand, patch.urgency, 'Batch limit reached — pending assignment', item.id]
+                `UPDATE mail_items SET category=?,confidence=?,is_demand=?,is_medical_bill=?,needs_review=1,urgency=?,reason=? WHERE id=?`,
+                [patch.category, patch.confidence, patch.isDemand, patch.isMedicalBill, patch.urgency, 'Batch limit reached — pending assignment', item.id]
               );
               continue;
             }
@@ -1056,8 +1076,8 @@ export const mailRouter = router({
           const summaryNote = buildMailSummary(cl);
           const newSubject = buildAiSubject(cl, item.subject ?? null);
           await conn.execute(
-            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=?,body_text=? WHERE id=?`,
-            [patch.category,patch.confidence,patch.isDemand,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,content.indexedBody,item.id]
+            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,is_medical_bill=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=?,body_text=? WHERE id=?`,
+            [patch.category,patch.confidence,patch.isDemand,patch.isMedicalBill,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,content.indexedBody,item.id]
           );
           if (patch.assignedHandlerId) {
             const sourceResult = await markAssignedMailSource(conn, {

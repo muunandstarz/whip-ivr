@@ -534,7 +534,7 @@ function AdminDrawer({
 }
 
 // ─── Admin: All Mail queue (redesigned) ──────────────────────────────────────
-type AdminTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "resolved" | "log";
+type AdminTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "bills" | "resolved" | "log";
 
 function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -568,6 +568,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     else if (activeTab === "urgent") base.urgent = true;
     else if (activeTab === "legal") base.category = 'legal_or_high_risk';
     else if (activeTab === "demands") base.isDemand = true;
+    else if (activeTab === "bills") base.medicalBills = true;
     else if (activeTab === "resolved") base.status = "resolved";
     // status filter from dropdown (only applies on "all" tab)
     if (activeTab === "all" && statusFilter !== "all") base.status = statusFilter;
@@ -721,7 +722,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                       <span className="text-xs text-muted-foreground/40">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="py-2"><CategoryBadge cat={item.category} /></TableCell>
+                  <TableCell className="py-2">{item.isMedicalBill ? <Badge variant="outline" className="border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</Badge> : <CategoryBadge cat={item.category} />}</TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">{item.claimNumber ?? "—"}</TableCell>
                   <TableCell className="py-2 text-xs">{handlerName ?? <span className="text-muted-foreground">Unassigned</span>}</TableCell>
                   <TableCell className="py-2">
@@ -891,7 +892,7 @@ function AdminMailLog() {
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{item.id}</TableCell>
                 <TableCell className="py-1.5 text-xs max-w-xs truncate">{item.subject ?? "—"}</TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{item.fromEmail ?? item.fromName ?? "—"}</TableCell>
-                <TableCell className="py-1.5"><CategoryBadge cat={item.category} /></TableCell>
+                <TableCell className="py-1.5">{item.isMedicalBill ? <Badge variant="outline" className="border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</Badge> : <CategoryBadge cat={item.category} />}</TableCell>
                 <TableCell className="py-1.5 text-xs capitalize">{item.status}</TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{item.claimNumber ?? "—"}</TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{fmtRelative(item.receivedAt)}</TableCell>
@@ -1529,11 +1530,12 @@ export default function Mailroom() {
             <TabsTrigger value="urgent" className="text-xs"><AlertTriangle className="h-3.5 w-3.5 mr-1.5" />Urgent</TabsTrigger>
             <TabsTrigger value="legal" className="text-xs"><Scale className="h-3.5 w-3.5 mr-1.5" />Legal</TabsTrigger>
             <TabsTrigger value="demands" className="text-xs"><FileText className="h-3.5 w-3.5 mr-1.5" />Demands</TabsTrigger>
+            <TabsTrigger value="bills" className="text-xs"><FileText className="h-3.5 w-3.5 mr-1.5" />Bills</TabsTrigger>
             <TabsTrigger value="resolved" className="text-xs"><CheckCircle className="h-3.5 w-3.5 mr-1.5" />Resolved</TabsTrigger>
             <TabsTrigger value="log" className="text-xs"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Mail Log</TabsTrigger>
             <TabsTrigger value="setup" className="text-xs"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Setup</TabsTrigger>
           </TabsList>
-          {(["all", "overdue", "urgent", "legal", "demands", "resolved"] as AdminTab[]).map(tab => (
+          {(["all", "overdue", "urgent", "legal", "demands", "bills", "resolved"] as AdminTab[]).map(tab => (
             <TabsContent key={tab} value={tab} className="mt-4">
               <AdminMailQueue activeTab={tab} />
             </TabsContent>

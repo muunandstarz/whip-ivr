@@ -722,6 +722,7 @@ export type MailSetting = typeof mailSettings.$inferSelect;
   confidence: int('confidence'),
   needsReview: int('needs_review').default(0),
   isDemand: int('is_demand').default(0),
+  isMedicalBill: int('is_medical_bill').notNull().default(0),
   isArchived: int('is_archived').notNull().default(0),
   summaryNote: varchar('summary_note', { length: 300 }),
   preReviewed: int('pre_reviewed').default(0),

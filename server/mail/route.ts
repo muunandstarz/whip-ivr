@@ -19,6 +19,7 @@ export interface RoutingPatch {
   category: string;
   confidence: number;
   isDemand: number;
+  isMedicalBill: number;
   needsReview: number;
   claimNumber: string | null;
   fromName: string | null;
@@ -67,6 +68,7 @@ export function isJaylaPriority(classification: ClassificationResult): boolean {
     classification.sender_organization,
   ].filter(Boolean).join(' ').toLowerCase();
   return classification.is_demand
+    || classification.is_medical_bill === true
     || isLetterOfRepresentation(classification.requested_action, classification.reason)
     || /\b(attorney|attorney's|attorneys|counsel|law firm|legal representative|esq\.?|lor)\b/.test(text);
 }
@@ -207,6 +209,7 @@ export async function route(
     category: classification.category,
     confidence: classification.confidence,
     isDemand: classification.is_demand ? 1 : 0,
+    isMedicalBill: classification.is_medical_bill ? 1 : 0,
     needsReview,
     claimNumber: classification.claim_number ?? null,
     fromName: null,

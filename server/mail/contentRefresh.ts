@@ -58,8 +58,12 @@ export function parseMailContentFiles(rawEntries: string | null | undefined): Ma
 }
 
 export function buildMailSummary(classification: ClassificationResult): string | null {
-  const category = CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence';
-  const action = classification.is_demand
+  const category = classification.is_medical_bill
+    ? 'Medical Bill'
+    : (CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence');
+  const action = classification.is_medical_bill
+    ? 'Provider invoice attached'
+    : classification.is_demand
     ? 'Demand attached'
     : classification.requested_action?.trim() || null;
   const headline = [category, action].filter(Boolean).join(' — ');
@@ -77,7 +81,9 @@ export function buildAiSubject(classification: ClassificationResult, currentSubj
     || currentSubject === '(no subject)'
     || /^(Claims Mail|FAX)[_\s]/i.test(currentSubject);
   if (!isGeneric) return currentSubject;
-  const parts = [CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence'];
+  const parts = [classification.is_medical_bill
+    ? 'Medical Bill'
+    : (CATEGORY_TITLE_MAP[classification.category] ?? 'Claims Correspondence')];
   if (classification.adverse_carrier) parts.push(classification.adverse_carrier);
   else if (classification.sender_organization) parts.push(classification.sender_organization);
   if (classification.claimant_or_member_name) parts.push(classification.claimant_or_member_name);
@@ -237,6 +243,7 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
          SET summary_note = ?, subject = ?,
              body_text = CASE WHEN ? = '' THEN body_text ELSE ? END,
              is_demand = CASE WHEN is_demand = 1 OR ? = 1 THEN 1 ELSE 0 END,
+             is_medical_bill = CASE WHEN is_medical_bill = 1 OR ? = 1 THEN 1 ELSE 0 END,
              demand_date = COALESCE(NULLIF(demand_date, ''), ?),
              response_due_date = COALESCE(NULLIF(response_due_date, ''), ?),
              claim_number = COALESCE(NULLIF(claim_number, ''), ?),
@@ -249,7 +256,8 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
         [
           buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null),
           content.attachmentText, content.indexedBody,
-          classification.is_demand ? 1 : 0, classification.demand_date ?? null, classification.response_due_date ?? null,
+          classification.is_demand ? 1 : 0, classification.is_medical_bill ? 1 : 0,
+          classification.demand_date ?? null, classification.response_due_date ?? null,
           classification.claim_number ?? null, classification.sender_organization ?? null,
           classification.adverse_carrier ?? null, classification.claimant_or_member_name ?? null,
           classification.requested_action ?? null, classification.reason ?? null, item.id,

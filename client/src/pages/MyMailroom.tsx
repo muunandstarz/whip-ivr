@@ -67,7 +67,7 @@ const STATUS_COLORS: Record<string, string> = {
   needs_review: "bg-yellow-100 text-yellow-800",
 };
 
-type FilterTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "resolved";
+type FilterTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "bills" | "resolved";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -211,7 +211,9 @@ function MailDrawer({
                 </div>
                 {/* Badges */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {item.category && (
+                  {item.isMedicalBill ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</span>
+                  ) : item.category && (
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
                       {CATEGORY_LABELS[item.category] ?? item.category}
                     </span>
@@ -476,6 +478,7 @@ export default function MyMailroom() {
       case "overdue": return { overdue: true };
       case "legal": return { legalOnly: true };
       case "demands": return { legalOnly: true };
+      case "bills": return { medicalBills: true };
       case "resolved": return { showResolved: true, status: "resolved" as const };
       default: return {};
     }
@@ -527,6 +530,7 @@ export default function MyMailroom() {
     { key: "urgent", label: "Urgent" },
     { key: "legal", label: "Legal & Demands" },
     { key: "demands", label: "Demands" },
+    { key: "bills", label: "Bills" },
     { key: "resolved", label: "Resolved" },
   ];
 
@@ -697,7 +701,9 @@ export default function MyMailroom() {
                     </TableCell>
                     {/* Category */}
                     <TableCell className="py-2.5">
-                      {item.category ? (
+                      {item.isMedicalBill ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</span>
+                      ) : item.category ? (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
                           {CATEGORY_LABELS[item.category] ?? item.category}
                         </span>

@@ -223,7 +223,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
         // Apply patch to mail_items
         await conn.execute(
           `UPDATE mail_items SET
-             category = ?, confidence = ?, is_demand = ?, needs_review = ?,
+             category = ?, confidence = ?, is_demand = ?, is_medical_bill = ?, needs_review = ?,
              claim_number = ?, from_name = ?, sender_org = ?, adverse_carrier = ?,
              claimant_name = ?, date_of_loss = ?, requested_action = ?,
              urgency = ?, reason = ?, demand_date = ?, response_due_date = ?,
@@ -233,7 +233,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
              summary_note = ?, subject = ?, body_text = ?
            WHERE id = ?`,
           [
-            patch.category, patch.confidence, patch.isDemand, patch.needsReview,
+            patch.category, patch.confidence, patch.isDemand, patch.isMedicalBill, patch.needsReview,
             patch.claimNumber, patch.fromName, patch.senderOrg, patch.adverseCarrier,
             patch.claimantName, patch.dateOfLoss, patch.requestedAction,
             patch.urgency, patch.reason, patch.demandDate, patch.responseDueDate,
