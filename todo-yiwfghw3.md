@@ -424,6 +424,7 @@
 ## Session 2026-08-17 Bills Backfill and Record Selection
 - [ ] Retroactively classify recoverable existing medical bills and route confirmed bills to Jayla
 - [x] Move four confirmed legacy medical-provider bills into the Bills queue and assign them to Jayla
+- [x] Move 17 additional active records with explicit medical-billing evidence into the Bills queue and assign them to Jayla
 - [x] Repair Mailroom selection checkboxes so clicks toggle selection without opening the record drawer
 
 ## Session 2026-08-12 Coverage Position and PDF Preview
