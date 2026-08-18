@@ -377,6 +377,28 @@ export const mailRouter = router({
       return { success: true };
     }),
 
+  /** Mark a record litigated and place it in the administrator's urgent escalation queue. */
+  litigate: protectedProcedure
+    .input(z.object({ itemId: z.number(), note: z.string().max(1000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      const item = await requireItem(db, input.itemId);
+      const reason = ['Litigated claim — escalated to administrator', input.note].filter(Boolean).join(' — ');
+      await db!.update(mailItems)
+        .set({
+          status: 'escalated',
+          urgency: 'urgent',
+          needsReview: 1,
+          assignedHandlerId: null,
+          assignedTeamId: null,
+          dueAt: new Date(),
+        })
+        .where(eq(mailItems.id, input.itemId));
+      await appendHistory(db, input.itemId, 'escalated', item.assignedHandlerId, null, ctx.user.id, reason);
+      await db!.insert(mailItemNotes).values({ itemId: input.itemId, byUserId: ctx.user.id, note: reason });
+      return { success: true };
+    }),
+
   /** Add a note to an item */
   addNote: protectedProcedure
     .input(z.object({
@@ -465,9 +487,14 @@ export const mailRouter = router({
       // Exclude archived items by default unless explicitly requested
       if (!input?.includeArchived) filters.push(eq(mailItems.isArchived, 0));
       if (input?.urgent) filters.push(eq(mailItems.urgency, 'urgent'));
-      if (input?.legalOnly) filters.push(or(eq(mailItems.category, 'legal_or_high_risk'), eq(mailItems.isDemand, 1))!);
-      if (input?.isDemand) filters.push(eq(mailItems.isDemand, 1));
-      if (input?.medicalBills) filters.push(eq(mailItems.isMedicalBill, 1));
+      if (input?.legalOnly) filters.push(sql`(
+        ${mailItems.isDemand} = 0
+        AND ${mailItems.isMedicalBill} = 0
+        AND LOWER(CONCAT_WS(' ', COALESCE(${mailItems.subject}, ''), COALESCE(${mailItems.bodyText}, ''), COALESCE(${mailItems.summaryNote}, ''), COALESCE(${mailItems.reason}, '')))
+          REGEXP 'summons|complaint|warrant|subpoena|court[[:space:]-]|lawsuit|legal service|service of process|notice of hearing'
+      )`);
+      if (input?.isDemand) filters.push(and(eq(mailItems.isDemand, 1), eq(mailItems.isMedicalBill, 0))!);
+      if (input?.medicalBills) filters.push(and(eq(mailItems.isMedicalBill, 1), eq(mailItems.isDemand, 0))!);
       if (input?.needsReview) filters.push(eq(mailItems.needsReview, 1));
       if (input?.from) filters.push(gte(mailItems.receivedAt, input.from));
       if (input?.to) filters.push(lte(mailItems.receivedAt, input.to));

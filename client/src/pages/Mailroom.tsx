@@ -185,6 +185,7 @@ function AdminDrawer({
 
   const resolveMut = trpc.mail.resolve.useMutation({ onSuccess: () => { toast.success("Resolved"); invalidate(); onClose(); }, onError: (e) => toast.error(e.message) });
   const escalateMut = trpc.mail.escalate.useMutation({ onSuccess: () => { toast.success("Escalated"); invalidate(); onClose(); }, onError: (e) => toast.error(e.message) });
+  const litigateMut = trpc.mail.litigate.useMutation({ onSuccess: () => { toast.success("Litigated claim escalated to administrator"); invalidate(); onClose(); }, onError: (e) => toast.error(e.message) });
   const rerouteMut = trpc.mail.reroute.useMutation({ onSuccess: () => { toast.success("Rerouted"); invalidate(); setShowRerouteDialog(false); }, onError: (e) => toast.error(e.message) });
   const addNoteMut = trpc.mail.addNote.useMutation({ onSuccess: () => { toast.success("Note added"); setNoteText(""); refetch(); }, onError: (e) => toast.error(e.message) });
   const reminderMut = trpc.mail.setReminder.useMutation({ onSuccess: () => { toast.success("Reminder set"); setShowReminderInput(false); setReminderDate(""); }, onError: (e) => toast.error(e.message) });
@@ -338,6 +339,10 @@ function AdminDrawer({
                     <Button size="sm" variant="outline" className="h-8 text-xs text-orange-700 border-orange-200 hover:bg-orange-50"
                       onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated by admin" })} disabled={escalateMut.isPending}>
                       <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Escalate
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs text-red-700 border-red-300 hover:bg-red-50"
+                      onClick={() => litigateMut.mutate({ itemId: item.id })} disabled={litigateMut.isPending}>
+                      <Scale className="w-3.5 h-3.5 mr-1.5" /> Litigated Claim
                     </Button>
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowReminderInput(v => !v)}>
                       <Bell className="w-3.5 h-3.5 mr-1.5" /> Set Reminder
@@ -578,7 +583,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     };
     if (activeTab === "overdue") base.overdue = true;
     else if (activeTab === "urgent") base.urgent = true;
-    else if (activeTab === "legal") base.category = 'legal_or_high_risk';
+    else if (activeTab === "legal") base.legalOnly = true;
     else if (activeTab === "demands") base.isDemand = true;
     else if (activeTab === "bills") base.medicalBills = true;
     else if (activeTab === "resolved") base.status = "resolved";

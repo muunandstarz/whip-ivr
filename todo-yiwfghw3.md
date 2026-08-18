@@ -433,6 +433,11 @@
 - [x] Implement direct Slack source recovery for forwarded attachments and clean forwarded fax body construction
 - [ ] Verify a live recipient-confirmed forwarding action delivers the original attachment and expected body after Gmail send authorization
 
+## Session 2026-08-18 Litigation and Queue Boundaries
+- [x] Add a Litigated Claim action that escalates the item to the administrator and records the action
+- [x] Allow handlers to select their Mailroom records with checkboxes
+- [x] Limit Demands to demands, Bills to medical bills, and Legal to court/legal-service documents only
+
 ## Session 2026-08-12 Coverage Position and PDF Preview
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane

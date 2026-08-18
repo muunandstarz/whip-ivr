@@ -482,6 +482,7 @@ export default function MyMailroom() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Build query input based on active tab
@@ -489,7 +490,7 @@ export default function MyMailroom() {
     switch (activeTab) {
       case "overdue": return { overdue: true };
       case "legal": return { legalOnly: true };
-      case "demands": return { legalOnly: true };
+      case "demands": return { isDemand: true };
       case "bills": return { medicalBills: true };
       case "resolved": return { showResolved: true, status: "resolved" as const };
       default: return {};
@@ -667,7 +668,14 @@ export default function MyMailroom() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-6 px-3" />
+                <TableHead className="w-8 px-3">
+                  <input
+                    type="checkbox"
+                    className="cursor-pointer"
+                    checked={pagedItems.length > 0 && selectedIds.size === pagedItems.length}
+                    onChange={() => setSelectedIds(prev => prev.size === pagedItems.length ? new Set() : new Set(pagedItems.map((row: any) => row.id)))}
+                  />
+                </TableHead>
                 <TableHead className="text-xs font-semibold">Subject / From</TableHead>
                 <TableHead className="text-xs font-semibold w-36">Category</TableHead>
                 <TableHead className="text-xs font-semibold w-32">Claim #</TableHead>
@@ -698,9 +706,15 @@ export default function MyMailroom() {
                     className="cursor-pointer hover:bg-muted/40 transition-colors"
                     onClick={() => handleRowClick(item.id)}
                   >
-                    {/* Signal */}
-                    <TableCell className="px-3 py-2.5">
-                      <div className="flex items-center justify-center">
+                    {/* Selection / signal */}
+                    <TableCell className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5 justify-center">
+                        <input
+                          type="checkbox"
+                          className="cursor-pointer"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => setSelectedIds(prev => { const next = new Set(prev); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; })}
+                        />
                         <SignalDot item={item} />
                       </div>
                     </TableCell>
