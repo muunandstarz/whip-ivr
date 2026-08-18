@@ -7,6 +7,8 @@ describe('buildForwardMessage', () => {
       recipient: 'claim.file@example.com',
       item: {
         id: 42,
+        source: 'email',
+        externalId: 'gmail-42',
         subject: 'Carrier demand',
         bodyText: 'Please review the attached demand.',
         fromName: 'Jane Carrier',
@@ -30,6 +32,8 @@ describe('buildForwardMessage', () => {
       recipient: 'claim.file@example.com',
       item: {
         id: 7,
+        source: 'mail',
+        externalId: 'slack-7',
         subject: 'Subject\r\nBcc: unexpected@example.com',
         bodyText: null,
         fromName: null,
@@ -41,5 +45,25 @@ describe('buildForwardMessage', () => {
 
     expect(message).toContain('Subject: FWD: Subject Bcc: unexpected@example.com');
     expect(message).not.toContain('\r\nBcc: unexpected@example.com');
+  });
+
+  it('does not forward page markers as the source body for Claims Mail faxes', () => {
+    const message = buildForwardMessage({
+      recipient: 'claim.file@example.com',
+      item: {
+        id: 8,
+        source: 'mail',
+        externalId: 'F123',
+        subject: 'Claims Mail fax',
+        bodyText: '-- 1 of 9 --\n-- 2 of 9 --',
+        fromName: null,
+        fromEmail: null,
+        claimNumber: null,
+      },
+      attachments: [],
+    });
+
+    expect(message).toContain('This correspondence was received through the Claims Mail channel. The original fax/document is attached.');
+    expect(message).not.toContain('-- 1 of 9 --');
   });
 });

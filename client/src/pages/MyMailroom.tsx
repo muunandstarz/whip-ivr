@@ -91,6 +91,18 @@ function dueLabel(dueAt: Date | string | null | undefined) {
   return null;
 }
 
+function displayMailBody(item: any): string | null {
+  const body = item?.bodyText?.trim() ?? "";
+  const pageMarkersOnly = body.length > 0 && body.replace(/--\s*\d+\s+of\s+\d+\s*--/gi, "").trim().length === 0;
+  if (body && !pageMarkersOnly) return body;
+  if (item?.source === "mail" || item?.source === "fax") {
+    return item?.summaryNote
+      ? `Document summary: ${item.summaryNote}\n\nThe original fax/document is available in Attachments.`
+      : "This item was received through Claims Mail. The original fax/document is available in Attachments.";
+  }
+  return body || null;
+}
+
 function SignalDot({ item }: { item: any }) {
   const due = item.dueAt ? new Date(item.dueAt) : null;
   const overdue = due && isPast(due) && !isToday(due);
@@ -242,7 +254,7 @@ function MailDrawer({
               <div className="px-5 py-3 border-b">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Message Body</p>
                 <div className="text-sm text-foreground max-h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                  {item.bodyText || <span className="text-muted-foreground italic">No body content</span>}
+                  {displayMailBody(item) || <span className="text-muted-foreground italic">No body content</span>}
                 </div>
               </div>
 

@@ -130,6 +130,18 @@ function formatSubject(subject: string | null | undefined, source: string): stri
   }
   return subject;
 }
+
+function displayMailBody(item: any): string | null {
+  const body = item?.bodyText?.trim() ?? "";
+  const pageMarkersOnly = body.length > 0 && body.replace(/--\s*\d+\s+of\s+\d+\s*--/gi, "").trim().length === 0;
+  if (body && !pageMarkersOnly) return body;
+  if (item?.source === "mail" || item?.source === "fax") {
+    return item?.summaryNote
+      ? `Document summary: ${item.summaryNote}\n\nThe original fax/document is available in Attachments.`
+      : "This item was received through Claims Mail. The original fax/document is available in Attachments.";
+  }
+  return body || null;
+}
 // Delta indicator
 function Delta({ n }: { n: number }) {
   if (n === 0) return <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Minus className="w-3 h-3" />0</span>;
@@ -261,11 +273,11 @@ function AdminDrawer({
                 {/* Details tab */}
                 <TabsContent value="details" className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
                   {/* Message body */}
-                  {item.bodyText && (
+                  {displayMailBody(item) && (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Message Body</p>
                       <div className="text-sm whitespace-pre-wrap bg-muted/30 rounded p-3 max-h-48 overflow-y-auto text-foreground/80 leading-relaxed">
-                        {item.bodyText}
+                        {displayMailBody(item)}
                       </div>
                     </div>
                   )}

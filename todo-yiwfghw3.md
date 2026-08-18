@@ -427,6 +427,12 @@
 - [x] Move 17 additional active records with explicit medical-billing evidence into the Bills queue and assign them to Jayla
 - [x] Repair Mailroom selection checkboxes so clicks toggle selection without opening the record drawer
 
+## Session 2026-08-18 Mailroom Forwarding Integrity
+- [x] Display original email body where present and meaningful fax/document context where source content consists only of page markers
+- [x] Restore original attachment open/download access through immutable file-ID proxy URLs
+- [x] Implement direct Slack source recovery for forwarded attachments and clean forwarded fax body construction
+- [ ] Verify a live recipient-confirmed forwarding action delivers the original attachment and expected body after Gmail send authorization
+
 ## Session 2026-08-12 Coverage Position and PDF Preview
 - [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
 - [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane

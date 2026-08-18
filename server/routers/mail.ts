@@ -212,8 +212,8 @@ export const mailRouter = router({
       // The proxy handles lazy re-download from Slack when S3 key is stale
       const signedFiles = files.map(f => ({
         ...f,
-        proxyUrl: `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}`,
-        downloadUrl: `/api/mail/file-proxy?storageKey=${encodeURIComponent(f.storageKey)}&download=1`,
+        proxyUrl: `/api/mail/file-proxy?fileId=${f.id}`,
+        downloadUrl: `/api/mail/file-proxy?fileId=${f.id}&download=1`,
       }));
 
       const notes = await db!.select().from(mailItemNotes)
@@ -246,6 +246,8 @@ export const mailRouter = router({
           note: input.note,
           item: {
             id: item.id,
+            source: item.source,
+            externalId: item.externalId,
             subject: item.subject,
             bodyText: item.bodyText,
             fromName: item.fromName,
@@ -257,6 +259,7 @@ export const mailRouter = router({
             contentType: file.contentType,
             storageKey: file.storageKey,
             sizeBytes: file.sizeBytes,
+            slackFileId: file.slackFileId,
           })),
         });
         const skipped = result.skippedAttachments.length
