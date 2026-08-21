@@ -519,3 +519,8 @@
 ## Klutch Navigation
 - [x] Remove the unfinished Klutch Dec Page from active Document Generator navigation
 - [x] Preserve and verify the approved Klutch Policy Declarations entry
+
+## Certificate Naming
+- [x] Rename the active Certificate of Coverage navigation and workspace label to Certificate of Insurance
+- [x] Rename the rendered certificate PDF heading and preview text to Certificate of Insurance
+- [x] Verify the renamed certificate remains fully functional

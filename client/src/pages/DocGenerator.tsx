@@ -108,7 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
 
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
-      { id: "coi-whip", label: "Certificate of Coverage", icon: Shield },
+      { id: "coi-whip", label: "Certificate of Insurance", icon: Shield },
       { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText },
     ],
   },
@@ -5964,7 +5964,7 @@ const KLUTCH_STATE_RULES: Record<string, {
   NC: { biLimits: "$30,000 / $60,000", pdLimit: "$25,000", um: true, umLimit: "$30,000 / $60,000", uim: true, uimLimit: "$30,000 / $60,000", pip: false, pipLimit: "" },
   SC: { biLimits: "$25,000 / $50,000", pdLimit: "$25,000", um: true, umLimit: "$25,000 / $50,000", uim: true, uimLimit: "$25,000 / $50,000", pip: false, pipLimit: "" },
 };
-// ─── Tab: Certificate of Coverage (Unified) ──────────────────────────────────
+// ─── Tab: Certificate of Insurance (Unified) ─────────────────────────────────
 // State rules for both Metrocars (self-insured) and Klutch (insurer)
 const COI_STATE_RULES: Record<string, {
   biPP: string; biPO: string; pdLimit: string;
@@ -6108,11 +6108,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       }
     }
 
-    // Center: CERTIFICATE OF COVERAGE
+    // Center: CERTIFICATE OF INSURANCE
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
     doc.setTextColor(0, 0, 0);
-    doc.text("CERTIFICATE OF COVERAGE", W / 2, y + 6, { align: "center" });
+    doc.text("CERTIFICATE OF INSURANCE", W / 2, y + 6, { align: "center" });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(80, 80, 80);
@@ -6633,7 +6633,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
         <PreviewPanel
           text={[
-            `CERTIFICATE OF COVERAGE`,
+            `CERTIFICATE OF INSURANCE`,
             `Issuing Carrier: ${isKlutch ? "Klutch Insurance Company" : "Metrocars Leasing Corp (Self-Insured)"}`,
             `Certificate No.: ${form.certNumber || "—"}`,
             `Date: ${form.certDate ? new Date(form.certDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
