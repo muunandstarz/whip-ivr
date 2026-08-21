@@ -500,3 +500,8 @@
 - [x] Restore attachment records and proxy access for ingested Slack files
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
+
+## Document Generator Letter Corrections
+- [x] Remove statute-of-limitations language from every Document Generator letter output
+- [x] Correct Coverage Position Letter field mapping so the driver field cannot use the handler/adjuster name
+- [x] Render and verify the corrected Coverage Position Letter with distinct driver and handler values

@@ -207,20 +207,8 @@ function addLetterFooter(doc: jsPDF) {
     { align: "center" }
   );
 }
-function addSOLNotice(doc: jsPDF, state?: string) {
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
-  const solText = state
-    ? `STATUTE OF LIMITATIONS NOTICE: The applicable statute of limitations in ${state} may limit the time within which legal action may be commenced. Failure to file suit within the applicable limitations period may permanently bar your right to recovery. This notice does not constitute legal advice. Consult an attorney for guidance specific to your jurisdiction.`
-    : "STATUTE OF LIMITATIONS NOTICE: The applicable statute of limitations may limit the time within which legal action may be commenced. Failure to file suit within the applicable limitations period may permanently bar your right to recovery. This notice does not constitute legal advice.";
-  doc.setFontSize(6.5);
-  doc.setFont("helvetica", "italic");
-  doc.setTextColor(130, 130, 130);
-  const lines = doc.splitTextToSize(solText, W - 28);
-  const lineH = 3.5;
-  const blockH = lines.length * lineH + 4;
-  const yStart = H - 18 - blockH - 2;
-  doc.text(lines, 14, yStart);
+function addSOLNotice(_doc: jsPDF, _state?: string) {
+  // Statute-of-limitations notices are intentionally omitted from all generated letters.
 }
 
 function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, lineH: number, lineHeightFactor = 1.15): number {
@@ -1670,6 +1658,7 @@ function CoverageTNCTab() {
     dateOfLoss: "",
     vehicle: "",
     vin: "",
+    driverName: "",
     tncPlatform: "Uber",
     tncPeriod: "2",
     tncCarrier: "",
@@ -1696,7 +1685,7 @@ Re: Claim #${form.claimNumber || "[Claim Number]"}
 Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
 Vehicle: ${form.vehicle || "[Year Make Model]"}
 VIN: ${form.vin || "[VIN]"}
-Driver: ${form.adjusterName || "[Driver Name]"}
+Driver: ${form.driverName || "[Driver Name]"}
 
 RE: Notice of TNC Primary Coverage
 
@@ -1798,10 +1787,11 @@ Email: ${form.adjusterEmail || "[claim email]"}`;
             <Field label="Claim Number" id="tnc-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="tnc-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
-          <Grid2 children={<>
+          <Grid3>
             <Field label="Vehicle (Year/Make/Model)" id="tnc-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" />
             <Field label="VIN" id="tnc-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
-          </>} />
+            <Field label="Driver Name" id="tnc-driver" value={form.driverName} onChange={set("driverName")} placeholder="First Last" />
+          </Grid3>
         </Panel>
         <Panel title="TNC Details">
           <Grid3>
