@@ -212,11 +212,11 @@
 - [x] Restrict COI and dec page state options to Whip operating markets only (MD, VA, FL, GA, IL, MA, PA, TX), pre-filled from member's originating market state
 - [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
 - [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
-- [ ] Add reassign dropdown to handler dashboard callback queue items
-- [ ] Add expandable call reason + quick reassign to intake records page (without going into view page)
-- [ ] Add processors to reassign/round-robin dropdown for file-a-claim calls
-- [ ] Route file-a-claim calls to processors automatically
-- [ ] Reassign existing file-a-claim intakes to processors via round-robin
+- [x] Add reassign dropdown to handler dashboard callback queue items
+- [x] Add expandable call reason + quick reassign to intake records page (without going into view page)
+- [x] Add processors to reassign/round-robin dropdown for file-a-claim calls
+- [x] Route file-a-claim calls to processors automatically
+- [x] Reassign existing file-a-claim intakes to processors via round-robin
 
 ## Session 2026-08-05 Tasks
 - [x] Add reassign dropdown to handler dashboard callback queue items
@@ -360,7 +360,7 @@
 - [x] Gmail ingest: add resolvedInserted to IngestGmailResult interface and result tracking
 - [x] Gmail ingest: add listReadMessages to GmailFetchFn interface and real implementation
 - [x] Dec Page: verified handleDownload matches approved format; states MD/VA/FL/GA/IL/MA/PA/TX only confirmed
-- [ ] Slack backfill: re-fetch 139 Slack files into production S3 bucket (running in background)
+- [x] Slack backfill: attempted recovery of 139 Slack files into production S3; 131 restored and 8 permanently unavailable because their Slack source files were deleted
 - [ ] Verify file proxy works after backfill (open 3-4 items in admin Mailroom drawer, click Open)
 - [ ] Trigger Now on deployed site after publishing to ingest Gmail + Slack + classify items
 
@@ -524,3 +524,15 @@
 - [x] Rename the active Certificate of Coverage navigation and workspace label to Certificate of Insurance
 - [x] Rename the rendered certificate PDF heading and preview text to Certificate of Insurance
 - [x] Verify the renamed certificate remains fully functional
+
+## COI and Declarations Coverage Rules
+- [x] List Metrocars Leasing Corp. as additional insured and the renter as the named operator on COIs
+- [x] Mark applicable COI coverages as extending to the Metrocars additional insured
+- [x] Enforce Florida BI limits of $10,000/$20,000, mandatory non-waivable PIP, and automatic UM rejection on COIs and declarations
+- [x] Enforce automatic UM rejection for Georgia on applicable COIs and declarations
+- [x] Render and verify Metrocars, Florida, and Georgia document outputs
+
+## Carrier Selection Date Source
+- [x] Use Subscription Start Date, rather than Date of Loss, to select Klutch or Metrocars at the July 1, 2026 cutoff
+- [x] Rename all related Certificate of Insurance labels and helper copy to Subscription Start Date
+- [x] Test June 30 and July 1, 2026 Subscription Start Date boundary selection

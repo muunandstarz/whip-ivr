@@ -5989,7 +5989,7 @@ const COI_STATE_RULES: Record<string, {
 
 const COI_STATES = ["MD","VA","FL","GA","IL","MA","PA","TX"];
 
-const KLUTCH_DATE_OF_LOSS_CUTOFF = "2026-07-01";
+const KLUTCH_SUBSCRIPTION_START_CUTOFF = "2026-07-01";
 
 function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [state, setState] = React.useState(initialState || "MD");
@@ -6008,12 +6008,19 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     effectiveDate: "",
     expirationDate: "",
     dateOfLoss: "",
+    subscriptionStartDate: "",
     certDate: new Date().toISOString().slice(0, 10),
     certNumber: "",
     revisionNumber: "",
     specialProvisions: "",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
+  const isAutomaticUmRejection = state === "FL" || state === "GA";
+  const isFloridaPipMandatory = state === "FL";
+  React.useEffect(() => {
+    setUmRejected(isAutomaticUmRejection);
+    if (isFloridaPipMandatory) setPipWaived(false);
+  }, [isAutomaticUmRejection, isFloridaPipMandatory]);
   // Auto-compute coverage-through date whenever effectiveDate, state, or stillInRental changes
   const coiCoverage = React.useMemo(() => computeCoverageThrough({
     startDateStr: form.certDate,
@@ -6049,8 +6056,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   };
 
   const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
-  // Carrier of record is determined by the loss date: Klutch from July 1, 2026 forward; Metrocars before that date.
-  const insurer: "klutch" | "metrocars" = form.dateOfLoss >= KLUTCH_DATE_OF_LOSS_CUTOFF ? "klutch" : "metrocars";
+  // Carrier of record is determined by Subscription Start Date: Klutch from July 1, 2026 forward; Metrocars before that date.
+  const insurer: "klutch" | "metrocars" = form.subscriptionStartDate >= KLUTCH_SUBSCRIPTION_START_CUTOFF ? "klutch" : "metrocars";
   const isKlutch = insurer === "klutch";
 
   // Auto-generate cert number on mount and when insurer/state changes
@@ -6251,6 +6258,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     y += gridH + 3;
 
     // ── INSURED SECTION ─────────────────────────────────────────────────────
+    // Metrocars Leasing Corp is shown as additional insured and the member is shown as renter/named operator.
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     const insuredH = 22;
@@ -6258,13 +6266,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // Left cell: insured name
     doc.line(lm + textW * 0.5, y, lm + textW * 0.5, y + insuredH);
     doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("INSURED", lm + 2, y + 3.5);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0, 0, 0);
-    doc.text("METROCARS LEASING CORP", lm + 2, y + 8);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-    // Mailing address
-    doc.text(form.insuredAddress || "14670 Southlawn Lane, Rockville, MD 20850", lm + 2, y + 13);
-    // Second insured: named operator/member
+    doc.text("ADDITIONAL INSURED / RENTER", lm + 2, y + 3.5);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    doc.text("METROCARS LEASING CORP (ADDITIONAL INSURED)", lm + 2, y + 8);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); doc.setTextColor(0, 0, 0);
+    doc.text(`RENTER / NAMED OPERATOR: ${form.namedOperator || "—"}`, lm + 2, y + 12.5);
     const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
     doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17);
     if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 21);
@@ -6364,7 +6370,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
         insr: "PIP", type: "PERSONAL INJURY PROTECTION (PIP)",
         limits: !rules.pip
           ? "NOT REQUIRED IN THIS STATE"
-          : pipWaived
+          : (pipWaived && !isFloridaPipMandatory)
             ? "WAIVED BY NAMED INSURED"
             : isKlutch
               ? "PER PERSON — STATUTORY MIN"
@@ -6379,6 +6385,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
         limits: "SUBJECT TO MEMBER AGREEMENT\nINCLUDED",
       },
     ];
+    // Liability and physical-damage coverage extends to Metrocars Leasing Corp as additional insured.
+    const additionalInsuredCoverageCodes = new Set(["BI", "PD", "COL", "COMP"]);
 
     for (const row of coverageRows) {
       const lines = row.limits.split("\n");
@@ -6393,10 +6401,10 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       // INSR LTR
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
       doc.text(row.insr, lm + cols.insr / 2, y + rH / 2 + 1, { align: "center" });
-      // ADDL INSD checkbox (always [ ] — form option removed, column kept for format compliance)
+      // ADDL INSD indicator: applicable liability and physical-damage coverages extend to Metrocars Leasing Corp.
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
-      doc.text("[ ]", lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
+      doc.text(additionalInsuredCoverageCodes.has(row.insr) ? "[X]" : "[ ]", lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
       // Type — use 7pt and maxWidth to prevent overflow into policy number column
       doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
       const typeX = lm + cols.insr + cols.addl + 2;
@@ -6506,7 +6514,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             </div>
             <div>
               <div className="text-sm font-semibold text-foreground">Klutch Insurance Company</div>
-              <div className="text-xs text-muted-foreground">Date of loss July 1, 2026 or later</div>
+              <div className="text-xs text-muted-foreground">Subscription Start Date July 1, 2026 or later</div>
             </div>
           </div>
           <div
@@ -6517,16 +6525,16 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             </div>
             <div>
               <div className="text-sm font-semibold text-foreground">Metrocars Leasing Corp</div>
-              <div className="text-xs text-muted-foreground">Date of loss before July 1, 2026</div>
+              <div className="text-xs text-muted-foreground">Subscription Start Date before July 1, 2026</div>
             </div>
           </div>
         </div>
         <div className={`mt-2 text-xs rounded px-2 py-1 ${isKlutch ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"}`}>
           {!form.dateOfLoss
-            ? "Enter the Date of Loss to determine the insurer of record. Metrocars applies until a qualifying July 1, 2026 or later loss date is entered."
+            ? "Enter the Subscription Start Date to determine the issuing carrier. Metrocars applies until a qualifying July 1, 2026 or later subscription start date is entered."
             : isKlutch
-              ? "Klutch Insurance Company — Insurer of record for date-of-loss values on or after July 1, 2026."
-              : "Metrocars Leasing Corp — Insurer of record for date-of-loss values before July 1, 2026."}
+              ? "Klutch Insurance Company — Issuing carrier for Subscription Start Dates on or after July 1, 2026."
+              : "Metrocars Leasing Corp — Issuing carrier for Subscription Start Dates before July 1, 2026."}
         </div>
       </div>
 
@@ -6595,11 +6603,14 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             {stillInRentalCOI && coiCoverage.helperText && !coiCoverage.warning && (
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
             )}
-            <Grid3>
+            <Grid2>
+              <Field label="Subscription Start Date" id="coi-subscription-start" value={form.subscriptionStartDate} onChange={set("subscriptionStartDate")} type="date" />
               <Field label="Date of Loss" id="coi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
+            </Grid2>
+            <Grid2>
               <Field label="Date Issued" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
               <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
-            </Grid3>
+            </Grid2>
             <Grid2>
               <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KIS0000" : `${state}000S0137XX`} />
               <Field label="Revision Number" id="coi-rev" value={form.revisionNumber} onChange={set("revisionNumber")} placeholder="e.g. 0" />
@@ -6610,15 +6621,23 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
           <Panel title="Coverage Options">
             <div className="space-y-2">
               {rules.umRejectable && (
-                <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
-                  <Checkbox checked={umRejected} onCheckedChange={(v) => setUmRejected(!!v)} />
+                <label className={`flex items-center gap-3 p-2.5 rounded-md border border-border/50 ${isAutomaticUmRejection ? "bg-muted/30" : "cursor-pointer hover:bg-muted/30"}`}>
+                  <Checkbox checked={umRejected} disabled={isAutomaticUmRejection} onCheckedChange={(v) => setUmRejected(!!v)} />
                   <div>
                     <div className="text-xs font-semibold">UM Rejected by Named Insured</div>
-                    <div className="text-xs text-muted-foreground">Shows "REJECTED BY NAMED INSURED" in UM row</div>
+                    <div className="text-xs text-muted-foreground">{isAutomaticUmRejection ? "Automatically applied for this state" : 'Shows "REJECTED BY NAMED INSURED" in UM row'}</div>
                   </div>
                 </label>
               )}
-              {rules.pip && (
+              {rules.pip && (isFloridaPipMandatory ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-md border border-border/50 bg-muted/30">
+                  <Checkbox checked disabled />
+                  <div>
+                    <div className="text-xs font-semibold">PIP Required</div>
+                    <div className="text-xs text-muted-foreground">Florida PIP is mandatory at $10,000 and cannot be waived</div>
+                  </div>
+                </div>
+              ) : (
                 <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
                   <Checkbox checked={pipWaived} onCheckedChange={(v) => setPipWaived(!!v)} />
                   <div>
@@ -6626,7 +6645,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
                     <div className="text-xs text-muted-foreground">Shows "WAIVED BY NAMED INSURED" in PIP row</div>
                   </div>
                 </label>
-              )}
+              ))}
             </div>
           </Panel>
         </div>
@@ -6636,7 +6655,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             `CERTIFICATE OF INSURANCE`,
             `Issuing Carrier: ${isKlutch ? "Klutch Insurance Company" : "Metrocars Leasing Corp (Self-Insured)"}`,
             `Certificate No.: ${form.certNumber || "—"}`,
-            `Date: ${form.certDate ? new Date(form.certDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
+            `Subscription Start Date: ${form.subscriptionStartDate ? new Date(form.subscriptionStartDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
+            `Date Issued: ${form.certDate ? new Date(form.certDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
             ``,
             `Named Operator: ${form.namedOperator || "—"}`,
             `Vehicle: ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}`,
@@ -6649,7 +6669,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             `PD: ${isKlutch ? "Per policy" : rules.pdLimit}`,
             `UM: ${umRejected ? "REJECTED" : (isKlutch ? "Per policy" : `${rules.umPP} / ${rules.umPO}`)}`,
             `UIM: ${isKlutch ? "Per policy" : (rules.uimPP || "N/A")}`,
-            `PIP: ${!rules.pip ? "N/A" : pipWaived ? "WAIVED" : (isKlutch ? "Statutory Min" : rules.pipLimit)}`,
+            `PIP: ${!rules.pip ? "N/A" : (pipWaived && !isFloridaPipMandatory) ? "WAIVED" : (isKlutch ? "Statutory Min" : rules.pipLimit)}`,
             `COL: Subject to Member Agreement`,
             `COMP: Subject to Member Agreement`,
           ].join("\n")}
@@ -6674,7 +6694,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   }> = {
     MD: { biPP: "$30,000", biPO: "$60,000", pdLimit: "$15,000", umPP: "$30,000", umPO: "$60,000", uimPP: "$30,000", uimPO: "$60,000", pip: true, pipLimit: "$2,500", umRejectable: false, pipWaiverAvailable: true, pipAdditionalAvailable: true },
     VA: { biPP: "$30,000", biPO: "$60,000", pdLimit: "$20,000", umPP: "$30,000", umPO: "$60,000", uimPP: "$30,000", uimPO: "$60,000", pip: false, pipLimit: "", umRejectable: true, pipWaiverAvailable: false, pipAdditionalAvailable: false },
-    FL: { biPP: "$10,000", biPO: "$20,000", pdLimit: "$10,000", umPP: "$10,000", umPO: "$20,000", uimPP: "", uimPO: "", pip: true, pipLimit: "$10,000", umRejectable: false, pipWaiverAvailable: false, pipAdditionalAvailable: false, biNotMandated: true },
+    FL: { biPP: "$10,000", biPO: "$20,000", pdLimit: "$10,000", umPP: "$10,000", umPO: "$20,000", uimPP: "", uimPO: "", pip: true, pipLimit: "$10,000", umRejectable: true, pipWaiverAvailable: false, pipAdditionalAvailable: false, biNotMandated: true },
     GA: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$25,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: false, pipLimit: "", umRejectable: true, pipWaiverAvailable: false, pipAdditionalAvailable: false },
     IL: { biPP: "$25,000", biPO: "$50,000", pdLimit: "$20,000", umPP: "$25,000", umPO: "$50,000", uimPP: "$25,000", uimPO: "$50,000", pip: false, pipLimit: "", umRejectable: true, pipWaiverAvailable: false, pipAdditionalAvailable: false },
     MA: { biPP: "$20,000", biPO: "$40,000", pdLimit: "$5,000", umPP: "$20,000", umPO: "$40,000", uimPP: "$20,000", uimPO: "$40,000", pip: true, pipLimit: "$8,000", umRejectable: false, pipWaiverAvailable: false, pipAdditionalAvailable: false },
@@ -6687,6 +6707,12 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const [state, setState] = React.useState(initialState || "MD");
   const [pipWaived, setPipWaived] = React.useState(false);
   const [umRejected, setUmRejected] = React.useState(false);
+  const isAutomaticUmRejection = state === "FL" || state === "GA";
+  const isFloridaPipMandatory = state === "FL";
+  React.useEffect(() => {
+    setUmRejected(isAutomaticUmRejection);
+    if (isFloridaPipMandatory) setPipWaived(false);
+  }, [isAutomaticUmRejection, isFloridaPipMandatory]);
   const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
   const [form, setForm] = React.useState({
     policyNumber: "",
@@ -6787,7 +6813,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     if (!weekly || !weeks) return null;
     const base = weekly * weeks;
     const weights: Record<string, number> = { bi: 30, pd: 12, coll: 25, comp: 13, pip: 8, um: 7, uim: 5 };
-    if (!rules.pip || pipWaived) weights.pip = 0;
+    if (!rules.pip || (pipWaived && !isFloridaPipMandatory)) weights.pip = 0;
     if (umRejected) { weights.um = 0; weights.uim = 0; }
     const totalW = Object.values(weights).reduce((a, b) => a + b, 0);
     if (!totalW) return null;
@@ -6972,9 +6998,9 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     covRow("Comprehensive Coverage", "Non-collision losses including theft, fire, and weather", "Actual cash value", form.compDeductible || "$1,000", calcPremium("comp"));
 
     if (rules.pip) {
-      const pipPrem = pipWaived ? null : calcPremium("pip");
-      const pipLimits = pipWaived ? "Waived" : `${rules.pipLimit} per person`;
-      covRow("Personal Injury Protection (PIP)", pipWaived ? "Waived per Maryland Transportation Article" : "", pipLimits, "Not applicable", pipPrem);
+      const pipPrem = (pipWaived && !isFloridaPipMandatory) ? null : calcPremium("pip");
+      const pipLimits = (pipWaived && !isFloridaPipMandatory) ? "Waived" : `${rules.pipLimit} per person`;
+      covRow("Personal Injury Protection (PIP)", (pipWaived && !isFloridaPipMandatory) ? "Waived per Maryland Transportation Article" : "", pipLimits, "Not applicable", pipPrem);
     }
 
     sectionHeader("Coverage if you're hit by an uninsured or underinsured driver");
