@@ -294,7 +294,7 @@
   - [x] Dec Page: mainW increased to 67%, column positions adjusted, sidebar contact info fixed, row spacing improved
 - [x] Denial letter: top-level field renamed "Letter Date" and auto-populated with today's date; dol template field remains for actual date of loss
   - [x] All Whip letters: addWhipLetterhead reformatted to clean letterhead only (logo + company info + rule); title/subtitle blocks removed; body font 9→10pt across all letters
-- [ ] Klutch COI logo: darken the PNG programmatically (multiply/darken filter) instead of text overlay
+- [x] Klutch COI logo: darken the PNG programmatically (multiply/darken filter) instead of text overlay
 - [ ] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
 - [ ] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
 - [ ] Slice 7: enable reminder cron — due-date overdue/urgent notifications
