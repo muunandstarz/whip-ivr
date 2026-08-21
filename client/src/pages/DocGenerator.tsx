@@ -85,7 +85,6 @@ type DocGenTab =
   | "coi-whip"
   | "coi-klutch"
   | "dec-page-whip"
-  | "dec-page-klutch"
   | "klutch-policy-declarations"
   | "dv-calculator";
 
@@ -110,7 +109,6 @@ const NAV_GROUPS: NavGroup[] = [
 
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
       { id: "coi-whip", label: "Certificate of Coverage", icon: Shield },
-      { id: "dec-page-klutch", label: "Klutch Dec Page", icon: FileText },
       { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText },
     ],
   },
@@ -7437,7 +7435,7 @@ export default function DocGenerator() {
   const initialTab = (() => {
     const params = new URLSearchParams(search);
     const t = params.get("tab");
-    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dec-page-klutch","dv-calculator"];
+    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dv-calculator"];
     return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
   })();
   const initialMemberState = (() => {
@@ -7532,7 +7530,6 @@ export default function DocGenerator() {
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "dec-page-whip": return <KlutchDecPageTab initialState={initialMemberState} />;
-      case "dec-page-klutch": return <KlutchDecPageTab initialState={initialMemberState} />;
       case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;
       case "dv-calculator": return <DVCalculatorTab />;
       default: return null;

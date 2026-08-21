@@ -515,3 +515,7 @@
 - [x] Apply Metrocars Leasing Corp. to all date-of-loss values before July 1, 2026
 - [x] Replace insurer helper copy so it references the July 1, 2026 DOL cutoff rather than April coverage-start dates
 - [x] Test the June 30 and July 1, 2026 boundary behavior in all relevant document forms
+
+## Klutch Navigation
+- [x] Remove the unfinished Klutch Dec Page from active Document Generator navigation
+- [x] Preserve and verify the approved Klutch Policy Declarations entry
