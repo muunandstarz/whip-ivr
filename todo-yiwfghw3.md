@@ -295,9 +295,9 @@
 - [x] Denial letter: top-level field renamed "Letter Date" and auto-populated with today's date; dol template field remains for actual date of loss
   - [x] All Whip letters: addWhipLetterhead reformatted to clean letterhead only (logo + company info + rule); title/subtitle blocks removed; body font 9→10pt across all letters
 - [x] Klutch COI logo: darken the PNG programmatically (multiply/darken filter) instead of text overlay
-- [ ] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
-- [ ] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
-- [ ] Slice 7: enable reminder cron — due-date overdue/urgent notifications
+- [x] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
+- [x] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
+- [x] Slice 7: enable reminder cron — due-date overdue/urgent notifications
 - [ ] Slice 7: live acceptance test — send test email to claims@, post to #claims-mail Slack, verify ingest + classify + assign + UI resolve
 - [x] Slice 7 correction: switch Gmail ingest from service account to standard OAuth (personal inbox)
 - [x] Slice 7 correction: remove is:unread filter — query all mail to:claims@ instead
@@ -361,7 +361,7 @@
 - [x] Gmail ingest: add listReadMessages to GmailFetchFn interface and real implementation
 - [x] Dec Page: verified handleDownload matches approved format; states MD/VA/FL/GA/IL/MA/PA/TX only confirmed
 - [x] Slack backfill: attempted recovery of 139 Slack files into production S3; 131 restored and 8 permanently unavailable because their Slack source files were deleted
-- [ ] Verify file proxy works after backfill (open 3-4 items in admin Mailroom drawer, click Open)
+- [x] Verify file proxy works after backfill (four recovered Slack PDFs returned HTTP 200 with application/pdf through immutable file-ID proxy URLs)
 - [ ] Trigger Now on deployed site after publishing to ingest Gmail + Slack + classify items
 
 ## Session 2026-08-11 Mailroom Repairs
@@ -419,10 +419,10 @@
 - [x] Detect medical bill, provider invoice, and medical demand mail from Claims Mail and eFax
 - [x] Route medical bills and all demands exclusively to Jayla
 - [x] Add Bills queue visibility in Admin Mailroom and Jayla’s myMailroom
-- [ ] Classify and place recoverable existing medical bill records into the Bills queue
+- [x] Classify and place recoverable existing medical bill records into the Bills queue (21 active records routed to Jayla)
 
 ## Session 2026-08-17 Bills Backfill and Record Selection
-- [ ] Retroactively classify recoverable existing medical bills and route confirmed bills to Jayla
+- [x] Retroactively classify recoverable existing medical bills and route confirmed bills to Jayla (21 active records confirmed)
 - [x] Move four confirmed legacy medical-provider bills into the Bills queue and assign them to Jayla
 - [x] Move 17 additional active records with explicit medical-billing evidence into the Bills queue and assign them to Jayla
 - [x] Repair Mailroom selection checkboxes so clicks toggle selection without opening the record drawer
@@ -456,7 +456,7 @@
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
 - [x] Recover missing attachment rows through Slack and Gmail recovery paths
 - [x] Re-run AI classification for unresolved items missing summaries or descriptive titles
-- [ ] Verify the record drawer displays the stored email body and generated summary
+- [x] Display the generated Mailroom summary in the record detail; verified alongside the captured email body on a live representative record
 - [x] Extend the Mailroom search bar to find text in subject, summary, email body, and extracted document content
 - [ ] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
 
