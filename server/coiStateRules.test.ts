@@ -5,10 +5,10 @@ import path from 'node:path';
 describe('COI and declarations state-specific coverage rules', () => {
   const source = fs.readFileSync(path.resolve(process.cwd(), 'client/src/pages/DocGenerator.tsx'), 'utf8');
 
-  it('lists Metrocars as additional insured and marks applicable liability and physical-damage coverages', () => {
-    expect(source).toContain('METROCARS LEASING CORP (ADDITIONAL INSURED)');
-    expect(source).toContain('RENTER / NAMED OPERATOR: ${form.namedOperator || "—"}');
-    expect(source).toContain('const additionalInsuredCoverageCodes = new Set(["BI", "PD", "COL", "COMP"])');
+  it('lists Metrocars as named insured, emphasizes the renter as additional named insured, and marks applicable coverages', () => {
+    expect(source).toContain('"NAMED INSURED"');
+    expect(source).toContain('"ADDITIONAL NAMED INSURED / RENTER"');
+    expect(source).toContain('state === "MD" ? ["BI", "PD", "UM", "UIM", "COL", "COMP"]');
     expect(source).toContain('additionalInsuredCoverageCodes.has(row.insr) ? "[X]" : "[ ]"');
   });
 

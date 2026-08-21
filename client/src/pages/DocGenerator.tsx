@@ -6261,19 +6261,22 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     // Metrocars Leasing Corp is shown as additional insured and the member is shown as renter/named operator.
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
-    const insuredH = 22;
+    const insuredH = 24;
     doc.rect(lm, y, textW, insuredH);
-    // Left cell: insured name
+    // Left cell: Metrocars remains the named insured; the renter is emphasized as additional named insured.
     doc.line(lm + textW * 0.5, y, lm + textW * 0.5, y + insuredH);
-    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("ADDITIONAL INSURED / RENTER", lm + 2, y + 3.5);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-    doc.text("METROCARS LEASING CORP (ADDITIONAL INSURED)", lm + 2, y + 8);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); doc.setTextColor(0, 0, 0);
-    doc.text(`RENTER / NAMED OPERATOR: ${form.namedOperator || "—"}`, lm + 2, y + 12.5);
+    doc.setFontSize(6.1); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
+    doc.text("NAMED INSURED", lm + 2, y + 3.2);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+    doc.text("Metrocars Leasing Corp", lm + 2, y + 6.6);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
+    doc.text("ADDITIONAL NAMED INSURED / RENTER", lm + 2, y + 10.2);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9.6); doc.setTextColor(0, 0, 0);
+    doc.text(form.namedOperator || "—", lm + 2, y + 14.7);
     const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
-    doc.text(`Vehicle: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 17);
-    if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 21);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); doc.setTextColor(0, 0, 0);
+    doc.text(`RENTAL VEHICLE: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 18.6);
+    if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 22);
 
     // Right cell: coverage period + state
     const rx = lm + textW * 0.5 + 2;
@@ -6385,8 +6388,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
         limits: "SUBJECT TO MEMBER AGREEMENT\nINCLUDED",
       },
     ];
-    // Liability and physical-damage coverage extends to Metrocars Leasing Corp as additional insured.
-    const additionalInsuredCoverageCodes = new Set(["BI", "PD", "COL", "COMP"]);
+    // Metrocars is additional insured for liability and physical damage. Maryland mandates UM/UIM,
+    // so those protections also extend to Metrocars as additional insured on Maryland certificates.
+    const additionalInsuredCoverageCodes = new Set(
+      state === "MD" ? ["BI", "PD", "UM", "UIM", "COL", "COMP"] : ["BI", "PD", "COL", "COMP"]
+    );
 
     for (const row of coverageRows) {
       const lines = row.limits.split("\n");

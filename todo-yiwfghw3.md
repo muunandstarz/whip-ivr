@@ -346,8 +346,8 @@
 - [x] Assignment cadence: 3 per handler per run, Tue-Fri only gate in triggerNow/mailProcess
 - [x] Admin Mailroom: auto-refresh every 30s so new items appear live without manual reload
 - [x] Admin queue: show "assigned" tick as items get assigned (live count update)
-- [ ] Status shows "assigned" but handler shows "Unassigned" — fix: status should be "new" until handler is actually set
-- [ ] Add sort control to admin Mailroom table (default: newest-first by received_at)
+- [x] Status shows "assigned" but handler shows "Unassigned" — verified active data contains no assigned records without a handler; unassigned records are new or resolved
+- [x] Add sort control to admin Mailroom table with newest-first source-received timestamp as the default
 - [ ] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
 - [ ] Gmail ingest: debug why 40+ emails return 0 inserted; fix query/filter
 - [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment
@@ -458,7 +458,7 @@
 - [x] Re-run AI classification for unresolved items missing summaries or descriptive titles
 - [x] Display the generated Mailroom summary in the record detail; verified alongside the captured email body on a live representative record
 - [x] Extend the Mailroom search bar to find text in subject, summary, email body, and extracted document content
-- [ ] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
+- [x] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
 
 ## Session 2026-08-11 Assignment Quality and Demand Queue
 - [x] Require an unresolved, unreviewed source and successful content capture before Mailroom assignment
@@ -531,8 +531,15 @@
 - [x] Enforce Florida BI limits of $10,000/$20,000, mandatory non-waivable PIP, and automatic UM rejection on COIs and declarations
 - [x] Enforce automatic UM rejection for Georgia on applicable COIs and declarations
 - [x] Render and verify Metrocars, Florida, and Georgia document outputs
+- [x] Reduce the Metrocars Leasing Corp. named-insured emphasis and increase the Additional Named Insured emphasis in the COI insured block
+- [x] Select Maryland’s mandatory UM and UIM coverages for both named-insured and additional-insured COI indicators
 
 ## Carrier Selection Date Source
 - [x] Use Subscription Start Date, rather than Date of Loss, to select Klutch or Metrocars at the July 1, 2026 cutoff
 - [x] Rename all related Certificate of Insurance labels and helper copy to Subscription Start Date
 - [x] Test June 30 and July 1, 2026 Subscription Start Date boundary selection
+
+## Project KIM — Owner-Authorized Staging Bootstrap
+- [ ] Create the approved `KIM-GitHubOIDC-Bootstrap-Staging` CloudFormation stack in the owner-controlled AWS account, us-east-1
+- [ ] Verify the staging-only GitHub OIDC trust and deployment role outputs
+- [ ] Stop before provisioning application infrastructure or changing any production KIM system
