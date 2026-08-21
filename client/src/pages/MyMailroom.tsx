@@ -138,6 +138,9 @@ function MailDrawer({
   const [rerouteHandlerId, setRerouteHandlerId] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
+  const [forwardRecipient, setForwardRecipient] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
 
   const { data, isLoading, refetch } = trpc.mail.getItem.useQuery(
     { id: itemId! },
@@ -171,6 +174,19 @@ function MailDrawer({
   });
   const reminderMut = trpc.mail.setReminder.useMutation({
     onSuccess: () => { toast.success("Reminder set"); setShowReminderInput(false); setReminderDate(""); },
+    onError: (e) => toast.error(e.message),
+  });
+  const forwardMut = trpc.mail.forwardToClaim.useMutation({
+    onSuccess: (result) => {
+      const skipped = result.skippedAttachments?.length
+        ? ` ${result.skippedAttachments.length} attachment(s) could not be included.`
+        : "";
+      toast.success(`Forwarded with ${result.attachmentCount} attachment(s).${skipped}`);
+      setShowForwardDialog(false);
+      setForwardRecipient("");
+      setForwardNote("");
+      refetch();
+    },
     onError: (e) => toast.error(e.message),
   });
 
@@ -317,6 +333,10 @@ function MailDrawer({
                   <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
                     onClick={() => setShowReminderInput(true)}>
                     <Bell className="w-3.5 h-3.5 text-blue-600" /> Set Reminder
+                  </Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                    onClick={() => setShowForwardDialog(true)}>
+                    <Mail className="w-3.5 h-3.5 text-primary" /> Forward to Claim
                   </Button>
                 </div>
                 {showReminderInput && (
@@ -465,6 +485,34 @@ function MailDrawer({
                 setShowRerouteDialog(false);
               }}>
               Reroute
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showForwardDialog} onOpenChange={setShowForwardDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Forward to Claim</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Confirm the recipient before sending the original message and recoverable attachments. The forwarding action will be recorded in this Mailroom item.
+            </p>
+            <div>
+              <Label className="text-xs">Claim recipient email</Label>
+              <Input className="mt-1" type="email" placeholder="claim recipient@example.com" value={forwardRecipient}
+                onChange={e => setForwardRecipient(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Forwarding note (optional)</Label>
+              <Textarea className="mt-1 h-20" placeholder="Context for the claim file…" value={forwardNote}
+                onChange={e => setForwardNote(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowForwardDialog(false)}>Cancel</Button>
+            <Button disabled={!/^\S+@\S+\.\S+$/.test(forwardRecipient) || forwardMut.isPending}
+              onClick={() => item && forwardMut.mutate({ itemId: item.id, recipient: forwardRecipient.trim(), note: forwardNote.trim() || undefined })}>
+              {forwardMut.isPending ? "Forwarding…" : "Confirm & Forward"}
             </Button>
           </DialogFooter>
         </DialogContent>

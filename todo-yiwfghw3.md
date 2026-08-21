@@ -505,3 +505,13 @@
 - [x] Remove statute-of-limitations language from every Document Generator letter output
 - [x] Correct Coverage Position Letter field mapping so the driver field cannot use the handler/adjuster name
 - [x] Render and verify the corrected Coverage Position Letter with distinct driver and handler values
+
+## Handler Mailroom Forwarding
+- [x] Restore visible recipient-confirmed Forward to Claim controls for assigned handlers in personal and full item Mailroom views
+- [x] Verify assigned handlers can forward while unassigned handlers remain blocked and every forwarding event remains audited
+
+## Insurer Date-of-Loss Rule
+- [x] Apply Klutch Insurance Company only to date-of-loss values on or after July 1, 2026
+- [x] Apply Metrocars Leasing Corp. to all date-of-loss values before July 1, 2026
+- [x] Replace insurer helper copy so it references the July 1, 2026 DOL cutoff rather than April coverage-start dates
+- [x] Test the June 30 and July 1, 2026 boundary behavior in all relevant document forms

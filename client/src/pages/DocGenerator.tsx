@@ -5991,8 +5991,9 @@ const COI_STATE_RULES: Record<string, {
 
 const COI_STATES = ["MD","VA","FL","GA","IL","MA","PA","TX"];
 
+const KLUTCH_DATE_OF_LOSS_CUTOFF = "2026-07-01";
+
 function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
-  const [insurer, setInsurer] = React.useState<"klutch" | "metrocars">("klutch");
   const [state, setState] = React.useState(initialState || "MD");
   const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
   const [umRejected, setUmRejected] = React.useState(false);
@@ -6050,6 +6051,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   };
 
   const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
+  // Carrier of record is determined by the loss date: Klutch from July 1, 2026 forward; Metrocars before that date.
+  const insurer: "klutch" | "metrocars" = form.dateOfLoss >= KLUTCH_DATE_OF_LOSS_CUTOFF ? "klutch" : "metrocars";
   const isKlutch = insurer === "klutch";
 
   // Auto-generate cert number on mount and when insurer/state changes
@@ -6497,37 +6500,35 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
           <span className="text-sm font-semibold text-foreground">Issuing Carrier</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setInsurer("klutch")}
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${insurer === "klutch" ? "border-[#171b31] bg-[#171b31]/5" : "border-border hover:border-[#171b31]/40"}`}
+          <div
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left ${insurer === "klutch" ? "border-[#171b31] bg-[#171b31]/5" : "border-border"}`}
           >
             <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "klutch" ? "border-[#171b31]" : "border-border"}`}>
               {insurer === "klutch" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
             </div>
             <div>
               <div className="text-sm font-semibold text-foreground">Klutch Insurance Company</div>
-              <div className="text-xs text-muted-foreground">Coverage start date April 2026 or later</div>
+              <div className="text-xs text-muted-foreground">Date of loss July 1, 2026 or later</div>
             </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setInsurer("metrocars")}
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${insurer === "metrocars" ? "border-[#171b31] bg-[#171b31]/5" : "border-border hover:border-[#171b31]/40"}`}
+          </div>
+          <div
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left ${insurer === "metrocars" ? "border-[#171b31] bg-[#171b31]/5" : "border-border"}`}
           >
             <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "metrocars" ? "border-[#171b31]" : "border-border"}`}>
               {insurer === "metrocars" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
             </div>
             <div>
               <div className="text-sm font-semibold text-foreground">Metrocars Leasing Corp</div>
-              <div className="text-xs text-muted-foreground">Coverage start date prior to April 2026</div>
+              <div className="text-xs text-muted-foreground">Date of loss before July 1, 2026</div>
             </div>
-          </button>
+          </div>
         </div>
         <div className={`mt-2 text-xs rounded px-2 py-1 ${isKlutch ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"}`}>
-          {isKlutch
-            ? "Klutch Insurance Company — Insurer of record. Certificate issued pursuant to Maryland Transportation Article § 17-103."
-            : "Metrocars Leasing Corp — Self-insured pursuant to Maryland MVA Certificate. Use for losses occurring prior to April 2026."}
+          {!form.dateOfLoss
+            ? "Enter the Date of Loss to determine the insurer of record. Metrocars applies until a qualifying July 1, 2026 or later loss date is entered."
+            : isKlutch
+              ? "Klutch Insurance Company — Insurer of record for date-of-loss values on or after July 1, 2026."
+              : "Metrocars Leasing Corp — Insurer of record for date-of-loss values before July 1, 2026."}
         </div>
       </div>
 
@@ -6596,10 +6597,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             {stillInRentalCOI && coiCoverage.helperText && !coiCoverage.warning && (
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
             )}
-            <Grid2>
+            <Grid3>
+              <Field label="Date of Loss" id="coi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
               <Field label="Date Issued" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
               <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
-            </Grid2>
+            </Grid3>
             <Grid2>
               <Field label="Certificate Number" id="coi-certno" value={form.certNumber} onChange={set("certNumber")} placeholder={isKlutch ? "KIS0000" : `${state}000S0137XX`} />
               <Field label="Revision Number" id="coi-rev" value={form.revisionNumber} onChange={set("revisionNumber")} placeholder="e.g. 0" />

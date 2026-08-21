@@ -237,6 +237,15 @@ export const mailRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       const item = await requireItem(db, input.itemId);
+      const isAdmin = ctx.user.role === 'admin';
+      const isAssignedHandler = Boolean(ctx.user.handlerProfileId)
+        && item.assignedHandlerId === ctx.user.handlerProfileId;
+      if (!isAdmin && !isAssignedHandler) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only the assigned handler or an administrator can forward this Mailroom item.',
+        });
+      }
       const files = await db!.select().from(mailItemFiles).where(eq(mailItemFiles.itemId, input.itemId));
       const conn = await mysql.createConnection(process.env.DATABASE_URL!);
       try {
