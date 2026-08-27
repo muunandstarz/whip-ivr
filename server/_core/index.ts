@@ -175,6 +175,12 @@ async function startServer() {
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
   app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
   // ─── Claims Mail Triage jobs ─────────────────────────────────────────────────
+  // Keep the autoscaling service warm before the source-recovery callbacks. This
+  // route intentionally avoids database and third-party work so a cold start is
+  // absorbed by the once-per-minute pulse instead of a mail-processing run.
+  app.post("/api/scheduled/mailWarmup", (_req, res) => {
+    res.status(204).end();
+  });
   app.post("/api/scheduled/mailIngestGmail", mailIngestGmailHandler);
   app.post("/api/scheduled/mailIngestSlack", mailIngestSlackHandler);
   app.post("/api/scheduled/mailReminders", mailRemindersHandler);

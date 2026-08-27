@@ -221,7 +221,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
        WHERE mi.category IS NULL AND mi.status = 'new'
        GROUP BY mi.id
        ORDER BY mi.received_at ASC
-       LIMIT 8`
+       LIMIT 2`
     );
 
     const readMailContent = await createMailContentReader(conn);
@@ -312,7 +312,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
       }
     }
 
-    const contentRefresh = await refreshIncompleteMailContent(conn, 8);
+    const contentRefresh = await refreshIncompleteMailContent(conn, 2);
     res.json({ ok: true, processed, errors, total: items.length, contentRefresh });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
@@ -333,12 +333,12 @@ export async function mailIngestGmailHandler(req: Request, res: Response): Promi
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
     const gmail = buildRealGmailFetch(conn);
-    const result = await ingestGmail(conn, gmail);
-    const attachmentRecovery = await recoverStaleGmailAttachments(conn, 6);
+    const result = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 1);
+    const attachmentRecovery = await recoverStaleGmailAttachments(conn, 1);
     // This callback has an established, healthy Heartbeat delivery path. Pair a
     // small Slack batch with it so Claims Mail recovery continues even if a newly
     // created standalone callback is temporarily unavailable at the platform edge.
-    const slackIngest = await runBoundedSlackIngest(conn, 4);
+    const slackIngest = await runBoundedSlackIngest(conn, 1);
     res.json({ ok: true, ...result, attachmentRecovery, slackIngest });
   } catch (e) {
     console.error('[mailIngestGmail] error:', e);

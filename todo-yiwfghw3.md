@@ -453,7 +453,7 @@
 
 ## Session 2026-08-11 Published Mailroom Verification
 - [x] Verify the published Trigger Now response is valid JSON and its live run completes
-- [ ] Eliminate the published Trigger Now Service Unavailable response and return a prompt structured result
+- [x] Eliminate the published Trigger Now Service Unavailable response and return a prompt structured result
 - [x] Move full Claims Mail polling and legacy attachment recovery into bounded scheduled Mailroom work
 - [ ] Run bounded Slack intake through the proven Gmail Heartbeat callback and retire the failing standalone Slack callback
 - [ ] Transition an already-ingested Slack item to resolved when it is subsequently marked reviewed in Claims Mail
@@ -474,6 +474,7 @@
 ## Mailroom Content Refresh Eligibility Repair
 - [ ] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
 - [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
+- [ ] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
 
 ## Session 2026-08-11 Mailroom Pagination
 - [x] Make the displayed result range update when the rows-per-page selection changes

@@ -823,6 +823,7 @@ export const mailRouter = router({
     const sessionToken = parseCookie(ctx.req.headers.cookie ?? '')[COOKIE_NAME] ?? '';
     const results: Record<string, string> = {};
     const jobs = [
+      { name: 'mail-warmup',       cron: '0 * * * * *',   path: '/api/scheduled/mailWarmup',      description: 'Keep the Mailroom callback service warm every minute' },
       { name: 'mail-ingest-gmail', cron: '0 */5 * * * *', path: '/api/scheduled/mailIngestGmail', description: 'Poll claims@ Gmail every 5 min' },
       { name: 'mail-process',      cron: '0 2/5 * * * *', path: '/api/scheduled/mailProcess',      description: 'Classify + assign new mail_items every 5 min' },
       { name: 'mail-reminders',    cron: '0 0 * * * *',   path: '/api/scheduled/mailReminders',    description: 'Send overdue/reminder DMs every hour' },
@@ -844,7 +845,7 @@ export const mailRouter = router({
     try {
       const jobs = await listHeartbeatJobs(sessionToken);
       const mailJobs = jobs.jobs.filter(j =>
-        ['mail-ingest-gmail', 'mail-ingest-slack', 'mail-process', 'mail-reminders'].includes(j.name)
+        ['mail-warmup', 'mail-ingest-gmail', 'mail-ingest-slack', 'mail-process', 'mail-reminders'].includes(j.name)
       );
       return { ok: true, jobs: mailJobs };
     } catch (e) {
