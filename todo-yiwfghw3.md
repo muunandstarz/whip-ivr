@@ -548,3 +548,13 @@
 - [ ] Create the approved `KIM-GitHubOIDC-Bootstrap-Staging` CloudFormation stack in the owner-controlled AWS account, us-east-1
 - [ ] Verify the staging-only GitHub OIDC trust and deployment role outputs
 - [ ] Stop before provisioning application infrastructure or changing any production KIM system
+
+## Claims Workspace — Handler Productivity Desk
+- [x] Add a handler-facing Claims Workspace route and sidebar entry without replacing the existing application navigation
+- [x] Create user-scoped note, quick-note, task, and accident-workspace persistence with autosave support
+- [x] Build the Notes workspace with rich text, checklists, tags, pinned/archive states, search, and task conversion
+- [x] Build the personal Tasks & Alerts workspace with priority, due date/time, reminder, snooze, recurrence, and completed-history views
+- [x] Build the Accident Workspace with editable diagrams, top-down vehicle objects, drawing, road controls, versions, and snapshot export
+- [x] Add optional loss-location Map mode with draggable/rotatable vehicle overlays
+- [x] Hand off workspace facts and scene analysis to the existing Liability Guide for documented liability and first-party recoverability reasoning
+- [x] Add a persistent minimized Claims Workspace panel with quick note, new task, today’s tasks, and recent notes

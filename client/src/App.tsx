@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { ImpersonationProvider } from "./contexts/ImpersonationContext";
 import { SoftphoneProvider } from "./contexts/SoftphoneContext";
 import FloatingSoftphone from "./components/FloatingSoftphone";
+import FloatingClaimsWorkspace from "./components/FloatingClaimsWorkspace";
 import Dashboard from "./pages/Dashboard";
 import IntakeRecords from "./pages/IntakeRecords";
 import IntakeDetail from "./pages/IntakeDetail";
@@ -37,6 +38,7 @@ import ReferenceHub from "./pages/kb/ReferenceHub";
 import Glossary from "./pages/kb/Glossary";
 import ResourcesLinks from "./pages/kb/ResourcesLinks";
 import VehicleAnatomy from "./pages/kb/VehicleAnatomy";
+import ClaimsWorkspace from "./pages/ClaimsWorkspace";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 
 function Router() {
@@ -54,6 +56,7 @@ function Router() {
       <Route path="/softphone" component={Softphone} />
       <Route path="/ivr-setup" component={IVRSetup} />
       <Route path="/my-dashboard" component={HandlerDashboard} />
+      <Route path="/claims-workspace" component={ClaimsWorkspace} />
       <Route path="/users" component={UserManagement} />
       <Route path="/settings" component={Settings} />
       <Route path="/callback-log" component={CallbackLog} />
@@ -89,6 +92,7 @@ function AppInner() {
           survives all page navigations. The Aircall SDK iframe is mounted
           once here and never destroyed. */}
       <FloatingSoftphone />
+      <FloatingClaimsWorkspace />
     </>
   );
 }

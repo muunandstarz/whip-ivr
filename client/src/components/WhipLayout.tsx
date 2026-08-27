@@ -34,7 +34,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { FileText } from "lucide-react";
-import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox } from "lucide-react";
+import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen } from "lucide-react";
 import { Database, Library, Link2 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -77,6 +77,7 @@ const KB_NAV_EXTRA = [
 // Order: My Dashboard → Intake Records → Loss Intake (if authorized) → Softphone
 const HANDLER_NAV_ITEMS_BASE = [
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
+  { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-mailroom", label: "myMailroom", icon: Inbox },
@@ -157,9 +158,9 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const showLossIntake =
     isAdmin ||
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
-  // Order: My Dashboard (0) → Intake Records (1) → Loss Intake (if authorized) → Softphone (2)
+  // Order: My Dashboard (0) → Claims Workspace (1) → Intake Records (2) → Loss Intake (if authorized) → Softphone (3)
   const handlerNavItems = showLossIntake
-    ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[2], HANDLER_NAV_ITEMS_BASE[3]]
+    ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], HANDLER_NAV_ITEMS_BASE[2], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[3], HANDLER_NAV_ITEMS_BASE[4]]
     : HANDLER_NAV_ITEMS_BASE;
   const navItems: { href: string; label: string; icon: React.ElementType }[] =
     isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems;

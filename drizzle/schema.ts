@@ -533,6 +533,64 @@ export const docgenSharedTemplates = mysqlTable("docgen_shared_templates", {
 });
 export type DocgenSharedTemplate = typeof docgenSharedTemplates.$inferSelect;
 
+// ─── Claims Workspace: Personal Adjuster Desk ─────────────────────────────────
+// These records deliberately remain user-scoped working material. They do not
+// represent claim-system-of-record data and never write back to Snapsheet.
+export const claimsWorkspaceNotes = mysqlTable("claims_workspace_notes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  title: varchar("title", { length: 256 }).notNull(),
+  content: text("content").notNull(),
+  tags: json("tags"),
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ClaimsWorkspaceNote = typeof claimsWorkspaceNotes.$inferSelect;
+
+export const claimsWorkspaceQuickNotes = mysqlTable("claims_workspace_quick_notes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  content: varchar("content", { length: 1000 }).notNull(),
+  status: mysqlEnum("status", ["active", "archived", "converted"]).default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ClaimsWorkspaceQuickNote = typeof claimsWorkspaceQuickNotes.$inferSelect;
+
+export const claimsWorkspaceTasks = mysqlTable("claims_workspace_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  title: varchar("title", { length: 256 }).notNull(),
+  details: text("details"),
+  priority: mysqlEnum("priority", ["normal", "high", "urgent"]).default("normal").notNull(),
+  status: mysqlEnum("status", ["active", "completed", "archived"]).default("active").notNull(),
+  dueAt: timestamp("due_at"),
+  remindAt: timestamp("remind_at"),
+  repeatRule: varchar("repeat_rule", { length: 32 }).default("none").notNull(),
+  sourceNoteId: int("source_note_id"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ClaimsWorkspaceTask = typeof claimsWorkspaceTasks.$inferSelect;
+
+export const claimsWorkspaceScenes = mysqlTable("claims_workspace_scenes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  title: varchar("title", { length: 256 }).notNull(),
+  versionLabel: varchar("version_label", { length: 128 }).default("My Analysis").notNull(),
+  state: varchar("state", { length: 8 }),
+  lossLocation: varchar("loss_location", { length: 512 }),
+  roadLayout: varchar("road_layout", { length: 32 }).default("four_way").notNull(),
+  sceneData: json("scene_data").notNull(),
+  analysisNotes: text("analysis_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ClaimsWorkspaceScene = typeof claimsWorkspaceScenes.$inferSelect;
+
 // ─── Mail / Fax Bot ────────────────────────────────────────────────────────────
 
 /** Global bot configuration (single row, id=1) */
