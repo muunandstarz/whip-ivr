@@ -14,6 +14,13 @@ const CATEGORY_TITLE_MAP: Record<string, string> = {
   other_or_unclear: 'Claims Correspondence',
 };
 
+export const PLACEHOLDER_SUMMARY_SQL_PATTERN = '(attachment.*(content|contents).*(not provided|not available)|only (a |the )?(generic )?attachment filename|only filename|no attachment content|insufficient information)';
+export const PLACEHOLDER_SUMMARY_PATTERN = new RegExp(PLACEHOLDER_SUMMARY_SQL_PATTERN, 'i');
+
+export function isPlaceholderMailSummary(summary: string | null | undefined): boolean {
+  return PLACEHOLDER_SUMMARY_PATTERN.test(String(summary ?? ''));
+}
+
 export interface MailContentFile {
   contentType: string;
   storageKey: string;
@@ -226,9 +233,10 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
          OR COALESCE(mi.subject, '') = ''
          OR mi.subject = '(no subject)'
          OR mi.subject REGEXP '^(Claims Mail|FAX)[_ ]'
+         OR LOWER(COALESCE(mi.summary_note, '')) REGEXP '${PLACEHOLDER_SUMMARY_SQL_PATTERN}'
        )
      GROUP BY mi.id
-     ORDER BY mi.received_at ASC
+     ORDER BY mi.received_at DESC
      LIMIT ${batchLimit}`,
   );
 
