@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import mysql from 'mysql2/promise';
 import type { Connection } from 'mysql2/promise';
-import { ingestGmail } from './ingestGmail.js';
+import { buildRealGmailFetch, ingestGmail } from './ingestGmail.js';
 import type { GmailFetchFn } from './ingestGmail.js';
 import { handleSlackFileEvent } from './ingestSlack.js';
 import type { SlackFetchFn } from './ingestSlack.js';
@@ -186,6 +186,24 @@ describe('ingestGmail() — mocked HTTP', () => {
     expect(row.body_text).toContain('Carrier follow-up');
     expect(row.body_text).toContain('CLM-HTML-001');
     await conn.execute('DELETE FROM mail_items WHERE external_id=?', [htmlId]);
+  });
+
+  it('G6: requests a bounded unread claims-mail page for responsive manual runs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ messages: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const gmail = buildRealGmailFetch(conn);
+      await gmail.listMessages('mock-access-token');
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('maxResults=25'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer mock-access-token' } }),
+      );
+      expect(fetchMock.mock.calls[0][0]).toContain(encodeURIComponent('to:claims@drivewhip.com is:unread -label:mailroom-done'));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

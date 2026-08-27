@@ -407,7 +407,9 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
 
     async listMessages(token) {
       const q = encodeURIComponent(CLAIMS_QUERY);
-      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=500`, {
+      // A bounded page keeps manual Trigger Now responsive; the scheduled ingest
+      // job continues through the remaining unread claims mail on later passes.
+      const res = await fetch(`${GMAIL_BASE}/messages?q=${q}&maxResults=25`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();

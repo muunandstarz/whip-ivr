@@ -848,8 +848,9 @@ export const mailRouter = router({
         const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
         const gmail = buildRealGmailFetch(conn);
         results.ingest = await ingestGmail(conn, gmail);
-        const { recoverStaleGmailAttachments } = await import('../mail/gmailAttachmentRecovery.js');
-        results.gmailAttachmentRecovery = await recoverStaleGmailAttachments(conn, 30);
+        // Attachment health checks download and inspect source files. They run in
+        // the bounded scheduled ingest job so a manual request can return promptly.
+        results.gmailAttachmentRecovery = { deferred: true, maxPerScheduledRun: 30 };
       } catch (ingestErr) {
         results.ingest = { skipped: true, reason: String(ingestErr) };
       }
@@ -877,7 +878,8 @@ export const mailRouter = router({
           const allReviewed = Array.from(new Set([...REVIEWED_EMOJIS, reviewedEmoji]));
           const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
           const slackFetch = buildRealSlackFetch(slackToken);
-          let inserted = 0, skipped = 0, resolved = 0;
+          let inserted = 0, skipped = 0, resolved = 0, deferredAttachmentRecovery = 0;
+          let attachmentRecoveriesRemaining = 6;
           const errors: string[] = [];
           let totalFiles = 0;
 
@@ -963,8 +965,9 @@ export const mailRouter = router({
                   );
                   resolved++;
                 }
-                if (!alreadyReviewed && Number(existing.file_count ?? 0) === 0) {
+                if (!alreadyReviewed && Number(existing.file_count ?? 0) === 0 && attachmentRecoveriesRemaining > 0) {
                   try {
+                    attachmentRecoveriesRemaining--;
                     const hydrated = await slackFetch.getFileInfo(file.id);
                     const downloadUrl = file.url_private_download ?? hydrated?.urlPrivateDownload;
                     if (!downloadUrl) throw new Error('Slack did not provide a download URL');
@@ -983,6 +986,8 @@ export const mailRouter = router({
                   } catch (recoveryError) {
                     errors.push(`attachment recovery ${file.id}: ${String(recoveryError)}`);
                   }
+                } else if (!alreadyReviewed && Number(existing.file_count ?? 0) === 0) {
+                  deferredAttachmentRecovery++;
                 }
                 skipped++;
                 continue;
@@ -1020,7 +1025,15 @@ export const mailRouter = router({
               }
             }
           }
-          results.slackIngest = { inserted, skipped, resolved, errors: errors.slice(0, 5), total: totalFiles };
+          results.slackIngest = {
+            inserted,
+            skipped,
+            resolved,
+            total: totalFiles,
+            attachmentRecoveriesAttempted: 6 - attachmentRecoveriesRemaining,
+            deferredAttachmentRecovery,
+            errors: errors.slice(0, 5),
+          };
         }
       } catch (slackErr) {
         results.slackIngest = { skipped: true, reason: String(slackErr) };
@@ -1042,8 +1055,8 @@ export const mailRouter = router({
 
       const BATCH_PER_HANDLER = 3;
 
-      // Bound synchronous LLM work so a manual run returns promptly; the next
-      // five-minute job picks up the next oldest batch.
+      // Bound synchronous content and LLM work so a manual request stays below
+      // the production request deadline. Scheduled mailProcess continues the queue.
       const [allItems] = await conn.execute<any[]>(
         `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
                 mi.slack_message_ts, mi.slack_channel_id,
@@ -1052,7 +1065,7 @@ export const mailRouter = router({
          FROM mail_items mi
          LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
          WHERE mi.category IS NULL AND mi.status = 'new'
-         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 24`
+         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 6`
       );
 
       let processed = 0, errors = 0, skippedDayGate = 0;
@@ -1164,10 +1177,9 @@ export const mailRouter = router({
         } catch { errors++; }
       }
       results.process = { processed, errors, total: allItems.length, skippedDayGate, handlerCounts: handlerAssignedCount };
-      // Existing items may pre-date content summaries or have recovered attachments.
-      // Enrich a bounded batch without changing their existing routing decisions.
-      const { refreshIncompleteMailContent } = await import('../mail/contentRefresh.js');
-      results.contentRefresh = await refreshIncompleteMailContent(conn, 50);
+      // Existing item enrichment can involve source downloads, PDF parsing, and LLM
+      // calls. It is intentionally deferred to the bounded scheduled mailProcess job.
+      results.contentRefresh = { deferred: true, maxPerScheduledRun: 25 };
     } finally {
       await conn.end();
     }
