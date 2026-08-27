@@ -454,6 +454,7 @@
 ## Session 2026-08-11 Published Mailroom Verification
 - [ ] Verify the published Trigger Now response is valid JSON and its live run completes
 - [ ] Eliminate the published Trigger Now Service Unavailable response and return a prompt structured result
+- [ ] Move full Claims Mail polling and legacy attachment recovery into bounded scheduled Mailroom work
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
 - [x] Recover missing attachment rows through Slack and Gmail recovery paths
 - [x] Re-run AI classification for unresolved items missing summaries or descriptive titles

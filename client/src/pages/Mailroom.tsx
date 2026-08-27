@@ -977,7 +977,10 @@ function AdminMailSetup() {
     onError: (e) => toast.error(e.message),
   });
   const triggerNow = trpc.mail.triggerNow.useMutation({
-    onSuccess: (data) => { setTriggerResult(data); toast.success("Manual run complete"); },
+    onSuccess: (data: any) => {
+      setTriggerResult(data);
+      toast.success(data?.queued ? "Mailroom processing is active" : "Manual run complete");
+    },
     onError: (e) => toast.error(e.message),
   });
   const updateAgent = trpc.mailBot.updateAgent.useMutation({

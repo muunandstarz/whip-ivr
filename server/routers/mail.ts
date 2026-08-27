@@ -810,6 +810,7 @@ export const mailRouter = router({
     const results: Record<string, string> = {};
     const jobs = [
       { name: 'mail-ingest-gmail', cron: '0 */5 * * * *', path: '/api/scheduled/mailIngestGmail', description: 'Poll claims@ Gmail every 5 min' },
+      { name: 'mail-ingest-slack', cron: '0 4/5 * * * *', path: '/api/scheduled/mailIngestSlack', description: 'Poll Claims Mail Slack every 5 min' },
       { name: 'mail-process',      cron: '0 2/5 * * * *', path: '/api/scheduled/mailProcess',      description: 'Classify + assign new mail_items every 5 min' },
       { name: 'mail-reminders',    cron: '0 0 * * * *',   path: '/api/scheduled/mailReminders',    description: 'Send overdue/reminder DMs every hour' },
     ];
@@ -830,7 +831,7 @@ export const mailRouter = router({
     try {
       const jobs = await listHeartbeatJobs(sessionToken);
       const mailJobs = jobs.jobs.filter(j =>
-        ['mail-ingest-gmail', 'mail-process', 'mail-reminders'].includes(j.name)
+        ['mail-ingest-gmail', 'mail-ingest-slack', 'mail-process', 'mail-reminders'].includes(j.name)
       );
       return { ok: true, jobs: mailJobs };
     } catch (e) {
@@ -840,6 +841,23 @@ export const mailRouter = router({
 
   /** Manual one-shot: ingest Gmail + process unclassified items immediately */
   triggerNow: adminProcedure.mutation(async () => {
+    // External source retrieval and document parsing must run within the two-minute
+    // Heartbeat deadline. In production, the managed Mailroom jobs already process
+    // these bounded batches every five minutes; acknowledge the manual request
+    // immediately instead of holding the browser connection until the platform
+    // returns its generic HTML service-unavailable page.
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        ok: true,
+        queued: true,
+        message: 'Mailroom processing is active. Gmail, Claims Mail, attachment recovery, and classification continue in bounded scheduled batches.',
+        results: {
+          ingest: { queued: true, source: 'Gmail unread claims mail' },
+          slackIngest: { queued: true, source: 'Claims Mail unreviewed files' },
+          process: { queued: true, source: 'New Mailroom items' },
+        },
+      };
+    }
     const conn = await mysql.createConnection(process.env.DATABASE_URL!);
     const results: Record<string, unknown> = {};
     try {

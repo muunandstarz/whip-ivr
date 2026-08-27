@@ -18,6 +18,31 @@ import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
 import { buildAiSubject, buildMailSummary, createMailContentReader, parseMailContentFiles, refreshIncompleteMailContent } from './contentRefresh.js';
 import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
 import { markAssignedMailSource } from './sourceMarking.js';
+import { buildRealSlackFetch, handleSlackFileEvent } from './ingestSlack.js';
+
+type SlackBatchCandidate = { id: string; timestamp?: number; [key: string]: unknown };
+
+/**
+ * Clears historical Claims Mail from both ends of the timeline so urgent recent
+ * files do not wait behind a large archive while the oldest backlog also drains.
+ */
+export function selectBalancedSlackBatch<T extends SlackBatchCandidate>(candidates: T[], limit = 8): T[] {
+  if (limit < 1 || candidates.length === 0) return [];
+  const ordered = [...candidates].sort((a, b) => Number(a.timestamp ?? 0) - Number(b.timestamp ?? 0));
+  if (ordered.length <= limit) return ordered;
+  const oldestCount = Math.ceil(limit / 2);
+  const newestCount = limit - oldestCount;
+  const selected = [...ordered.slice(0, oldestCount), ...ordered.slice(-newestCount)];
+  return Array.from(new Map(selected.map(item => [item.id, item])).values());
+}
+
+function sharesForClaimsChannel(file: any, channelId: string): any[] {
+  return file.shares?.public?.[channelId] ?? file.shares?.private?.[channelId] ?? [];
+}
+
+function fileHasReviewedReaction(file: any, reviewedEmojis: string[]): boolean {
+  return (file.reactions ?? []).some((reaction: { name?: string }) => Boolean(reaction.name && reviewedEmojis.includes(reaction.name)));
+}
 
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
 
@@ -196,7 +221,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
        WHERE mi.category IS NULL AND mi.status = 'new'
        GROUP BY mi.id
        ORDER BY mi.received_at ASC
-       LIMIT 20`
+       LIMIT 8`
     );
 
     const readMailContent = await createMailContentReader(conn);
@@ -287,7 +312,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
       }
     }
 
-    const contentRefresh = await refreshIncompleteMailContent(conn, 25);
+    const contentRefresh = await refreshIncompleteMailContent(conn, 8);
     res.json({ ok: true, processed, errors, total: items.length, contentRefresh });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
@@ -309,11 +334,103 @@ export async function mailIngestGmailHandler(req: Request, res: Response): Promi
   try {
     const gmail = buildRealGmailFetch(conn);
     const result = await ingestGmail(conn, gmail);
-    const attachmentRecovery = await recoverStaleGmailAttachments(conn, 30);
+    const attachmentRecovery = await recoverStaleGmailAttachments(conn, 6);
     res.json({ ok: true, ...result, attachmentRecovery });
   } catch (e) {
     console.error('[mailIngestGmail] error:', e);
     res.status(500).json({ ok: false, error: String(e) });
+  } finally {
+    await conn.end();
+  }
+}
+
+// ─── mailIngestSlack ──────────────────────────────────────────────────────────
+
+/**
+ * Bounded Claims Mail pull for the scheduled worker. It enumerates the channel
+ * inventory, then downloads at most eight files (four oldest and four newest)
+ * that are new, pre-reviewed, or still missing their stored attachment. This
+ * prevents a browser-triggered request from being held open by historical files.
+ */
+export async function mailIngestSlackHandler(req: Request, res: Response): Promise<void> {
+  const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+  const result = { inserted: 0, skipped: 0, resolved: 0, totalFiles: 0, selected: 0, errors: [] as string[] };
+  try {
+    let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
+    let channelId = 'C07R60KAC2C';
+    const [[botConfig]] = await conn.execute<any[]>(
+      'SELECT slack_bot_token, claims_mail_channel_id FROM mail_bot_config LIMIT 1',
+    );
+    if (botConfig?.slack_bot_token) slackToken = botConfig.slack_bot_token;
+    if (botConfig?.claims_mail_channel_id) channelId = botConfig.claims_mail_channel_id;
+    if (!slackToken) {
+      res.status(500).json({ ok: false, error: 'Slack bot token is not configured' });
+      return;
+    }
+
+    const [[reviewedSetting]] = await conn.execute<any[]>(
+      "SELECT value FROM mail_settings WHERE `key`='reviewed_emoji'",
+    );
+    const reviewedEmojis = Array.from(new Set(['white_check_mark', 'eyes', 'heavy_check_mark', reviewedSetting?.value ?? 'white_check_mark']));
+    const [knownRows] = await conn.execute<any[]>(
+      `SELECT mi.id, mi.external_id, mi.status, COUNT(mif.id) AS file_count
+       FROM mail_items mi
+       LEFT JOIN mail_item_files mif ON mif.item_id=mi.id
+       WHERE mi.source='mail'
+       GROUP BY mi.id, mi.external_id, mi.status`,
+    );
+    const knownByFileId = new Map(knownRows.map(row => [String(row.external_id), row]));
+
+    const allFiles: any[] = [];
+    for (let page = 1; page <= 30; page++) {
+      const params = new URLSearchParams({ channel: channelId, count: '100', page: String(page), types: 'all' });
+      const response = await fetch(`https://slack.com/api/files.list?${params}`, { headers: { Authorization: `Bearer ${slackToken}` } });
+      const raw = await response.text();
+      let payload: { ok?: boolean; files?: any[]; paging?: { pages?: number } };
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        result.errors.push(`files.list page ${page} returned non-JSON HTTP ${response.status}`);
+        break;
+      }
+      if (!payload.ok) {
+        result.errors.push(`files.list page ${page} failed: ${raw.slice(0, 220)}`);
+        break;
+      }
+      allFiles.push(...(payload.files ?? []));
+      if (page >= (payload.paging?.pages ?? 1)) break;
+    }
+    result.totalFiles = allFiles.length;
+
+    const candidates = allFiles.filter(file => {
+      if (!file?.id) return false;
+      const known = knownByFileId.get(String(file.id));
+      return !known || Number(known.file_count ?? 0) === 0 || fileHasReviewedReaction(file, reviewedEmojis);
+    });
+    const work = selectBalancedSlackBatch(candidates, 8);
+    result.selected = work.length;
+    const slack = buildRealSlackFetch(slackToken);
+    for (const file of work) {
+      const shares = sharesForClaimsChannel(file, channelId);
+      const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
+      const outcome = await handleSlackFileEvent(conn, {
+        fileId: String(file.id),
+        channelId,
+        messageTs,
+        filename: file.name ?? file.title,
+        mimeType: file.mimetype,
+        urlPrivateDownload: file.url_private_download,
+        reactions: file.reactions ?? [],
+        receivedAt: file.timestamp ? new Date(Number(file.timestamp) * 1000) : undefined,
+      }, slack, { reviewedEmoji: reviewedSetting?.value ?? 'white_check_mark', reviewedEmojis, addBotMarker: false });
+      if (outcome.action === 'inserted') result.inserted++;
+      else if (outcome.action === 'pre_reviewed') result.resolved++;
+      else if (outcome.action === 'error') result.errors.push(outcome.error ?? `Unknown Slack ingest error for ${file.id}`);
+      else result.skipped++;
+    }
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error), ...result });
   } finally {
     await conn.end();
   }

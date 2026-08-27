@@ -32,6 +32,7 @@ import {
 import {
   mailRemindersHandler,
   mailProcessHandler,
+  mailIngestSlackHandler,
   mailQaWeeklyHandler,
 } from "../mail/jobs";
 import { mailIngestGmailHandler } from "../mail/jobs";
@@ -175,6 +176,7 @@ async function startServer() {
   app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
   // ─── Claims Mail Triage jobs ─────────────────────────────────────────────────
   app.post("/api/scheduled/mailIngestGmail", mailIngestGmailHandler);
+  app.post("/api/scheduled/mailIngestSlack", mailIngestSlackHandler);
   app.post("/api/scheduled/mailReminders", mailRemindersHandler);
   app.post("/api/scheduled/mailProcess", mailProcessHandler);
   app.post("/api/scheduled/mailQaWeekly", mailQaWeeklyHandler);

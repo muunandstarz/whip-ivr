@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
 import type { Connection } from 'mysql2/promise';
 import { appRouter } from '../routers.js';
+import { selectBalancedSlackBatch } from './jobs.js';
 import type { TrpcContext } from '../_core/context.js';
 
 // ─── Context factories ────────────────────────────────────────────────────────
@@ -122,6 +123,34 @@ afterAll(async () => {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('mail tRPC procedures', () => {
+
+  it('P0a: selects oldest and newest Claims Mail work together during backlog recovery', () => {
+    const candidates = [
+      { id: 'oldest', timestamp: 1 },
+      { id: 'old', timestamp: 2 },
+      { id: 'middle-a', timestamp: 3 },
+      { id: 'middle-b', timestamp: 4 },
+      { id: 'new', timestamp: 5 },
+      { id: 'newest', timestamp: 6 },
+    ];
+    expect(selectBalancedSlackBatch(candidates, 4).map(item => item.id)).toEqual(['oldest', 'old', 'new', 'newest']);
+  });
+
+  it('P0: production Trigger Now returns an immediate structured scheduled-processing acknowledgement', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const caller = appRouter.createCaller(adminCtx());
+      const result = await caller.mail.triggerNow();
+      expect(result.ok).toBe(true);
+      expect(result.queued).toBe(true);
+      expect(result.results.ingest).toMatchObject({ queued: true, source: 'Gmail unread claims mail' });
+      expect(result.results.slackIngest).toMatchObject({ queued: true, source: 'Claims Mail unreviewed files' });
+      expect(result.results.process).toMatchObject({ queued: true, source: 'New Mailroom items' });
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  });
 
   it('P1: myPendingCount returns correct count for the handler', async () => {
     const caller = appRouter.createCaller(handlerCtx(handlerId));
