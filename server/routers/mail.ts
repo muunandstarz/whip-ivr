@@ -671,9 +671,53 @@ export const mailRouter = router({
           const allReviewed = Array.from(new Set([...REVIEWED_EMOJIS, reviewedEmoji]));
           const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
           const slackFetch = buildRealSlackFetch(slackToken);
-          let inserted = 0, skipped = 0, errors: string[] = [];
+          let inserted = 0, skipped = 0, resolved = 0;
+          const errors: string[] = [];
           let totalFiles = 0;
-          // Use files.list API with pagination to get ALL files in the channel
+
+          // Load existing records once.  This avoids one database query per Slack file
+          // when inspecting a historical Claims Mail channel.
+          const [knownRows] = await conn.execute<any[]>(
+            `SELECT mi.id, mi.external_id, mi.status, COUNT(mif.id) AS file_count
+             FROM mail_items mi
+             LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
+             WHERE mi.source = 'mail'
+             GROUP BY mi.id, mi.external_id, mi.status`
+          );
+          const existingByFileId = new Map<string, any>(
+            knownRows.map(row => [String(row.external_id), row])
+          );
+
+          // One history pass supplies message reactions in batches.  The previous
+          // implementation made a reactions.get call for every historical file,
+          // causing Trigger Now to remain pending for many minutes.
+          const messagesByTs = new Map<string, { reactions: Array<{ name: string }> }>();
+          let historyCursor = '';
+          let historyPages = 0;
+          do {
+            const historyParams = new URLSearchParams({ channel: CLAIMS_MAIL_CHANNEL, limit: '100' });
+            if (historyCursor) historyParams.set('cursor', historyCursor);
+            const historyRes = await fetch(`https://slack.com/api/conversations.history?${historyParams}`, {
+              headers: { Authorization: `Bearer ${slackToken}` },
+            });
+            const historyData = await parseExternalJson(historyRes, `Slack conversations.history page ${historyPages + 1}`) as {
+              ok: boolean; messages?: Array<{ ts?: string; reactions?: Array<{ name: string }> }>;
+              response_metadata?: { next_cursor?: string };
+            };
+            if (!historyData.ok) {
+              errors.push(`conversations.history page ${historyPages + 1}: ${JSON.stringify(historyData)}`);
+              break;
+            }
+            for (const message of historyData.messages ?? []) {
+              if (message.ts) messagesByTs.set(message.ts, { reactions: message.reactions ?? [] });
+            }
+            historyCursor = historyData.response_metadata?.next_cursor?.trim() ?? '';
+            historyPages++;
+          } while (historyCursor && historyPages < 30);
+          if (historyCursor) errors.push('conversations.history stopped after 30 pages; remaining messages will be picked up on the next run');
+
+          // files.list remains the source of truth for every file, including files
+          // not represented in a normal channel-history page.
           let page = 1;
           let hasMore = true;
           while (hasMore) {
@@ -700,35 +744,20 @@ export const mailRouter = router({
               // Get message ts from file shares
               const shares = (file.shares?.public?.[CLAIMS_MAIL_CHANNEL] ?? file.shares?.private?.[CLAIMS_MAIL_CHANNEL] ?? []) as any[];
               const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
-              // Check reactions on the message
-              let reactions: Array<{ name: string }> = [];
-              if (messageTs) {
-                try {
-                  const reactParams = new URLSearchParams({ channel: CLAIMS_MAIL_CHANNEL, timestamp: messageTs, full: 'true' });
-                  const reactRes = await fetch(`https://slack.com/api/reactions.get?${reactParams}`, {
-                    headers: { Authorization: `Bearer ${slackToken}` },
-                  });
-                  const reactData = await parseExternalJson(reactRes, `Slack reactions.get ${file.id}`) as { ok: boolean; message?: { reactions?: Array<{ name: string }> } };
-                  reactions = reactData.message?.reactions ?? [];
-                } catch { /* non-fatal */ }
-              }
-              const alreadyReviewed = reactions.some(r => allReviewed.includes(r.name));
+              const reactions = messagesByTs.get(messageTs)?.reactions ?? file.reactions ?? [];
+              const alreadyReviewed = reactions.some((r: { name: string }) => allReviewed.includes(r.name));
               // Existing files remain deduped. If a prior item has since been marked reviewed,
               // preserve it in history as resolved instead of leaving a stale pending item.
-              const [existing] = await conn.execute<any[]>(
-                `SELECT mi.id, mi.status,
-                        (SELECT COUNT(*) FROM mail_item_files mif WHERE mif.item_id = mi.id) AS file_count
-                 FROM mail_items mi WHERE mi.source = 'mail' AND mi.external_id = ?`,
-                [file.id]
-              );
-              if (existing.length > 0) {
-                if (alreadyReviewed && existing[0].status !== 'resolved') {
+              const existing = existingByFileId.get(String(file.id));
+              if (existing) {
+                if (alreadyReviewed && existing.status !== 'resolved') {
                   await conn.execute(
                     "UPDATE mail_items SET pre_reviewed=1, status='resolved', resolved_at=COALESCE(resolved_at, NOW()) WHERE id=?",
-                    [existing[0].id]
+                    [existing.id]
                   );
+                  resolved++;
                 }
-                if (!alreadyReviewed && Number(existing[0].file_count ?? 0) === 0) {
+                if (!alreadyReviewed && Number(existing.file_count ?? 0) === 0) {
                   try {
                     const hydrated = await slackFetch.getFileInfo(file.id);
                     const downloadUrl = file.url_private_download ?? hydrated?.urlPrivateDownload;
@@ -743,7 +772,7 @@ export const mailRouter = router({
                     await conn.execute(
                       `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
                        VALUES (?, ?, ?, ?, ?, ?)`,
-                      [existing[0].id, storageKey, storageName, downloaded.contentType, downloaded.buffer.length, file.id]
+                      [existing.id, storageKey, storageName, downloaded.contentType, downloaded.buffer.length, file.id]
                     );
                   } catch (recoveryError) {
                     errors.push(`attachment recovery ${file.id}: ${String(recoveryError)}`);
@@ -778,17 +807,14 @@ export const mailRouter = router({
                   addBotMarker: false,
                 });
                 if (result.action === 'inserted') inserted++;
-                else if (result.action === 'pre_reviewed') {
-                  const current = results.slackIngest as { resolved?: number } | undefined;
-                  results.slackIngest = { ...(current ?? {}), resolved: (current?.resolved ?? 0) + 1 };
-                } else skipped++;
+                else if (result.action === 'pre_reviewed') resolved++;
+                else skipped++;
               } catch (e) {
                 errors.push(String(e));
               }
             }
           }
-          const prior = results.slackIngest as { resolved?: number } | undefined;
-          results.slackIngest = { inserted, skipped, resolved: prior?.resolved ?? 0, errors: errors.slice(0, 5), total: totalFiles };
+          results.slackIngest = { inserted, skipped, resolved, errors: errors.slice(0, 5), total: totalFiles };
         }
       } catch (slackErr) {
         results.slackIngest = { skipped: true, reason: String(slackErr) };
@@ -807,15 +833,17 @@ export const mailRouter = router({
 
       const BATCH_PER_HANDLER = 3;
 
-      // Get all unprocessed items (no limit — we'll apply per-handler limit below)
+      // Bound synchronous LLM work so a manual run returns promptly; the next
+      // five-minute job picks up the next oldest batch.
       const [allItems] = await conn.execute<any[]>(
         `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
+                mi.slack_channel_id, mi.slack_message_ts,
                 GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
                 GROUP_CONCAT(mif.storage_key SEPARATOR '|||') AS storage_keys
          FROM mail_items mi
          LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
          WHERE mi.category IS NULL AND mi.status = 'new'
-         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 200`
+         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 24`
       );
 
       let processed = 0, errors = 0, skippedDayGate = 0;

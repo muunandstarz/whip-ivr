@@ -928,7 +928,7 @@ function AdminMailSetup() {
             {[
               {
                 icon: "📥", label: "Ingest Gmail", schedule: "Every 5 min (Tue–Fri, 1 PM ET on schedule)",
-                desc: "Polls the connected Gmail account for messages addressed to claims@drivewhip.com that have not yet been labeled mailroom-done. Each message is saved as a new mail item with its attachments. The mailroom-done label is applied after processing so the message is never re-ingested.",
+                desc: "Polls the connected Gmail account only for unread messages addressed to claims@drivewhip.com that are not yet labeled mailroom-done. Each message is saved with its attachments; the mailroom-done label prevents duplicate intake without changing the read state.",
               },
               {
                 icon: "📨", label: "Ingest Slack", schedule: "Every 5 min (runs with Gmail ingest)",

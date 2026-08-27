@@ -87,7 +87,10 @@ export async function handleSlackFileEvent(
 
     if (alreadyReviewed) {
       // Insert a pre_reviewed=1, status='resolved' row (for the log) but do not route
-      const permalink = event.permalink ?? await slack.getPermalink(channelId, messageTs);
+      // Checked files are retained as resolved history only.  The message payload
+      // already includes a usable link when available; do not add a network call
+      // per reviewed legacy file merely to create a permalink.
+      const permalink = event.permalink ?? null;
       const [existing] = await conn.execute<any[]>(
         "SELECT id FROM mail_items WHERE source = 'mail' AND external_id = ?",
         [fileId]

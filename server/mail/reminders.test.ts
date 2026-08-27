@@ -89,7 +89,9 @@ describe('runMailReminders() — mocked Slack DM', () => {
       }),
     };
 
-    const result = await runMailReminders(conn, mockSlack);
+    const result = await runMailReminders(conn, mockSlack, {
+      itemIds: [overdueItemId, futureItemId, reminderDueItemId],
+    });
 
     // Should have notified at least 2 (overdue + remindAt-due)
     expect(result.notified, 'notified count').toBeGreaterThanOrEqual(2);
@@ -115,7 +117,9 @@ describe('runMailReminders() — mocked Slack DM', () => {
     };
 
     // Run again immediately — items now have lastRemindedAt set within throttle window
-    const result2 = await runMailReminders(conn, mockSlack);
+    const result2 = await runMailReminders(conn, mockSlack, {
+      itemIds: [overdueItemId, futureItemId, reminderDueItemId],
+    });
 
     // The overdue and remindAt-due items should be skipped (throttled)
     // sendDM should not have been called for our test items

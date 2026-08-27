@@ -103,7 +103,6 @@ describe('ingestGmail() — mocked HTTP', () => {
     addLabel: vi.fn().mockResolvedValue(undefined),
     getOrCreateLabel: vi.fn().mockResolvedValue('mock-label-id'),
     markRead: vi.fn().mockResolvedValue(undefined), // no-op compat
-    listReadMessages: vi.fn().mockResolvedValue({ messages: [] }),
   };
 
   it('G1: inserts a mail_items row with correct fields', async () => {
@@ -111,6 +110,7 @@ describe('ingestGmail() — mocked HTTP', () => {
     expect(result.inserted, 'inserted count').toBe(1);
     expect(result.skipped, 'skipped count').toBe(0);
     expect(result.errors, 'errors').toHaveLength(0);
+    expect(result.debug?.query, 'unread claims query').toBe('to:claims@drivewhip.com is:unread -label:mailroom-done');
 
     const [[row]] = await conn.execute<any[]>(
       "SELECT * FROM mail_items WHERE external_id = ?",

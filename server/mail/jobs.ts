@@ -80,13 +80,23 @@ export interface MailRemindersResult {
   errors: string[];
 }
 
+export interface MailReminderRunOptions {
+  /** Restricts a run to known items for deterministic tests; production leaves this unset. */
+  itemIds?: number[];
+}
+
 export async function runMailReminders(
   conn: mysql.Connection,
   slack: SlackDMFn,
+  options: MailReminderRunOptions = {},
 ): Promise<MailRemindersResult> {
   const result: MailRemindersResult = { notified: 0, skipped: 0, errors: [] };
   const now = new Date();
   const throttleCutoff = new Date(now.getTime() - REMINDER_THROTTLE_HOURS * 3600 * 1000);
+  const itemIds = options.itemIds?.filter(Number.isInteger) ?? [];
+  const itemIdFilter = itemIds.length > 0
+    ? ` AND mi.id IN (${itemIds.map(() => '?').join(', ')})`
+    : '';
 
   // Select overdue items (dueAt < NOW()) OR remindAt-due items, unresolved, assigned
   const [items] = await conn.execute<any[]>(
@@ -103,9 +113,10 @@ export async function runMailReminders(
          (mi.remind_at IS NOT NULL AND mi.remind_at <= ?)
        )
        AND (mi.last_reminded_at IS NULL OR mi.last_reminded_at < ?)
+       ${itemIdFilter}
      ORDER BY mi.due_at ASC
      LIMIT 100`,
-    [now, now, throttleCutoff]
+    [now, now, throttleCutoff, ...itemIds]
   );
 
   for (const item of items) {

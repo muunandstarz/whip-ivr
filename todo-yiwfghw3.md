@@ -374,6 +374,9 @@
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
 
 ## Session 2026-08-11 Mailroom Repairs
+
+- [x] Make Trigger Now complete within a single request by batching Slack metadata lookups and limiting synchronous classification
+- [x] Restrict Gmail ingest to unread claims-addressed messages while preserving resolved status for any already-stored read messages
 - [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
 - [x] Correct Slack assignment posts: resolve readable agent mentions, remove/correct the six incorrect posts, and preserve valid links
 - [x] Add admin reassignment for individual Mailroom items and post the updated assignment to Slack
