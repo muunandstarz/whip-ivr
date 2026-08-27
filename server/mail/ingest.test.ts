@@ -328,6 +328,27 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     await conn.execute("DELETE FROM mail_items WHERE external_id = ?", [PRE_REVIEWED_FILE_ID]);
   });
 
+  it('S5b: resolves an existing unreviewed item if its Claims Mail post is later checked off', async () => {
+    const reviewedSlack: SlackFetchFn = {
+      ...mockSlack,
+      getReactions: vi.fn().mockResolvedValue([{ name: 'eyes' }]),
+    };
+    const result = await handleSlackFileEvent(
+      conn,
+      { ...baseEvent, reactions: [{ name: 'eyes' }] },
+      reviewedSlack,
+      { ...opts, reviewedEmojis: ['white_check_mark', 'eyes', 'heavy_check_mark'] },
+    );
+    expect(result.action).toBe('skipped_dedupe');
+    const [[row]] = await conn.execute<any[]>(
+      'SELECT status, pre_reviewed, resolved_at FROM mail_items WHERE external_id=?',
+      [SLACK_FILE_ID],
+    );
+    expect(row.status).toBe('resolved');
+    expect(row.pre_reviewed).toBe(1);
+    expect(row.resolved_at).toBeTruthy();
+  });
+
   it('S6: hydrates file_shared events that arrive with only a Slack file ID', async () => {
     const hydratedId = 'F_HYDRATED_SLACK_001';
     await conn.execute('DELETE FROM mail_items WHERE external_id=?', [hydratedId]);

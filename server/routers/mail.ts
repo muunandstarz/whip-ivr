@@ -810,7 +810,6 @@ export const mailRouter = router({
     const results: Record<string, string> = {};
     const jobs = [
       { name: 'mail-ingest-gmail', cron: '0 */5 * * * *', path: '/api/scheduled/mailIngestGmail', description: 'Poll claims@ Gmail every 5 min' },
-      { name: 'mail-ingest-slack', cron: '0 4/5 * * * *', path: '/api/scheduled/mailIngestSlack', description: 'Poll Claims Mail Slack every 5 min' },
       { name: 'mail-process',      cron: '0 2/5 * * * *', path: '/api/scheduled/mailProcess',      description: 'Classify + assign new mail_items every 5 min' },
       { name: 'mail-reminders',    cron: '0 0 * * * *',   path: '/api/scheduled/mailReminders',    description: 'Send overdue/reminder DMs every hour' },
     ];

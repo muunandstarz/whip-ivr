@@ -149,10 +149,28 @@ export async function handleSlackFileEvent(
       // per reviewed legacy file merely to create a permalink.
       const permalink = event.permalink ?? null;
       const [existing] = await conn.execute<any[]>(
-        "SELECT id FROM mail_items WHERE source = 'mail' AND external_id = ?",
+        "SELECT id, status, pre_reviewed FROM mail_items WHERE source = 'mail' AND external_id = ?",
         [fileId]
       );
       if (existing.length > 0) {
+        // A file may have entered Mailroom as unresolved and then been reviewed
+        // directly in Claims Mail. Preserve it as completed history and do not route it.
+        await conn.execute(
+          `UPDATE mail_items
+           SET status='resolved', resolved_at=COALESCE(resolved_at, ?), pre_reviewed=1,
+               slack_channel_id=COALESCE(slack_channel_id, ?),
+               slack_message_ts=COALESCE(slack_message_ts, ?),
+               slack_permalink=COALESCE(slack_permalink, ?)
+           WHERE id=? AND status <> 'resolved'`,
+          [new Date(), channelId, messageTs, permalink, existing[0].id],
+        );
+        if (existing[0].status !== 'resolved') {
+          await conn.execute(
+            `INSERT INTO mail_item_notes (item_id, by_user_id, note)
+             VALUES (?, NULL, 'Marked resolved after a reviewed marker was found in Claims Mail')`,
+            [existing[0].id],
+          );
+        }
         return { action: 'skipped_dedupe', itemId: existing[0].id };
       }
       const [ins] = await conn.execute<any>(

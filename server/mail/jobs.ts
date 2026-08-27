@@ -335,7 +335,11 @@ export async function mailIngestGmailHandler(req: Request, res: Response): Promi
     const gmail = buildRealGmailFetch(conn);
     const result = await ingestGmail(conn, gmail);
     const attachmentRecovery = await recoverStaleGmailAttachments(conn, 6);
-    res.json({ ok: true, ...result, attachmentRecovery });
+    // This callback has an established, healthy Heartbeat delivery path. Pair a
+    // small Slack batch with it so Claims Mail recovery continues even if a newly
+    // created standalone callback is temporarily unavailable at the platform edge.
+    const slackIngest = await runBoundedSlackIngest(conn, 4);
+    res.json({ ok: true, ...result, attachmentRecovery, slackIngest });
   } catch (e) {
     console.error('[mailIngestGmail] error:', e);
     res.status(500).json({ ok: false, error: String(e) });
@@ -352,9 +356,20 @@ export async function mailIngestGmailHandler(req: Request, res: Response): Promi
  * that are new, pre-reviewed, or still missing their stored attachment. This
  * prevents a browser-triggered request from being held open by historical files.
  */
-export async function mailIngestSlackHandler(req: Request, res: Response): Promise<void> {
-  const conn = await mysql.createConnection(process.env.DATABASE_URL!);
-  const result = { inserted: 0, skipped: 0, resolved: 0, totalFiles: 0, selected: 0, errors: [] as string[] };
+export interface MailIngestSlackResult {
+  inserted: number;
+  skipped: number;
+  resolved: number;
+  totalFiles: number;
+  selected: number;
+  errors: string[];
+}
+
+export async function runBoundedSlackIngest(
+  conn: mysql.Connection,
+  limit = 8,
+): Promise<MailIngestSlackResult> {
+  const result: MailIngestSlackResult = { inserted: 0, skipped: 0, resolved: 0, totalFiles: 0, selected: 0, errors: [] };
   try {
     let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
     let channelId = 'C07R60KAC2C';
@@ -364,8 +379,8 @@ export async function mailIngestSlackHandler(req: Request, res: Response): Promi
     if (botConfig?.slack_bot_token) slackToken = botConfig.slack_bot_token;
     if (botConfig?.claims_mail_channel_id) channelId = botConfig.claims_mail_channel_id;
     if (!slackToken) {
-      res.status(500).json({ ok: false, error: 'Slack bot token is not configured' });
-      return;
+      result.errors.push('Slack bot token is not configured');
+      return result;
     }
 
     const [[reviewedSetting]] = await conn.execute<any[]>(
@@ -381,8 +396,13 @@ export async function mailIngestSlackHandler(req: Request, res: Response): Promi
     );
     const knownByFileId = new Map(knownRows.map(row => [String(row.external_id), row]));
 
+    // Keep every run well inside Heartbeat’s two-minute request ceiling. The first
+    // page clears newest unreviewed mail while the final page clears the oldest
+    // backlog, matching the required split strategy without re-listing all history.
     const allFiles: any[] = [];
-    for (let page = 1; page <= 30; page++) {
+    const pagesToFetch = [1];
+    for (let pageIndex = 0; pageIndex < pagesToFetch.length; pageIndex++) {
+      const page = pagesToFetch[pageIndex];
       const params = new URLSearchParams({ channel: channelId, count: '100', page: String(page), types: 'all' });
       const response = await fetch(`https://slack.com/api/files.list?${params}`, { headers: { Authorization: `Bearer ${slackToken}` } });
       const raw = await response.text();
@@ -398,7 +418,8 @@ export async function mailIngestSlackHandler(req: Request, res: Response): Promi
         break;
       }
       allFiles.push(...(payload.files ?? []));
-      if (page >= (payload.paging?.pages ?? 1)) break;
+      const lastPage = payload.paging?.pages ?? 1;
+      if (page === 1 && lastPage > 1) pagesToFetch.push(lastPage);
     }
     result.totalFiles = allFiles.length;
 
@@ -407,9 +428,27 @@ export async function mailIngestSlackHandler(req: Request, res: Response): Promi
       const known = knownByFileId.get(String(file.id));
       return !known || Number(known.file_count ?? 0) === 0 || fileHasReviewedReaction(file, reviewedEmojis);
     });
-    const work = selectBalancedSlackBatch(candidates, 8);
-    result.selected = work.length;
     const slack = buildRealSlackFetch(slackToken);
+    const directRecovery = knownRows
+      .filter(row => Number(row.file_count ?? 0) === 0)
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .slice(0, Math.max(1, Math.floor(limit / 2)));
+    const recoveredFiles = await Promise.all(directRecovery.map(async row => {
+      const file = await slack.getFileInfo(String(row.external_id));
+      return file ? {
+        id: String(row.external_id),
+        name: file.filename,
+        mimetype: file.mimeType,
+        url_private_download: file.urlPrivateDownload,
+        timestamp: file.receivedAt ? Math.floor(file.receivedAt.getTime() / 1000) : undefined,
+        shares: { public: { [channelId]: [{ ts: file.messageTs }] } },
+      } : null;
+    }));
+    const listedWork = selectBalancedSlackBatch(candidates, Math.max(1, limit - recoveredFiles.filter(Boolean).length));
+    const work = Array.from(new Map(
+      [...recoveredFiles.filter(Boolean), ...listedWork].map(file => [String((file as any).id), file])
+    ).values()) as any[];
+    result.selected = work.length;
     for (const file of work) {
       const shares = sharesForClaimsChannel(file, channelId);
       const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
@@ -428,9 +467,20 @@ export async function mailIngestSlackHandler(req: Request, res: Response): Promi
       else if (outcome.action === 'error') result.errors.push(outcome.error ?? `Unknown Slack ingest error for ${file.id}`);
       else result.skipped++;
     }
-    res.json({ ok: true, ...result });
+    return result;
   } catch (error) {
-    res.status(500).json({ ok: false, error: String(error), ...result });
+    result.errors.push(String(error));
+    return result;
+  }
+}
+
+export async function mailIngestSlackHandler(req: Request, res: Response): Promise<void> {
+  const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+  try {
+    const result = await runBoundedSlackIngest(conn);
+    res.status(result.errors.length ? 207 : 200).json({ ok: result.errors.length === 0, ...result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error) });
   } finally {
     await conn.end();
   }
