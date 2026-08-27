@@ -475,6 +475,7 @@
 - [ ] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
 - [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
 - [ ] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
+- [ ] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable
 
 ## Session 2026-08-11 Mailroom Pagination
 - [x] Make the displayed result range update when the rows-per-page selection changes

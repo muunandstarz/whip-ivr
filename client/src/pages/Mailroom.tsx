@@ -966,6 +966,7 @@ function AdminMailSetup() {
   const [editingAgentId, setEditingAgentId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<{ name: string; slackId: string; role: string; dailyCap: number; isActive: boolean }>({ name: "", slackId: "", role: "general_roundrobin", dailyCap: 3, isActive: true });
   const [ptoForm, setPtoForm] = useState({ agentId: "", startDate: "", endDate: "", note: "" });
+  const [scheduleResult, setScheduleResult] = useState<Record<string, string> | null>(null);
   const utils = trpc.useUtils();
 
   const { data: cronList, refetch: refetchCrons } = trpc.mail.listCrons.useQuery();
@@ -973,7 +974,15 @@ function AdminMailSetup() {
   const { data: ptoList } = trpc.mailBot.listPto.useQuery();
 
   const setupCrons = trpc.mail.setupCrons.useMutation({
-    onSuccess: () => { toast.success("Crons registered"); refetchCrons(); },
+    onSuccess: (data: any) => {
+      const outcomes = (data?.taskUids ?? {}) as Record<string, string>;
+      setScheduleResult(outcomes);
+      const failed = Object.entries(outcomes).filter(([, value]) => String(value).startsWith("error:"));
+      toast[failed.length ? "error" : "success"](
+        failed.length ? `${failed.length} schedule${failed.length === 1 ? "" : "s"} could not be registered.` : "Crons registered",
+      );
+      refetchCrons();
+    },
     onError: (e) => toast.error(e.message),
   });
   const triggerNow = trpc.mail.triggerNow.useMutation({
@@ -1114,6 +1123,19 @@ function AdminMailSetup() {
                   </div>
                 ))}
               </div>
+            )}
+            {scheduleResult && (
+              <details className="text-xs" open={Object.values(scheduleResult).some(value => String(value).startsWith("error:"))}>
+                <summary className="cursor-pointer text-primary hover:underline">View schedule setup result</summary>
+                <div className="mt-1 space-y-1 rounded bg-muted p-2">
+                  {Object.entries(scheduleResult).map(([name, outcome]) => {
+                    const failed = String(outcome).startsWith("error:");
+                    return <div key={name} className={failed ? "text-destructive" : "text-muted-foreground"}>
+                      <span className="font-medium">{name}:</span> {failed ? String(outcome).replace(/^error:\s*/, "") : "registered"}
+                    </div>;
+                  })}
+                </div>
+              </details>
             )}
             {triggerResult && (
               <details className="text-xs">
