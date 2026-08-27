@@ -210,6 +210,22 @@ export async function mailRemindersHandler(req: Request, res: Response): Promise
 export async function mailProcessHandler(req: Request, res: Response): Promise<void> {
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
+    // This scheduled callback is established and healthy. Keep one small source
+    // intake pass here as a reliable fallback when a source-specific Heartbeat is
+    // delayed by the platform. Every operation is intentionally capped at one
+    // source record so the combined request remains well within the deadline.
+    const sourceRecovery: Record<string, unknown> = {};
+    try {
+      const gmail = buildRealGmailFetch(conn);
+      sourceRecovery.gmailIngest = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 1);
+      sourceRecovery.gmailAttachmentRecovery = await recoverStaleGmailAttachments(conn, 1);
+      sourceRecovery.slackIngest = await runBoundedSlackIngest(conn, 1);
+    } catch (sourceRecoveryError) {
+      sourceRecovery.error = sourceRecoveryError instanceof Error
+        ? sourceRecoveryError.message
+        : String(sourceRecoveryError);
+    }
+
     // Select unprocessed items (category IS NULL, status='new')
     const [items] = await conn.execute<any[]>(
       `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
@@ -313,7 +329,7 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
     }
 
     const contentRefresh = await refreshIncompleteMailContent(conn, 2);
-    res.json({ ok: true, processed, errors, total: items.length, contentRefresh });
+    res.json({ ok: true, processed, errors, total: items.length, contentRefresh, sourceRecovery });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
   } finally {

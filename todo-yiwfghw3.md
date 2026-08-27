@@ -476,6 +476,7 @@
 - [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
 - [ ] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
 - [ ] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable
+- [ ] Run one bounded unread-Gmail and unreviewed-Claims-Mail recovery pass from the proven Mailroom processing callback when source-specific schedules stall
 
 ## Session 2026-08-11 Mailroom Pagination
 - [x] Make the displayed result range update when the rows-per-page selection changes
