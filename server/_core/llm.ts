@@ -56,6 +56,8 @@ export type ToolChoice =
   | ToolChoiceExplicit;
 
 export type InvokeParams = {
+  model?: string;
+  timeoutMs?: number;
   messages: Message[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
@@ -269,6 +271,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
 
   const {
+    model,
+    timeoutMs,
     messages,
     tools,
     toolChoice,
@@ -280,7 +284,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: model ?? "gpt-5-mini",
     messages: messages.map(normalizeMessage),
   };
 
@@ -319,6 +323,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       authorization: `Bearer ${ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs ?? 60_000),
   });
 
   if (!response.ok) {

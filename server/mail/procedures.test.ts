@@ -84,11 +84,13 @@ beforeAll(async () => {
        (source, external_id, received_at, status, category, confidence,
         assigned_team_id, assigned_handler_id, assigned_at, due_at,
         initial_category, initial_handler_id, initial_confidence,
-        subject, from_email)
+        subject, from_email, body_text, summary_note)
      VALUES ('mail', 'PROC_TEST_001', NOW(), 'assigned', 'inbound_subro', 92,
              ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 48 HOUR),
              'inbound_subro', ?, 92,
-             'Test Subro Demand', 'carrier@example.com')`,
+             'Test Subro Demand', 'carrier@example.com',
+             'Letter of representation for David Mason is attached.',
+             'Person: David Mason · Attorney letter of representation')`,
     [teamId, handlerId, handlerId]
   );
   itemId = (ins1 as any).insertId;
@@ -239,6 +241,12 @@ describe('mail tRPC procedures', () => {
     expect(Array.isArray(items)).toBe(true);
     const ids = items.map(i => i.id);
     expect(ids).toContain(itemId);
+  });
+
+  it('P9b: adminQueue searches stored email body and AI summary text', async () => {
+    const caller = appRouter.createCaller(adminCtx());
+    const { items } = await caller.mail.adminQueue({ search: 'David Mason' });
+    expect(items.map(item => item.id)).toContain(itemId);
   });
 
   it('P10: adminQueue rejects a non-admin caller', async () => {

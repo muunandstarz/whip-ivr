@@ -117,6 +117,7 @@ async function processMailEvent(body: Record<string, unknown>): Promise<void> {
         fileId,
         messageTs,
         channelId,
+        receivedAt: event.event_ts ? new Date(Number(event.event_ts) * 1000) : undefined,
       }, slack, {
         reviewedEmoji,
         reviewedEmojis: ['white_check_mark', 'eyes', 'heavy_check_mark'],
@@ -134,6 +135,7 @@ async function processMailEvent(body: Record<string, unknown>): Promise<void> {
         fileId: file.id as string,
         messageTs,
         channelId,
+        receivedAt: file.timestamp ? new Date(Number(file.timestamp) * 1000) : new Date(Number(messageTs) * 1000),
         filename: file.name as string | undefined,
         mimeType: file.mimetype as string | undefined,
         urlPrivateDownload: file.url_private_download as string | undefined,

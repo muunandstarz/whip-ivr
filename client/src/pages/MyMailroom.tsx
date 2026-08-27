@@ -67,7 +67,7 @@ const STATUS_COLORS: Record<string, string> = {
   needs_review: "bg-yellow-100 text-yellow-800",
 };
 
-type FilterTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "resolved";
+type FilterTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "bills" | "resolved";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -89,6 +89,18 @@ function dueLabel(dueAt: Date | string | null | undefined) {
   if (isPast(d) && !isToday(d)) return { text: "Overdue", color: "text-red-600" };
   if (isToday(d)) return { text: "Due today", color: "text-amber-600" };
   return null;
+}
+
+function displayMailBody(item: any): string | null {
+  const body = item?.bodyText?.trim() ?? "";
+  const pageMarkersOnly = body.length > 0 && body.replace(/--\s*\d+\s+of\s+\d+\s*--/gi, "").trim().length === 0;
+  if (body && !pageMarkersOnly) return body;
+  if (item?.source === "mail" || item?.source === "fax") {
+    return item?.summaryNote
+      ? `Document summary: ${item.summaryNote}\n\nThe original fax/document is available in Attachments.`
+      : "This item was received through Claims Mail. The original fax/document is available in Attachments.";
+  }
+  return body || null;
 }
 
 function SignalDot({ item }: { item: any }) {
@@ -126,11 +138,15 @@ function MailDrawer({
   const [rerouteHandlerId, setRerouteHandlerId] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
+  const [forwardRecipient, setForwardRecipient] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
 
   const { data, isLoading, refetch } = trpc.mail.getItem.useQuery(
     { id: itemId! },
     { enabled: open && itemId != null }
   );
+  const { data: handlers } = trpc.handlers.list.useQuery();
 
   const utils = trpc.useUtils();
   const invalidate = useCallback(() => {
@@ -158,6 +174,19 @@ function MailDrawer({
   });
   const reminderMut = trpc.mail.setReminder.useMutation({
     onSuccess: () => { toast.success("Reminder set"); setShowReminderInput(false); setReminderDate(""); },
+    onError: (e) => toast.error(e.message),
+  });
+  const forwardMut = trpc.mail.forwardToClaim.useMutation({
+    onSuccess: (result) => {
+      const skipped = result.skippedAttachments?.length
+        ? ` ${result.skippedAttachments.length} attachment(s) could not be included.`
+        : "";
+      toast.success(`Forwarded with ${result.attachmentCount} attachment(s).${skipped}`);
+      setShowForwardDialog(false);
+      setForwardRecipient("");
+      setForwardNote("");
+      refetch();
+    },
     onError: (e) => toast.error(e.message),
   });
 
@@ -210,7 +239,9 @@ function MailDrawer({
                 </div>
                 {/* Badges */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {item.category && (
+                  {item.isMedicalBill ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</span>
+                  ) : item.category && (
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
                       {CATEGORY_LABELS[item.category] ?? item.category}
                     </span>
@@ -220,7 +251,7 @@ function MailDrawer({
                       {item.status}
                     </span>
                   )}
-                  {item.dueAt && isPast(new Date(item.dueAt)) && !isToday(new Date(item.dueAt)) && (
+                  {item.assignedHandlerId && item.dueAt && isPast(new Date(item.dueAt)) && !isToday(new Date(item.dueAt)) && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Overdue</span>
                   )}
                   {item.urgency === "urgent" && (
@@ -239,7 +270,7 @@ function MailDrawer({
               <div className="px-5 py-3 border-b">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Message Body</p>
                 <div className="text-sm text-foreground max-h-36 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                  {item.bodyText || <span className="text-muted-foreground italic">No body content</span>}
+                  {displayMailBody(item) || <span className="text-muted-foreground italic">No body content</span>}
                 </div>
               </div>
 
@@ -274,11 +305,26 @@ function MailDrawer({
                     onClick={() => setShowRerouteDialog(true)}>
                     <ArrowRight className="w-3.5 h-3.5" /> Reroute
                   </Button>
-                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
-                    onClick={() => resolveMut.mutate({ itemId: item.id })}
-                    disabled={resolveMut.isPending}>
-                    <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Resolve
-                  </Button>
+                  {item.isDemand === 1 ? (
+                    <>
+                      <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs text-green-700"
+                        onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "settled" })}
+                        disabled={resolveMut.isPending}>
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Settled
+                      </Button>
+                      <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs text-red-700"
+                        onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "denied" })}
+                        disabled={resolveMut.isPending}>
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600" /> Denied
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                      onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "other" })}
+                      disabled={resolveMut.isPending}>
+                      <CheckCircle className="w-3.5 h-3.5 text-green-600" /> Resolve
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
                     onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated from mailroom" })}
                     disabled={escalateMut.isPending}>
@@ -287,6 +333,10 @@ function MailDrawer({
                   <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
                     onClick={() => setShowReminderInput(true)}>
                     <Bell className="w-3.5 h-3.5 text-blue-600" /> Set Reminder
+                  </Button>
+                  <Button size="sm" variant="outline" className="justify-start gap-1.5 text-xs"
+                    onClick={() => setShowForwardDialog(true)}>
+                    <Mail className="w-3.5 h-3.5 text-primary" /> Forward to Claim
                   </Button>
                 </div>
                 {showReminderInput && (
@@ -407,9 +457,15 @@ function MailDrawer({
           <DialogHeader><DialogTitle>Reroute Mail Item</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Handler ID</Label>
-              <Input placeholder="Handler ID (number)" value={rerouteHandlerId}
-                onChange={e => setRerouteHandlerId(e.target.value)} className="mt-1" />
+              <Label className="text-xs">Assign to</Label>
+              <Select value={rerouteHandlerId} onValueChange={setRerouteHandlerId}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select a handler" /></SelectTrigger>
+                <SelectContent>
+                  {(handlers ?? []).filter((handler: any) => handler.active !== false).map((handler: any) => (
+                    <SelectItem key={handler.id} value={String(handler.id)}>{handler.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs">Reason (optional)</Label>
@@ -433,6 +489,34 @@ function MailDrawer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showForwardDialog} onOpenChange={setShowForwardDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Forward to Claim</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Confirm the recipient before sending the original message and recoverable attachments. The forwarding action will be recorded in this Mailroom item.
+            </p>
+            <div>
+              <Label className="text-xs">Claim recipient email</Label>
+              <Input className="mt-1" type="email" placeholder="claim recipient@example.com" value={forwardRecipient}
+                onChange={e => setForwardRecipient(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Forwarding note (optional)</Label>
+              <Textarea className="mt-1 h-20" placeholder="Context for the claim file…" value={forwardNote}
+                onChange={e => setForwardNote(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowForwardDialog(false)}>Cancel</Button>
+            <Button disabled={!/^\S+@\S+\.\S+$/.test(forwardRecipient) || forwardMut.isPending}
+              onClick={() => item && forwardMut.mutate({ itemId: item.id, recipient: forwardRecipient.trim(), note: forwardNote.trim() || undefined })}>
+              {forwardMut.isPending ? "Forwarding…" : "Confirm & Forward"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -446,6 +530,7 @@ export default function MyMailroom() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Build query input based on active tab
@@ -453,7 +538,8 @@ export default function MyMailroom() {
     switch (activeTab) {
       case "overdue": return { overdue: true };
       case "legal": return { legalOnly: true };
-      case "demands": return { legalOnly: true };
+      case "demands": return { isDemand: true };
+      case "bills": return { medicalBills: true };
       case "resolved": return { showResolved: true, status: "resolved" as const };
       default: return {};
     }
@@ -505,6 +591,7 @@ export default function MyMailroom() {
     { key: "urgent", label: "Urgent" },
     { key: "legal", label: "Legal & Demands" },
     { key: "demands", label: "Demands" },
+    { key: "bills", label: "Bills" },
     { key: "resolved", label: "Resolved" },
   ];
 
@@ -629,7 +716,14 @@ export default function MyMailroom() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-6 px-3" />
+                <TableHead className="w-8 px-3">
+                  <input
+                    type="checkbox"
+                    className="cursor-pointer"
+                    checked={pagedItems.length > 0 && selectedIds.size === pagedItems.length}
+                    onChange={() => setSelectedIds(prev => prev.size === pagedItems.length ? new Set() : new Set(pagedItems.map((row: any) => row.id)))}
+                  />
+                </TableHead>
                 <TableHead className="text-xs font-semibold">Subject / From</TableHead>
                 <TableHead className="text-xs font-semibold w-36">Category</TableHead>
                 <TableHead className="text-xs font-semibold w-32">Claim #</TableHead>
@@ -660,9 +754,15 @@ export default function MyMailroom() {
                     className="cursor-pointer hover:bg-muted/40 transition-colors"
                     onClick={() => handleRowClick(item.id)}
                   >
-                    {/* Signal */}
-                    <TableCell className="px-3 py-2.5">
-                      <div className="flex items-center justify-center">
+                    {/* Selection / signal */}
+                    <TableCell className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5 justify-center">
+                        <input
+                          type="checkbox"
+                          className="cursor-pointer"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => setSelectedIds(prev => { const next = new Set(prev); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; })}
+                        />
                         <SignalDot item={item} />
                       </div>
                     </TableCell>
@@ -675,7 +775,9 @@ export default function MyMailroom() {
                     </TableCell>
                     {/* Category */}
                     <TableCell className="py-2.5">
-                      {item.category ? (
+                      {item.isMedicalBill ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</span>
+                      ) : item.category ? (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-700"}`}>
                           {CATEGORY_LABELS[item.category] ?? item.category}
                         </span>
@@ -762,16 +864,17 @@ export default function MyMailroom() {
               disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
               <ChevronRight className="w-3.5 h-3.5" />
             </Button>
-            <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-              <SelectTrigger className="h-7 w-24 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[10, 25, 50].map(s => (
-                  <SelectItem key={s} value={String(s)} className="text-xs">{s} / page</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              aria-label="Rows per page"
+              value={pageSize}
+              onChange={(event) => {
+                setPage(1);
+                setPageSize(Number(event.currentTarget.value));
+              }}
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {[10, 25, 50].map(s => <option key={s} value={s}>{s} / page</option>)}
+            </select>
           </div>
         </div>
       </div>

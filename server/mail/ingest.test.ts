@@ -126,6 +126,10 @@ describe('ingestGmail() — mocked HTTP', () => {
     expect(row.from_name, 'from_name').toBe('Attorney Smith');
     expect(row.gmail_thread_id, 'gmail_thread_id').toBe(GMAIL_THREAD_ID);
     expect(row.body_text, 'body_text').toContain('CLM-TEST-001');
+    expect(new Date(row.received_at).getTime(), 'uses Gmail internal received time').toBeCloseTo(
+      Number(CANNED_GMAIL_MESSAGE.internalDate),
+      -3,
+    );
   });
 
   it('G2: inserts a mail_item_files row for the PDF attachment', async () => {
@@ -206,6 +210,7 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     filename: 'subro_demand.pdf',
     mimeType: 'application/pdf',
     urlPrivateDownload: 'https://files.slack.com/files-pri/T-test/subro_demand.pdf',
+    receivedAt: new Date('2026-08-06T12:00:00.000Z'),
   };
 
   const opts = {
@@ -231,6 +236,7 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     expect(row.slack_channel_id, 'slack_channel_id').toBe(SLACK_CHANNEL);
     expect(row.slack_message_ts, 'slack_message_ts').toBe(SLACK_MSG_TS);
     expect(row.slack_permalink, 'slack_permalink').toContain('slack.com');
+    expect(new Date(row.received_at).toISOString(), 'uses the original Slack upload time').toBe('2026-08-06T12:00:00.000Z');
   });
 
   it('S2: inserts a mail_item_files row for the downloaded file', async () => {
@@ -325,5 +331,28 @@ describe('handleSlackFileEvent() — mocked HTTP', () => {
     const [[file]] = await conn.execute<any[]>('SELECT filename FROM mail_item_files WHERE item_id=?', [result.itemId]);
     expect(file.filename).toBe('hydrated.pdf');
     await conn.execute('DELETE FROM mail_items WHERE external_id=?', [hydratedId]);
+  });
+
+  it('S7: retries a fresh files.info URL when the event download URL has expired', async () => {
+    const retryId = 'F_RETRY_FRESH_URL_001';
+    await conn.execute('DELETE FROM mail_items WHERE external_id=?', [retryId]);
+    const retrySlack: SlackFetchFn = {
+      ...mockSlack,
+      downloadFile: vi.fn()
+        .mockRejectedValueOnce(new Error('Slack file download failed (403)'))
+        .mockResolvedValueOnce({ buffer: Buffer.from('FRESH_PDF'), contentType: 'application/pdf' }),
+      getFileInfo: vi.fn().mockResolvedValue({
+        filename: 'fresh-fax.pdf',
+        mimeType: 'application/pdf',
+        urlPrivateDownload: 'https://files.slack.com/files-pri/T-test/fresh-fax.pdf',
+        messageTs: '1722960003.000001',
+      }),
+    };
+    const result = await handleSlackFileEvent(conn, { ...baseEvent, fileId: retryId, urlPrivateDownload: 'https://files.slack.com/expired.pdf' }, retrySlack, opts);
+    expect(result.action).toBe('inserted');
+    expect(retrySlack.getFileInfo).toHaveBeenCalledWith(retryId);
+    const [[file]] = await conn.execute<any[]>('SELECT filename FROM mail_item_files WHERE item_id=?', [result.itemId]);
+    expect(file.filename).toBe('fresh-fax.pdf');
+    await conn.execute('DELETE FROM mail_items WHERE external_id=?', [retryId]);
   });
 });

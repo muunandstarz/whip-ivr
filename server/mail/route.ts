@@ -12,12 +12,14 @@
 
 import type { Connection } from 'mysql2/promise';
 import type { ClassificationResult } from './classify.js';
+import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } from './businessTime.js';
 
 export interface RoutingPatch {
   // classification fields
   category: string;
   confidence: number;
   isDemand: number;
+  isMedicalBill: number;
   needsReview: number;
   claimNumber: string | null;
   fromName: string | null;
@@ -34,9 +36,10 @@ export interface RoutingPatch {
   // assignment
   assignedTeamId: number;
   assignedHandlerId: number | null;
+  priorityAssignment: boolean;
   status: 'new' | 'assigned' | 'escalated';
-  assignedAt: Date;
-  dueAt: Date;
+  assignedAt: Date | null;
+  dueAt: Date | null;
 
   // QA snapshot (never overwritten after first write)
   initialCategory: string;
@@ -57,11 +60,51 @@ interface HandlerRow { id: number; name: string; openCount: number; }
 const CONFIDENCE_AUTO   = 90;
 const CONFIDENCE_REVIEW = 75;
 
+/** Priority inbound mail goes directly to the attorney / demand owner, Jayla. */
+export function isJaylaPriority(classification: ClassificationResult): boolean {
+  const text = [
+    classification.requested_action,
+    classification.reason,
+    classification.sender_organization,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return classification.is_demand
+    || classification.is_medical_bill === true
+    || isLetterOfRepresentation(classification.requested_action, classification.reason)
+    || /\b(attorney|attorney's|attorneys|counsel|law firm|legal representative|esq\.?|lor)\b/.test(text);
+}
+
+/** Urgent alarms cover escalations, demands, Holt matters, and court filings. */
+export function isUrgentMailClassification(classification: ClassificationResult): boolean {
+  const text = [
+    classification.requested_action,
+    classification.reason,
+    classification.sender_organization,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return classification.is_demand
+    || classification.category === 'legal_or_high_risk'
+    || /\b(holt|time[ -]?limit|policy[ -]?limit|court|summons|complaint|subpoena|lawsuit|litigation|hearing|answer due)\b/.test(text);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function findAddressedHandler(conn: Connection, sourceText?: string): Promise<number | null> {
+  if (!sourceText?.trim()) return null;
+  const [handlers] = await conn.execute<any[]>('SELECT id, name FROM handlers WHERE active = 1 AND name IS NOT NULL');
+  const normalized = sourceText.replace(/\s+/g, ' ');
+  for (const handler of handlers) {
+    const escapedName = escapeRegex(String(handler.name)).replace(/\\ /g, '\\s+');
+    if (new RegExp(`\\b${escapedName}\\b`, 'i').test(normalized)) return handler.id;
+  }
+  return null;
+}
+
 export async function route(
   conn: Connection,
   classification: ClassificationResult,
   /** Pass overrides for confidence thresholds in tests */
-  opts?: { confidenceAuto?: number; confidenceReview?: number }
+  opts?: { confidenceAuto?: number; confidenceReview?: number; sourceText?: string }
 ): Promise<RoutingPatch> {
   const confAuto   = opts?.confidenceAuto   ?? CONFIDENCE_AUTO;
   const confReview = opts?.confidenceReview ?? CONFIDENCE_REVIEW;
@@ -96,7 +139,20 @@ export async function route(
   //    - Normal lane: least-loaded active member (fewest open mail_items)
   let assignedHandlerId: number | null = null;
 
-  if (team.isReviewLane === 1 || lowConf) {
+  const priorityAssignment = isJaylaPriority(classification);
+  const addresseeEligible = !priorityAssignment
+    && classification.category !== 'legal_or_high_risk'
+    && classification.category !== 'injury_pip_bi'
+    && !classification.is_demand;
+  const addressedHandlerId = addresseeEligible ? await findAddressedHandler(conn, opts?.sourceText) : null;
+  if (priorityAssignment) {
+    const [[jayla]] = await conn.execute<any[]>(
+      `SELECT id FROM handlers WHERE active = 1 AND LOWER(name) = 'jayla bernard' LIMIT 1`,
+    );
+    assignedHandlerId = jayla?.id ?? null;
+  } else if (addressedHandlerId) {
+    assignedHandlerId = addressedHandlerId;
+  } else if (team.isReviewLane === 1 || lowConf) {
     // Route to review lane
     const [[reviewTeam]] = await conn.execute<any[]>(
       `SELECT id, sla_hours FROM teams WHERE is_review_lane = 1 LIMIT 1`
@@ -130,15 +186,14 @@ export async function route(
     }
   }
 
-  // 5. Compute dueAt
+  // 5. Compute the internal review deadline. Demand deadlines remain in
+  // responseDueDate so an item can display and remind against both clocks.
   const now = new Date();
-  let dueAt: Date;
-  if (classification.response_due_date) {
-    const parsed = new Date(classification.response_due_date);
-    dueAt = isNaN(parsed.getTime()) ? addHours(now, team.slaHours) : parsed;
-  } else {
-    dueAt = addHours(now, team.slaHours);
-  }
+  const dueAt = assignedHandlerId
+    ? (isLetterOfRepresentation(classification.requested_action, classification.reason)
+      ? addMailBusinessDays(now, 1)
+      : addMailBusinessHours(now, 4))
+    : null;
 
   // 6. Build history actions
   const historyActions: RoutingPatch['historyActions'] = [
@@ -154,6 +209,7 @@ export async function route(
     category: classification.category,
     confidence: classification.confidence,
     isDemand: classification.is_demand ? 1 : 0,
+    isMedicalBill: classification.is_medical_bill ? 1 : 0,
     needsReview,
     claimNumber: classification.claim_number ?? null,
     fromName: null,
@@ -162,15 +218,16 @@ export async function route(
     claimantName: classification.claimant_or_member_name ?? null,
     dateOfLoss: classification.date_of_loss ?? null,
     requestedAction: classification.requested_action ?? null,
-    urgency: classification.urgency ?? 'normal',
+    urgency: isUrgentMailClassification(classification) ? 'urgent' : (classification.urgency ?? 'normal'),
     reason: classification.reason ?? null,
     demandDate: classification.demand_date ?? null,
     responseDueDate: classification.response_due_date ?? null,
 
     assignedTeamId: team.id,
     assignedHandlerId,
+    priorityAssignment,
     status: assignedHandlerId ? baseStatus : 'new',
-    assignedAt: assignedHandlerId ? now : null as any,
+    assignedAt: assignedHandlerId ? now : null,
     dueAt,
 
     initialCategory: classification.category,
@@ -179,8 +236,4 @@ export async function route(
 
     historyActions,
   };
-}
-
-function addHours(date: Date, hours: number): Date {
-  return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }

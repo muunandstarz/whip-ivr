@@ -26,6 +26,7 @@ export interface ClassificationResult {
   category: Category;
   confidence: number;           // 0-100
   is_demand: boolean;
+  is_medical_bill?: boolean;
   demand_date?: string | null;
   response_due_date?: string | null;
   claim_number?: string | null;
@@ -51,10 +52,11 @@ const SYSTEM_PROMPT = `You are a claims mail classifier for Whip Claims Manageme
 Rules:
 - If the mail contains BOTH a total-loss valuation AND an outbound subro response, choose total_loss.
 - Set is_demand=true if the mail is a formal demand for payment or settlement.
-- Extract response_due_date if stated or implied (e.g. "respond within 30 days" → calculate from demand_date or today).
+- Set is_medical_bill=true only when the mail is a medical provider bill, medical invoice, HCFA/CMS-1500, UB-04, itemized statement, EOB, or medical demand package. Do not set it for ordinary injury correspondence without billing material.
+- Extract response_due_date as an absolute YYYY-MM-DD date if stated or implied. For wording such as "respond within 30 days" or "30 days from receipt," calculate from the supplied Mailroom received date. Never use the processing date as a substitute. If no demand deadline exists, return null.
 - confidence: 0-100. Use <75 when genuinely ambiguous; use ≥90 when clear.
 - Return ONLY minified JSON, no markdown fences, no explanation. Schema:
-{"category":"…","confidence":0,"is_demand":false,"demand_date":null,"response_due_date":null,"claim_number":null,"sender_organization":null,"claimant_or_member_name":null,"adverse_carrier":null,"date_of_loss":null,"requested_action":null,"urgency":"normal","reason":"…"}`;
+{"category":"…","confidence":0,"is_demand":false,"is_medical_bill":false,"demand_date":null,"response_due_date":null,"claim_number":null,"sender_organization":null,"claimant_or_member_name":null,"adverse_carrier":null,"date_of_loss":null,"requested_action":null,"urgency":"normal","reason":"…"}`;
 
 /** Strip markdown code fences and trim whitespace */
 function stripFences(raw: string): string {
@@ -83,6 +85,7 @@ function parseClassification(raw: string): ClassificationResult {
     category: category as Category,
     confidence: Number(parsed.confidence ?? 50),
     is_demand: Boolean(parsed.is_demand),
+    is_medical_bill: Boolean(parsed.is_medical_bill),
     demand_date: (parsed.demand_date as string) ?? null,
     response_due_date: (parsed.response_due_date as string) ?? null,
     claim_number: (parsed.claim_number as string) ?? null,
@@ -102,6 +105,8 @@ export interface ClassifyInput {
   subject?: string;
   bodyText?: string;
   attachmentNames?: string[];
+  /** Original Gmail received time or Claims Mail upload time, for deadline calculations. */
+  receivedAt?: Date | string | null;
   /** For Slack mail items: presigned image URLs for vision */
   imageUrls?: string[];
   /** Presigned S3 URLs for attached PDFs — downloaded and sent as base64 file_url */
@@ -110,6 +115,10 @@ export interface ClassifyInput {
 
 export async function classify(input: ClassifyInput): Promise<ClassificationResult> {
   const parts: string[] = [];
+  if (input.receivedAt) {
+    const receivedAt = new Date(input.receivedAt);
+    if (!Number.isNaN(receivedAt.getTime())) parts.push(`Mailroom received date: ${receivedAt.toISOString().slice(0, 10)}`);
+  }
   if (input.subject) parts.push(`Subject: ${input.subject}`);
   if (input.bodyText) parts.push(`Body:\n${input.bodyText.slice(0, 4000)}`);
   if (input.attachmentNames?.length) {
@@ -141,24 +150,41 @@ export async function classify(input: ClassifyInput): Promise<ClassificationResu
     userContent = userText;
   }
 
-  const result = await invokeLLM({
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userContent },
-    ],
-  });
-
-  const raw = (() => {
+  const extractRaw = (result: Awaited<ReturnType<typeof invokeLLM>>): string | null => {
     const choice = result.choices?.[0];
-    if (!choice) throw new Error('classify: empty LLM response');
+    if (!choice) return null;
     const content = choice.message.content;
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
       const textPart = content.find((c: { type: string }) => c.type === 'text') as { text: string } | undefined;
       if (textPart) return textPart.text;
     }
-    throw new Error('classify: unexpected content shape');
-  })();
+    return null;
+  };
+
+  let result = await invokeLLM({
+    model: 'gpt-5-mini',
+    timeoutMs: hasFiles ? 30_000 : 45_000,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userContent },
+    ],
+  });
+  let raw = extractRaw(result);
+  // Some providers decline rich PDF inputs without a visible text response.
+  // Retry the same classification from the persisted subject/body/attachment metadata.
+  if (!raw && hasFiles) {
+    result = await invokeLLM({
+      model: 'gpt-5-mini',
+      timeoutMs: 30_000,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userText },
+      ],
+    });
+    raw = extractRaw(result);
+  }
+  if (!raw) throw new Error('classify: empty LLM response');
 
   return parseClassification(raw);
 }

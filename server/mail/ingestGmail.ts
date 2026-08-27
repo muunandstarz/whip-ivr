@@ -56,7 +56,7 @@ export interface GmailFetchFn {
   addLabel(token: string, messageId: string, labelId: string): Promise<void>;
   /** Get or create a label by name, returning its ID */
   getOrCreateLabel(token: string, labelName: string): Promise<string>;
-  /** @deprecated kept for test compatibility — no-op in production */
+  /** Remove Gmail's UNREAD label after a successful Mailroom assignment. */
   markRead(token: string, messageId: string): Promise<void>;
 }
 
@@ -120,6 +120,16 @@ function extractMessageBody(payload: GmailMessage['payload']): string {
       : b64urlToString(payload.body.data);
   }
   return extractTextBody({ mimeType: payload.mimeType ?? 'multipart/mixed', body: payload.body, parts: payload.parts });
+}
+
+/** Gmail's internalDate is the mailbox receipt time; the Date header is sender-provided. */
+function resolveReceivedAt(message: GmailMessage, dateHeader: string | null): Date {
+  const internalTimestamp = Number(message.internalDate);
+  if (Number.isFinite(internalTimestamp) && internalTimestamp > 0) {
+    return new Date(internalTimestamp);
+  }
+  const headerTimestamp = dateHeader ? new Date(dateHeader).getTime() : NaN;
+  return Number.isFinite(headerTimestamp) ? new Date(headerTimestamp) : new Date();
 }
 
 function collectAttachments(part: GmailPart): Array<{ filename: string; mimeType: string; attachmentId?: string; data?: string }> {
@@ -222,7 +232,7 @@ export async function ingestGmail(
 
       const subject = getHeader('Subject');
       const dateRaw = getHeader('Date');
-      const receivedAt = dateRaw ? new Date(dateRaw) : new Date(Number(msg.internalDate));
+      const receivedAt = resolveReceivedAt(msg, dateRaw);
 
       // Sender extraction: Reply-To > From (carrier sends to claims@, owner inbox is just a copy)
 
@@ -315,6 +325,7 @@ const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.labels',
   'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.send',
 ].join(' ');
 
 /** Build the Google OAuth consent URL for the admin to visit */
@@ -440,8 +451,16 @@ export function buildRealGmailFetch(conn: Connection): GmailFetchFn {
       return created.id;
     },
 
-    /** No-op — kept for test compatibility */
-    async markRead(_token, _messageId) {},
+    async markRead(token, messageId) {
+      const response = await fetch(`${GMAIL_BASE}/messages/${messageId}/modify`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ removeLabelIds: ['UNREAD'] }),
+      });
+      if (!response.ok) {
+        throw new Error(`Gmail mark-read failed (${response.status})`);
+      }
+    },
 
   };
 }

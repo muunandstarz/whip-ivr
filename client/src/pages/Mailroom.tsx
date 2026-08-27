@@ -130,6 +130,18 @@ function formatSubject(subject: string | null | undefined, source: string): stri
   }
   return subject;
 }
+
+function displayMailBody(item: any): string | null {
+  const body = item?.bodyText?.trim() ?? "";
+  const pageMarkersOnly = body.length > 0 && body.replace(/--\s*\d+\s+of\s+\d+\s*--/gi, "").trim().length === 0;
+  if (body && !pageMarkersOnly) return body;
+  if (item?.source === "mail" || item?.source === "fax") {
+    return item?.summaryNote
+      ? `Document summary: ${item.summaryNote}\n\nThe original fax/document is available in Attachments.`
+      : "This item was received through Claims Mail. The original fax/document is available in Attachments.";
+  }
+  return body || null;
+}
 // Delta indicator
 function Delta({ n }: { n: number }) {
   if (n === 0) return <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Minus className="w-3 h-3" />0</span>;
@@ -155,6 +167,9 @@ function AdminDrawer({
   const [editHandlerId, setEditHandlerId] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
+  const [forwardRecipient, setForwardRecipient] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
 
   const { data, isLoading, refetch } = trpc.mail.getItem.useQuery(
     { id: itemId! },
@@ -170,9 +185,21 @@ function AdminDrawer({
 
   const resolveMut = trpc.mail.resolve.useMutation({ onSuccess: () => { toast.success("Resolved"); invalidate(); onClose(); }, onError: (e) => toast.error(e.message) });
   const escalateMut = trpc.mail.escalate.useMutation({ onSuccess: () => { toast.success("Escalated"); invalidate(); onClose(); }, onError: (e) => toast.error(e.message) });
+  const litigateMut = trpc.mail.litigate.useMutation({ onSuccess: () => { toast.success("Litigated claim escalated to administrator"); invalidate(); onClose(); }, onError: (e) => toast.error(e.message) });
   const rerouteMut = trpc.mail.reroute.useMutation({ onSuccess: () => { toast.success("Rerouted"); invalidate(); setShowRerouteDialog(false); }, onError: (e) => toast.error(e.message) });
   const addNoteMut = trpc.mail.addNote.useMutation({ onSuccess: () => { toast.success("Note added"); setNoteText(""); refetch(); }, onError: (e) => toast.error(e.message) });
   const reminderMut = trpc.mail.setReminder.useMutation({ onSuccess: () => { toast.success("Reminder set"); setShowReminderInput(false); setReminderDate(""); }, onError: (e) => toast.error(e.message) });
+  const forwardMut = trpc.mail.forwardToClaim.useMutation({
+    onSuccess: (result) => {
+      const skipped = result.skippedAttachments?.length ? ` ${result.skippedAttachments.length} attachment(s) could not be included.` : "";
+      toast.success(`Forwarded with ${result.attachmentCount} attachment(s).${skipped}`);
+      setShowForwardDialog(false);
+      setForwardRecipient("");
+      setForwardNote("");
+      refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -247,11 +274,11 @@ function AdminDrawer({
                 {/* Details tab */}
                 <TabsContent value="details" className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
                   {/* Message body */}
-                  {item.bodyText && (
+                  {displayMailBody(item) && (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Message Body</p>
                       <div className="text-sm whitespace-pre-wrap bg-muted/30 rounded p-3 max-h-48 overflow-y-auto text-foreground/80 leading-relaxed">
-                        {item.bodyText}
+                        {displayMailBody(item)}
                       </div>
                     </div>
                   )}
@@ -278,7 +305,8 @@ function AdminDrawer({
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                       <div><span className="text-muted-foreground">Handler</span><div className="font-medium">{handlerName}</div></div>
                       <div><span className="text-muted-foreground">Assigned On</span><div className="font-medium">{item.assignedAt ? fmtDate(item.assignedAt) : "—"}</div></div>
-                      <div><span className="text-muted-foreground">Due Date</span><div className={`font-medium ${item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved" ? "text-red-600" : ""}`}>{fmtDate(item.dueAt)}</div></div>
+                      <div><span className="text-muted-foreground">Review Due</span><div className={`font-medium ${item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved" ? "text-red-600" : ""}`}>{fmtDate(item.dueAt)}</div></div>
+                      {item.isDemand === 1 && <div><span className="text-muted-foreground">Demand Due</span><div className={`font-medium ${item.responseDueDate && new Date(`${item.responseDueDate}T23:59:59`) < new Date() && item.status !== "resolved" ? "text-red-600" : ""}`}>{item.responseDueDate ?? "—"}</div></div>}
                       <div><span className="text-muted-foreground">Status</span><div className="font-medium capitalize">{item.status}</div></div>
                     </div>
                   </div>
@@ -288,13 +316,33 @@ function AdminDrawer({
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowRerouteDialog(true)}>
                       <ArrowRight className="w-3.5 h-3.5 mr-1.5" /> Reroute
                     </Button>
-                    <Button size="sm" variant="outline" className="h-8 text-xs text-green-700 border-green-200 hover:bg-green-50"
-                      onClick={() => resolveMut.mutate({ itemId: item.id })} disabled={resolveMut.isPending}>
-                      <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Resolve
+                    <Button size="sm" variant="outline" className="h-8 text-xs text-sky-700 border-sky-200 hover:bg-sky-50" onClick={() => { setForwardRecipient(""); setForwardNote(""); setShowForwardDialog(true); }}>
+                      <Mail className="w-3.5 h-3.5 mr-1.5" /> Forward to Claim
                     </Button>
+                    {item.isDemand === 1 ? (
+                      <>
+                        <Button size="sm" variant="outline" className="h-8 text-xs text-green-700 border-green-200 hover:bg-green-50"
+                          onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "settled" })} disabled={resolveMut.isPending}>
+                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Settled
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 text-xs text-red-700 border-red-200 hover:bg-red-50"
+                          onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "denied" })} disabled={resolveMut.isPending}>
+                          <XCircle className="w-3.5 h-3.5 mr-1.5" /> Denied
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-8 text-xs text-green-700 border-green-200 hover:bg-green-50"
+                        onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "other" })} disabled={resolveMut.isPending}>
+                        <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Resolve
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" className="h-8 text-xs text-orange-700 border-orange-200 hover:bg-orange-50"
                       onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated by admin" })} disabled={escalateMut.isPending}>
                       <AlertCircle className="w-3.5 h-3.5 mr-1.5" /> Escalate
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs text-red-700 border-red-300 hover:bg-red-50"
+                      onClick={() => litigateMut.mutate({ itemId: item.id })} disabled={litigateMut.isPending}>
+                      <Scale className="w-3.5 h-3.5 mr-1.5" /> Litigated Claim
                     </Button>
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowReminderInput(v => !v)}>
                       <Bell className="w-3.5 h-3.5 mr-1.5" /> Set Reminder
@@ -435,6 +483,35 @@ function AdminDrawer({
         </Dialog>
       )}
 
+      {showForwardDialog && item && (
+        <Dialog open onOpenChange={() => setShowForwardDialog(false)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Forward to Claim</DialogTitle></DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground text-xs">This sends the captured message and all recoverable attachments from the connected Claims mailbox. Confirm the intended claim recipient before sending.</p>
+              <div className="rounded border bg-muted/30 px-3 py-2 text-xs space-y-1">
+                <div><span className="text-muted-foreground">Claim #:</span> {item.claimNumber ?? "Not identified"}</div>
+                <div><span className="text-muted-foreground">Subject:</span> {item.subject ?? "(no subject)"}</div>
+              </div>
+              <div>
+                <Label className="text-xs">Claim recipient email</Label>
+                <Input className="mt-1" type="email" placeholder="recipient@example.com" value={forwardRecipient} onChange={(e) => setForwardRecipient(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Forwarding note (optional)</Label>
+                <Textarea className="mt-1 min-h-[72px] text-sm" value={forwardNote} onChange={(e) => setForwardNote(e.target.value)} placeholder="Add context for the claim file…" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowForwardDialog(false)}>Cancel</Button>
+              <Button onClick={() => forwardMut.mutate({ itemId: item.id, recipient: forwardRecipient.trim(), note: forwardNote.trim() || undefined })} disabled={!/^\S+@\S+\.\S+$/.test(forwardRecipient.trim()) || forwardMut.isPending}>
+                <Mail className="w-3.5 h-3.5 mr-1.5" /> {forwardMut.isPending ? "Forwarding…" : "Confirm & Forward"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Edit Routing dialog */}
       {showEditRouting && item && (
         <Dialog open onOpenChange={() => setShowEditRouting(false)}>
@@ -474,7 +551,7 @@ function AdminDrawer({
 }
 
 // ─── Admin: All Mail queue (redesigned) ──────────────────────────────────────
-type AdminTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "resolved" | "log";
+type AdminTab = "all" | "overdue" | "urgent" | "legal" | "demands" | "bills" | "resolved" | "log";
 
 function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -506,22 +583,18 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
     };
     if (activeTab === "overdue") base.overdue = true;
     else if (activeTab === "urgent") base.urgent = true;
-    else if (activeTab === "legal") base.category = 'legal_or_high_risk';
-    else if (activeTab === "demands") base.status = undefined, base.legalOnly = undefined;
+    else if (activeTab === "legal") base.legalOnly = true;
+    else if (activeTab === "demands") base.isDemand = true;
+    else if (activeTab === "bills") base.medicalBills = true;
     else if (activeTab === "resolved") base.status = "resolved";
     // status filter from dropdown (only applies on "all" tab)
     if (activeTab === "all" && statusFilter !== "all") base.status = statusFilter;
-    // demands tab: filter by isDemand — we'll filter client-side since adminQueue doesn't have isDemand filter
     return base;
   }, [activeTab, page, pageSize, search, categoryFilter, handlerFilter, statusFilter, dateFrom, dateTo, sortOrder, sourceFilter]);
 
   const { data, isLoading, refetch } = trpc.mail.adminQueue.useQuery(queryInput, { refetchInterval: 30000 });
-  const items = useMemo(() => {
-    let list = data?.items ?? [];
-    if (activeTab === "demands") list = list.filter(i => i.isDemand === 1);
-    return list;
-  }, [data?.items, activeTab]);
-  const total = activeTab === "demands" ? items.length : (data?.total ?? 0);
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const utils = trpc.useUtils();
   const resolveMut = trpc.mail.resolve.useMutation({ onSuccess: () => { toast.success("Resolved"); utils.mail.adminQueue.invalidate(); utils.mail.adminStats.invalidate(); refetch(); }, onError: (e) => toast.error(e.message) });
@@ -615,8 +688,14 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
-              <TableHead className="w-8 py-2" onClick={toggleSelectAll}>
-                <input type="checkbox" className="cursor-pointer" checked={items.length > 0 && selectedIds.size === items.length} onChange={toggleSelectAll} />
+              <TableHead className="w-8 py-2" onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className="cursor-pointer"
+                  checked={items.length > 0 && selectedIds.size === items.length}
+                  onClick={e => e.stopPropagation()}
+                  onChange={toggleSelectAll}
+                />
               </TableHead>
               <TableHead className="w-8 py-2 text-xs">Status</TableHead>
               <TableHead className="w-8 py-2 text-xs">Type</TableHead>
@@ -636,7 +715,8 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
             ) : items.length === 0 ? (
               <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground text-sm">No items found.</TableCell></TableRow>
             ) : items.map(item => {
-              const isOverdue = item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved";
+              const isOverdue = Boolean(item.assignedHandlerId && item.dueAt && isPast(new Date(item.dueAt)) && item.status !== "resolved");
+              const demandDueReached = Boolean(item.isDemand === 1 && item.responseDueDate && new Date(`${item.responseDueDate}T23:59:59`) < new Date() && item.status !== "resolved");
               const handlerName = handlers?.find(h => h.id === item.assignedHandlerId)?.name;
               return (
                 <TableRow
@@ -644,8 +724,14 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                   className={`cursor-pointer hover:bg-muted/30 ${rowBorderClass(item)} ${selectedIds.has(item.id) ? "bg-blue-50/50" : ""}`}
                   onClick={() => { setSelectedItemId(item.id); setDrawerOpen(true); }}
                 >
-                  <TableCell className="py-2" onClick={e => { e.stopPropagation(); toggleSelect(item.id); }}>
-                    <input type="checkbox" className="cursor-pointer" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} />
+                  <TableCell className="py-2" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="cursor-pointer"
+                      checked={selectedIds.has(item.id)}
+                      onClick={e => e.stopPropagation()}
+                      onChange={() => toggleSelect(item.id)}
+                    />
                   </TableCell>
                   <TableCell className="py-2"><StatusPill item={item} /></TableCell>
                   <TableCell className="py-2"><SourceIcon source={item.source} /></TableCell>
@@ -665,13 +751,14 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                       <span className="text-xs text-muted-foreground/40">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="py-2"><CategoryBadge cat={item.category} /></TableCell>
+                  <TableCell className="py-2">{item.isMedicalBill ? <Badge variant="outline" className="border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</Badge> : <CategoryBadge cat={item.category} />}</TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">{item.claimNumber ?? "—"}</TableCell>
                   <TableCell className="py-2 text-xs">{handlerName ?? <span className="text-muted-foreground">Unassigned</span>}</TableCell>
                   <TableCell className="py-2">
                     <div className={`text-xs ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>{fmtDate(item.dueAt)}</div>
                     {isOverdue && <div className="text-xs text-red-500">Overdue</div>}
                     {!isOverdue && item.dueAt && isToday(new Date(item.dueAt)) && <div className="text-xs text-amber-600">Due today</div>}
+                    {item.isDemand === 1 && item.responseDueDate && <div className={`text-xs mt-0.5 ${demandDueReached ? "text-red-600 font-medium" : "text-muted-foreground"}`}>Demand: {item.responseDueDate}</div>}
                   </TableCell>
                   <TableCell className="py-2 text-xs text-muted-foreground">{fmtRelative(item.receivedAt)}</TableCell>
                   <TableCell className="py-2" onClick={e => e.stopPropagation()}>
@@ -683,7 +770,12 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => { setSelectedItemId(item.id); setDrawerOpen(true); }}>Open</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id })}>Resolve</DropdownMenuItem>
+                        {item.isDemand === 1 ? (
+                          <>
+                            <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "settled" })}>Resolve as Settled</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "denied" })}>Resolve as Denied</DropdownMenuItem>
+                          </>
+                        ) : <DropdownMenuItem onClick={() => resolveMut.mutate({ itemId: item.id, outcome: "other" })}>Resolve</DropdownMenuItem>}
                         <DropdownMenuItem onClick={() => escalateMut.mutate({ itemId: item.id, reason: "Escalated by admin" })}>Escalate</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -699,15 +791,20 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>Showing {total === 0 ? 0 : startIdx}–{endIdx} of {total} results</span>
         <div className="flex items-center gap-2">
-          <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-            <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 / page</SelectItem>
-              <SelectItem value="25">25 / page</SelectItem>
-              <SelectItem value="50">50 / page</SelectItem>
-              <SelectItem value="100">100 / page</SelectItem>
-            </SelectContent>
-          </Select>
+          <select
+            aria-label="Rows per page"
+            value={pageSize}
+            onChange={(event) => {
+              setPage(1);
+              setPageSize(Number(event.currentTarget.value));
+            }}
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
           <div className="flex items-center gap-1">
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -824,7 +921,7 @@ function AdminMailLog() {
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{item.id}</TableCell>
                 <TableCell className="py-1.5 text-xs max-w-xs truncate">{item.subject ?? "—"}</TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{item.fromEmail ?? item.fromName ?? "—"}</TableCell>
-                <TableCell className="py-1.5"><CategoryBadge cat={item.category} /></TableCell>
+                <TableCell className="py-1.5">{item.isMedicalBill ? <Badge variant="outline" className="border-cyan-300 bg-cyan-50 text-cyan-800">Medical Bill</Badge> : <CategoryBadge cat={item.category} />}</TableCell>
                 <TableCell className="py-1.5 text-xs capitalize">{item.status}</TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{item.claimNumber ?? "—"}</TableCell>
                 <TableCell className="py-1.5 text-xs text-muted-foreground">{fmtRelative(item.receivedAt)}</TableCell>
@@ -1462,11 +1559,12 @@ export default function Mailroom() {
             <TabsTrigger value="urgent" className="text-xs"><AlertTriangle className="h-3.5 w-3.5 mr-1.5" />Urgent</TabsTrigger>
             <TabsTrigger value="legal" className="text-xs"><Scale className="h-3.5 w-3.5 mr-1.5" />Legal</TabsTrigger>
             <TabsTrigger value="demands" className="text-xs"><FileText className="h-3.5 w-3.5 mr-1.5" />Demands</TabsTrigger>
+            <TabsTrigger value="bills" className="text-xs"><FileText className="h-3.5 w-3.5 mr-1.5" />Bills</TabsTrigger>
             <TabsTrigger value="resolved" className="text-xs"><CheckCircle className="h-3.5 w-3.5 mr-1.5" />Resolved</TabsTrigger>
             <TabsTrigger value="log" className="text-xs"><BarChart3 className="h-3.5 w-3.5 mr-1.5" />Mail Log</TabsTrigger>
             <TabsTrigger value="setup" className="text-xs"><Settings2 className="h-3.5 w-3.5 mr-1.5" />Setup</TabsTrigger>
           </TabsList>
-          {(["all", "overdue", "urgent", "legal", "demands", "resolved"] as AdminTab[]).map(tab => (
+          {(["all", "overdue", "urgent", "legal", "demands", "bills", "resolved"] as AdminTab[]).map(tab => (
             <TabsContent key={tab} value={tab} className="mt-4">
               <AdminMailQueue activeTab={tab} />
             </TabsContent>

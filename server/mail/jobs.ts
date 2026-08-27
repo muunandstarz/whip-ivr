@@ -15,6 +15,9 @@ import mysql from 'mysql2/promise';
 import { classify } from './classify.js';
 import { route } from './route.js';
 import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
+import { buildAiSubject, buildMailSummary, createMailContentReader, parseMailContentFiles, refreshIncompleteMailContent } from './contentRefresh.js';
+import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
+import { markAssignedMailSource } from './sourceMarking.js';
 
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
 
@@ -98,10 +101,11 @@ export async function runMailReminders(
     ? ` AND mi.id IN (${itemIds.map(() => '?').join(', ')})`
     : '';
 
-  // Select overdue items (dueAt < NOW()) OR remindAt-due items, unresolved, assigned
+  // Select missed review deadlines, explicit reminders, or demand deadlines.
   const [items] = await conn.execute<any[]>(
     `SELECT mi.id, mi.assigned_handler_id, mi.due_at, mi.remind_at,
-            mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date,
+            mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date, mi.is_demand, mi.urgency,
+            mi.resolution_outcome,
             h.email AS handler_email, h.name AS handler_name
      FROM mail_items mi
      JOIN handlers h ON h.id = mi.assigned_handler_id
@@ -111,12 +115,16 @@ export async function runMailReminders(
          (mi.due_at IS NOT NULL AND mi.due_at < ?)
          OR
          (mi.remind_at IS NOT NULL AND mi.remind_at <= ?)
+         OR
+         (mi.is_demand = 1 AND mi.response_due_date IS NOT NULL AND DATE(mi.response_due_date) <= DATE(?))
+         OR
+         mi.urgency = 'urgent'
        )
        AND (mi.last_reminded_at IS NULL OR mi.last_reminded_at < ?)
        ${itemIdFilter}
      ORDER BY mi.due_at ASC
      LIMIT 100`,
-    [now, now, throttleCutoff, ...itemIds]
+    [now, now, now, throttleCutoff, ...itemIds]
   );
 
   for (const item of items) {
@@ -130,8 +138,13 @@ export async function runMailReminders(
 
       const overdue = item.due_at && new Date(item.due_at) < now;
       const reminderDue = item.remind_at && new Date(item.remind_at) <= now;
-      const due = item.response_due_date ? ` Response due: *${item.response_due_date}*` : '';
-      const prefix = overdue ? '⏰ *Overdue mail item*' : '🔔 *Reminder: mail item due*';
+      const demandDue = item.is_demand === 1 && item.response_due_date && new Date(`${item.response_due_date}T23:59:59`) <= now;
+      const urgentAlarm = item.urgency === 'urgent';
+      const due = item.response_due_date ? ` Demand deadline: *${item.response_due_date}*` : '';
+      const prefix = demandDue
+        ? '🚨 *Demand deadline reached — record settled or denied outcome*'
+        : urgentAlarm ? '🚨 *Urgent Mailroom alarm — immediate review required*'
+        : overdue ? '⏰ *Mail review overdue*' : '🔔 *Mailroom reminder*';
       const text = [
         prefix,
         `*Item #${item.id}* — ${item.subject ?? '(no subject)'}`,
@@ -174,9 +187,10 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
   try {
     // Select unprocessed items (category IS NULL, status='new')
     const [items] = await conn.execute<any[]>(
-      `SELECT mi.id, mi.subject, mi.body_text, mi.from_email, mi.source,
+      `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
               mi.slack_channel_id, mi.slack_message_ts,
-              GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names
+              GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
+              GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
        FROM mail_items mi
        LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
        WHERE mi.category IS NULL AND mi.status = 'new'
@@ -185,43 +199,74 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
        LIMIT 20`
     );
 
+    const readMailContent = await createMailContentReader(conn);
     let processed = 0, errors = 0;
     for (const item of items) {
       try {
-        // Classify
+        const content = await readMailContent(
+          item.source,
+          item.external_id,
+          item.body_text,
+          parseMailContentFiles(item.file_entries),
+        );
+        if (!content.hasReadableContent) {
+          await conn.execute(
+            `UPDATE mail_items
+             SET needs_review=1,
+                 reason=COALESCE(NULLIF(reason, ''), 'Awaiting readable email body or attachment content before assignment')
+             WHERE id=?`,
+            [item.id],
+          );
+          continue;
+        }
         const classification = await classify({
           subject: item.subject ?? undefined,
-          bodyText: item.body_text ?? undefined,
+          bodyText: content.indexedBody,
+          receivedAt: item.received_at,
           attachmentNames: item.attachment_names
             ? item.attachment_names.split(', ').filter(Boolean)
             : undefined,
         });
 
         // Route
-        const patch = await route(conn, classification);
+        const patch = await route(conn, classification, { sourceText: content.indexedBody });
 
         // Apply patch to mail_items
         await conn.execute(
           `UPDATE mail_items SET
-             category = ?, confidence = ?, is_demand = ?, needs_review = ?,
+             category = ?, confidence = ?, is_demand = ?, is_medical_bill = ?, needs_review = ?,
              claim_number = ?, from_name = ?, sender_org = ?, adverse_carrier = ?,
              claimant_name = ?, date_of_loss = ?, requested_action = ?,
              urgency = ?, reason = ?, demand_date = ?, response_due_date = ?,
              assigned_team_id = ?, assigned_handler_id = ?, status = ?,
              assigned_at = ?, due_at = ?,
-             initial_category = ?, initial_handler_id = ?, initial_confidence = ?
+             initial_category = ?, initial_handler_id = ?, initial_confidence = ?,
+             summary_note = ?, subject = ?, body_text = ?
            WHERE id = ?`,
           [
-            patch.category, patch.confidence, patch.isDemand, patch.needsReview,
+            patch.category, patch.confidence, patch.isDemand, patch.isMedicalBill, patch.needsReview,
             patch.claimNumber, patch.fromName, patch.senderOrg, patch.adverseCarrier,
             patch.claimantName, patch.dateOfLoss, patch.requestedAction,
             patch.urgency, patch.reason, patch.demandDate, patch.responseDueDate,
             patch.assignedTeamId, patch.assignedHandlerId, patch.status,
             patch.assignedAt, patch.dueAt,
             patch.initialCategory, patch.initialHandlerId, patch.initialConfidence,
+            buildMailSummary(classification), buildAiSubject(classification, item.subject ?? null), content.indexedBody,
             item.id,
           ]
         );
+        if (patch.assignedHandlerId) {
+          const sourceResult = await markAssignedMailSource(conn, {
+            id: item.id,
+            source: item.source,
+            externalId: item.external_id,
+            slackChannelId: item.slack_channel_id,
+            slackMessageTs: item.slack_message_ts,
+          });
+          if (sourceResult.errors.length) {
+            console.warn(`[mailProcess] source marking failed for ${item.id}: ${sourceResult.errors.join('; ')}`);
+          }
+        }
 
         // Append routing history
         for (const h of patch.historyActions) {
@@ -232,22 +277,8 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
           );
         }
 
-        // Send urgent DM if urgency='urgent' and handler is assigned
-        if (patch.urgency === 'urgent' && patch.assignedHandlerId) {
-          const [[handlerRow]] = await conn.execute<any[]>(
-            'SELECT email FROM handlers WHERE id = ?', [patch.assignedHandlerId]
-          );
-          if (handlerRow?.email) {
-            const token = process.env.SLACK_BOT_TOKEN ?? '';
-            const slack = buildRealSlackDM(token);
-            await sendUrgentAssignmentDM(handlerRow.email, {
-              id: item.id,
-              subject: item.subject,
-              category: patch.category,
-              responseDueDate: patch.responseDueDate,
-            }, slack).catch(e => console.error('[mailProcess] urgent DM failed:', e));
-          }
-        }
+        // Mailroom routing is intentionally internal-only. Slack is reserved for
+        // user-initiated Mail Bot operations and overdue reminders, not assignments.
 
         processed++;
       } catch (e) {
@@ -256,7 +287,8 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
       }
     }
 
-    res.json({ ok: true, processed, errors, total: items.length });
+    const contentRefresh = await refreshIncompleteMailContent(conn, 25);
+    res.json({ ok: true, processed, errors, total: items.length, contentRefresh });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });
   } finally {
@@ -277,7 +309,8 @@ export async function mailIngestGmailHandler(req: Request, res: Response): Promi
   try {
     const gmail = buildRealGmailFetch(conn);
     const result = await ingestGmail(conn, gmail);
-    res.json({ ok: true, ...result });
+    const attachmentRecovery = await recoverStaleGmailAttachments(conn, 30);
+    res.json({ ok: true, ...result, attachmentRecovery });
   } catch (e) {
     console.error('[mailIngestGmail] error:', e);
     res.status(500).json({ ok: false, error: String(e) });

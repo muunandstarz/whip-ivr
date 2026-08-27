@@ -51,7 +51,7 @@ const FIXTURES: Array<{
       urgency: 'normal', reason: 'Adverse carrier seeking reimbursement',
     },
     expectedTeam: 'Inbound Subro',
-    expectedHandlerEmail: 'geovanni.cabrera@drivewhip.com',
+    expectedHandlerEmail: 'jayla.bernard@drivewhip.com',
     expectedStatus: 'assigned',
     expectedNeedsReview: 0,
     expectedIsDemand: 1,
@@ -136,8 +136,8 @@ const FIXTURES: Array<{
       urgency: 'urgent', reason: 'Policy-limit demand with explicit bad-faith threat',
     },
     expectedTeam: 'Review',
-    expectedHandlerEmail: null,
-    expectedStatus: 'new',
+    expectedHandlerEmail: 'jayla.bernard@drivewhip.com',
+    expectedStatus: 'escalated',
     expectedNeedsReview: 1,
     expectedIsDemand: 1,
     expectedHasDueDate: true,
@@ -219,13 +219,15 @@ describe('route() — mocked LLM', () => {
       // isDemand
       expect(patch.isDemand, `${fx.id}: isDemand`).toBe(fx.expectedIsDemand);
 
-      // dueAt: legal/demand cases must have a dueAt derived from response_due_date
-      if (fx.expectedHasDueDate && fx.classification.response_due_date) {
-        const expectedDue = new Date(fx.classification.response_due_date);
-        expect(
-          Math.abs(patch.dueAt.getTime() - expectedDue.getTime()),
-          `${fx.id}: dueAt within 1s of response_due_date`
-        ).toBeLessThan(1000);
+      // dueAt is the internal handler review deadline. A demand deadline stays
+      // separately in responseDueDate so the two clocks are never conflated.
+      if (fx.expectedStatus === 'new') {
+        expect(patch.dueAt, `${fx.id}: no review deadline without a handler`).toBeNull();
+      } else {
+        expect(patch.dueAt, `${fx.id}: assigned item has review deadline`).toBeInstanceOf(Date);
+      }
+      if (fx.classification.response_due_date) {
+        expect(patch.responseDueDate, `${fx.id}: preserves demand deadline`).toBe(fx.classification.response_due_date);
       }
 
       // initial* snapshot
@@ -246,4 +248,31 @@ describe('route() — mocked LLM', () => {
       }
     });
   }
+
+  it('routes non-priority mail addressed to an active handler directly to that handler', async () => {
+    const patch = await route(conn, {
+      category: 'existing_claim_followup', confidence: 96, is_demand: false,
+      demand_date: null, response_due_date: null, claim_number: 'MD-TEST-1',
+      sender_organization: 'Member', claimant_or_member_name: null, adverse_carrier: null,
+      date_of_loss: null, requested_action: 'Claim status update', urgency: 'normal',
+      reason: 'Routine claim correspondence',
+    }, { sourceText: 'Hello Natashia Edulan, please review the claim status update.' });
+    const [[handler]] = await conn.execute<any[]>('SELECT email FROM handlers WHERE id=?', [patch.assignedHandlerId]);
+    expect(handler?.email).toBe('natashiae@drivewhip.com');
+    expect(patch.status).toBe('assigned');
+  });
+
+  it('routes a medical bill directly to Jayla regardless of its general injury category', async () => {
+    const patch = await route(conn, {
+      category: 'injury_pip_bi', confidence: 96, is_demand: false, is_medical_bill: true,
+      demand_date: null, response_due_date: null, claim_number: 'MD-BILL-1',
+      sender_organization: 'Provider Billing', claimant_or_member_name: 'Claimant', adverse_carrier: null,
+      date_of_loss: null, requested_action: 'Review provider invoice', urgency: 'normal',
+      reason: 'Medical provider invoice and itemized bill attached',
+    });
+    const [[handler]] = await conn.execute<any[]>('SELECT email FROM handlers WHERE id=?', [patch.assignedHandlerId]);
+    expect(handler?.email).toBe('jayla.bernard@drivewhip.com');
+    expect(patch.isMedicalBill).toBe(1);
+    expect(patch.status).toBe('assigned');
+  });
 });

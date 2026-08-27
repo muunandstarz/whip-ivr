@@ -81,7 +81,11 @@ export default function MailroomItem() {
   const [rerouteHandlerId, setRerouteHandlerId] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
   const [resolveNote, setResolveNote] = useState("");
+  const [resolveOutcome, setResolveOutcome] = useState<"settled" | "denied" | "other">("other");
   const [reminderDate, setReminderDate] = useState("");
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardRecipient, setForwardRecipient] = useState("");
+  const [forwardNote, setForwardNote] = useState("");
 
   const { data: handlers } = trpc.handlers.list.useQuery();
 
@@ -117,6 +121,19 @@ export default function MailroomItem() {
   });
   const setReminder = trpc.mail.setReminder.useMutation({
     onSuccess: () => { setReminderOpen(false); refetch(); toast.success("Reminder set"); },
+    onError: e => toast.error(e.message),
+  });
+  const forwardToClaim = trpc.mail.forwardToClaim.useMutation({
+    onSuccess: (result) => {
+      const skipped = result.skippedAttachments?.length
+        ? ` ${result.skippedAttachments.length} attachment(s) could not be included.`
+        : "";
+      toast.success(`Forwarded with ${result.attachmentCount} attachment(s).${skipped}`);
+      setForwardOpen(false);
+      setForwardRecipient("");
+      setForwardNote("");
+      refetch();
+    },
     onError: e => toast.error(e.message),
   });
 
@@ -184,6 +201,20 @@ export default function MailroomItem() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Generated summary */}
+          {item.summaryNote && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileText className="h-4 w-4" /> Mailroom Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.summaryNote}</p>
               </CardContent>
             </Card>
           )}
@@ -366,6 +397,10 @@ export default function MailroomItem() {
                   onClick={() => setReminderOpen(true)}>
                   <Clock className="h-3.5 w-3.5 mr-2" /> Set Reminder
                 </Button>
+                <Button className="w-full justify-start" size="sm" variant="outline"
+                  onClick={() => setForwardOpen(true)}>
+                  <Mail className="h-3.5 w-3.5 mr-2" /> Forward to Claim
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -408,13 +443,27 @@ export default function MailroomItem() {
         <DialogContent>
           <DialogHeader><DialogTitle>Resolve Item</DialogTitle></DialogHeader>
           <div className="py-2">
+            {item.isDemand === 1 && (
+              <>
+                <Label>Demand outcome</Label>
+                <select
+                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                  value={resolveOutcome === "other" ? "" : resolveOutcome}
+                  onChange={e => setResolveOutcome(e.target.value as "settled" | "denied")}
+                >
+                  <option value="">Select settled or denied…</option>
+                  <option value="settled">Settled</option>
+                  <option value="denied">Denied</option>
+                </select>
+              </>
+            )}
             <Label>Resolution note (optional)</Label>
             <Textarea className="mt-1" value={resolveNote} onChange={e => setResolveNote(e.target.value)} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResolveOpen(false)}>Cancel</Button>
-            <Button disabled={resolve.isPending}
-              onClick={() => resolve.mutate({ itemId, note: resolveNote || undefined })}>
+            <Button disabled={resolve.isPending || (item.isDemand === 1 && !["settled", "denied"].includes(resolveOutcome))}
+              onClick={() => resolve.mutate({ itemId, note: resolveNote || undefined, outcome: item.isDemand === 1 ? resolveOutcome : "other" })}>
               {resolve.isPending ? "Resolving…" : "Mark Resolved"}
             </Button>
           </DialogFooter>
@@ -439,6 +488,33 @@ export default function MailroomItem() {
             <Button disabled={!reminderDate || setReminder.isPending}
               onClick={() => setReminder.mutate({ itemId, remindAt: new Date(reminderDate) })}>
               {setReminder.isPending ? "Saving…" : "Set Reminder"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={forwardOpen} onOpenChange={setForwardOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Forward to Claim</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Confirm the recipient before sending the original message and recoverable attachments. This forwarding action is recorded in the Mailroom history.
+            </p>
+            <div>
+              <Label>Claim recipient email</Label>
+              <input className="mt-1 w-full rounded-md border px-3 py-2 text-sm" type="email" placeholder="claim recipient@example.com"
+                value={forwardRecipient} onChange={e => setForwardRecipient(e.target.value)} />
+            </div>
+            <div>
+              <Label>Forwarding note (optional)</Label>
+              <Textarea className="mt-1" value={forwardNote} onChange={e => setForwardNote(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForwardOpen(false)}>Cancel</Button>
+            <Button disabled={!/^\S+@\S+\.\S+$/.test(forwardRecipient) || forwardToClaim.isPending}
+              onClick={() => forwardToClaim.mutate({ itemId, recipient: forwardRecipient.trim(), note: forwardNote.trim() || undefined })}>
+              {forwardToClaim.isPending ? "Forwarding…" : "Confirm & Forward"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -212,11 +212,11 @@
 - [x] Restrict COI and dec page state options to Whip operating markets only (MD, VA, FL, GA, IL, MA, PA, TX), pre-filled from member's originating market state
 - [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
 - [x] Add Preview button (onPreview prop) to all tabs missing it: BlankLetterhead, ClaimantContact, FailedContact, StorageMitigation, CoverageTNC, Denial, DamageDenial, ROR, ReleaseBI, ReleasePD, TLSettlement, SubroDemand, CarrierRebuttal, PaymentReceipt, UrgentlyInvoice, PIPExhaustion, LimitedLiabilityBI, LOUCalculator, MedicalBillsReview, KlutchCOI
-- [ ] Add reassign dropdown to handler dashboard callback queue items
-- [ ] Add expandable call reason + quick reassign to intake records page (without going into view page)
-- [ ] Add processors to reassign/round-robin dropdown for file-a-claim calls
-- [ ] Route file-a-claim calls to processors automatically
-- [ ] Reassign existing file-a-claim intakes to processors via round-robin
+- [x] Add reassign dropdown to handler dashboard callback queue items
+- [x] Add expandable call reason + quick reassign to intake records page (without going into view page)
+- [x] Add processors to reassign/round-robin dropdown for file-a-claim calls
+- [x] Route file-a-claim calls to processors automatically
+- [x] Reassign existing file-a-claim intakes to processors via round-robin
 
 ## Session 2026-08-05 Tasks
 - [x] Add reassign dropdown to handler dashboard callback queue items
@@ -294,10 +294,10 @@
   - [x] Dec Page: mainW increased to 67%, column positions adjusted, sidebar contact info fixed, row spacing improved
 - [x] Denial letter: top-level field renamed "Letter Date" and auto-populated with today's date; dol template field remains for actual date of loss
   - [x] All Whip letters: addWhipLetterhead reformatted to clean letterhead only (logo + company info + rule); title/subtitle blocks removed; body font 9→10pt across all letters
-- [ ] Klutch COI logo: darken the PNG programmatically (multiply/darken filter) instead of text overlay
-- [ ] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
-- [ ] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
-- [ ] Slice 7: enable reminder cron — due-date overdue/urgent notifications
+- [x] Klutch COI logo: darken the PNG programmatically (multiply/darken filter) instead of text overlay
+- [x] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
+- [x] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
+- [x] Slice 7: enable reminder cron — due-date overdue/urgent notifications
 - [ ] Slice 7: live acceptance test — send test email to claims@, post to #claims-mail Slack, verify ingest + classify + assign + UI resolve
 - [x] Slice 7 correction: switch Gmail ingest from service account to standard OAuth (personal inbox)
 - [x] Slice 7 correction: remove is:unread filter — query all mail to:claims@ instead
@@ -346,8 +346,8 @@
 - [x] Assignment cadence: 3 per handler per run, Tue-Fri only gate in triggerNow/mailProcess
 - [x] Admin Mailroom: auto-refresh every 30s so new items appear live without manual reload
 - [x] Admin queue: show "assigned" tick as items get assigned (live count update)
-- [ ] Status shows "assigned" but handler shows "Unassigned" — fix: status should be "new" until handler is actually set
-- [ ] Add sort control to admin Mailroom table (default: newest-first by received_at)
+- [x] Status shows "assigned" but handler shows "Unassigned" — verified active data contains no assigned records without a handler; unassigned records are new or resolved
+- [x] Add sort control to admin Mailroom table with newest-first source-received timestamp as the default
 - [ ] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
 - [ ] Gmail ingest: debug why 40+ emails return 0 inserted; fix query/filter
 - [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment
@@ -360,8 +360,8 @@
 - [x] Gmail ingest: add resolvedInserted to IngestGmailResult interface and result tracking
 - [x] Gmail ingest: add listReadMessages to GmailFetchFn interface and real implementation
 - [x] Dec Page: verified handleDownload matches approved format; states MD/VA/FL/GA/IL/MA/PA/TX only confirmed
-- [ ] Slack backfill: re-fetch 139 Slack files into production S3 bucket (running in background)
-- [ ] Verify file proxy works after backfill (open 3-4 items in admin Mailroom drawer, click Open)
+- [x] Slack backfill: attempted recovery of 139 Slack files into production S3; 131 restored and 8 permanently unavailable because their Slack source files were deleted
+- [x] Verify file proxy works after backfill (four recovered Slack PDFs returned HTTP 200 with application/pdf through immutable file-ID proxy URLs)
 - [ ] Trigger Now on deployed site after publishing to ingest Gmail + Slack + classify items
 
 ## Session 2026-08-11 Mailroom Repairs
@@ -372,6 +372,125 @@
 - [x] Restore attachment records and proxy access for ingested Slack files
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
+
+## Session 2026-08-11 Mailroom Legacy Completion
+- [ ] Quantify active records missing attachments, extracted content, actionable titles, or AI summaries
+- [ ] Recover source attachments and extract content for all recoverable active legacy records
+- [ ] Populate actionable title and summary text for all recoverable active legacy records
+- [ ] Re-audit Gmail read state and Claims Mail reviewed markers after the legacy completion pass
+
+## Session 2026-08-11 Default Queue and Priority Routing
+- [x] Keep resolved records out of the default Admin Mailroom view; display them only via the Resolved filter
+- [x] Immediately assign LORs, attorney correspondence, and demands to Jayla on receipt
+- [x] Preserve the Tuesday–Friday cadence for all non-priority Mailroom work
+
+## Session 2026-08-12 Mailroom Urgent Alarm Rules
+- [x] Treat escalated records, all demands, time-limit demands, Holt matters, and court documents as urgent
+- [x] Surface urgent-alarm records in the Urgent queue and send repeated handler reminders until resolved
+- [x] Reconcile existing active priority legal mail into the urgent alarm path (47 records)
+
+## Session 2026-08-12 Mailroom Reroute Usability
+- [x] Replace numeric handler-ID entry with a named handler dropdown in all Mailroom reroute controls
+
+## Session 2026-08-12 Handler-Addressee Routing
+- [x] Route non-legal, non-injury, non-demand mail addressed to an active handler directly to that handler
+- [x] Preserve priority legal, injury, demand, court, Holt, and time-limit routing over addressee routing
+- [x] Correct the Alfred Ofili claim mail from Jovel to Natashia when the source confirms her as the addressee
+
+## Session 2026-08-12 Storage Mitigation Letter
+- [x] Replace the Storage Mitigation Letter body with the approved notice language
+
+## Session 2026-08-12 Revised Storage Letter and Spacing
+- [x] Replace the Storage Mitigation Letter body with the latest approved notice language
+- [x] Apply 1.5 line spacing to applicable Document Generator letter bodies
+
+## Session 2026-08-12 Mailroom Forward to Claim
+- [x] Verify claim-email data and Gmail sending authorization for controlled Mailroom forwarding
+- [x] Implement forwarding of original Mailroom content and recoverable attachments to a selected claim email with an audit record
+- [x] Add a recipient-confirmed Forward to Claim action in the Mailroom record drawer
+- [ ] Reconnect Gmail from Mailroom Setup to grant the newly requested Gmail send permission before sending live email
+- [ ] Verify one recipient-confirmed live forwarding action after Gmail reauthorization
+
+## Session 2026-08-13 Fresh Fax Attachments
+- [x] Retry fresh Slack file metadata and bounded storage uploads when newly ingested fax attachment persistence fails
+- [ ] Verify a newly received Claims Mail fax displays and forwards its original attachment after deployment
+
+## Session 2026-08-17 Medical Bills Queue
+- [x] Detect medical bill, provider invoice, and medical demand mail from Claims Mail and eFax
+- [x] Route medical bills and all demands exclusively to Jayla
+- [x] Add Bills queue visibility in Admin Mailroom and Jayla’s myMailroom
+- [x] Classify and place recoverable existing medical bill records into the Bills queue (21 active records routed to Jayla)
+
+## Session 2026-08-17 Bills Backfill and Record Selection
+- [x] Retroactively classify recoverable existing medical bills and route confirmed bills to Jayla (21 active records confirmed)
+- [x] Move four confirmed legacy medical-provider bills into the Bills queue and assign them to Jayla
+- [x] Move 17 additional active records with explicit medical-billing evidence into the Bills queue and assign them to Jayla
+- [x] Repair Mailroom selection checkboxes so clicks toggle selection without opening the record drawer
+
+## Session 2026-08-18 Mailroom Forwarding Integrity
+- [x] Display original email body where present and meaningful fax/document context where source content consists only of page markers
+- [x] Restore original attachment open/download access through immutable file-ID proxy URLs
+- [x] Implement direct Slack source recovery for forwarded attachments and clean forwarded fax body construction
+- [ ] Verify a live recipient-confirmed forwarding action delivers the original attachment and expected body after Gmail send authorization
+
+## Session 2026-08-18 Litigation and Queue Boundaries
+- [x] Add a Litigated Claim action that escalates the item to the administrator and records the action
+- [x] Allow handlers to select their Mailroom records with checkboxes
+- [x] Limit Demands to demands, Bills to medical bills, and Legal to court/legal-service documents only
+
+## Session 2026-08-12 Coverage Position and PDF Preview
+- [x] Replace the Coverage Position Letter body with the approved TNC-primary notice language
+- [x] Make applicable Document Generator Preview actions render the generated PDF in the preview pane
+
+## Session 2026-08-12 Klutch Policy Declarations
+- [x] Serve the approved Klutch Policy Declarations HTML verbatim at its own application route
+- [x] Add a Document Generator entry that opens the verbatim policy declarations page
+- [x] Verify state application and native browser Print / Save PDF behavior without altering the source layout
+
+## Session 2026-08-12 Denial and Acknowledgment Claim Heading
+- [x] Replace the served Policy Declarations source with the corrected approved HTML verbatim
+- [x] Add date, claim, loss, vehicle, VIN, driver, and professional reference fields to every Denial and Acknowledgment letter
+
+## Session 2026-08-11 Published Mailroom Verification
+- [ ] Verify the published Trigger Now response is valid JSON and its live run completes
+- [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
+- [x] Recover missing attachment rows through Slack and Gmail recovery paths
+- [x] Re-run AI classification for unresolved items missing summaries or descriptive titles
+- [x] Display the generated Mailroom summary in the record detail; verified alongside the captured email body on a live representative record
+- [x] Extend the Mailroom search bar to find text in subject, summary, email body, and extracted document content
+- [x] Verify live attachment open/download, generated summary, email body, and David Mason search after publishing this checkpoint
+
+## Session 2026-08-11 Assignment Quality and Demand Queue
+- [x] Require an unresolved, unreviewed source and successful content capture before Mailroom assignment
+- [x] Keep items with unreadable or missing source content in the unassigned review lane rather than auto-assigning them
+- [x] Fix the Admin Mailroom Demands card so it opens the populated demand-filtered queue
+- [x] Measure the legacy Mailroom content backlog and estimate its completion timeline under the safe refresh throughput (797 items; approximately 159.4 minutes at 25 items per five-minute pass)
+
+## Session 2026-08-11 Mailroom Pagination
+- [x] Make the displayed result range update when the rows-per-page selection changes
+
+## Session 2026-08-11 Mailroom Audit and Summary Quality
+- [x] Audit all active email, mail, and fax records; resolve any source item already read, reviewed, or checked
+- [x] Ensure active Mailroom records represent only unread/unreviewed source mail with complete captured content
+- [x] Make the row summary action-oriented, including category, document type, and applicable action such as an attached demand
+- [x] Use on-demand parsing updates at the user’s request instead of adding a recurring chat schedule
+
+## Session 2026-08-11 Mailroom Assignment Source Marking
+- [x] Mark Gmail claims messages read after a successful Mailroom assignment
+- [x] Add the configured checked marker to the originating #claims-mail post after a successful Mailroom assignment
+
+## Session 2026-08-11 Mailroom SLA and Demand Deadlines
+- [x] Fix Admin Mailroom Assigned filtering so only records with a real assignee appear
+- [x] Define overdue as a missed Mailroom review deadline, not merely an assigned status
+- [x] Calculate four business review hours in Tuesday–Friday, 1:00–6:00 PM Eastern for ordinary assigned mail
+- [x] Set LOR review deadlines to one business day after assignment
+- [x] Store a distinct demand deadline calculated from the demand's stated timing and received date
+- [x] Continue demand reminders until the assigned handler records a settled or denied resolution
+
+## Session 2026-08-11 Mailroom Assignment Boundary
+- [x] Prevent Mailroom ingest, classification, routing, and reassignments from creating Slack assignment posts
+- [x] Preserve Mailroom internal assignment records and existing Slack reviewed-marker behavior
+- [x] Verify a live Mailroom processing run creates no Slack assignment messages
 
 ## Session 2026-08-11 Mailroom Repairs
 
@@ -384,3 +503,46 @@
 - [x] Restore attachment records and proxy access for ingested Slack files
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
+
+## Document Generator Letter Corrections
+- [x] Remove statute-of-limitations language from every Document Generator letter output
+- [x] Correct Coverage Position Letter field mapping so the driver field cannot use the handler/adjuster name
+- [x] Render and verify the corrected Coverage Position Letter with distinct driver and handler values
+
+## Handler Mailroom Forwarding
+- [x] Restore visible recipient-confirmed Forward to Claim controls for assigned handlers in personal and full item Mailroom views
+- [x] Verify assigned handlers can forward while unassigned handlers remain blocked and every forwarding event remains audited
+
+## Insurer Date-of-Loss Rule
+- [x] Apply Klutch Insurance Company only to date-of-loss values on or after July 1, 2026
+- [x] Apply Metrocars Leasing Corp. to all date-of-loss values before July 1, 2026
+- [x] Replace insurer helper copy so it references the July 1, 2026 DOL cutoff rather than April coverage-start dates
+- [x] Test the June 30 and July 1, 2026 boundary behavior in all relevant document forms
+
+## Klutch Navigation
+- [x] Remove the unfinished Klutch Dec Page from active Document Generator navigation
+- [x] Preserve and verify the approved Klutch Policy Declarations entry
+
+## Certificate Naming
+- [x] Rename the active Certificate of Coverage navigation and workspace label to Certificate of Insurance
+- [x] Rename the rendered certificate PDF heading and preview text to Certificate of Insurance
+- [x] Verify the renamed certificate remains fully functional
+
+## COI and Declarations Coverage Rules
+- [x] List Metrocars Leasing Corp. as additional insured and the renter as the named operator on COIs
+- [x] Mark applicable COI coverages as extending to the Metrocars additional insured
+- [x] Enforce Florida BI limits of $10,000/$20,000, mandatory non-waivable PIP, and automatic UM rejection on COIs and declarations
+- [x] Enforce automatic UM rejection for Georgia on applicable COIs and declarations
+- [x] Render and verify Metrocars, Florida, and Georgia document outputs
+- [x] Reduce the Metrocars Leasing Corp. named-insured emphasis and increase the Additional Named Insured emphasis in the COI insured block
+- [x] Select Maryland’s mandatory UM and UIM coverages for both named-insured and additional-insured COI indicators
+
+## Carrier Selection Date Source
+- [x] Use Subscription Start Date, rather than Date of Loss, to select Klutch or Metrocars at the July 1, 2026 cutoff
+- [x] Rename all related Certificate of Insurance labels and helper copy to Subscription Start Date
+- [x] Test June 30 and July 1, 2026 Subscription Start Date boundary selection
+
+## Project KIM — Owner-Authorized Staging Bootstrap
+- [ ] Create the approved `KIM-GitHubOIDC-Bootstrap-Staging` CloudFormation stack in the owner-controlled AWS account, us-east-1
+- [ ] Verify the staging-only GitHub OIDC trust and deployment role outputs
+- [ ] Stop before provisioning application infrastructure or changing any production KIM system
