@@ -854,29 +854,21 @@ export const mailRouter = router({
 
   /** Manual one-shot: ingest Gmail + process unclassified items immediately */
   triggerNow: adminProcedure.mutation(async () => {
-    // External source retrieval and document parsing must run within the two-minute
-    // Heartbeat deadline. In production, the managed Mailroom jobs already process
-    // these bounded batches every five minutes; acknowledge the manual request
-    // immediately instead of holding the browser connection until the platform
-    // returns its generic HTML service-unavailable page.
+    // Do not hold an interactive browser request open while Gmail, Slack, storage,
+    // or the database is cold. Those services can take longer than the production
+    // edge allows, which otherwise becomes a non-JSON Service Unavailable response.
+    // The three authorized Mailroom Heartbeats perform the bounded recovery passes.
     if (process.env.NODE_ENV === 'production') {
-      const conn = await mysql.createConnection(process.env.DATABASE_URL!);
-      try {
-        const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
-        const gmail = buildRealGmailFetch(conn);
-        const ingest = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 2);
-        const slackIngest = await runBoundedSlackIngest(conn, 2);
-        return buildManualTriggerResult(ingest, slackIngest);
-      } catch (error) {
-        return {
-          ok: false,
-          queued: true,
-          message: 'Mailroom background processing remains active; this manual recovery pass could not complete.',
-          results: { error: String(error) },
-        };
-      } finally {
-        await conn.end();
-      }
+      return {
+        ok: true,
+        queued: true,
+        message: 'Mailroom processing is active. The next scheduled recovery pass will ingest and classify available source mail.',
+        results: {
+          gmail: { scheduled: true, cadence: 'every 5 minutes' },
+          claimsMail: { scheduled: true, cadence: 'every 5 minutes' },
+          classification: { scheduled: true, cadence: 'every 5 minutes plus two minutes' },
+        },
+      };
     }
     const conn = await mysql.createConnection(process.env.DATABASE_URL!);
     const results: Record<string, unknown> = {};

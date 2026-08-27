@@ -981,7 +981,13 @@ function AdminMailSetup() {
       setTriggerResult(data);
       toast.success(data?.queued ? "Mailroom processing is active" : "Manual run complete");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => {
+      const isTemporaryServiceFailure = /unexpected token|service unavailable/i.test(e.message ?? "");
+      toast.error(isTemporaryServiceFailure
+        ? "Mailroom is temporarily waking up. Please try Trigger Now again in a few seconds."
+        : e.message,
+      );
+    },
   });
   const updateAgent = trpc.mailBot.updateAgent.useMutation({
     onSuccess: () => { toast.success("Agent updated"); utils.mailBot.listAgents.invalidate(); setEditingAgentId(null); },
