@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
 import type { Connection } from 'mysql2/promise';
 import { appRouter } from '../routers.js';
+import { buildManualTriggerResult } from '../routers/mail.js';
 import { selectBalancedSlackBatch } from './jobs.js';
 import type { TrpcContext } from '../_core/context.js';
 
@@ -136,20 +137,16 @@ describe('mail tRPC procedures', () => {
     expect(selectBalancedSlackBatch(candidates, 4).map(item => item.id)).toEqual(['oldest', 'old', 'new', 'newest']);
   });
 
-  it('P0: production Trigger Now returns an immediate structured scheduled-processing acknowledgement', async () => {
-    const originalNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    try {
-      const caller = appRouter.createCaller(adminCtx());
-      const result = await caller.mail.triggerNow();
-      expect(result.ok).toBe(true);
-      expect(result.queued).toBe(true);
-      expect(result.results.ingest).toMatchObject({ queued: true, source: 'Gmail unread claims mail' });
-      expect(result.results.slackIngest).toMatchObject({ queued: true, source: 'Claims Mail unreviewed files' });
-      expect(result.results.process).toMatchObject({ queued: true, source: 'New Mailroom items' });
-    } finally {
-      process.env.NODE_ENV = originalNodeEnv;
-    }
+  it('P0: production Trigger Now formats a bounded live recovery result without external test calls', () => {
+    const result = buildManualTriggerResult(
+      { inserted: 1, skipped: 0, errors: [] },
+      { inserted: 1, skipped: 0, resolved: 0, totalFiles: 100, selected: 2, errors: [] },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.queued).toBe(true);
+    expect(result.results.ingest).toMatchObject({ inserted: 1, errors: [] });
+    expect(result.results.slackIngest).toMatchObject({ inserted: 1, selected: 2, errors: [] });
+    expect(result.results.process).toMatchObject({ queued: true, source: 'New Mailroom items' });
   });
 
   it('P1: myPendingCount returns correct count for the handler', async () => {

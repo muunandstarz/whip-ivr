@@ -457,6 +457,7 @@
 - [x] Move full Claims Mail polling and legacy attachment recovery into bounded scheduled Mailroom work
 - [ ] Run bounded Slack intake through the proven Gmail Heartbeat callback and retire the failing standalone Slack callback
 - [ ] Transition an already-ingested Slack item to resolved when it is subsequently marked reviewed in Claims Mail
+- [ ] Make Trigger Now execute one safe bounded Gmail and Claims Mail recovery batch rather than only acknowledging deferred work
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
 - [x] Recover missing attachment rows through Slack and Gmail recovery paths
 - [x] Re-run AI classification for unresolved items missing summaries or descriptive titles
@@ -560,3 +561,10 @@
 - [x] Add optional loss-location Map mode with draggable/rotatable vehicle overlays
 - [x] Hand off workspace facts and scene analysis to the existing Liability Guide for documented liability and first-party recoverability reasoning
 - [x] Add a persistent minimized Claims Workspace panel with quick note, new task, today’s tasks, and recent notes
+
+## Document Generator, Dashboard Announcements, and Escalation Enhancements
+- [x] Add estimate upload and structured estimate parsing to the Subro Demand Letter workflow
+- [x] Add estimate upload and structured estimate parsing to the Carrier Rebuttal workflow
+- [x] Add an admin-editable dashboard announcement system with new-feature callouts and a safe positivity message fallback
+- [x] Add opt-in birthday collection in the announcement area and personalized birthday recognition for teammates
+- [x] Restore the original Knowledge Base attorney names and contact information in Denied Claim Escalation

@@ -876,3 +876,37 @@ export const mailQaSnapshots = mysqlTable('mail_qa_snapshots', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 export type MailQaSnapshot = typeof mailQaSnapshots.$inferSelect;
+
+// ─── Dashboard announcements and team celebrations ───────────────────────────
+
+export const dashboardAnnouncements = mysqlTable('dashboard_announcements', {
+  id: int('id').primaryKey().autoincrement(),
+  title: varchar('title', { length: 180 }).notNull(),
+  message: text('message').notNull(),
+  kind: mysqlEnum('kind', ['feature', 'message']).default('message').notNull(),
+  actionLabel: varchar('action_label', { length: 80 }),
+  actionHref: varchar('action_href', { length: 512 }),
+  isActive: boolean('is_active').default(true).notNull(),
+  startsAt: datetime('starts_at'),
+  endsAt: datetime('ends_at'),
+  createdByUserId: int('created_by_user_id'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  activeWindow: index('dashboard_announcements_active_window_idx').on(t.isActive, t.startsAt, t.endsAt),
+}));
+export type DashboardAnnouncement = typeof dashboardAnnouncements.$inferSelect;
+
+/** Birthday is intentionally limited to month/day and requires opt-in; no birth year is collected. */
+export const userBirthdayPreferences = mysqlTable('user_birthday_preferences', {
+  id: int('id').primaryKey().autoincrement(),
+  userId: int('user_id').notNull().unique(),
+  birthMonth: int('birth_month'),
+  birthDay: int('birth_day'),
+  isOptedIn: boolean('is_opted_in').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  birthdayLookup: index('user_birthday_preferences_lookup_idx').on(t.isOptedIn, t.birthMonth, t.birthDay),
+}));
+export type UserBirthdayPreference = typeof userBirthdayPreferences.$inferSelect;

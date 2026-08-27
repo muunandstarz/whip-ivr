@@ -25,6 +25,7 @@ import {
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import DashboardAnnouncementCard from "@/components/DashboardAnnouncementCard";
 
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS_DASH = new Set([4, 6, 30003]);
@@ -339,7 +340,11 @@ export default function HandlerDashboard() {
           </div>
         </div>
 
-        {/* ── Main two-column grid ── */}
+        <div className="px-6 pt-5">
+          <DashboardAnnouncementCard />
+        </div>
+
+        {/* ── Main content ── */}
         <div className="flex-1 grid grid-cols-2 gap-0">
           {/* LEFT: My Performance + lower stats */}
           <div className="flex flex-col border-r border-border/40">

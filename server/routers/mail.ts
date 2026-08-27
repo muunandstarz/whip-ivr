@@ -23,6 +23,7 @@ import { invokeLLM } from '../_core/llm.js';
 import type { ClassificationResult } from '../mail/classify.js';
 import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } from '../mail/businessTime.js';
 import { forwardMailToClaim } from '../mail/forwardToClaim.js';
+import { runBoundedSlackIngest } from '../mail/jobs.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -67,6 +68,19 @@ async function parseExternalJson(response: Response, stage: string): Promise<any
   } catch {
     throw new Error(`${stage} returned non-JSON: ${raw.slice(0, 240).replace(/\s+/g, ' ')}`);
   }
+}
+
+export function buildManualTriggerResult(ingest: unknown, slackIngest: unknown) {
+  return {
+    ok: true,
+    queued: true,
+    message: 'Completed a safe two-item Gmail and Claims Mail recovery pass. Remaining unread and unreviewed source mail continues in bounded scheduled batches.',
+    results: {
+      ingest,
+      slackIngest,
+      process: { queued: true, source: 'New Mailroom items' },
+    },
+  };
 }
 
 const CATEGORY_TITLE_MAP: Record<string, string> = {
@@ -846,16 +860,23 @@ export const mailRouter = router({
     // immediately instead of holding the browser connection until the platform
     // returns its generic HTML service-unavailable page.
     if (process.env.NODE_ENV === 'production') {
-      return {
-        ok: true,
-        queued: true,
-        message: 'Mailroom processing is active. Gmail, Claims Mail, attachment recovery, and classification continue in bounded scheduled batches.',
-        results: {
-          ingest: { queued: true, source: 'Gmail unread claims mail' },
-          slackIngest: { queued: true, source: 'Claims Mail unreviewed files' },
-          process: { queued: true, source: 'New Mailroom items' },
-        },
-      };
+      const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      try {
+        const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
+        const gmail = buildRealGmailFetch(conn);
+        const ingest = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 2);
+        const slackIngest = await runBoundedSlackIngest(conn, 2);
+        return buildManualTriggerResult(ingest, slackIngest);
+      } catch (error) {
+        return {
+          ok: false,
+          queued: true,
+          message: 'Mailroom background processing remains active; this manual recovery pass could not complete.',
+          results: { error: String(error) },
+        };
+      } finally {
+        await conn.end();
+      }
     }
     const conn = await mysql.createConnection(process.env.DATABASE_URL!);
     const results: Record<string, unknown> = {};

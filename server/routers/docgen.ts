@@ -23,6 +23,14 @@ function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   return "";
 }
 
+function parseJsonObject(raw: string): Record<string, unknown> {
+  const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const firstBrace = unfenced.indexOf("{");
+  const lastBrace = unfenced.lastIndexOf("}");
+  if (firstBrace < 0 || lastBrace <= firstBrace) throw new Error("Estimate parser returned no JSON object");
+  return JSON.parse(unfenced.slice(firstBrace, lastBrace + 1)) as Record<string, unknown>;
+}
+
 
 function getStateCoverageInfo(state: string): string {
   const rules: Record<string, string> = {
@@ -46,6 +54,49 @@ function getStateCoverageInfo(state: string): string {
 
 
 export const docgenRouter = router({
+  parseEstimate: protectedProcedure
+    .input(z.object({
+      fileUrl: z.string().url(),
+      fileName: z.string().max(255).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await invokeLLM({
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${input.fileName ? ` The uploaded filename is ${input.fileName}.` : ""}`,
+            },
+            { type: "file_url", file_url: { url: input.fileUrl, mime_type: "application/pdf" } },
+          ] as any,
+        }],
+      });
+      const parsed = parseJsonObject(extractText(result));
+      const amount = (value: unknown) => {
+        const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
+        return normalized && Number.isFinite(Number(normalized)) ? Number(normalized).toFixed(2) : "";
+      };
+      const vin = String(parsed.vin ?? "").replace(/\s/g, "").toUpperCase();
+      const rawLines = Array.isArray(parsed.lineItems) ? parsed.lineItems : [];
+      const lineItems = rawLines
+        .map((item) => ({
+          description: String((item as Record<string, unknown>)?.description ?? "").trim().slice(0, 180),
+          amount: amount((item as Record<string, unknown>)?.amount),
+        }))
+        .filter((item) => item.description || item.amount)
+        .slice(0, 12);
+      return {
+        repairTotal: amount(parsed.repairTotal),
+        vehicle: String(parsed.vehicle ?? "").trim().slice(0, 160),
+        vin: /^[A-HJ-NPR-Z0-9]{17}$/.test(vin) ? vin : "",
+        claimNumber: String(parsed.claimNumber ?? "").trim().slice(0, 100),
+        dateOfLoss: /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.dateOfLoss ?? "")) ? String(parsed.dateOfLoss) : "",
+        shopName: String(parsed.shopName ?? "").trim().slice(0, 160),
+        lineItems,
+      };
+    }),
+
   improveWithAI: protectedProcedure
     .input(z.object({
       body: z.string().min(10),

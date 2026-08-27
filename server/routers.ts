@@ -11,6 +11,7 @@ import { docgenRouter } from "./routers/docgen";
 import { mailBotRouter } from "./routers/mailBot";
 import { kbRouter } from "./routers/kb";
 import { claimsWorkspaceRouter } from "./routers/claimsWorkspace";
+import { announcementsRouter } from "./routers/announcements";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -81,6 +82,7 @@ export const appRouter = router({
   mail: mailRouter,
   kb: kbRouter,
   claimsWorkspace: claimsWorkspaceRouter,
+  announcements: announcementsRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

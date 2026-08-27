@@ -165,6 +165,7 @@ export async function ingestGmail(
   conn: Connection,
   gmail: GmailFetchFn,
   claimEmail = 'claims@drivewhip.com',
+  maxMessages?: number,
 ): Promise<IngestGmailResult> {
   const result: IngestGmailResult = { inserted: 0, skipped: 0, errors: [], debug: { listed: 0, filteredOut: 0, query: 'to:claims@drivewhip.com is:unread -label:mailroom-done' } };
 
@@ -196,7 +197,8 @@ export async function ingestGmail(
     return result;
   }
 
-  const ids = messageList.messages ?? [];
+  const requestedBatch = Number.isFinite(maxMessages) ? Math.max(1, Math.floor(maxMessages!)) : undefined;
+  const ids = requestedBatch ? (messageList.messages ?? []).slice(0, requestedBatch) : (messageList.messages ?? []);
   if (result.debug) result.debug.listed = ids.length;
 
   for (const { id: messageId } of ids) {

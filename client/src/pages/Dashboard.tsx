@@ -57,6 +57,7 @@ import {
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
+import DashboardAnnouncementCard from "@/components/DashboardAnnouncementCard";
 
 const CALLER_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; chartColor: string }> = {
   carrier:          { label: "Carrier",    icon: Building2,   color: "bg-blue-500/15 text-blue-700 dark:text-blue-400",    chartColor: "#3b82f6" },
@@ -298,6 +299,8 @@ export default function Dashboard() {
             )}
           </a>
         </div>
+
+        <DashboardAnnouncementCard />
 
         {/* ── Top Banner: Today tiles + 7-day Sparkline ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

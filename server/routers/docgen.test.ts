@@ -2,12 +2,13 @@ import { describe, it, expect } from "vitest";
 import { docgenRouter } from "./docgen";
 
 describe("docgenRouter", () => {
-  it("exposes all four AI procedures", () => {
+  it("exposes all Document Generator AI procedures", () => {
     const procedures = Object.keys(docgenRouter._def.procedures);
     expect(procedures).toContain("improveWithAI");
     expect(procedures).toContain("generateRebuttal");
     expect(procedures).toContain("polishRebuttal");
     expect(procedures).toContain("generateSettlementEmail");
+    expect(procedures).toContain("parseEstimate");
   });
 
   it("improveWithAI input schema rejects short body", async () => {
@@ -27,6 +28,15 @@ describe("docgenRouter", () => {
       lineItems: [{ item: "Labor", ours: 500, theirs: 300, reason: "Betterment" }],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("parseEstimate input schema accepts a securely hosted estimate and rejects malformed URLs", () => {
+    const schema = (docgenRouter._def.procedures.parseEstimate as any)._def.inputs[0];
+    expect(schema.safeParse({
+      fileUrl: "https://files.example.com/estimates/repair.pdf",
+      fileName: "repair-estimate.pdf",
+    }).success).toBe(true);
+    expect(schema.safeParse({ fileUrl: "not-a-url" }).success).toBe(false);
   });
 
   it("generateSettlementEmail input schema accepts bi type", async () => {

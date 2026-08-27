@@ -250,6 +250,56 @@ export default function DeniedClaimEscalation() {
           </div>
         </div>
       </div>
+
+      {/* Retained Attorneys — restored from the original Knowledge Base */}
+      <div>
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold">Retained Attorneys</h2>
+          <p className="text-sm text-muted-foreground">Retained counsel by market state. Engage only after supervisor approval and after Templates 1–3 have been sent without resolution.</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-border border-t-4 border-t-[#ff6221] bg-card p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#d84f18]">Maryland · DC · Virginia</p>
+            <h3 className="mt-1 text-lg font-extrabold">Jack D. Lapidus</h3>
+            <p className="text-sm text-muted-foreground">Partner — Thomas, Thomas &amp; Hafer, LLP</p>
+            <p className="mt-3 text-sm italic leading-6">Insurance defense, general liability, and motor vehicle negligence. Lead counsel in MD, VA, and DC courts. Super Lawyers 2015–2025. President, DC Defense Lawyers Association.</p>
+            <dl className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+              <div><dt className="inline font-semibold text-foreground">Phone: </dt><dd className="inline"><a className="text-[#d84f18] hover:underline" href="tel:2029782052">(202) 978-2052</a></dd></div>
+              <div><dt className="inline font-semibold text-foreground">Email: </dt><dd className="inline"><a className="text-[#d84f18] hover:underline" href="mailto:jlapidus@tthlaw.com">jlapidus@tthlaw.com</a></dd></div>
+              <div><dt className="inline font-semibold text-foreground">Office: </dt><dd className="inline">Washington, DC (Thomas, Thomas &amp; Hafer)</dd></div>
+              <div><dt className="inline font-semibold text-foreground">Bar: </dt><dd className="inline">MD, VA, DC — 4th Circuit, SCOTUS</dd></div>
+            </dl>
+            <a className="mt-4 inline-flex text-xs font-semibold text-[#d84f18] hover:underline" href="https://www.tthlaw.com/people/jack-d-lapidus/" target="_blank" rel="noopener noreferrer">View profile ↗</a>
+          </div>
+          <div className="rounded-lg border border-border border-t-4 border-t-[#171b31] bg-card p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#31478a]">Florida</p>
+            <h3 className="mt-1 text-lg font-extrabold">Sandy Topkin</h3>
+            <p className="text-sm text-muted-foreground">Managing Partner — Topkin &amp; Partlow, PL</p>
+            <p className="mt-3 text-sm italic leading-6">23+ years defending self-insured corporations. Civil litigation, premises liability, products liability, insurance coverage opinions, and PIP. Chambers-ranked coverage partners.</p>
+            <dl className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+              <div><dt className="inline font-semibold text-foreground">Phone: </dt><dd className="inline"><a className="text-[#31478a] hover:underline" href="tel:9544228422">(954) 422-8422</a></dd></div>
+              <div><dt className="inline font-semibold text-foreground">Email: </dt><dd className="inline">Confirm with Sandy directly</dd></div>
+              <div><dt className="inline font-semibold text-foreground">Office: </dt><dd className="inline">Deerfield Beach, FL</dd></div>
+              <div><dt className="inline font-semibold text-foreground">Bar: </dt><dd className="inline">Florida</dd></div>
+            </dl>
+            <a className="mt-4 inline-flex text-xs font-semibold text-[#31478a] hover:underline" href="https://www.topkinlaw.com/" target="_blank" rel="noopener noreferrer">View firm ↗</a>
+          </div>
+          <div className="rounded-lg border border-border border-t-4 border-t-emerald-600 bg-card p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400">Georgia</p>
+            <h3 className="mt-1 text-lg font-extrabold">Kimberly D. Stevens</h3>
+            <p className="text-sm text-muted-foreground">Attorney — Hawkins Parnell &amp; Young LLP</p>
+            <p className="mt-3 text-sm italic leading-6">Complex business disputes, gig-economy litigation, premises and product liability, and catastrophic injuries. Former in-house counsel. Appointed mentor, GA Supreme Court. Bar: MI and GA.</p>
+            <dl className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+              <div><dt className="inline font-semibold text-foreground">Phone: </dt><dd className="inline">Confirm direct line</dd></div>
+              <div><dt className="inline font-semibold text-foreground">Email: </dt><dd className="inline">Confirm email</dd></div>
+              <div><dt className="inline font-semibold text-foreground">Office: </dt><dd className="inline">303 Peachtree St NE, Suite 4000, Atlanta, GA 30308</dd></div>
+              <div><dt className="inline font-semibold text-foreground">Bar: </dt><dd className="inline">GA, MI — federal courts, multiple states</dd></div>
+            </dl>
+            <a className="mt-4 inline-flex text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400" href="https://www.hpylaw.com/kimberly-d-stevens/" target="_blank" rel="noopener noreferrer">View profile ↗</a>
+          </div>
+        </div>
+        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">Sandy Topkin’s and Kimberly Stevens’s direct contact details should be confirmed before a retention letter is sent. Firm information is from the original Knowledge Base and should be verified before engagement.</p>
+      </div>
     </div>
     </WhipLayout>
   );

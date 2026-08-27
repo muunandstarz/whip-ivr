@@ -3020,6 +3020,9 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [handlerName, setHandlerName] = useState("");
   const [vinDecoding, setVinDecoding] = useState(false);
+  const [estimateFile, setEstimateFile] = useState<File | null>(null);
+  const [estimateParsing, setEstimateParsing] = useState(false);
+  const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
   // Attachment checkboxes
   const ATTACHMENT_OPTIONS = [
     "Estimate",
@@ -3083,6 +3086,34 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
+
+  const parseEstimateFile = async (file = estimateFile) => {
+    if (!file) { toast.error("Select an estimate first"); return; }
+    setEstimateFile(file);
+    setEstimateParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
+      if (!upload.ok) throw new Error(`Upload failed: ${file.name}`);
+      const { url } = await upload.json() as { url: string };
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl: url, fileName: file.name });
+      setForm(p => ({
+        ...p,
+        repair: parsed.repairTotal || p.repair,
+        vehicle: parsed.vehicle || p.vehicle,
+        vin: parsed.vin || p.vin,
+        ourClaim: parsed.claimNumber || p.ourClaim,
+        dol: parsed.dateOfLoss || p.dol,
+      }));
+      setSelectedAttachments(prev => prev.includes("Estimate") ? prev : ["Estimate", ...prev]);
+      toast.success(parsed.repairTotal ? `Estimate read — $${parsed.repairTotal} added to the demand` : "Estimate read — review the pre-filled fields");
+    } catch (error: unknown) {
+      toast.error((error as Error).message || "Could not read the estimate");
+    } finally {
+      setEstimateParsing(false);
+    }
+  };
 
   const total = (() => {
     const r = parseFloat(form.repair) || 0;
@@ -3388,6 +3419,28 @@ This demand is made without waiver of any rights or remedies available to Metroc
               </SelectContent>
             </Select>
           </div>
+          <div
+            className="mb-3 rounded-lg border-2 border-dashed border-[#ff6221]/35 bg-[#ff6221]/[0.035] px-4 py-3 transition-colors hover:border-[#ff6221]/65"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void parseEstimateFile(file); }}
+          >
+            <input id="sd-estimate-upload" type="file" accept="application/pdf,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) setEstimateFile(file); }} />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#171b31] dark:text-[#ff9c73]">Drop a repair estimate here</p>
+                <p className="text-[11px] text-muted-foreground">PDF or image · reads the total, vehicle, VIN, claim number, and loss date into this demand.</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <label htmlFor="sd-estimate-upload" className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[#ff6221]/50 px-3 text-xs font-medium text-[#d84f18] hover:bg-[#ff6221]/10">
+                  <Upload className="h-3.5 w-3.5" /> {estimateFile ? "Replace" : "Choose file"}
+                </label>
+                <Button type="button" size="sm" className="h-8 bg-[#ff6221] text-xs text-white hover:bg-[#e5541a]" disabled={!estimateFile || estimateParsing} onClick={() => void parseEstimateFile()}>
+                  {estimateParsing ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {estimateParsing ? "Reading…" : "Read estimate"}
+                </Button>
+              </div>
+            </div>
+            {estimateFile && <p className="mt-2 truncate text-[11px] font-medium text-foreground/75">Selected: {estimateFile.name}</p>}
+          </div>
           <Grid2 children={<>
             {form.demandType === "repair" ? (
               <Field label="Repair Estimate ($)" id="sd-repair" value={form.repair} onChange={set("repair")} placeholder="0.00" />
@@ -3470,7 +3523,9 @@ function CarrierRebuttalTab() {
   const [docUploading, setDocUploading] = useState(false);
   const [ourEstimateDoc, setOurEstimateDoc] = useState<File | null>(null);
   const [ourImageReportDoc, setOurImageReportDoc] = useState<File | null>(null);
+  const [estimateParsing, setEstimateParsing] = useState(false);
   const generateMutation = trpc.docgen.generateRebuttal.useMutation();
+  const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
 
   const set = (k: keyof typeof form) => (v: string) =>
@@ -3490,6 +3545,35 @@ function CarrierRebuttalTab() {
   const totalOurs = lineItems.reduce((s, r) => s + (parseFloat(r.ours) || 0), 0);
   const totalTheirs = lineItems.reduce((s, r) => s + (parseFloat(r.theirs) || 0), 0);
   const totalGap = totalOurs - totalTheirs;
+
+  const parseOurEstimate = async () => {
+    if (!ourEstimateDoc) { toast.error("Upload our estimate first"); return; }
+    setEstimateParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", ourEstimateDoc);
+      const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
+      if (!upload.ok) throw new Error(`Upload failed: ${ourEstimateDoc.name}`);
+      const { url } = await upload.json() as { url: string };
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl: url, fileName: ourEstimateDoc.name });
+      setForm(p => ({
+        ...p,
+        claimNumber: parsed.claimNumber || p.claimNumber,
+        vehicle: parsed.vehicle || p.vehicle,
+        dateOfLoss: parsed.dateOfLoss || p.dateOfLoss,
+      }));
+      if (parsed.lineItems.length) {
+        setLineItems(parsed.lineItems.map(item => ({ item: item.description, ours: item.amount, theirs: "", reason: "" })));
+      } else if (parsed.repairTotal) {
+        setLineItems([{ item: "Repair estimate", ours: parsed.repairTotal, theirs: "", reason: "" }]);
+      }
+      toast.success("Estimate read — claim details and our line items were pre-filled");
+    } catch (error: unknown) {
+      toast.error((error as Error).message || "Could not read the estimate");
+    } finally {
+      setEstimateParsing(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!form.claimNumber || !form.vehicle || !form.carrier) {
@@ -3604,6 +3688,19 @@ function CarrierRebuttalTab() {
             </div>
           ))}
         </div>
+        {ourEstimateDoc && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3 h-7 w-full gap-1.5 border-[#22c55e]/40 text-xs text-[#16803c] hover:bg-[#22c55e]/10"
+            disabled={estimateParsing || docUploading || aiLoading}
+            onClick={() => void parseOurEstimate()}
+          >
+            {estimateParsing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {estimateParsing ? "Reading estimate…" : "Read our estimate & pre-fill rebuttal"}
+          </Button>
+        )}
         {(ourEstimateDoc || ourImageReportDoc || carrierDoc) && (
           <Button
             size="sm"
