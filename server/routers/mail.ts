@@ -853,23 +853,43 @@ export const mailRouter = router({
     }
   }),
 
-  /** Manual one-shot: ingest Gmail + process unclassified items immediately */
+  /** Manual one-shot: run a small source-recovery pass, then leave deeper work to the scheduled processor. */
   triggerNow: adminProcedure.mutation(async () => {
-    // Do not hold an interactive browser request open while Gmail, Slack, storage,
-    // or the database is cold. Those services can take longer than the production
-    // edge allows, which otherwise becomes a non-JSON Service Unavailable response.
-    // The three authorized Mailroom Heartbeats perform the bounded recovery passes.
+    // Production requests are capped at one record from each source. This gives an
+    // administrator an immediate, useful recovery action without reopening the
+    // previous full-history request that could exceed the edge deadline.
     if (process.env.NODE_ENV === 'production') {
-      return {
-        ok: true,
-        queued: true,
-        message: 'Mailroom processing is active. The next scheduled recovery pass will ingest and classify available source mail.',
-        results: {
-          gmail: { scheduled: true, cadence: 'every 5 minutes' },
-          claimsMail: { scheduled: true, cadence: 'every 5 minutes' },
-          classification: { scheduled: true, cadence: 'every 5 minutes plus two minutes' },
-        },
-      };
+      const conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      const results: Record<string, unknown> = {};
+      try {
+        try {
+          const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
+          const gmail = buildRealGmailFetch(conn);
+          results.gmail = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 1);
+        } catch (error) {
+          results.gmail = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
+        try {
+          const { recoverStaleGmailAttachments } = await import('../mail/gmailAttachmentRecovery.js');
+          results.gmailAttachmentRecovery = await recoverStaleGmailAttachments(conn, 1);
+        } catch (error) {
+          results.gmailAttachmentRecovery = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
+        try {
+          const { runBoundedSlackIngest } = await import('../mail/jobs.js');
+          results.claimsMail = await runBoundedSlackIngest(conn, 1);
+        } catch (error) {
+          results.claimsMail = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
+        return {
+          ok: true,
+          queued: false,
+          message: 'One safe Gmail and Claims Mail recovery batch completed. Classification and remaining recovery continue in scheduled passes.',
+          results,
+        };
+      } finally {
+        await conn.end();
+      }
     }
     const conn = await mysql.createConnection(process.env.DATABASE_URL!);
     const results: Record<string, unknown> = {};
