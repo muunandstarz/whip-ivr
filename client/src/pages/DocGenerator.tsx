@@ -265,6 +265,24 @@ function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, 
   return y + lines.length * lineH;
 }
 
+function writeReleaseText(doc: jsPDF, text: string): void {
+  const marginX = 19;
+  const marginTop = 20;
+  const marginBottom = 22;
+  const lineH = 5.1;
+  const maxY = doc.internal.pageSize.getHeight() - marginBottom;
+  const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - marginX * 2) as string[];
+  let y = marginTop;
+  for (const line of lines) {
+    if (y > maxY) {
+      doc.addPage();
+      y = marginTop;
+    }
+    doc.text(line, marginX, y);
+    y += lineH;
+  }
+}
+
 function wrapLetterText(doc: jsPDF, text: string, x: number, y: number, maxW: number, baseLineH = 6): number {
   return wrapText(doc, text, x, y, maxW, baseLineH * 1.5, 1.5);
 }
@@ -2475,12 +2493,10 @@ function ReleaseBITab() {
 
   const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = 14; // No letterhead on releases
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
+    writeReleaseText(doc, releaseText);
     // Releases are unbranded legal documents: no Whip letterhead, SOL notice, or footer.
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
@@ -2677,12 +2693,10 @@ function ReleasePDTab() {
 
   const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = 14; // No letterhead on releases
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
+    writeReleaseText(doc, releaseText);
     // Releases are unbranded legal documents: no Whip letterhead, SOL notice, or footer.
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);

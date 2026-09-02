@@ -584,9 +584,9 @@
 
 ## September 2026 Document Generator Repairs
 - [ ] Verify the new claims email and Claims Mail thread attachment ingest, classification, and reviewed-marker behavior
-- [ ] Add a PD-only Failed Contact Letter date-of-loss field and computed statute-of-limitations notice above the footer
-- [ ] Replace invalid URL-only estimate parsing inputs with browser-upload compatible document parsing for Subro Demand and Carrier Rebuttal
-- [ ] Add the COI still-in-rental expiration calculation and editable result to the Klutch Dec Page form filler
+- [x] Add a PD-only Failed Contact Letter date-of-loss field and computed statute-of-limitations notice above the footer
+- [x] Replace invalid URL-only estimate parsing inputs with browser-upload compatible document parsing for Subro Demand and Carrier Rebuttal
+- [x] Add the COI still-in-rental expiration calculation and editable result to the Klutch Dec Page form filler
 - [ ] Reformat BI and PD release PDFs against the attached approved release references
 
 ## Scheduled Mailroom and Threaded Claims Mail Intake
