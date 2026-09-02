@@ -44,6 +44,29 @@ function fileHasReviewedReaction(file: any, reviewedEmojis: string[]): boolean {
   return (file.reactions ?? []).some((reaction: { name?: string }) => Boolean(reaction.name && reviewedEmojis.includes(reaction.name)));
 }
 
+/**
+ * Converts one document attached to a Slack thread reply into the same lightweight
+ * file shape consumed by the bounded Claims Mail intake. Root-post review markers
+ * deliberately travel with every reply attachment: marking the original mail post
+ * reviewed means its supporting-thread documents are resolved history, not new work.
+ */
+export function buildThreadReplyFileCandidate(
+  root: { ts?: string; thread_ts?: string; reactions?: Array<{ name?: string }> },
+  reply: { ts?: string; reactions?: Array<{ name?: string }>; files?: any[] },
+  file: any,
+  channelId: string,
+): any {
+  const parentTs = root.thread_ts ?? root.ts;
+  return {
+    ...file,
+    // `files.list` normally supplies shares. Reply payloads do not always do so.
+    shares: file.shares ?? { public: { [channelId]: [{ ts: reply.ts ?? parentTs }] } },
+    __mailroomMessageTs: reply.ts ?? parentTs,
+    __mailroomRootReactions: root.reactions ?? [],
+    __mailroomReplyReactions: reply.reactions ?? [],
+  };
+}
+
 // ─── Shared Slack helpers ─────────────────────────────────────────────────────
 
 export interface SlackDMFn {
@@ -437,6 +460,51 @@ export async function runBoundedSlackIngest(
       const lastPage = payload.paging?.pages ?? 1;
       if (page === 1 && lastPage > 1) pagesToFetch.push(lastPage);
     }
+
+    // Claims Mail frequently starts with one mail/fax post and adds supporting
+    // estimates, photographs, or correspondence in its reply thread. Inspect a
+    // small, newest-first set of active threads on each pass; this adds coverage
+    // without reverting to an unbounded channel-history scan.
+    try {
+      const historyParams = new URLSearchParams({ channel: channelId, limit: '100' });
+      const historyResponse = await fetch(`https://slack.com/api/conversations.history?${historyParams}`, {
+        headers: { Authorization: `Bearer ${slackToken}` },
+      });
+      const historyText = await historyResponse.text();
+      const history = JSON.parse(historyText) as { ok?: boolean; messages?: any[] };
+      if (!history.ok) {
+        result.errors.push(`conversations.history failed: ${historyText.slice(0, 220)}`);
+      } else {
+        const roots = (history.messages ?? [])
+          .filter((message: any) => Number(message.reply_count ?? 0) > 0 && message.ts)
+          .slice(0, Math.max(1, Math.min(4, limit)));
+        for (const root of roots) {
+          const replyParams = new URLSearchParams({ channel: channelId, ts: String(root.ts), limit: '100' });
+          const replyResponse = await fetch(`https://slack.com/api/conversations.replies?${replyParams}`, {
+            headers: { Authorization: `Bearer ${slackToken}` },
+          });
+          const replyText = await replyResponse.text();
+          let thread: { ok?: boolean; messages?: any[] };
+          try {
+            thread = JSON.parse(replyText) as { ok?: boolean; messages?: any[] };
+          } catch {
+            result.errors.push(`conversations.replies ${root.ts} returned non-JSON HTTP ${replyResponse.status}`);
+            continue;
+          }
+          if (!thread.ok) {
+            result.errors.push(`conversations.replies ${root.ts} failed: ${replyText.slice(0, 220)}`);
+            continue;
+          }
+          for (const reply of (thread.messages ?? []).filter((message: any) => message.ts !== root.ts)) {
+            for (const file of reply.files ?? []) {
+              if (file?.id) allFiles.push(buildThreadReplyFileCandidate(root, reply, file, channelId));
+            }
+          }
+        }
+      }
+    } catch (threadError) {
+      result.errors.push(`thread attachment discovery failed: ${String(threadError)}`);
+    }
     result.totalFiles = allFiles.length;
 
     const candidates = allFiles.filter(file => {
@@ -467,7 +535,12 @@ export async function runBoundedSlackIngest(
     result.selected = work.length;
     for (const file of work) {
       const shares = sharesForClaimsChannel(file, channelId);
-      const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
+      const messageTs = file.__mailroomMessageTs ?? shares[0]?.ts ?? String(file.timestamp ?? file.id);
+      const combinedReactions = [
+        ...(file.reactions ?? []),
+        ...(file.__mailroomReplyReactions ?? []),
+        ...(file.__mailroomRootReactions ?? []),
+      ];
       const outcome = await handleSlackFileEvent(conn, {
         fileId: String(file.id),
         channelId,
@@ -475,7 +548,7 @@ export async function runBoundedSlackIngest(
         filename: file.name ?? file.title,
         mimeType: file.mimetype,
         urlPrivateDownload: file.url_private_download,
-        reactions: file.reactions ?? [],
+        reactions: combinedReactions,
         receivedAt: file.timestamp ? new Date(Number(file.timestamp) * 1000) : undefined,
       }, slack, { reviewedEmoji: reviewedSetting?.value ?? 'white_check_mark', reviewedEmojis, addBotMarker: false });
       if (outcome.action === 'inserted') result.inserted++;

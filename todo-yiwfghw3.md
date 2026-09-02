@@ -575,3 +575,7 @@
 - [x] Add an admin-editable dashboard announcement system with new-feature callouts and a safe positivity message fallback
 - [x] Add opt-in birthday collection in the announcement area and personalized birthday recognition for teammates
 - [x] Restore the original Knowledge Base attorney names and contact information in Denied Claim Escalation
+
+## Scheduled Mailroom and Threaded Claims Mail Intake
+- [ ] Repair all Mailroom schedule callbacks so Gmail intake, Claims Mail intake, classification, and reminders run reliably on their configured cadence
+- [x] Ingest attachments from Claims Mail root posts and all related Slack thread replies using the same reviewed-marker rules

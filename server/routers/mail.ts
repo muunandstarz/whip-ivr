@@ -14,7 +14,7 @@ import {
 } from '../../drizzle/schema.js';
 import { eq, and, or, inArray, isNull, isNotNull, lt, desc, asc, sql, gte, lte } from 'drizzle-orm';
 import { storageGetSignedUrl, storagePut } from '../storage.js';
-import { createHeartbeatJob, listHeartbeatJobs } from '../_core/heartbeat.js';
+import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from '../_core/heartbeat.js';
 import { parse as parseCookie } from 'cookie';
 import { COOKIE_NAME } from '../../shared/const.js';
 import mysql from 'mysql2/promise';
@@ -818,7 +818,14 @@ export const mailRouter = router({
 
   // ─── Cron management ───────────────────────────────────────────────────────
 
-  /** Register all three mail Heartbeat crons (idempotent — safe to call again) */
+  /**
+   * Refresh Mailroom Heartbeat jobs from the current admin session.
+   *
+   * Heartbeat callbacks carry the creating user's decoded session token. Recreating
+   * the known Mailroom jobs prevents an expired callback credential from silently
+   * breaking a previously configured schedule. The job names and cadence remain
+   * unchanged, and creation failures are returned per job to the Setup UI.
+   */
   setupCrons: adminProcedure.mutation(async ({ ctx }) => {
     const sessionToken = parseCookie(ctx.req.headers.cookie ?? '')[COOKIE_NAME] ?? '';
     const results: Record<string, string> = {};
@@ -828,6 +835,20 @@ export const mailRouter = router({
       { name: 'mail-process',      cron: '0 2/5 * * * *', path: '/api/scheduled/mailProcess',      description: 'Classify + assign new mail_items every 5 min' },
       { name: 'mail-reminders',    cron: '0 0 * * * *',   path: '/api/scheduled/mailReminders',    description: 'Send overdue/reminder DMs every hour' },
     ];
+    try {
+      const existing = await listHeartbeatJobs(sessionToken);
+      const expectedNames = new Set(jobs.map(job => job.name));
+      for (const current of existing.jobs.filter(job => expectedNames.has(job.name))) {
+        try {
+          await deleteHeartbeatJob(current.taskUid, sessionToken);
+          results[`${current.name}:previous`] = 'removed for credential refresh';
+        } catch (error) {
+          results[`${current.name}:previous`] = `could not remove previous job: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      }
+    } catch (error) {
+      results.scheduleRefresh = `could not inspect existing jobs: ${error instanceof Error ? error.message : String(error)}`;
+    }
     for (const job of jobs) {
       try {
         const created = await createHeartbeatJob(job, sessionToken);
