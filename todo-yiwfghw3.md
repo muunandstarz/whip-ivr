@@ -472,7 +472,7 @@
 - [x] Measure the legacy Mailroom content backlog and estimate its completion timeline under the safe refresh throughput (797 items; approximately 159.4 minutes at 25 items per five-minute pass)
 
 ## Mailroom Content Refresh Eligibility Repair
-- [ ] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
+- [x] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
 - [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
 - [ ] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
 - [ ] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable
