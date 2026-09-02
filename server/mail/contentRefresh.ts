@@ -14,7 +14,7 @@ const CATEGORY_TITLE_MAP: Record<string, string> = {
   other_or_unclear: 'Claims Correspondence',
 };
 
-export const PLACEHOLDER_SUMMARY_SQL_PATTERN = '(attachment.*(content|contents).*(not provided|not available)|only (a |the )?(generic )?attachment filename|only filename|no attachment content|insufficient information)';
+export const PLACEHOLDER_SUMMARY_SQL_PATTERN = '(attachment.*(content|contents).*(not provided|not available)|attachment referenced but no readable content|no readable content( provided| in (the )?(message )?body| in email body|.*attachment.*not parsed)?|attached pdf not provided for review|only (a |the )?(generic )?attachment filename|only filename|no attachment content|insufficient information)';
 export const PLACEHOLDER_SUMMARY_PATTERN = new RegExp(PLACEHOLDER_SUMMARY_SQL_PATTERN, 'i');
 
 export function isPlaceholderMailSummary(summary: string | null | undefined): boolean {

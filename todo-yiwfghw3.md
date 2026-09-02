@@ -374,7 +374,7 @@
 - [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
 
 ## Session 2026-08-11 Mailroom Legacy Completion
-- [ ] Quantify active records missing attachments, extracted content, actionable titles, or AI summaries
+- [x] Quantify active records missing attachments, extracted content, actionable titles, or AI summaries (638 active email: 283 without file records and 16 without body/summary; 565 active Claims Mail: 0 without file records, 11 without body/summary, 26 placeholder summaries)
 - [ ] Recover source attachments and extract content for all recoverable active legacy records
 - [ ] Populate actionable title and summary text for all recoverable active legacy records
 - [ ] Re-audit Gmail read state and Claims Mail reviewed markers after the legacy completion pass
