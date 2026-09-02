@@ -99,7 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "blank-letterhead", label: "Blank Letterhead", icon: FileText },
       { id: "claimant-contact", label: "Claimant Contact", icon: Phone },
-      { id: "failed-contact", label: "Failed Contact", icon: Phone },
+      { id: "failed-contact", label: "Failed Contact (PD only)", icon: Phone },
       { id: "storage-mitigation", label: "Storage Mitigation", icon: AlertTriangle },
     ],
   },
@@ -205,8 +205,58 @@ function addLetterFooter(doc: jsPDF) {
     { align: "center" }
   );
 }
+const PD_SOL_YEARS: Record<string, number> = {
+  AL: 2, AK: 2, AZ: 2, AR: 3, CA: 3, CO: 3, CT: 2, DE: 2, DC: 3, FL: 4,
+  GA: 4, HI: 2, ID: 3, IL: 5, IN: 2, IA: 5, KS: 2, KY: 2, LA: 2, ME: 6,
+  MD: 3, MA: 3, MI: 3, MN: 6, MS: 3, MO: 5, MT: 2, NE: 4, NV: 3, NH: 3,
+  NJ: 6, NM: 4, NY: 3, NC: 3, ND: 6, OH: 2, OK: 2, OR: 6, PA: 2, RI: 10,
+  SC: 3, SD: 6, TN: 3, TX: 2, UT: 4, VT: 3, VA: 5, WA: 3, WV: 2, WI: 3, WY: 4,
+};
+
+const PD_SOL_STATE_OPTIONS = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'],
+  ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'],
+  ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'],
+  ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'],
+  ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'],
+  ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'],
+  ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'],
+  ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+] as const;
+
+function projectedPdSolDate(dateOfLoss: string, state: string): Date | null {
+  const years = PD_SOL_YEARS[state];
+  if (!dateOfLoss || !years) return null;
+  const [year, month, day] = dateOfLoss.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const result = new Date(year + years, month - 1, day);
+  // Keep leap-day calculations inside the intended expiration month.
+  if (result.getMonth() !== month - 1) result.setDate(0);
+  return result;
+}
+
+function formatLongCalendarDate(value: Date | null): string | null {
+  return value ? value.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
+}
+
+function addFailedContactPdSolNotice(doc: jsPDF, state: string, dateOfLoss: string) {
+  const projectedDate = formatLongCalendarDate(projectedPdSolDate(dateOfLoss, state));
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const notice = `Please be advised that your claim is subject to applicable legal filing deadlines, including the statute of limitations. Based on the information currently available to us, the applicable statute of limitations is currently projected to expire on ${projectedDate ?? '[DATE]'}. This date may be affected by the specific circumstances of your claim and should not be considered legal advice. Our investigation, communications, attempts to contact you, or closure of our claim file do not extend, waive, or toll any applicable deadline. It is your responsibility to take any action necessary to preserve your legal rights.`;
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(9);
+  doc.setTextColor(80, 80, 80);
+  const lines = doc.splitTextToSize(notice, W - 28);
+  const lineHeight = 4.15;
+  const startY = H - 17 - (lines.length * lineHeight);
+  doc.text(lines, 14, startY, { lineHeightFactor: 1.15 });
+  doc.setTextColor(40, 40, 40);
+  doc.setFont('helvetica', 'normal');
+}
+
 function addSOLNotice(_doc: jsPDF, _state?: string) {
-  // Statute-of-limitations notices are intentionally omitted from all generated letters.
+  // SOL notices are selectively rendered by documents that explicitly request them.
 }
 
 function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, lineH: number, lineHeightFactor = 1.15): number {
@@ -819,6 +869,7 @@ function ClaimantContactTab() {
     claimantName: "",
     claimNumber: "",
     dateOfLoss: "",
+    state: "",
     vehicle: "",
     adjusterName: "",
     adjusterPhone: "",
@@ -880,7 +931,7 @@ Email: ${form.adjusterEmail || "claims@drivewhip.com"}`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
     y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
-    addSOLNotice(doc);
+    if (form.state && form.dateOfLoss) addFailedContactPdSolNotice(doc, form.state, form.dateOfLoss);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Contact_${form.claimNumber || "Draft"}.pdf`);
@@ -945,6 +996,7 @@ function FailedContactTab() {
     claimantName: "",
     claimNumber: "",
     dateOfLoss: "",
+    state: "",
     vehicle: "",
     adjusterName: "",
     adjusterPhone: "",
@@ -988,7 +1040,9 @@ We look forward to hearing from you.
 Sincerely,
 
 ${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management`;
+Whip Claims Management
+
+${form.state && form.dateOfLoss ? `Statute of Limitations Notice (PD only): Based on the information currently available, the applicable statute of limitations is currently projected to expire on ${formatLongCalendarDate(projectedPdSolDate(form.dateOfLoss, form.state)) ?? "[DATE]"}.` : ""}`;
 
   const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
@@ -998,7 +1052,7 @@ Whip Claims Management`;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(40, 40, 40);
     y = wrapLetterText(doc, preview, 14, y, W - 28, 6);
-    addSOLNotice(doc);
+    if (form.state && form.dateOfLoss) addFailedContactPdSolNotice(doc, form.state, form.dateOfLoss);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_FailedContact_${form.claimNumber || "Draft"}.pdf`);
@@ -1012,8 +1066,22 @@ Whip Claims Management`;
           <Grid3>
             <Field label="Claimant Name" id="fc-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />
             <Field label="Claim Number" id="fc-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
-            <Field label="Date of Loss" id="fc-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
+            <Field label="Date of Loss" id="fc-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" required />
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Loss State (PD SOL)</Label>
+              <Select value={form.state} onValueChange={set("state")}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select state" /></SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {PD_SOL_STATE_OPTIONS.map(([code, name]) => <SelectItem key={code} value={code}>{name} ({code})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </Grid3>
+          {form.state && form.dateOfLoss && (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              PD statute date (projected): <strong>{formatLongCalendarDate(projectedPdSolDate(form.dateOfLoss, form.state)) ?? "Check the date of loss"}</strong>. Review before issuing; this is not legal advice.
+            </p>
+          )}
           <div className="mt-3">
             <Field label="Vehicle (Year/Make/Model)" id="fc-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" />
           </div>
@@ -2413,8 +2481,7 @@ function ReleaseBITab() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
-    addSOLNotice(doc, form.state);
-    addLetterFooter(doc);
+    // Releases are unbranded legal documents: no Whip letterhead, SOL notice, or footer.
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -2616,8 +2683,7 @@ function ReleasePDTab() {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
     y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
-    addSOLNotice(doc, form.state);
-    addLetterFooter(doc);
+    // Releases are unbranded legal documents: no Whip letterhead, SOL notice, or footer.
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -3096,8 +3162,10 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
       fd.append("file", file);
       const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
       if (!upload.ok) throw new Error(`Upload failed: ${file.name}`);
-      const { url } = await upload.json() as { url: string };
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl: url, fileName: file.name });
+      const payload = await upload.json() as { url?: string; signedUrl?: string };
+      const fileUrl = payload.signedUrl || payload.url;
+      if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: file.name });
       setForm(p => ({
         ...p,
         repair: parsed.repairTotal || p.repair,
@@ -3554,8 +3622,10 @@ function CarrierRebuttalTab() {
       fd.append("file", ourEstimateDoc);
       const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
       if (!upload.ok) throw new Error(`Upload failed: ${ourEstimateDoc.name}`);
-      const { url } = await upload.json() as { url: string };
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl: url, fileName: ourEstimateDoc.name });
+      const payload = await upload.json() as { url?: string; signedUrl?: string };
+      const fileUrl = payload.signedUrl || payload.url;
+      if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: ourEstimateDoc.name });
       setForm(p => ({
         ...p,
         claimNumber: parsed.claimNumber || p.claimNumber,

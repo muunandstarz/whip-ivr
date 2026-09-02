@@ -348,11 +348,11 @@
 - [x] Admin queue: show "assigned" tick as items get assigned (live count update)
 - [x] Status shows "assigned" but handler shows "Unassigned" — verified active data contains no assigned records without a handler; unassigned records are new or resolved
 - [x] Add sort control to admin Mailroom table with newest-first source-received timestamp as the default
-- [ ] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
+- [x] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
 - [ ] Gmail ingest: debug why 40+ emails return 0 inserted; fix query/filter
 - [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment
-- [ ] Bulk archive: checkbox column, select-all, archive button in admin Mailroom
-- [ ] Summary column in All Mail table showing brief note of what the mail is
+- [x] Bulk archive: checkbox column, select-all, archive button in admin Mailroom
+- [x] Summary column in All Mail table showing brief note of what the mail is
 
 ## Session 2026-08-10 Tasks
 - [x] Gmail ingest: fix query to is:unread to:claims@drivewhip.com (was querying all mail without is:unread)
@@ -581,6 +581,13 @@
 - [x] Add an admin-editable dashboard announcement system with new-feature callouts and a safe positivity message fallback
 - [x] Add opt-in birthday collection in the announcement area and personalized birthday recognition for teammates
 - [x] Restore the original Knowledge Base attorney names and contact information in Denied Claim Escalation
+
+## September 2026 Document Generator Repairs
+- [ ] Verify the new claims email and Claims Mail thread attachment ingest, classification, and reviewed-marker behavior
+- [ ] Add a PD-only Failed Contact Letter date-of-loss field and computed statute-of-limitations notice above the footer
+- [ ] Replace invalid URL-only estimate parsing inputs with browser-upload compatible document parsing for Subro Demand and Carrier Rebuttal
+- [ ] Add the COI still-in-rental expiration calculation and editable result to the Klutch Dec Page form filler
+- [ ] Reformat BI and PD release PDFs against the attached approved release references
 
 ## Scheduled Mailroom and Threaded Claims Mail Intake
 - [x] Repair all Mailroom schedule callbacks so Gmail intake, Claims Mail intake, classification, and reminders run reliably on their configured cadence
