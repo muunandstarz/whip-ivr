@@ -136,6 +136,14 @@ export interface MailReminderRunOptions {
   itemIds?: number[];
 }
 
+export async function resolveReminderSlackUserId(
+  item: { mailbot_slack_id?: string | null; handler_email?: string | null },
+  slack: SlackDMFn,
+): Promise<string | null> {
+  if (item.mailbot_slack_id?.trim()) return item.mailbot_slack_id;
+  return item.handler_email ? slack.lookupByEmail(item.handler_email) : null;
+}
+
 export async function runMailReminders(
   conn: mysql.Connection,
   slack: SlackDMFn,
@@ -154,7 +162,16 @@ export async function runMailReminders(
     `SELECT mi.id, mi.assigned_handler_id, mi.due_at, mi.remind_at,
             mi.last_reminded_at, mi.subject, mi.category, mi.response_due_date, mi.is_demand, mi.urgency,
             mi.resolution_outcome,
-            h.email AS handler_email, h.name AS handler_name
+            h.email AS handler_email, h.name AS handler_name,
+            (
+              SELECT mba.slack_id
+              FROM mail_bot_agents mba
+              WHERE mba.is_active = 1
+                AND LOWER(REPLACE(SUBSTRING_INDEX(mba.name, ' ', 1), 'giovanni', 'geovanni')) =
+                    LOWER(SUBSTRING_INDEX(h.name, ' ', 1))
+              ORDER BY mba.id ASC
+              LIMIT 1
+            ) AS mailbot_slack_id
      FROM mail_items mi
      JOIN handlers h ON h.id = mi.assigned_handler_id
      WHERE mi.status IN ('assigned', 'escalated')
@@ -177,7 +194,7 @@ export async function runMailReminders(
 
   for (const item of items) {
     try {
-      const userId = await slack.lookupByEmail(item.handler_email);
+      const userId = await resolveReminderSlackUserId(item, slack);
       if (!userId) {
         result.errors.push(`No Slack user for ${item.handler_email}`);
         result.skipped++;

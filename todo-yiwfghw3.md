@@ -455,9 +455,9 @@
 - [x] Verify the published Trigger Now response is valid JSON and its live run completes
 - [x] Eliminate the published Trigger Now Service Unavailable response and return a prompt structured result
 - [x] Move full Claims Mail polling and legacy attachment recovery into bounded scheduled Mailroom work
-- [ ] Run bounded Slack intake through the proven Gmail Heartbeat callback and retire the failing standalone Slack callback
-- [ ] Transition an already-ingested Slack item to resolved when it is subsequently marked reviewed in Claims Mail
-- [ ] Make Trigger Now execute one safe bounded Gmail and Claims Mail recovery batch rather than only acknowledging deferred work
+- [x] Run bounded Slack intake through the proven Gmail Heartbeat callback and retire the failing standalone Slack callback
+- [x] Transition an already-ingested Slack item to resolved when it is subsequently marked reviewed in Claims Mail
+- [x] Make Trigger Now execute one safe bounded Gmail and Claims Mail recovery batch rather than only acknowledging deferred work
 - [x] Store and sort by the source received timestamp: Gmail received date or Slack Claims Mail upload date
 - [x] Recover missing attachment rows through Slack and Gmail recovery paths
 - [x] Re-run AI classification for unresolved items missing summaries or descriptive titles
@@ -583,5 +583,6 @@
 - [x] Restore the original Knowledge Base attorney names and contact information in Denied Claim Escalation
 
 ## Scheduled Mailroom and Threaded Claims Mail Intake
-- [ ] Repair all Mailroom schedule callbacks so Gmail intake, Claims Mail intake, classification, and reminders run reliably on their configured cadence
+- [x] Repair all Mailroom schedule callbacks so Gmail intake, Claims Mail intake, classification, and reminders run reliably on their configured cadence
 - [x] Ingest attachments from Claims Mail root posts and all related Slack thread replies using the same reviewed-marker rules
+- [x] Resolve Mailroom reminder recipients through active Mail Bot Slack IDs when a handler email has no Slack directory match

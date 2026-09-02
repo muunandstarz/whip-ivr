@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
 import type { Connection } from 'mysql2/promise';
-import { runMailReminders } from './jobs.js';
+import { resolveReminderSlackUserId, runMailReminders } from './jobs.js';
 import type { SlackDMFn } from './jobs.js';
 
 let conn: Connection;
@@ -80,6 +80,17 @@ afterAll(async () => {
 });
 
 describe('runMailReminders() — mocked Slack DM', () => {
+  it('R0: uses the durable Mail Bot Slack ID without requiring an email-directory lookup', async () => {
+    const mockSlack: SlackDMFn = {
+      lookupByEmail: vi.fn().mockResolvedValue('U_EMAIL_LOOKUP'),
+      sendDM: vi.fn(),
+    };
+
+    await expect(resolveReminderSlackUserId({ mailbot_slack_id: 'U_MAILBOT', handler_email: 'agent@example.com' }, mockSlack))
+      .resolves.toBe('U_MAILBOT');
+    expect(mockSlack.lookupByEmail).not.toHaveBeenCalled();
+  });
+
   it('R1: notifies overdue and remindAt-due items, skips future items', async () => {
     const sentTo: string[] = [];
     const mockSlack: SlackDMFn = {
