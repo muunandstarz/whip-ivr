@@ -569,6 +569,12 @@
 - [x] Hand off workspace facts and scene analysis to the existing Liability Guide for documented liability and first-party recoverability reasoning
 - [x] Add a persistent minimized Claims Workspace panel with quick note, new task, today’s tasks, and recent notes
 
+## Claims Workspace Accident Diagram Enhancements
+- [x] Add direct click-and-drag vehicle rotation plus discrete rotate controls to the accident diagram
+- [x] Improve accident-diagram vehicle silhouettes so insured and claimant vehicles clearly resemble top-down cars
+- [x] Add editable street and road labels to the accident diagram
+- [x] Add address and approximate-location search that centers the optional map behind the accident diagram vehicles
+
 ## Document Generator, Dashboard Announcements, and Escalation Enhancements
 - [x] Add estimate upload and structured estimate parsing to the Subro Demand Letter workflow
 - [x] Add estimate upload and structured estimate parsing to the Carrier Rebuttal workflow
