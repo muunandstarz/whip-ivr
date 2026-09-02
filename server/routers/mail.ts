@@ -819,15 +819,15 @@ export const mailRouter = router({
   // ─── Cron management ───────────────────────────────────────────────────────
 
   /**
-   * Refresh Mailroom Heartbeat jobs from the current admin session.
+   * Refresh Mailroom Heartbeat jobs under the durable project-owner identity.
    *
-   * Heartbeat callbacks carry the creating user's decoded session token. Recreating
-   * the known Mailroom jobs prevents an expired callback credential from silently
-   * breaking a previously configured schedule. The job names and cadence remain
-   * unchanged, and creation failures are returned per job to the Setup UI.
+   * Mailroom jobs operate organization-wide, rather than for an individual handler.
+   * Passing an empty session to the Heartbeat SDK intentionally uses the project
+   * owner identity, which lets the scheduler mint its required cron callback cookie
+   * instead of preserving a browser session that will eventually be rejected.
    */
-  setupCrons: adminProcedure.mutation(async ({ ctx }) => {
-    const sessionToken = parseCookie(ctx.req.headers.cookie ?? '')[COOKIE_NAME] ?? '';
+  setupCrons: adminProcedure.mutation(async () => {
+    const sessionToken = '';
     const results: Record<string, string> = {};
     const jobs = [
       { name: 'mail-warmup',       cron: '0 * * * * *',   path: '/api/scheduled/mailWarmup',      description: 'Keep the Mailroom callback service warm every minute' },
@@ -861,8 +861,8 @@ export const mailRouter = router({
   }),
 
   /** List current mail cron jobs */
-  listCrons: adminProcedure.query(async ({ ctx }) => {
-    const sessionToken = parseCookie(ctx.req.headers.cookie ?? '')[COOKIE_NAME] ?? '';
+  listCrons: adminProcedure.query(async () => {
+    const sessionToken = '';
     try {
       const jobs = await listHeartbeatJobs(sessionToken);
       const mailJobs = jobs.jobs.filter(j =>
