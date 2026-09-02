@@ -586,5 +586,5 @@
 - [x] Repair all Mailroom schedule callbacks so Gmail intake, Claims Mail intake, classification, and reminders run reliably on their configured cadence
 - [x] Ingest attachments from Claims Mail root posts and all related Slack thread replies using the same reviewed-marker rules
 - [x] Resolve Mailroom reminder recipients through active Mail Bot Slack IDs when a handler email has no Slack directory match
-- [ ] Cap daily overdue Mailroom reminders at the ten oldest eligible items until the backlog is cleared
-- [ ] Restore automated deployment capacity after the current platform service-quota failure
+- [x] Cap daily overdue Mailroom reminders at the ten oldest eligible items until the backlog is cleared
+- [x] Restore automated deployment capacity after the current platform service-quota failure

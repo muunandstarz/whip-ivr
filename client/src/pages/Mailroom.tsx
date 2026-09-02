@@ -1054,8 +1054,8 @@ function AdminMailSetup() {
                 desc: "Runs the AI classifier on every new item (category IS NULL). Determines category, urgency, claim number, and whether it is a demand. Then routes to the correct team and assigns to the least-loaded active handler on that team. Batch limit: 3 items per handler per run. Items beyond the limit are classified but held for the next run.",
               },
               {
-                icon: "🔔", label: "Reminders", schedule: "Hourly",
-                desc: "Checks for overdue items (dueAt < now) and items with a remindAt timestamp that has passed. Sends a Slack DM to the assigned handler. Throttled to once per 24 hours per item to avoid spam.",
+                icon: "🔔", label: "Reminders", schedule: "Daily · 10 oldest",
+                desc: "Sends a daily catch-up batch for the 10 oldest overdue items (or due reminders), then alerts each assigned handler in Slack. Each item is throttled to one reminder per 24 hours to avoid duplicate notifications.",
               },
             ].map(job => (
               <div key={job.label} className="rounded-lg border border-border/50 p-3 space-y-1">
