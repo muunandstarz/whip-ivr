@@ -833,7 +833,7 @@ export const mailRouter = router({
       { name: 'mail-warmup',       cron: '0 * * * * *',   path: '/api/scheduled/mailWarmup',      description: 'Keep the Mailroom callback service warm every minute' },
       { name: 'mail-ingest-gmail', cron: '0 */5 * * * *', path: '/api/scheduled/mailIngestGmail', description: 'Poll claims@ Gmail every 5 min' },
       { name: 'mail-process',      cron: '0 2/5 * * * *', path: '/api/scheduled/mailProcess',      description: 'Classify + assign new mail_items every 5 min' },
-      { name: 'mail-reminders',    cron: '0 0 * * * *',   path: '/api/scheduled/mailReminders',    description: 'Send overdue/reminder DMs every hour' },
+      { name: 'mail-reminders',    cron: '0 0 18 * * *',  path: '/api/scheduled/mailReminders',    description: 'Send the ten oldest eligible overdue reminders once daily at 1:00 PM EST' },
     ];
     try {
       const existing = await listHeartbeatJobs(sessionToken);

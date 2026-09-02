@@ -122,6 +122,7 @@ export async function sendUrgentAssignmentDM(
 
 // ─── THROTTLE: don't re-notify within this many hours ────────────────────────
 const REMINDER_THROTTLE_HOURS = 24;
+export const DAILY_REMINDER_LIMIT = 10;
 
 // ─── mailReminders ────────────────────────────────────────────────────────────
 
@@ -187,8 +188,10 @@ export async function runMailReminders(
        )
        AND (mi.last_reminded_at IS NULL OR mi.last_reminded_at < ?)
        ${itemIdFilter}
-     ORDER BY mi.due_at ASC
-     LIMIT 100`,
+     -- Backlog clearance is deliberately oldest-first, rather than urgency-first,
+     -- because urgent mail has a separate immediate-assignment alarm path.
+     ORDER BY COALESCE(mi.received_at, mi.due_at, mi.remind_at) ASC, mi.id ASC
+     LIMIT ${DAILY_REMINDER_LIMIT}`,
     [now, now, now, throttleCutoff, ...itemIds]
   );
 

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
 import type { Connection } from 'mysql2/promise';
-import { resolveReminderSlackUserId, runMailReminders } from './jobs.js';
+import { DAILY_REMINDER_LIMIT, resolveReminderSlackUserId, runMailReminders } from './jobs.js';
 import type { SlackDMFn } from './jobs.js';
 
 let conn: Connection;
@@ -146,5 +146,34 @@ describe('runMailReminders() — mocked Slack DM', () => {
     const firstRemindedAt = new Date(row.last_reminded_at).getTime();
     // Should be within 5 seconds of when R1 ran (not updated by R2)
     expect(Date.now() - firstRemindedAt, 'lastRemindedAt not updated by R2').toBeLessThan(30000);
+  });
+
+  it('R3: caps daily catch-up to the ten oldest eligible records', async () => {
+    const [[team]] = await conn.execute<any[]>('SELECT id FROM teams LIMIT 1');
+    const token = `REM_LIMIT_${Date.now()}`;
+    const ids: number[] = [];
+    try {
+      for (let age = 12; age >= 1; age--) {
+        const [inserted] = await conn.execute<any>(
+          `INSERT INTO mail_items
+             (source, external_id, received_at, status, category, assigned_team_id, assigned_handler_id, assigned_at, due_at, subject)
+           VALUES ('mail', ?, DATE_SUB(NOW(), INTERVAL ? DAY), 'assigned', 'inbound_subro', ?, ?, NOW(), DATE_SUB(NOW(), INTERVAL 1 HOUR), ?)`,
+          [`${token}_${age}`, age, team.id, handlerId, `Oldest-first ${age}`],
+        );
+        ids.push((inserted as any).insertId);
+      }
+      const sent: string[] = [];
+      const slack: SlackDMFn = {
+        lookupByEmail: vi.fn().mockResolvedValue('U_MOCK_HANDLER'),
+        sendDM: vi.fn().mockImplementation(async (_userId, text) => { sent.push(text); }),
+      };
+      const result = await runMailReminders(conn, slack, { itemIds: ids });
+      expect(result.notified).toBe(DAILY_REMINDER_LIMIT);
+      expect(sent).toHaveLength(DAILY_REMINDER_LIMIT);
+      expect(sent[0]).toContain(`Item #${ids[0]}`);
+      expect(sent[DAILY_REMINDER_LIMIT - 1]).toContain(`Item #${ids[DAILY_REMINDER_LIMIT - 1]}`);
+    } finally {
+      await conn.execute('DELETE FROM mail_items WHERE external_id LIKE ?', [`${token}_%`]);
+    }
   });
 });
