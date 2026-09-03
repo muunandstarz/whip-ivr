@@ -601,3 +601,7 @@
 
 ## September 2026 Mailroom Assignment Cadence Repair
 - [x] Keep Gmail and Claims Mail source ingestion running continuously while limiting routine handler assignment to the Tuesday–Friday 1:00 PM Eastern batch and preserving immediate priority routing
+
+## September 2026 Claims Workspace Navigation and Layout
+- [x] Add Claims Workspace as a sidebar tab for dashboard users
+- [x] Make the Claims Workspace panel moveable so it can be repositioned instead of obscuring underlying claim information

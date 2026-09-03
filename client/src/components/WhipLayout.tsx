@@ -54,6 +54,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/mailroom", label: "Mailroom", icon: Inbox },
+  { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
 ];
 
