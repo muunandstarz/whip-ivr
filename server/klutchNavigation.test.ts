@@ -11,7 +11,7 @@ describe('Klutch coverage navigation', () => {
   });
 
   it('retains the approved Klutch Policy Declarations entry', () => {
-    expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText }');
+    expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText }');
     expect(source).toContain('src="/klutch-policy-declarations.html"');
   });
 

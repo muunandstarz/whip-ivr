@@ -110,7 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
       { id: "coi-whip", label: "Certificate of Insurance", icon: Shield },
       { id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText },
-      { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText },
+      { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText },
     ],
   },
   {
