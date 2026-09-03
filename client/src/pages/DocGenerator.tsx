@@ -110,6 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
       { id: "coi-whip", label: "Certificate of Insurance", icon: Shield },
       { id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText },
+      { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText },
     ],
   },
   {
@@ -7666,7 +7667,7 @@ export default function DocGenerator() {
   const initialTab = (() => {
     const params = new URLSearchParams(search);
     const t = params.get("tab");
-    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","dv-calculator"];
+    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","klutch-policy-declarations","dv-calculator"];
     return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
   })();
   const initialMemberState = (() => {

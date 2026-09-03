@@ -14,4 +14,9 @@ describe('Klutch coverage navigation', () => {
     expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations", icon: FileText }');
     expect(source).toContain('src="/klutch-policy-declarations.html"');
   });
+
+  it('also exposes the separate interactive Klutch Dec Page form', () => {
+    expect(source).toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText }');
+    expect(source).toContain('case "dec-page-whip": return <KlutchDecPageTab initialState={initialMemberState} />');
+  });
 });

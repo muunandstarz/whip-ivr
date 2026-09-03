@@ -588,6 +588,7 @@
 - [x] Add a PD-only Failed Contact Letter date-of-loss field and computed statute-of-limitations notice above the footer
 - [x] Replace invalid URL-only estimate parsing inputs with browser-upload compatible document parsing for Subro Demand and Carrier Rebuttal
 - [x] Make the Klutch Dec Page still-in-rental expiration calculation and editable result visibly available in the form filler
+- [x] Preserve the approved static Klutch Policy Declarations entry while separately exposing the interactive Klutch Dec Page form
 - [ ] Reformat BI and PD release PDFs against the attached approved release references
 
 ## Scheduled Mailroom and Threaded Claims Mail Intake
