@@ -1136,7 +1136,9 @@ export const mailRouter = router({
                 GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
          FROM mail_items mi
          LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
-         WHERE mi.category IS NULL AND mi.status = 'new'
+         WHERE mi.category IS NULL
+           AND mi.status = 'new'
+           AND COALESCE(mi.needs_review, 0) = 0
          GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 6`
       );
 

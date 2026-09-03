@@ -473,6 +473,7 @@
 
 ## Mailroom Content Refresh Eligibility Repair
 - [x] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
+- [x] Prevent unreadable manual-review items from repeatedly blocking later readable Gmail and Claims Mail records in bounded processing runs
 - [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
 - [ ] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
 - [ ] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable

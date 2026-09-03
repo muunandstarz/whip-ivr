@@ -269,7 +269,9 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
         : String(sourceRecoveryError);
     }
 
-    // Select unprocessed items (category IS NULL, status='new')
+    // Select only automated-processing candidates. Records already held in the
+    // review lane for missing/unreadable source content must not monopolize
+    // every bounded callback; they remain visible to administrators for review.
     const [items] = await conn.execute<any[]>(
       `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
               mi.slack_channel_id, mi.slack_message_ts,
@@ -277,7 +279,9 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
               GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
        FROM mail_items mi
        LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
-       WHERE mi.category IS NULL AND mi.status = 'new'
+       WHERE mi.category IS NULL
+         AND mi.status = 'new'
+         AND COALESCE(mi.needs_review, 0) = 0
        GROUP BY mi.id
        ORDER BY mi.received_at ASC
        LIMIT 2`
