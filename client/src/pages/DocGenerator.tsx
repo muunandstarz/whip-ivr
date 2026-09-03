@@ -455,7 +455,7 @@ interface CoverageThroughResult {
   warning: string | null;
 }
 
-function computeCoverageThrough(opts: {
+export function computeCoverageThrough(opts: {
   startDateStr: string;
   state: string;
   stillInRental: boolean;

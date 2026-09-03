@@ -15,3 +15,7 @@
 - Signature block appears at the bottom of the final substantive page or on a separate closing page depending on document length.
 - Signature layout uses claimant signature / printed name / date, then witness signature / printed name / date.
 - Reference examples show the desired release look is simple and legal-document oriented rather than a generated preview-text rendering.
+
+## Current Application Preview Check
+
+The revised BI and PD previews render as a single unbranded white legal-document page with black Helvetica text, a left-aligned all-caps release title, compact paragraphs, a numbered representations block, a simple Releasor signature line, and the Whip Claims Management / Metrocars authorized-representative line. The PD form visibly offers a separate carrier-payment toggle; when selected, the carrier name is used as the release signer. The preview contains no letterhead, colored logo, footer, or SOL notice.
