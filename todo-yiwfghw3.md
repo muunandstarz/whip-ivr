@@ -598,3 +598,6 @@
 - [x] Resolve Mailroom reminder recipients through active Mail Bot Slack IDs when a handler email has no Slack directory match
 - [x] Cap daily overdue Mailroom reminders at the ten oldest eligible items until the backlog is cleared
 - [x] Restore automated deployment capacity after the current platform service-quota failure
+
+## September 2026 Mailroom Assignment Cadence Repair
+- [x] Keep Gmail and Claims Mail source ingestion running continuously while limiting routine handler assignment to the Tuesday–Friday 1:00 PM Eastern batch and preserving immediate priority routing

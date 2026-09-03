@@ -13,12 +13,49 @@
 import type { Request, Response } from 'express';
 import mysql from 'mysql2/promise';
 import { classify } from './classify.js';
-import { route } from './route.js';
+import { route, type RoutingPatch } from './route.js';
 import { ingestGmail, buildRealGmailFetch } from './ingestGmail.js';
 import { buildAiSubject, buildMailSummary, createMailContentReader, parseMailContentFiles, refreshIncompleteMailContent } from './contentRefresh.js';
 import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
 import { markAssignedMailSource } from './sourceMarking.js';
 import { buildRealSlackFetch, handleSlackFileEvent } from './ingestSlack.js';
+import { isMailRoutineAssignmentWindow, mailEasternDayBounds } from './businessTime.js';
+
+export const ROUTINE_ASSIGNMENT_DAILY_LIMIT = 3;
+
+/**
+ * Keep a non-priority item classified and visible in the administrator queue,
+ * but do not assign it until the scheduled Tue–Fri 1 PM Eastern workflow.
+ */
+export function deferRoutineAssignment(patch: RoutingPatch): RoutingPatch {
+  return {
+    ...patch,
+    assignedHandlerId: null,
+    status: 'new',
+    assignedAt: null,
+    dueAt: null,
+    initialHandlerId: null,
+    historyActions: patch.historyActions.filter((action) => action.action === 'classified'),
+  };
+}
+
+async function hasRoutineAssignmentCapacity(
+  conn: mysql.Connection,
+  handlerId: number,
+  now: Date,
+): Promise<boolean> {
+  const { start, end } = mailEasternDayBounds(now);
+  const [[row]] = await conn.execute<any[]>(
+    `SELECT COUNT(*) AS assigned_count
+     FROM mail_items
+     WHERE assigned_handler_id = ?
+       AND assigned_at >= ?
+       AND assigned_at < ?
+       AND status IN ('assigned', 'escalated')`,
+    [handlerId, start, end],
+  );
+  return Number(row?.assigned_count ?? 0) < ROUTINE_ASSIGNMENT_DAILY_LIMIT;
+}
 
 type SlackBatchCandidate = { id: string; timestamp?: number; [key: string]: unknown };
 
@@ -272,6 +309,11 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
     // Select only automated-processing candidates. Records already held in the
     // review lane for missing/unreadable source content must not monopolize
     // every bounded callback; they remain visible to administrators for review.
+    const runAt = new Date();
+    const releaseRoutineAssignments = isMailRoutineAssignmentWindow(runAt);
+    const queuedRoutineClause = releaseRoutineAssignments
+      ? ' OR (mi.category IS NOT NULL AND mi.assigned_handler_id IS NULL)'
+      : '';
     const [items] = await conn.execute<any[]>(
       `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
               mi.slack_channel_id, mi.slack_message_ts,
@@ -279,9 +321,9 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
               GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
        FROM mail_items mi
        LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
-       WHERE mi.category IS NULL
-         AND mi.status = 'new'
+       WHERE mi.status = 'new'
          AND COALESCE(mi.needs_review, 0) = 0
+         AND (mi.category IS NULL${queuedRoutineClause})
        GROUP BY mi.id
        ORDER BY mi.received_at ASC
        LIMIT 2`
@@ -317,7 +359,14 @@ export async function mailProcessHandler(req: Request, res: Response): Promise<v
         });
 
         // Route
-        const patch = await route(conn, classification, { sourceText: content.indexedBody });
+        const routedPatch = await route(conn, classification, { sourceText: content.indexedBody });
+        let patch = routedPatch;
+        if (!patch.priorityAssignment && !releaseRoutineAssignments) {
+          patch = deferRoutineAssignment(patch);
+        } else if (!patch.priorityAssignment && patch.assignedHandlerId) {
+          const hasCapacity = await hasRoutineAssignmentCapacity(conn, patch.assignedHandlerId, runAt);
+          if (!hasCapacity) patch = deferRoutineAssignment(patch);
+        }
 
         // Apply patch to mail_items
         await conn.execute(

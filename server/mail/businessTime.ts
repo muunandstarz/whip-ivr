@@ -60,6 +60,31 @@ function normalizeToBusinessWindow(date: Date): EasternParts {
   return parts;
 }
 
+/**
+ * Routine Mailroom assignments are released only in the 1 PM Eastern batch on
+ * Tuesday through Friday. Source collection and priority routing continue at
+ * all times.
+ */
+export function isMailRoutineAssignmentWindow(date: Date = new Date()): boolean {
+  const parts = easternParts(date);
+  return isBusinessWeekday(parts.weekday) && parts.hour === BUSINESS_START_HOUR;
+}
+
+/** Return the UTC boundaries for the supplied calendar day in Eastern time. */
+export function mailEasternDayBounds(date: Date = new Date()): { start: Date; end: Date } {
+  const parts = easternParts(date);
+  const start = eastToUtc({
+    year: parts.year, month: parts.month, day: parts.day,
+    hour: 0, minute: 0, second: 0,
+  });
+  const nextCalendarDay = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
+  const end = eastToUtc({
+    year: nextCalendarDay.getUTCFullYear(), month: nextCalendarDay.getUTCMonth() + 1, day: nextCalendarDay.getUTCDate(),
+    hour: 0, minute: 0, second: 0,
+  });
+  return { start, end };
+}
+
 /** Tue–Fri, 1pm–6pm Eastern only. */
 export function addMailBusinessHours(assignedAt: Date, hours: number): Date {
   let parts = normalizeToBusinessWindow(assignedAt);
