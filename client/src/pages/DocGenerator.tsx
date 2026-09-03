@@ -268,18 +268,34 @@ function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, 
 function writeReleaseText(doc: jsPDF, text: string): void {
   const marginX = 19;
   const marginTop = 20;
-  const marginBottom = 22;
-  const lineH = 5.1;
+  const marginBottom = 20;
+  const bodyLineH = 4.15;
+  const paragraphGap = 5.4;
+  const pageWidth = doc.internal.pageSize.getWidth();
   const maxY = doc.internal.pageSize.getHeight() - marginBottom;
-  const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - marginX * 2) as string[];
+  const blocks = text.trim().split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+  const [title, ...bodyBlocks] = blocks;
   let y = marginTop;
-  for (const line of lines) {
-    if (y > maxY) {
-      doc.addPage();
-      y = marginTop;
-    }
-    doc.text(line, marginX, y);
-    y += lineH;
+
+  const nextPage = () => {
+    doc.addPage();
+    y = marginTop;
+  };
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text(title, marginX, y);
+  y += 8.5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  for (const block of bodyBlocks) {
+    const lines = doc.splitTextToSize(block, pageWidth - marginX * 2) as string[];
+    const blockHeight = lines.length * bodyLineH;
+    if (y + blockHeight > maxY) nextPage();
+    doc.text(lines, marginX, y, { lineHeightFactor: 1.08 });
+    y += blockHeight + paragraphGap;
   }
 }
 
@@ -2437,30 +2453,25 @@ function ReleaseBITab() {
   const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
   const releaseText = [
-    "GENERAL RELEASE OF ALL CLAIMS – BODILY INJURY",
+    "GENERAL RELEASE — BODILY INJURY",
     "",
-    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${form.claimantName || "[Claimant Full Name]"}${minorLine} ("Claimant"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident"), and from any and all other claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
+    `For and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"} (the "Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively, "Releasees") from any and all claims, demands, damages, actions, causes of action, or suits of any kind or nature whatsoever, known or unknown, arising out of or relating to the incident occurring on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident").`,
     "",
-    "This Release is intended to operate as a full, complete, and final settlement of all bodily injury claims and all other claims of any kind that Claimant has or may have against the Releasees as of the date of execution, including but not limited to past and future medical expenses, hospital, physician, therapy, and diagnostic services, pain and suffering, emotional distress, loss of earnings or earning capacity, loss of consortium, and any and all other damages of any kind, whether currently known or that may later be discovered. Claimant expressly waives any rights or benefits under any statute or common law principle that would otherwise limit the effect of this Release to claims known to exist at the time of execution.",
+    "This Release specifically includes, but is not limited to, all claims for bodily injury, personal injury, pain and suffering, emotional distress, lost wages, medical expenses (past, present, and future), and any other damages of any nature arising from the Incident.",
     "",
-    "Claimant represents and warrants that all medical bills, liens, subrogation interests, and reimbursement claims, including but not limited to those of health insurers, Medicare, Medicaid, ERISA plans, hospitals, and medical providers related to the Incident, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid medical balances, liens, or reimbursement rights arising from the Incident or otherwise.",
+    minorBlock + "The Releasor(s) represent and warrant that:\n1. They are the sole owner(s) of the claims released herein;\n2. No other person or entity has any interest in the claims released herein;\n3. They have not assigned or transferred any claim released herein to any other person or entity;\n4. They have had the opportunity to consult with counsel of their choosing prior to executing this Release.",
     "",
-    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}. This Release constitutes the entire agreement between the parties with respect to the subject matter hereof and supersedes all prior negotiations, representations, and agreements.`,
     "",
-    minorBlock + `Claimant acknowledges that this is a general release intended to resolve all claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.`,
+    "IN WITNESS WHEREOF, the undersigned has executed this Release on [EXECUTION DATE].",
     "",
-    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}.`,
+    "_______________________________",
+    form.isMinor ? form.minorGuardianName || "[Guardian / Parent Name]" : form.claimantName || "[Claimant Full Name]",
+    form.isMinor ? "Parent and Legal Guardian" : "Releasor",
     "",
-    "IN WITNESS WHEREOF, Claimant has executed this Release on the date set forth below.",
-    "",
-    `Claimant Signature: ________________________________`,
-    `Printed Name: ________________________________`,
-    `Date: ________________________________`,
-    "",
-    `Witness Signature: ________________________________`,
-    `Printed Name: ________________________________`,
-    `Date: ________________________________`,
-    minorSig,
+    "_______________________________",
+    "Authorized Representative",
+    "Whip Claims Management / Metrocars Leasing Corp",
   ].join("\n");
 
   const handleGenerateEmail = async () => {
@@ -2637,30 +2648,25 @@ function ReleasePDTab() {
   const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
 
   const releaseText = [
-    "GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE",
+    "GENERAL RELEASE — PROPERTY DAMAGE",
     "",
-    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${form.claimantName || "[Claimant Full Name]"}${minorLine} ("Claimant"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident"), and from any and all other property damage claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
+    `For and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"} (the "Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively, "Releasees") from any and all claims, demands, damages, actions, causes of action, or suits of any kind or nature whatsoever, known or unknown, arising out of or relating to the incident occurring on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident").`,
     "",
-    "This Release is intended to operate as a full, complete, and final settlement of all property damage claims that Claimant has or may have against the Releasees as of the date of execution, including but not limited to vehicle repair costs, total loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any and all other property-related damages of any kind, whether currently known or that may later be discovered. Claimant expressly waives any rights or benefits under any statute or common law principle that would otherwise limit the effect of this Release to claims known to exist at the time of execution.",
+    "This Release specifically includes, but is not limited to, all claims for vehicle repair costs, total loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any other property-related damages arising from the Incident.",
     "",
-    "Claimant represents and warrants that all liens, subrogation interests, and reimbursement claims related to the property at issue, including but not limited to those of insurers, lienholders, and finance companies, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid balances, liens, or reimbursement rights arising from the Incident or otherwise.",
+    minorBlock + "The Releasor(s) represent and warrant that:\n1. They are the sole owner(s) of the claims released herein;\n2. No other person or entity has any interest in the claims released herein;\n3. They have not assigned or transferred any claim released herein to any other person or entity;\n4. They have had the opportunity to consult with counsel of their choosing prior to executing this Release.",
     "",
-    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}. This Release constitutes the entire agreement between the parties with respect to the subject matter hereof and supersedes all prior negotiations, representations, and agreements.`,
     "",
-    minorBlock + "Claimant acknowledges that this is a general release intended to resolve all property damage claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.",
+    "IN WITNESS WHEREOF, the undersigned has executed this Release on [EXECUTION DATE].",
     "",
-    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}.`,
+    "_______________________________",
+    form.isCarrierPayee ? form.carrierName || "[Carrier Name]" : form.isMinor ? form.minorGuardianName || "[Guardian / Parent Name]" : form.claimantName || "[Claimant Full Name]",
+    form.isCarrierPayee ? "Carrier / Releasor" : form.isMinor ? "Parent and Legal Guardian" : "Releasor",
     "",
-    "IN WITNESS WHEREOF, Claimant has executed this Release on the date set forth below.",
-    "",
-    `Claimant Signature: ________________________________`,
-    `Printed Name: ________________________________`,
-    `Date: ________________________________`,
-    "",
-    `Witness Signature: ________________________________`,
-    `Printed Name: ________________________________`,
-    `Date: ________________________________`,
-    minorSig,
+    "_______________________________",
+    "Authorized Representative",
+    "Whip Claims Management / Metrocars Leasing Corp",
   ].join("\n");
 
   const handleGenerateEmail = async () => {
@@ -2743,6 +2749,18 @@ function ReleasePDTab() {
             {form.isMinor && (
               <div className="ml-7">
                 <Field label="Guardian / Parent Name" id="rpd-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
+              </div>
+            )}
+            <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+              <Checkbox checked={form.isCarrierPayee} onCheckedChange={(v) => set("isCarrierPayee")(!!v)} />
+              <div>
+                <div className="text-xs font-semibold">Payment Issued to Carrier</div>
+                <div className="text-xs text-muted-foreground">Uses the carrier as the property-damage release payee and signer</div>
+              </div>
+            </label>
+            {form.isCarrierPayee && (
+              <div className="ml-7">
+                <Field label="Carrier Name" id="rpd-carrier" value={form.carrierName} onChange={set("carrierName")} placeholder="Carrier's legal name" />
               </div>
             )}
           </div>
