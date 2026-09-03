@@ -8,9 +8,10 @@ describe('Document Generator letter corrections', () => {
     'utf8'
   );
 
-  it('does not retain statute-of-limitations content in generated letters', () => {
-    expect(source).not.toContain('STATUTE OF LIMITATIONS NOTICE');
-    expect(source).toContain('Statute-of-limitations notices are intentionally omitted from all generated letters.');
+  it('limits statute-of-limitations content to the approved PD-only Failed Contact notice', () => {
+    expect(source).toContain('function addFailedContactPdSolNotice');
+    expect(source).toContain('applicable legal filing deadlines, including the statute of limitations');
+    expect(source).toContain("addFailedContactPdSolNotice(doc, form.state, form.dateOfLoss)");
   });
 
   it('uses the dedicated driver field in Coverage Position while retaining the handler as signatory', () => {

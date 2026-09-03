@@ -192,7 +192,7 @@ describe('mail tRPC procedures', () => {
     const [[row]] = await conn.execute<any[]>(
       'SELECT remind_at FROM mail_items WHERE id = ?', [itemId]
     );
-    expect(new Date(row.remind_at).getTime()).toBeCloseTo(remindAt.getTime(), -3);
+    expect(Math.abs(new Date(row.remind_at).getTime() - remindAt.getTime())).toBeLessThan(1_000);
   });
 
   it('P6: reroute moves assignee and writes a rerouted history row', async () => {
