@@ -8,9 +8,15 @@ describe('Mailroom content refresh eligibility', () => {
     expect(isPlaceholderMailSummary('Demand attached · Claim CLM-101 · Progressive · Payment requested')).toBe(false);
   });
 
-  it('keeps at most two PDF attachment entries for a safe content-refresh pass', () => {
+  it('keeps at most two document or image attachment entries for a safe content-refresh pass', () => {
     const entries = parseMailContentFiles('application/pdf:::a.pdf:::F1:::a.pdf|||application/pdf:::b.pdf:::F2:::b.pdf|||application/pdf:::c.pdf:::F3:::c.pdf');
     expect(entries).toHaveLength(2);
     expect(entries.map((entry) => entry.slackFileId)).toEqual(['F1', 'F2']);
+  });
+
+  it('includes recoverable image files so the vision classifier can create a usable summary', () => {
+    const entries = parseMailContentFiles('image/png:::fax.png:::F1:::fax.png|||image/jpeg:::damage.jpg:::F2:::damage.jpg');
+    expect(entries).toHaveLength(2);
+    expect(entries.map((entry) => entry.filename)).toEqual(['fax.png', 'damage.jpg']);
   });
 });

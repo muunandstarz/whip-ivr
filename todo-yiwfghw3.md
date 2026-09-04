@@ -624,3 +624,4 @@
 
 ## September 2026 Remaining Actionable Repairs
 - [ ] Work through remaining actionable document, Mailroom, and live-verification checklist items while preserving data and leaving third-party authorization requirements explicitly pending
+- [x] Allow the legacy Mailroom content refresh to classify recoverable image attachments through the existing vision path instead of limiting refresh to PDF files

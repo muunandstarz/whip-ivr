@@ -35,6 +35,18 @@ export interface MailContentRead {
   imageDataUrls: string[];
 }
 
+function isPdfFile(file: Pick<MailContentFile, 'contentType' | 'storageKey' | 'filename'>): boolean {
+  return file.contentType.toLowerCase().includes('pdf')
+    || file.storageKey.toLowerCase().endsWith('.pdf')
+    || file.filename?.toLowerCase().endsWith('.pdf') === true;
+}
+
+function isImageFile(file: Pick<MailContentFile, 'contentType' | 'storageKey' | 'filename'>): boolean {
+  const name = `${file.storageKey} ${file.filename ?? ''}`.toLowerCase();
+  return file.contentType.toLowerCase().startsWith('image/')
+    || /\.(png|jpe?g|webp|gif|heic|heif)\b/.test(name);
+}
+
 function isUsableFileResponse(response: Response): boolean {
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
   return response.ok && !contentType.includes('xml') && !contentType.includes('text/html');
@@ -69,7 +81,7 @@ export function parseMailContentFiles(rawEntries: string | null | undefined): Ma
     })
     .filter((file) =>
       Boolean(file.storageKey) &&
-      (file.contentType.toLowerCase().includes('pdf') || file.storageKey.toLowerCase().endsWith('.pdf')),
+      (isPdfFile(file) || isImageFile(file)),
     )
     .slice(0, 2);
 }
@@ -167,6 +179,7 @@ export async function createMailContentReader(conn: Connection) {
     const extractedChunks: string[] = [];
     const imageDataUrls: string[] = [];
     for (const file of files) {
+      const imageCountBeforeRead = imageDataUrls.length;
       let bytes: Buffer | null = null;
       if (source === 'mail' && file.slackFileId) {
         const slackFile = await downloadSlackFile(file.slackFileId, slackToken);
@@ -194,11 +207,21 @@ export async function createMailContentReader(conn: Connection) {
         }
       }
       if (bytes?.length) {
-        const text = await extractPdfText(bytes).catch((error) => {
-          console.warn(`[mailContentRefresh] PDF text extraction skipped for ${externalId}:`, error instanceof Error ? error.message : String(error));
-          return '';
-        });
-        if (text) extractedChunks.push(text);
+        if (isImageFile(file) && imageDataUrls.length === imageCountBeforeRead && bytes.length <= 6 * 1024 * 1024) {
+          const mime = file.contentType.toLowerCase().startsWith('image/')
+            ? file.contentType.split(';')[0]
+            : /\.png$/i.test(file.filename ?? file.storageKey) ? 'image/png'
+            : /\.webp$/i.test(file.filename ?? file.storageKey) ? 'image/webp'
+            : 'image/jpeg';
+          imageDataUrls.push(`data:${mime};base64,${bytes.toString('base64')}`);
+        }
+        if (isPdfFile(file)) {
+          const text = await extractPdfText(bytes).catch((error) => {
+            console.warn(`[mailContentRefresh] PDF text extraction skipped for ${externalId}:`, error instanceof Error ? error.message : String(error));
+            return '';
+          });
+          if (text) extractedChunks.push(text);
+        }
       }
     }
 
