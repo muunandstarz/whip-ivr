@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, ChevronDown, ClipboardList, GripVertical, NotebookPen, Plus, StickyNote } from "lucide-react";
+import { CheckCircle2, ChevronDown, ClipboardList, GripVertical, NotebookPen, Plus, StickyNote, X } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,7 @@ export default function FloatingClaimsWorkspace() {
   const [, navigate] = useLocation();
   const { user, loading } = useAuth();
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [quickNote, setQuickNote] = useState("");
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragOrigin = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
@@ -35,6 +36,7 @@ export default function FloatingClaimsWorkspace() {
       if (!saved) return;
       const parsed = JSON.parse(saved) as { x?: unknown; y?: unknown };
       if (typeof parsed.x === "number" && typeof parsed.y === "number") setOffset({ x: parsed.x, y: parsed.y });
+      setDismissed(window.localStorage.getItem("whip.claimsWorkspace.floatingDismissed") === "true");
     } catch {
       // A corrupt browser preference should never prevent the workspace from opening.
     }
@@ -63,7 +65,13 @@ export default function FloatingClaimsWorkspace() {
     });
   };
 
-  if (loading || !user || window.location.pathname === "/claims-workspace") return null;
+  const dismiss = () => {
+    setOpen(false);
+    setDismissed(true);
+    window.localStorage.setItem("whip.claimsWorkspace.floatingDismissed", "true");
+  };
+
+  if (loading || !user || dismissed || window.location.pathname === "/claims-workspace") return null;
 
   const activeTasks = dashboard.data?.tasks ?? [];
   const notes = dashboard.data?.notes ?? [];
@@ -88,6 +96,7 @@ export default function FloatingClaimsWorkspace() {
                 title="Drag to move this panel"
               ><GripVertical className="h-4 w-4" /></button>
               <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/10 hover:text-white" onClick={() => setOpen(false)} aria-label="Minimize Claims Workspace"><ChevronDown className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-white hover:bg-white/10 hover:text-white" onClick={dismiss} aria-label="Close Claims Workspace" title="Close — reopen from the sidebar"><X className="h-4 w-4" /></Button>
             </div>
           </header>
           <div className="space-y-4 p-4">
@@ -104,7 +113,22 @@ export default function FloatingClaimsWorkspace() {
           </div>
         </section>
       )}
-      {!open && <Button onClick={() => setOpen(true)} className="h-12 rounded-full bg-[#171b31] px-4 text-white shadow-lg hover:bg-[#252b4a]" aria-label="Open Claims Workspace"><NotebookPen className="mr-2 h-4 w-4 text-[#ff6221]" />Claims Workspace</Button>}
+      {!open && (
+        <div className="flex items-center rounded-full bg-[#171b31] pr-1.5 shadow-lg">
+          <button
+            type="button"
+            className="flex h-10 w-7 touch-none cursor-grab items-center justify-center rounded-l-full text-slate-300 hover:bg-white/10 hover:text-white active:cursor-grabbing"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            aria-label="Move Claims Workspace bubble"
+            title="Drag to move this bubble"
+          ><GripVertical className="h-4 w-4" /></button>
+          <Button onClick={() => setOpen(true)} className="h-12 rounded-none bg-transparent px-2 text-white shadow-none hover:bg-transparent" aria-label="Open Claims Workspace"><NotebookPen className="mr-2 h-4 w-4 text-[#ff6221]" />Claims Workspace</Button>
+          <button type="button" onClick={dismiss} className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Close Claims Workspace" title="Close — reopen from the sidebar"><X className="h-4 w-4" /></button>
+        </div>
+      )}
     </div>
   );
 }

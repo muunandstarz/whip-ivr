@@ -16,4 +16,11 @@ describe('Claims Workspace navigation and floating panel', () => {
     expect(floating).toContain('onPointerMove={moveDrag}');
     expect(floating).toContain('whip.claimsWorkspace.floatingOffset');
   });
+
+  it('allows the collapsed floating workpad to be moved or closed and reopened from the sidebar', () => {
+    expect(floating).toContain('aria-label="Move Claims Workspace bubble"');
+    expect(floating).toContain('aria-label="Close Claims Workspace"');
+    expect(floating).toContain('whip.claimsWorkspace.floatingDismissed');
+    expect(floating).toContain('reopen from the sidebar');
+  });
 });

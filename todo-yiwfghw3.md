@@ -605,6 +605,7 @@
 ## September 2026 Claims Workspace Navigation and Layout
 - [x] Add Claims Workspace as a sidebar tab for dashboard users
 - [x] Make the Claims Workspace panel moveable so it can be repositioned instead of obscuring underlying claim information
+- [x] Add an explicit close control to the floating Claims Workspace bubble so users can dismiss it and reopen it from the sidebar
 
 ## September 2026 Estimate Parser Repair
 - [x] Repair the shared uploaded-estimate parser used by Subro Demand and Carrier Rebuttal when the AI response contains no directly parseable JSON object
