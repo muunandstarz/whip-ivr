@@ -19,3 +19,11 @@
 ## Current Application Preview Check
 
 The revised BI and PD previews render as a single unbranded white legal-document page with black Helvetica text, a left-aligned all-caps release title, compact paragraphs, a numbered representations block, a simple Releasor signature line, and the Whip Claims Management / Metrocars authorized-representative line. The PD form visibly offers a separate carrier-payment toggle; when selected, the carrier name is used as the release signer. The preview contains no letterhead, colored logo, footer, or SOL notice.
+
+## Additional Bryan BI Reference Findings (September 2026 review)
+
+- The approved BI form uses a **centered** all-caps title: “GENERAL RELEASE OF ALL CLAIMS – BODILY INJURY,” not a left-aligned heading.
+- The opening clause is materially broader and more specific than the current app text: it names the claimant in quotes, uses “KNOW ALL PERSONS BY THESE PRESENTS,” and includes “release, acquit, and forever discharge” language plus a detailed definition of the releasees.
+- The body paragraphs are denser and longer than the current app output. They include separate paragraphs for: full/final settlement scope, medical-bill/liens/subrogation warranties, no-admission language, claimant acknowledgment of full understanding, governing-law sentence, and execution sentence.
+- The approved signature section is claimant-facing only. It uses labeled lines for **Claimant Signature**, **Printed Name**, **Date**, **Witness Signature**, **Printed Name**, and **Date**. It does **not** include an internal Whip authorized-representative signature block.
+- The minor version uses parent/guardian-specific labels, a relationship-to-minor line, the minor’s name, then the same witness block.

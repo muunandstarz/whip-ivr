@@ -20,4 +20,15 @@ describe('Document Generator letter corrections', () => {
     expect(source).toContain('<Field label="Driver Name" id="tnc-driver" value={form.driverName}');
     expect(source).toContain('${form.adjusterName || "[Adjuster Name]"}');
   });
+
+  it('renders BI and PD releases as approved-style claimant-facing documents with a witness block', () => {
+    expect(source).toContain('GENERAL RELEASE OF ALL CLAIMS – BODILY INJURY');
+    expect(source).toContain('GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE');
+    expect(source).toContain('KNOW ALL PERSONS BY THESE PRESENTS');
+    expect(source).toContain('Claimant Signature:');
+    expect(source).toContain('Witness Signature:');
+    expect(source).toContain('Signature of Parent/Guardian:');
+    expect(source).toContain('doc.text(title, pageWidth / 2, y, { align: "center" });');
+    expect(source).not.toContain('"Whip Claims Management / Metrocars Leasing Corp",\n  ].join("\\n");');
+  });
 });

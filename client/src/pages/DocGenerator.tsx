@@ -266,11 +266,54 @@ function wrapText(doc: jsPDF, text: string, x: number, y: number, maxW: number, 
   return y + lines.length * lineH;
 }
 
-function writeReleaseText(doc: jsPDF, text: string): void {
+type ReleaseSignatureDetails = {
+  signerName: string;
+  signerType: "claimant" | "guardian" | "carrier";
+  minorName?: string;
+};
+
+function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSignatureDetails): void {
+  const marginX = 19;
+  const lineEnd = 122;
+  const labelForSigner = details.signerType === "guardian"
+    ? "Signature of Parent/Guardian:"
+    : details.signerType === "carrier"
+      ? "Carrier Representative Signature:"
+      : "Claimant Signature:";
+  const printLabel = details.signerType === "guardian" ? "Printed Name (Parent/Guardian):" : "Printed Name:";
+  const renderLine = (label: string, value = "") => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text(label, marginX, y);
+    const start = marginX + doc.getTextWidth(label) + 2;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.2);
+    doc.line(start, y + 0.8, lineEnd, y + 0.8);
+    if (value) {
+      doc.setFont("helvetica", "normal");
+      doc.text(value, start + 1.5, y - 0.7);
+    }
+    y += 8;
+  };
+
+  renderLine(labelForSigner);
+  renderLine(printLabel, details.signerName);
+  if (details.signerType === "guardian") {
+    renderLine("Relationship to Minor:", "Parent and Natural Guardian");
+    renderLine("Minor's Name:", details.minorName || "[Minor's Name]");
+  }
+  renderLine("Date:");
+  y += 7;
+  renderLine("Witness Signature:");
+  renderLine("Printed Name:");
+  renderLine("Date:");
+}
+
+function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignatureDetails): void {
   const marginX = 19;
   const marginTop = 20;
   const marginBottom = 20;
-  const bodyLineH = 4.15;
+  const bodyLineH = 4.2;
   const paragraphGap = 5.4;
   const pageWidth = doc.internal.pageSize.getWidth();
   const maxY = doc.internal.pageSize.getHeight() - marginBottom;
@@ -283,11 +326,11 @@ function writeReleaseText(doc: jsPDF, text: string): void {
     y = marginTop;
   };
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
-  doc.text(title, marginX, y);
-  y += 8.5;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text(title, pageWidth / 2, y, { align: "center" });
+  y += 10;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -298,6 +341,26 @@ function writeReleaseText(doc: jsPDF, text: string): void {
     doc.text(lines, marginX, y, { lineHeightFactor: 1.08 });
     y += blockHeight + paragraphGap;
   }
+
+  if (signature) {
+    const signatureHeight = signature.signerType === "guardian" ? 81 : 65;
+    if (y + signatureHeight > maxY) nextPage();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("IN WITNESS WHEREOF, the undersigned has executed this Release on the date set forth below.", marginX, y);
+    y += 16;
+    writeReleaseSignatureBlock(doc, y, signature);
+  }
+}
+
+const RELEASE_STATE_NAMES: Record<string, string> = {
+  MD: "Maryland", VA: "Virginia", PA: "Pennsylvania", FL: "Florida",
+  IL: "Illinois", GA: "Georgia", MA: "Massachusetts", TX: "Texas",
+};
+
+function formatReleaseDate(value: string): string {
+  const date = parseLocalDate(value);
+  return date ? date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date of Loss]";
 }
 
 function wrapLetterText(doc: jsPDF, text: string, x: number, y: number, maxW: number, baseLineH = 6): number {
@@ -2447,32 +2510,25 @@ function ReleaseBITab() {
     month: "long", day: "numeric", year: "numeric",
   });
 
-  const minorLine = form.isMinor ? ` (Minor, by Guardian: ${form.minorGuardianName || "[Guardian Name]"})` : "";
-  const minorBlock = form.isMinor
-    ? `MINOR CLAIMANT PROVISION: The undersigned Guardian/Parent represents that they have the legal authority to execute this release on behalf of the minor claimant, ${form.claimantName || "[Minor's Name]"}, and that this settlement is in the best interest of the minor. Court approval may be required under applicable state law for settlements involving minors.\n\n`
-    : "";
-  const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
+  const releasorDescription = form.isMinor
+    ? `${form.minorGuardianName || "[Parent/Guardian Name]"}, as parent and natural guardian of ${form.claimantName || "[Minor's Name]"}, a minor ("Claimant")`
+    : `${form.claimantName || "[Claimant Full Name]"} ("Claimant")`;
+  const releaseStateName = RELEASE_STATE_NAMES[form.state] || form.state || "[State]";
 
   const releaseText = [
-    "GENERAL RELEASE — BODILY INJURY",
+    "GENERAL RELEASE OF ALL CLAIMS – BODILY INJURY",
     "",
-    `For and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"} (the "Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively, "Releasees") from any and all claims, demands, damages, actions, causes of action, or suits of any kind or nature whatsoever, known or unknown, arising out of or relating to the incident occurring on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident").`,
+    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${releasorDescription}, for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${formatReleaseDate(form.dateOfLoss)} (the "Incident"), and from any and all other claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
     "",
-    "This Release specifically includes, but is not limited to, all claims for bodily injury, personal injury, pain and suffering, emotional distress, lost wages, medical expenses (past, present, and future), and any other damages of any nature arising from the Incident.",
+    "This Release is intended to operate as a full, complete, and final settlement of all bodily injury claims and all other claims of any kind that Claimant has or may have against the Releasees as of the date of execution, including but not limited to past and future medical expenses, hospital, physician, therapy, and diagnostic services, pain and suffering, emotional distress, loss of earnings or earning capacity, loss of consortium, and any and all other damages of any kind, whether currently known or that may later be discovered. Claimant expressly waives any rights or benefits under any statute or common law principle that would otherwise limit the effect of this Release to claims known to exist at the time of execution.",
     "",
-    minorBlock + "The Releasor(s) represent and warrant that:\n1. They are the sole owner(s) of the claims released herein;\n2. No other person or entity has any interest in the claims released herein;\n3. They have not assigned or transferred any claim released herein to any other person or entity;\n4. They have had the opportunity to consult with counsel of their choosing prior to executing this Release.",
+    "Claimant represents and warrants that all medical bills, liens, subrogation interests, and reimbursement claims, including but not limited to those of health insurers, Medicare, Medicaid, ERISA plans, hospitals, and medical providers related to the Incident, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid medical balances, liens, or reimbursement rights arising from the Incident or otherwise.",
     "",
-    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}. This Release constitutes the entire agreement between the parties with respect to the subject matter hereof and supersedes all prior negotiations, representations, and agreements.`,
+    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
     "",
-    "IN WITNESS WHEREOF, the undersigned has executed this Release on [EXECUTION DATE].",
+    "Claimant acknowledges that this is a general release intended to resolve all claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.",
     "",
-    "_______________________________",
-    form.isMinor ? form.minorGuardianName || "[Guardian / Parent Name]" : form.claimantName || "[Claimant Full Name]",
-    form.isMinor ? "Parent and Legal Guardian" : "Releasor",
-    "",
-    "_______________________________",
-    "Authorized Representative",
-    "Whip Claims Management / Metrocars Leasing Corp",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${releaseStateName}.`,
   ].join("\n");
 
   const handleGenerateEmail = async () => {
@@ -2508,7 +2564,11 @@ function ReleaseBITab() {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    writeReleaseText(doc, releaseText);
+    writeReleaseText(doc, releaseText, {
+      signerName: form.isMinor ? form.minorGuardianName || "[Parent/Guardian Name]" : form.claimantName || "[Claimant Full Name]",
+      signerType: form.isMinor ? "guardian" : "claimant",
+      minorName: form.claimantName || "[Minor's Name]",
+    });
     // Releases are unbranded legal documents: no Whip letterhead, SOL notice, or footer.
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Release_BI_${form.claimNumber || "Draft"}.pdf`);
@@ -2642,32 +2702,28 @@ function ReleasePDTab() {
     month: "long", day: "numeric", year: "numeric",
   });
 
-  const minorLine = form.isMinor ? ` (Minor, by Guardian: ${form.minorGuardianName || "[Guardian Name]"})` : "";
-  const minorBlock = form.isMinor
-    ? `MINOR CLAIMANT PROVISION: The undersigned Guardian/Parent represents that they have the legal authority to execute this release on behalf of the minor claimant, ${form.claimantName || "[Minor's Name]"}, and that this settlement is in the best interest of the minor. Court approval may be required under applicable state law for settlements involving minors.\n\n`
-    : "";
-  const minorSig = form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : "";
+  const signerName = form.isCarrierPayee ? form.carrierName || "[Carrier Name]" : form.isMinor ? form.minorGuardianName || "[Parent/Guardian Name]" : form.claimantName || "[Claimant Full Name]";
+  const releasorDescription = form.isCarrierPayee
+    ? `${signerName}, as authorized representative of the property-damage claimant ("Claimant")`
+    : form.isMinor
+      ? `${signerName}, as parent and natural guardian of ${form.claimantName || "[Minor's Name]"}, a minor ("Claimant")`
+      : `${form.claimantName || "[Claimant Full Name]"} ("Claimant")`;
+  const releaseStateName = RELEASE_STATE_NAMES[form.state] || form.state || "[State]";
 
   const releaseText = [
-    "GENERAL RELEASE — PROPERTY DAMAGE",
+    "GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE",
     "",
-    `For and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"} (the "Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively, "Releasees") from any and all claims, demands, damages, actions, causes of action, or suits of any kind or nature whatsoever, known or unknown, arising out of or relating to the incident occurring on or about ${form.dateOfLoss || "[Date of Loss]"} (the "Incident").`,
+    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${releasorDescription}, for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${formatReleaseDate(form.dateOfLoss)} (the "Incident"), and from any and all other claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
     "",
-    "This Release specifically includes, but is not limited to, all claims for vehicle repair costs, total loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any other property-related damages arising from the Incident.",
+    "This Release is intended to operate as a full, complete, and final settlement of all property damage claims and all other claims of any kind that Claimant has or may have against the Releasees as of the date of execution, including but not limited to vehicle repair costs, total-loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any other property-related damages of any kind, whether currently known or that may later be discovered.",
     "",
-    minorBlock + "The Releasor(s) represent and warrant that:\n1. They are the sole owner(s) of the claims released herein;\n2. No other person or entity has any interest in the claims released herein;\n3. They have not assigned or transferred any claim released herein to any other person or entity;\n4. They have had the opportunity to consult with counsel of their choosing prior to executing this Release.",
+    "Claimant represents and warrants that Claimant has the authority to settle the property damage claims released by this document; that all owners, lienholders, subrogation interests, and reimbursement claims related to the property damage have been disclosed; and that Claimant will satisfy and resolve any such interest from the settlement proceeds. Claimant further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to an undisclosed ownership, lien, reimbursement, or subrogation interest arising from the Incident.",
     "",
-    `This Release shall be governed by and construed in accordance with the laws of the State of ${form.state || "[Insert State]"}. This Release constitutes the entire agreement between the parties with respect to the subject matter hereof and supersedes all prior negotiations, representations, and agreements.`,
+    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
     "",
-    "IN WITNESS WHEREOF, the undersigned has executed this Release on [EXECUTION DATE].",
+    "Claimant acknowledges that this is a general release intended to resolve all claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.",
     "",
-    "_______________________________",
-    form.isCarrierPayee ? form.carrierName || "[Carrier Name]" : form.isMinor ? form.minorGuardianName || "[Guardian / Parent Name]" : form.claimantName || "[Claimant Full Name]",
-    form.isCarrierPayee ? "Carrier / Releasor" : form.isMinor ? "Parent and Legal Guardian" : "Releasor",
-    "",
-    "_______________________________",
-    "Authorized Representative",
-    "Whip Claims Management / Metrocars Leasing Corp",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${releaseStateName}.`,
   ].join("\n");
 
   const handleGenerateEmail = async () => {
@@ -2703,7 +2759,11 @@ function ReleasePDTab() {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    writeReleaseText(doc, releaseText);
+    writeReleaseText(doc, releaseText, {
+      signerName,
+      signerType: form.isMinor ? "guardian" : form.isCarrierPayee ? "carrier" : "claimant",
+      minorName: form.claimantName || "[Minor's Name]",
+    });
     // Releases are unbranded legal documents: no Whip letterhead, SOL notice, or footer.
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_Release_PD_${form.claimNumber || "Draft"}.pdf`);
