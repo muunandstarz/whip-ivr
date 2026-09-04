@@ -608,3 +608,7 @@
 
 ## September 2026 Estimate Parser Repair
 - [x] Repair the shared uploaded-estimate parser used by Subro Demand and Carrier Rebuttal when the AI response contains no directly parseable JSON object
+
+## September 2026 Production Acceptance Validation
+- [x] Confirm the repaired uploaded-estimate parser completes in both Subro Demand and Carrier Rebuttal using a real production document-upload flow
+- [x] Confirm the Klutch Dec Page expiration calculator produces the required initial-term, weekly-renewal, editable-last-rental, and before-start-warning results in the production form

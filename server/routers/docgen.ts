@@ -120,6 +120,14 @@ export const docgenRouter = router({
         const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
         return normalized && Number.isFinite(Number(normalized)) ? Number(normalized).toFixed(2) : "";
       };
+      const isoDate = (value: unknown) => {
+        const rawDate = String(value ?? "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return rawDate;
+        const timestamp = Date.parse(rawDate);
+        if (Number.isNaN(timestamp)) return "";
+        const date = new Date(timestamp);
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+      };
       const vin = String(parsed.vin ?? "").replace(/\s/g, "").toUpperCase();
       const rawLines = Array.isArray(parsed.lineItems) ? parsed.lineItems : [];
       const lineItems = rawLines
@@ -134,7 +142,7 @@ export const docgenRouter = router({
         vehicle: String(parsed.vehicle ?? "").trim().slice(0, 160),
         vin: /^[A-HJ-NPR-Z0-9]{17}$/.test(vin) ? vin : "",
         claimNumber: String(parsed.claimNumber ?? "").trim().slice(0, 100),
-        dateOfLoss: /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.dateOfLoss ?? "")) ? String(parsed.dateOfLoss) : "",
+        dateOfLoss: isoDate(parsed.dateOfLoss),
         shopName: String(parsed.shopName ?? "").trim().slice(0, 160),
         lineItems,
       };
