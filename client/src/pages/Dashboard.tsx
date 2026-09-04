@@ -282,9 +282,9 @@ export default function Dashboard() {
 
   return (
     <WhipLayout>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
+	      <div className="p-6 space-y-6">
+	        {/* Header */}
+	        <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Claims IVR Dashboard</h1>
             <p className="text-muted-foreground text-sm mt-0.5">AI-powered call intake management for Whip Claims</p>
@@ -298,9 +298,40 @@ export default function Dashboard() {
               </span>
             )}
           </a>
-        </div>
+	        </div>
 
-        <DashboardAnnouncementCard />
+	        <DashboardAnnouncementCard />
+
+	        {/* The selection controls both the Intake Records and Call Volume sections. */}
+	        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+	          <div className="min-w-0">
+	            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dashboard period</p>
+	            <p className="text-sm font-semibold text-foreground">{monthLabel}</p>
+	          </div>
+	          <div className="flex items-center gap-1">
+	            <div className="flex items-center rounded-md border border-border overflow-hidden mr-1">
+	              {(["month", "ytd", "all"] as const).map((mode) => (
+	                <button key={mode} onClick={() => setViewMode(mode)}
+	                  className={`px-2 py-1 text-xs font-medium transition-colors ${viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+	                  {mode === "month" ? "Month" : mode === "ytd" ? "YTD" : "All Time"}
+	                </button>
+	              ))}
+	            </div>
+	            {viewMode === "month" && (<>
+	              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+	                disabled={monthIndex >= availableMonths.length - 1}
+	                onClick={() => { const next = availableMonths[monthIndex + 1]; if (next) setSelectedMonth(next); }}>
+	                <ChevronLeft className="w-4 h-4" />
+	              </Button>
+	              <span className="text-xs text-muted-foreground px-1 min-w-[90px] text-center">{monthLabel}</span>
+	              <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+	                disabled={monthIndex <= 0}
+	                onClick={() => { const prev = availableMonths[monthIndex - 1]; if (prev) setSelectedMonth(prev); }}>
+	                <ChevronRight className="w-4 h-4" />
+	              </Button>
+	            </>)}
+	          </div>
+	        </div>
 
         {/* ── Top Banner: Today tiles + 7-day Sparkline ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -369,8 +400,11 @@ export default function Dashboard() {
               <CardContent>
                 {trendLoading ? (
                   <ChartSkeleton height={180} />
-                ) : sparklineData.length === 0 ? (
-                  <div className="flex items-center justify-center h-[180px] text-sm text-muted-foreground">No data for the last 7 days</div>
+	                ) : sparklineData.length === 0 ? (
+	                  <div className="flex flex-col items-center justify-center h-[180px] text-center text-sm text-muted-foreground">
+	                    <span>No processed intake records in the last 7 days.</span>
+	                    <span className="mt-1 text-xs">Call activity remains available in the Call Volume section below.</span>
+	                  </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={180}>
                     <LineChart data={sparklineData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
@@ -444,40 +478,12 @@ export default function Dashboard() {
 
         {/* ── Call Volume with Month Selector ── */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Call Volume — {monthLabel}</p>
-              <InfoTooltip text="Live call statistics from Aircall for the Whip Claims line. Includes ALL calls (business hours, after hours, and weekends). Use the arrows to browse previous months." />
-            </div>
-            <div className="flex items-center gap-1">
-              {/* Mode toggle: Month / YTD / All Time */}
-              <div className="flex items-center rounded-md border border-border overflow-hidden mr-1">
-                {(["month", "ytd", "all"] as const).map((mode) => (
-                  <button key={mode} onClick={() => setViewMode(mode)}
-                    className={`px-2 py-0.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
-                    {mode === "month" ? "Month" : mode === "ytd" ? "YTD" : "All Time"}
-                  </button>
-                ))}
-              </div>
-              {/* Month nav — only shown in month mode */}
-              {viewMode === "month" && (<>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                  disabled={monthIndex >= availableMonths.length - 1}
-                  onClick={() => { const next = availableMonths[monthIndex + 1]; if (next) setSelectedMonth(next); }}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-xs text-muted-foreground px-1 min-w-[90px] text-center">{monthLabel}</span>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                  disabled={monthIndex <= 0}
-                  onClick={() => { const prev = availableMonths[monthIndex - 1]; if (prev) setSelectedMonth(prev); }}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </>)}
-              {viewMode !== "month" && (
-                <span className="text-xs text-muted-foreground px-2">{monthLabel}</span>
-              )}
-            </div>
-          </div>
+	          <div className="flex items-center justify-between mb-3">
+	            <div className="flex items-center gap-2">
+	              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Call Volume — {monthLabel}</p>
+	              <InfoTooltip text="Live call statistics from Aircall for the Whip Claims line. Includes ALL calls (business hours, after hours, and weekends). Change the dashboard period above to browse months or view YTD and All Time." />
+	            </div>
+	          </div>
 
           {monthLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[0,1,2,3].map((i) => <StatCardSkeleton key={i} />)}</div>
