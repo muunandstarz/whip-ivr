@@ -12,8 +12,10 @@
  * so voicemail intake continues even if the user-list fetch fails.
  */
 import cron from "node-cron";
-import { upsertCallHistory } from "./db";
+import { getDb, upsertCallHistory } from "./db";
 import { classifyCallBatch } from "./classifyCalls";
+import { callHistory } from "../drizzle/schema";
+import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
 
 const AIRCALL_API_BASE = "https://api.aircall.io/v1";
 
@@ -157,6 +159,65 @@ function isClaimsTeamCall(call: any): boolean {
   if (numberId && _allowedNumberIds.has(numberId)) return true;
   if (numberName && _allowedNumberNames.has(numberName)) return true;
   return false;
+}
+
+/** A Claims-line voicemail is the only recent call type that becomes an actionable intake record. */
+export function shouldProcessRecentVoicemail(call: { direction?: string | null; voicemail?: string | null }): boolean {
+  return call.direction !== "outbound" && Boolean(call.voicemail);
+}
+
+/**
+ * A small catch-up batch protects the intake dashboard if a voicemail webhook is delayed or missed.
+ * It intentionally processes only three records from the preceding day per sync; processVoicemail
+ * remains the single idempotent processor and records empty/spam outcomes as handled.
+ */
+export async function recoverRecentUnlinkedVoicemails(limit = 3): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const candidates = await db
+    .select({
+      aircallCallId: callHistory.aircallCallId,
+      callerPhone: callHistory.callerPhone,
+      voicemailUrl: callHistory.voicemailUrl,
+      startedAt: callHistory.startedAt,
+      endedAt: callHistory.endedAt,
+      aircallNumberId: callHistory.aircallNumberId,
+      aircallNumberName: callHistory.aircallNumberName,
+      agentId: callHistory.agentId,
+      callSource: callHistory.callSource,
+    })
+    .from(callHistory)
+    .where(and(
+      isNotNull(callHistory.voicemailUrl),
+      eq(callHistory.hasIntakeRecord, false),
+      gte(callHistory.startedAt, cutoff),
+    ))
+    .orderBy(desc(callHistory.startedAt))
+    .limit(limit);
+
+  let recovered = 0;
+  const { processVoicemail } = await import("./aircall");
+  for (const call of candidates) {
+    if (!call.voicemailUrl) continue;
+    try {
+      const result = await processVoicemail({
+        aircallCallId: call.aircallCallId,
+        callerPhone: call.callerPhone ?? "unknown",
+        voicemailUrl: call.voicemailUrl,
+        startedAt: call.startedAt,
+        endedAt: call.endedAt ?? undefined,
+        aircallNumberId: call.aircallNumberId ?? undefined,
+        aircallNumberName: call.aircallNumberName ?? undefined,
+        aircallAgentId: call.agentId ?? undefined,
+        routingMethod: call.callSource === "extension" ? "extension" : "ivr",
+      });
+      if (!result.skipped) recovered++;
+    } catch (error) {
+      console.warn(`[AircallSync] Could not recover voicemail ${call.aircallCallId}:`, error);
+    }
+  }
+  return recovered;
 }
 
 /**
@@ -345,6 +406,10 @@ async function runSync() {
     }
     // Also pull any unread assigned voicemails from handler personal mailboxes
     await syncAssignedVoicemails();
+    const recovered = await recoverRecentUnlinkedVoicemails();
+    if (recovered > 0) {
+      console.log(`[AircallSync] Recovered ${recovered} recent unlinked voicemail intake${recovered === 1 ? "" : "s"}`);
+    }
     // Auto-classify any calls that arrived without a callerType (runs silently after sync)
     try {
       const classified = await classifyCallBatch(20);

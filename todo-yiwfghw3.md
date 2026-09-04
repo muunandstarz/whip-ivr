@@ -617,3 +617,9 @@
 - [x] Determine why the dashboard shows zero intake data and restore verified records or correct the active data view without deleting existing data
 - [x] Wire Mailroom resolution to add the configured reviewed marker to the originating Claims Mail Slack post without blocking the resolution outcome
 - [ ] Verify that resolving a Claims Mail item adds the configured reviewed marker to its originating Slack post and repair the source-marker path if needed
+
+## September 2026 Intake Trend Restoration
+- [ ] Restore processing for eligible Aircall voicemails so new intake records and the 7-Day Intake Trend reflect real current inbound work
+
+## September 2026 Remaining Actionable Repairs
+- [ ] Work through remaining actionable document, Mailroom, and live-verification checklist items while preserving data and leaving third-party authorization requirements explicitly pending

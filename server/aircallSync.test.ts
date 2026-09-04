@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { shouldProcessRecentVoicemail } from "./aircallSync";
 
 describe("Aircall API credentials", () => {
   it("AIRCALL_API_ID is set in the environment", () => {
@@ -18,4 +19,12 @@ describe("Aircall API credentials", () => {
     });
     expect(res.status).toBe(200);
   }, 10000);
+});
+
+describe("bounded Claims-line voicemail recovery eligibility", () => {
+  it("includes inbound voicemail media but excludes ordinary and outbound calls", () => {
+    expect(shouldProcessRecentVoicemail({ direction: "inbound", voicemail: "https://example.test/voicemail.mp3" })).toBe(true);
+    expect(shouldProcessRecentVoicemail({ direction: "inbound", voicemail: null })).toBe(false);
+    expect(shouldProcessRecentVoicemail({ direction: "outbound", voicemail: "https://example.test/voicemail.mp3" })).toBe(false);
+  });
 });
