@@ -23,13 +23,49 @@ function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   return "";
 }
 
-function parseJsonObject(raw: string): Record<string, unknown> {
-  const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+export function parseJsonObject(raw: string): Record<string, unknown> {
+  const unfenced = raw
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
   const firstBrace = unfenced.indexOf("{");
   const lastBrace = unfenced.lastIndexOf("}");
   if (firstBrace < 0 || lastBrace <= firstBrace) throw new Error("Estimate parser returned no JSON object");
-  return JSON.parse(unfenced.slice(firstBrace, lastBrace + 1)) as Record<string, unknown>;
+  const candidate = unfenced.slice(firstBrace, lastBrace + 1)
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'");
+  try {
+    return JSON.parse(candidate) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`Estimate parser returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
+
+const ESTIMATE_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    repairTotal: { type: "string" },
+    vehicle: { type: "string" },
+    vin: { type: "string" },
+    claimNumber: { type: "string" },
+    dateOfLoss: { type: "string" },
+    shopName: { type: "string" },
+    lineItems: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          description: { type: "string" },
+          amount: { type: "string" },
+        },
+        required: ["description", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "lineItems"],
+  additionalProperties: false,
+} as const;
 
 
 function getStateCoverageInfo(state: string): string {
@@ -71,8 +107,15 @@ export const docgenRouter = router({
             { type: "file_url", file_url: { url: input.fileUrl, mime_type: "application/pdf" } },
           ] as any,
         }],
+        outputSchema: {
+          name: "repair_estimate",
+          strict: true,
+          schema: ESTIMATE_OUTPUT_SCHEMA,
+        },
       });
-      const parsed = parseJsonObject(extractText(result));
+      const raw = extractText(result);
+      if (!raw) throw new Error("Estimate parser returned an empty structured response");
+      const parsed = parseJsonObject(raw);
       const amount = (value: unknown) => {
         const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
         return normalized && Number.isFinite(Number(normalized)) ? Number(normalized).toFixed(2) : "";

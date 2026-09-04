@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { docgenRouter } from "./docgen";
+import { docgenRouter, parseJsonObject } from "./docgen";
 
 describe("docgenRouter", () => {
   it("exposes all Document Generator AI procedures", () => {
@@ -37,6 +37,18 @@ describe("docgenRouter", () => {
       fileName: "repair-estimate.pdf",
     }).success).toBe(true);
     expect(schema.safeParse({ fileUrl: "not-a-url" }).success).toBe(false);
+  });
+
+  it("extracts model JSON whether it is bare, fenced, or surrounded by explanatory text", () => {
+    expect(parseJsonObject('{"repairTotal":"1234.56","lineItems":[]}')).toMatchObject({ repairTotal: "1234.56" });
+    expect(parseJsonObject('```json\n{"repairTotal":"1234.56","lineItems":[]}\n```')).toMatchObject({ repairTotal: "1234.56" });
+    expect(parseJsonObject('Structured estimate follows: {"repairTotal":"1234.56","lineItems":[]}')).toMatchObject({ repairTotal: "1234.56" });
+  });
+
+  it("requests a strict repair-estimate output schema instead of relying on freeform model prose", () => {
+    const source = require("node:fs").readFileSync(require("node:path").resolve(process.cwd(), "server/routers/docgen.ts"), "utf8");
+    expect(source).toContain('name: "repair_estimate"');
+    expect(source).toContain('strict: true');
   });
 
   it("generateSettlementEmail input schema accepts bi type", async () => {
