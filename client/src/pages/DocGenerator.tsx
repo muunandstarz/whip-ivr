@@ -282,7 +282,7 @@ function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSigna
       : "Claimant Signature:";
   const printLabel = details.signerType === "guardian" ? "Printed Name (Parent/Guardian):" : "Printed Name:";
   const renderLine = (label: string, value = "") => {
-    doc.setFont("helvetica", "bold");
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
     doc.text(label, marginX, y);
     const start = marginX + doc.getTextWidth(label) + 2;
@@ -310,11 +310,12 @@ function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSigna
 }
 
 function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignatureDetails): void {
-  const marginX = 19;
-  const marginTop = 20;
-  const marginBottom = 20;
-  const bodyLineH = 4.2;
-  const paragraphGap = 5.4;
+  // Standard U.S. legal-document page protection: 0.75in margins on all sides.
+  const marginX = 19.05;
+  const marginTop = 19.05;
+  const marginBottom = 19.05;
+  const bodyLineH = 4.6;
+  const paragraphGap = 5.8;
   const pageWidth = doc.internal.pageSize.getWidth();
   const maxY = doc.internal.pageSize.getHeight() - marginBottom;
   const blocks = text.trim().split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
@@ -327,8 +328,8 @@ function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignature
   };
 
   doc.setTextColor(0, 0, 0);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
   doc.text(title, pageWidth / 2, y, { align: "center" });
   y += 10;
 
@@ -345,7 +346,7 @@ function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignature
   if (signature) {
     const signatureHeight = signature.signerType === "guardian" ? 81 : 65;
     if (y + signatureHeight > maxY) nextPage();
-    doc.setFont("helvetica", "bold");
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text("IN WITNESS WHEREOF, the undersigned has executed this Release on the date set forth below.", marginX, y);
     y += 16;

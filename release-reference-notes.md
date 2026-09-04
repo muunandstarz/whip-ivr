@@ -27,3 +27,9 @@ The revised BI and PD previews render as a single unbranded white legal-document
 - The body paragraphs are denser and longer than the current app output. They include separate paragraphs for: full/final settlement scope, medical-bill/liens/subrogation warranties, no-admission language, claimant acknowledgment of full understanding, governing-law sentence, and execution sentence.
 - The approved signature section is claimant-facing only. It uses labeled lines for **Claimant Signature**, **Printed Name**, **Date**, **Witness Signature**, **Printed Name**, and **Date**. It does **not** include an internal Whip authorized-representative signature block.
 - The minor version uses parent/guardian-specific labels, a relationship-to-minor line, the minor’s name, then the same witness block.
+
+## Current Production BI Preview (September 2026 live check)
+
+- The production PDF preview rendered successfully as a plain unbranded legal document with the centered all-caps BI release title, black body text, broad release clauses, no decorative footer, and no Whip letterhead.
+- The rendered document used a single page for the representative completed form. The signature area was below the visible initial scroll position and therefore still requires a dedicated closing-page visual comparison before the reference-level layout task can be marked complete.
+- In the full-screen PDF viewer at 100% scale, the body used dense but readable black legal-document text, evenly spaced paragraphs, narrow practical margins, and a centered bold title. The final signature area remains below the first viewport and is the remaining visual checkpoint.

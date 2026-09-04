@@ -304,6 +304,11 @@ async function checkRepeatCaller(
   return { isRepeat: newCount > 1, callCount: newCount };
 }
 
+export function isDuplicateAircallIntakeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /duplicate entry|uq_intake_aircall_call_id|aircall_call_id/i.test(message);
+}
+
 // Main voicemail processing function
 export async function processVoicemail(params: {
   aircallCallId: string;
@@ -499,38 +504,55 @@ export async function processVoicemail(params: {
   }
 
   // 6. Save intake record
-  const [insertResult] = await db.insert(intakeRecords).values({
-    aircallCallId: params.aircallCallId,
-    callerPhone: params.callerPhone,
-    callerName: extracted.callerName ?? undefined,
-    callerOrg: extracted.callerOrg ?? undefined,
-    callerType: extracted.callerType,
-    whipClaimNumber: extracted.whipClaimNumber ?? undefined,
-    callerRefNumber: extracted.callerRefNumber ?? undefined,
-    callbackPhone: extracted.callbackPhone ?? params.callerPhone,
-    callbackEmail: extracted.callbackEmail ?? undefined,
-    message: extracted.message ?? undefined,
-    rawTranscript: transcript,
-    handlerId: handler.id,
-    handlerName: handler.name,
-    status: "open",
-    isRepeatCaller: isRepeat,
-    repeatCallCount: callCount,
-    priority,
-    source: "voicemail",
-    routingMethod: params.routingMethod ?? (extensionHandler ? "extension" : "ivr"),
-    aircallRecordingUrl: params.voicemailUrl,
-    claimMatchType: claimMatchType ?? undefined,
-    claimMatchConfidence: claimMatchConfidence ?? undefined,
-    snapsheetClaimUrl: snapsheetClaimUrl ?? undefined,
-    // Callback SLA: due within 4 business hours of receipt
-    callbackDueBy: addBusinessHours(new Date(), 4),
-    // Auto-compute labels: after_hours, weekend, direct_voicemail
-    labels: JSON.stringify(computeIntakeLabels({
-      createdAt: new Date(),
-      routingMethod: params.routingMethod ?? (extensionHandler ? 'extension' : 'ivr'),
-    })),
-  });
+  let insertResult: { insertId?: number };
+  try {
+    [insertResult] = await db.insert(intakeRecords).values({
+      aircallCallId: params.aircallCallId,
+      callerPhone: params.callerPhone,
+      callerName: extracted.callerName ?? undefined,
+      callerOrg: extracted.callerOrg ?? undefined,
+      callerType: extracted.callerType,
+      whipClaimNumber: extracted.whipClaimNumber ?? undefined,
+      callerRefNumber: extracted.callerRefNumber ?? undefined,
+      callbackPhone: extracted.callbackPhone ?? params.callerPhone,
+      callbackEmail: extracted.callbackEmail ?? undefined,
+      message: extracted.message ?? undefined,
+      rawTranscript: transcript,
+      handlerId: handler.id,
+      handlerName: handler.name,
+      status: "open",
+      isRepeatCaller: isRepeat,
+      repeatCallCount: callCount,
+      priority,
+      source: "voicemail",
+      routingMethod: params.routingMethod ?? (extensionHandler ? "extension" : "ivr"),
+      aircallRecordingUrl: params.voicemailUrl,
+      claimMatchType: claimMatchType ?? undefined,
+      claimMatchConfidence: claimMatchConfidence ?? undefined,
+      snapsheetClaimUrl: snapsheetClaimUrl ?? undefined,
+      // Callback SLA: due within 4 business hours of receipt
+      callbackDueBy: addBusinessHours(new Date(), 4),
+      // Auto-compute labels: after_hours, weekend, direct_voicemail
+      labels: JSON.stringify(computeIntakeLabels({
+        createdAt: new Date(),
+        routingMethod: params.routingMethod ?? (extensionHandler ? 'extension' : 'ivr'),
+      })),
+    });
+  } catch (error) {
+    if (!isDuplicateAircallIntakeError(error)) throw error;
+    const concurrent = await db
+      .select({ id: intakeRecords.id })
+      .from(intakeRecords)
+      .where(eq(intakeRecords.aircallCallId, params.aircallCallId))
+      .limit(1);
+    if (concurrent.length === 0) throw error;
+    await db
+      .update(callHistory)
+      .set({ hasIntakeRecord: true, intakeRecordId: concurrent[0].id })
+      .where(eq(callHistory.aircallCallId, params.aircallCallId));
+    console.log(`[Aircall] Intake ${concurrent[0].id} was created concurrently for call ${params.aircallCallId} — reconciled without duplicate notification`);
+    return { skipped: true, intakeId: concurrent[0].id };
+  }
 
   // 7. Update call_history record
   await db
