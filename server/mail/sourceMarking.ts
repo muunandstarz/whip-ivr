@@ -16,11 +16,11 @@ export interface SourceMarkingResult {
   errors: string[];
 }
 
-async function addSlackCheckMarker(token: string, channel: string, timestamp: string) {
+async function addSlackCheckMarker(token: string, channel: string, timestamp: string, emoji: string) {
   const response = await fetch('https://slack.com/api/reactions.add', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel, timestamp, name: 'white_check_mark' }),
+    body: JSON.stringify({ channel, timestamp, name: emoji }),
   });
   const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
   return { ok: Boolean(data?.ok || data?.error === 'already_reacted'), error: data?.error };
@@ -65,13 +65,15 @@ export async function markAssignedMailSource(
         result.skipped++;
         return result;
       }
+      const [[markerSetting]] = await conn.execute<any[]>("SELECT value FROM mail_settings WHERE `key`='reviewed_emoji' LIMIT 1");
+      const emoji = markerSetting?.value || 'white_check_mark';
       let timestamp = item.slackMessageTs;
-      let marker = await addSlackCheckMarker(token, item.slackChannelId, timestamp);
+      let marker = await addSlackCheckMarker(token, item.slackChannelId, timestamp, emoji);
       if (!marker.ok && marker.error === 'message_not_found') {
         const shareTimestamp = await findSlackFileShareTimestamp(token, item.externalId, item.slackChannelId);
         if (shareTimestamp) {
           timestamp = shareTimestamp;
-          marker = await addSlackCheckMarker(token, item.slackChannelId, timestamp);
+          marker = await addSlackCheckMarker(token, item.slackChannelId, timestamp, emoji);
         }
       }
       if (!marker.ok) throw new Error(`Slack check marker failed: ${marker.error ?? 'unknown error'}`);

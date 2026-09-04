@@ -24,6 +24,7 @@ import type { ClassificationResult } from '../mail/classify.js';
 import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } from '../mail/businessTime.js';
 import { forwardMailToClaim } from '../mail/forwardToClaim.js';
 import { runBoundedSlackIngest } from '../mail/jobs.js';
+import { markAssignedMailSource } from '../mail/sourceMarking.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -56,6 +57,29 @@ async function appendHistory(
   await db.insert(mailRoutingHistory).values({
     itemId, action, fromHandlerId, toHandlerId, byUserId, reason,
   });
+}
+
+/** Resolution is already complete before this best-effort source acknowledgement is attempted. */
+async function markResolvedSlackSource(item: Awaited<ReturnType<typeof requireItem>>): Promise<void> {
+  if (item.source !== 'mail' || item.sourceHandledAt) return;
+  let conn: mysql.Connection | null = null;
+  try {
+    conn = await mysql.createConnection(process.env.DATABASE_URL!);
+    const result = await markAssignedMailSource(conn, {
+      id: item.id,
+      source: item.source,
+      externalId: item.externalId,
+      slackChannelId: item.slackChannelId,
+      slackMessageTs: item.slackMessageTs,
+    });
+    if (result.errors.length) {
+      console.warn(`[Mailroom] Resolved source marker failed for item ${item.id}: ${result.errors.join('; ')}`);
+    }
+  } catch (error) {
+    console.warn(`[Mailroom] Could not acknowledge resolved Claims Mail item ${item.id}:`, error);
+  } finally {
+    await conn?.end().catch(() => undefined);
+  }
 }
 
 async function parseExternalJson(response: Response, stage: string): Promise<any> {
@@ -376,6 +400,8 @@ export const mailRouter = router({
 
       await appendHistory(db, input.itemId, 'resolved',
         null, null, ctx.user.id, [input.outcome ? `Outcome: ${input.outcome}` : null, input.note].filter(Boolean).join(' — ') || null);
+
+      await markResolvedSlackSource(item);
 
       return { success: true };
     }),

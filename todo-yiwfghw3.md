@@ -612,3 +612,8 @@
 ## September 2026 Production Acceptance Validation
 - [x] Confirm the repaired uploaded-estimate parser completes in both Subro Demand and Carrier Rebuttal using a real production document-upload flow
 - [x] Confirm the Klutch Dec Page expiration calculator produces the required initial-term, weekly-renewal, editable-last-rental, and before-start-warning results in the production form
+
+## September 2026 Data Visibility and Claims Mail Source Marking
+- [ ] Determine why the dashboard shows zero intake data and restore verified records or correct the active data view without deleting existing data
+- [x] Wire Mailroom resolution to add the configured reviewed marker to the originating Claims Mail Slack post without blocking the resolution outcome
+- [ ] Verify that resolving a Claims Mail item adds the configured reviewed marker to its originating Slack post and repair the source-marker path if needed
