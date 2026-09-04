@@ -590,7 +590,7 @@
 - [x] Replace invalid URL-only estimate parsing inputs with browser-upload compatible document parsing for Subro Demand and Carrier Rebuttal
 - [x] Make the Klutch Dec Page still-in-rental expiration calculation and editable result visibly available in the form filler
 - [x] Preserve the approved static Klutch Policy Declarations entry while separately exposing the interactive Klutch Dec Page form
-- [ ] Reformat BI and PD release PDFs against the attached approved release references
+- [x] Reformat BI and PD release PDFs against the attached approved release references
 
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight

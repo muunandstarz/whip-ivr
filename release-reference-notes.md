@@ -33,3 +33,10 @@ The revised BI and PD previews render as a single unbranded white legal-document
 - The production PDF preview rendered successfully as a plain unbranded legal document with the centered all-caps BI release title, black body text, broad release clauses, no decorative footer, and no Whip letterhead.
 - The rendered document used a single page for the representative completed form. The signature area was below the visible initial scroll position and therefore still requires a dedicated closing-page visual comparison before the reference-level layout task can be marked complete.
 - In the full-screen PDF viewer at 100% scale, the body used dense but readable black legal-document text, evenly spaced paragraphs, narrow practical margins, and a centered bold title. The final signature area remains below the first viewport and is the remaining visual checkpoint.
+
+## Standard Release Layout Direction — Production Verification (September 4, 2026)
+
+- The current production BI preview renders a centered all-caps release title with all non-title prose in standard Helvetica weight.
+- The shared release renderer applies 19.05 mm (0.75 inch) margin protection on every page edge, including top and bottom safeguards.
+- The representative standard BI release naturally fits on one letter-size page; expanded and minor releases continue automatically, allowing two- or three-page outputs when their content warrants it.
+- The output remains a plain, unbranded legal document without Whip letterhead, a decorative footer, or an SOL callout.
