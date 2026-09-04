@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPlaceholderMailSummary, parseMailContentFiles } from './contentRefresh.js';
+import { CONTENT_REFRESH_PRIORITY_SQL, isPlaceholderMailSummary, parseMailContentFiles } from './contentRefresh.js';
 
 describe('Mailroom content refresh eligibility', () => {
   it('recognizes the legacy placeholder summaries that require source-document reprocessing', () => {
@@ -18,5 +18,11 @@ describe('Mailroom content refresh eligibility', () => {
     const entries = parseMailContentFiles('image/png:::fax.png:::F1:::fax.png|||image/jpeg:::damage.jpg:::F2:::damage.jpg');
     expect(entries).toHaveLength(2);
     expect(entries.map((entry) => entry.filename)).toEqual(['fax.png', 'damage.jpg']);
+  });
+
+  it('prioritizes Slack-source files, stored body text, and attached documents before empty legacy rows', () => {
+    expect(CONTENT_REFRESH_PRIORITY_SQL).toContain("mif.slack_file_id");
+    expect(CONTENT_REFRESH_PRIORITY_SQL).toContain("mi.body_text");
+    expect(CONTENT_REFRESH_PRIORITY_SQL).toContain("COUNT(mif.id)");
   });
 });

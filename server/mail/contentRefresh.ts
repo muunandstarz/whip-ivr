@@ -16,6 +16,12 @@ const CATEGORY_TITLE_MAP: Record<string, string> = {
 
 export const PLACEHOLDER_SUMMARY_SQL_PATTERN = '(attachment.*(content|contents).*(not provided|not available)|attachment referenced but no readable content|no readable content( provided| in (the )?(message )?body| in email body|.*attachment.*not parsed)?|attached pdf not provided for review|only (a |the )?(generic )?attachment filename|only filename|no attachment content|insufficient information)';
 export const PLACEHOLDER_SUMMARY_PATTERN = new RegExp(PLACEHOLDER_SUMMARY_SQL_PATTERN, 'i');
+export const CONTENT_REFRESH_PRIORITY_SQL = `CASE
+  WHEN MAX(CASE WHEN COALESCE(mif.slack_file_id, '') <> '' THEN 1 ELSE 0 END) = 1 THEN 0
+  WHEN MAX(CASE WHEN COALESCE(mi.body_text, '') <> '' THEN 1 ELSE 0 END) = 1 THEN 1
+  WHEN COUNT(mif.id) > 0 THEN 2
+  ELSE 3
+END`;
 
 export function isPlaceholderMailSummary(summary: string | null | undefined): boolean {
   return PLACEHOLDER_SUMMARY_PATTERN.test(String(summary ?? ''));
@@ -259,7 +265,7 @@ export async function refreshIncompleteMailContent(conn: Connection, limit = 50)
          OR LOWER(COALESCE(mi.summary_note, '')) REGEXP '${PLACEHOLDER_SUMMARY_SQL_PATTERN}'
        )
      GROUP BY mi.id
-     ORDER BY mi.received_at DESC
+     ORDER BY ${CONTENT_REFRESH_PRIORITY_SQL} ASC, mi.received_at DESC
      LIMIT ${batchLimit}`,
   );
 
