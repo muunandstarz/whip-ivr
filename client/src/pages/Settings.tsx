@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   SlidersHorizontal, FileText, CheckCircle, Pencil, X, Save,
-  Phone, Zap, Shield, ArrowRight, Webhook, Copy,
+  Phone, Zap, Shield, ArrowRight, Webhook, Copy, Inbox, Bot, Power,
 } from "lucide-react";
 
 const CALLER_TYPE_LABELS: Record<string, string> = {
@@ -83,12 +84,27 @@ export default function Settings() {
   const { data: scripts, refetch } = trpc.settings.getCallScripts.useQuery(undefined, {
     enabled: isAdmin,
   });
+  const { data: mailFeatures, refetch: refetchMailFeatures } = trpc.settings.getMailFeatureControls.useQuery(undefined, {
+    enabled: isAdmin,
+  });
 
   const updateMutation = trpc.settings.updateCallScript.useMutation({
     onSuccess: () => {
       toast.success("Script saved successfully");
       setEditing(null);
       refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateMailFeatures = trpc.settings.updateMailFeatureControls.useMutation({
+    onSuccess: (data) => {
+      toast.success("Mail feature settings saved", {
+        description: data.mailroomEnabled || data.mailBotEnabled
+          ? "Enabled features are available again. Mailroom schedules are restored when Mailroom is enabled."
+          : "Mailroom and Mail Bot are paused and hidden from navigation.",
+      });
+      refetchMailFeatures();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -136,7 +152,54 @@ export default function Settings() {
           <TabsList className="mb-4">
             <TabsTrigger value="scripts">Call Scripts</TabsTrigger>
             <TabsTrigger value="ivr">IVR Setup</TabsTrigger>
+            <TabsTrigger value="features">Feature Controls</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="features" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Power className="w-4 h-4 text-[#ff6221]" />
+                  <CardTitle className="text-base">Mail Features</CardTitle>
+                </div>
+                <CardDescription>
+                  Pause a mail feature to hide it from navigation and stop its active processing. Turning Mailroom back on restores its background intake, processing, and reminder schedules.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-lg bg-muted p-2"><Inbox className="h-4 w-4 text-muted-foreground" /></div>
+                    <div>
+                      <p className="text-sm font-medium">Mailroom</p>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">Controls Gmail/Claims Mail intake, routing, reminders, and handler/admin queues.</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={mailFeatures?.mailroomEnabled === true}
+                    disabled={!mailFeatures || updateMailFeatures.isPending}
+                    onCheckedChange={(mailroomEnabled) => updateMailFeatures.mutate({ mailroomEnabled })}
+                    aria-label="Enable Mailroom"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-lg bg-muted p-2"><Bot className="h-4 w-4 text-muted-foreground" /></div>
+                    <div>
+                      <p className="text-sm font-medium">Mail / Fax Bot</p>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">Controls Mail Bot assignment activity and its administrative dashboard.</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={mailFeatures?.mailBotEnabled === true}
+                    disabled={!mailFeatures || updateMailFeatures.isPending}
+                    onCheckedChange={(mailBotEnabled) => updateMailFeatures.mutate({ mailBotEnabled })}
+                    aria-label="Enable Mail and Fax Bot"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* ── Call Scripts Tab ── */}
           <TabsContent value="scripts" className="space-y-4">

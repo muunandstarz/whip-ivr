@@ -40,6 +40,21 @@ import ResourcesLinks from "./pages/kb/ResourcesLinks";
 import VehicleAnatomy from "./pages/kb/VehicleAnatomy";
 import ClaimsWorkspace from "./pages/ClaimsWorkspace";
 import { useErrorReporter } from "./hooks/useErrorReporter";
+import MailFeaturePaused from "./components/MailFeaturePaused";
+import { trpc } from "@/lib/trpc";
+
+function MailFeatureGate({
+  feature,
+  component: Component,
+}: {
+  feature: "mailroom" | "mailBot";
+  component: React.ComponentType;
+}) {
+  const { data: controls } = trpc.settings.getMailFeatureControls.useQuery();
+  const enabled = feature === "mailroom" ? controls?.mailroomEnabled : controls?.mailBotEnabled;
+  if (enabled !== true) return <MailFeaturePaused feature={feature === "mailroom" ? "Mailroom" : "Mail / Fax Bot"} />;
+  return <Component />;
+}
 
 function Router() {
   return (
@@ -63,10 +78,10 @@ function Router() {
       <Route path="/reports" component={Reports} />
       <Route path="/loss-intake" component={LossIntake} />
       <Route path="/doc-generator" component={DocGenerator} />
-      <Route path="/mail-bot" component={MailBot} />
-      <Route path="/mailroom/:id" component={MailroomItem} />
-      <Route path="/mailroom" component={Mailroom} />
-      <Route path="/my-mailroom" component={MyMailroom} />
+      <Route path="/mail-bot" component={() => <MailFeatureGate feature="mailBot" component={MailBot} />} />
+      <Route path="/mailroom/:id" component={() => <MailFeatureGate feature="mailroom" component={MailroomItem} />} />
+      <Route path="/mailroom" component={() => <MailFeatureGate feature="mailroom" component={Mailroom} />} />
+      <Route path="/my-mailroom" component={() => <MailFeatureGate feature="mailroom" component={MyMailroom} />} />
       <Route path="/pro-rata" component={ProRataCalc} />
       <Route path="/kb/liability-guide" component={LiabilityGuide} />
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />

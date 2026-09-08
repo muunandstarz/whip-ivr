@@ -20,6 +20,7 @@ import { recoverStaleGmailAttachments } from './gmailAttachmentRecovery.js';
 import { markAssignedMailSource } from './sourceMarking.js';
 import { buildRealSlackFetch, handleSlackFileEvent } from './ingestSlack.js';
 import { isMailRoutineAssignmentWindow, mailEasternDayBounds } from './businessTime.js';
+import { isMailroomFeatureEnabled } from './featureControls.js';
 
 export const ROUTINE_ASSIGNMENT_DAILY_LIMIT = 3;
 
@@ -274,6 +275,10 @@ export async function runMailReminders(
 export async function mailRemindersHandler(req: Request, res: Response): Promise<void> {
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
+    if (!await isMailroomFeatureEnabled(conn)) {
+      res.json({ ok: true, skipped: 'Mailroom is disabled in Settings' });
+      return;
+    }
     const token = process.env.SLACK_BOT_TOKEN ?? '';
     const slack = buildRealSlackDM(token);
     const result = await runMailReminders(conn, slack);
@@ -290,6 +295,10 @@ export async function mailRemindersHandler(req: Request, res: Response): Promise
 export async function mailProcessHandler(req: Request, res: Response): Promise<void> {
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
+    if (!await isMailroomFeatureEnabled(conn)) {
+      res.json({ ok: true, skipped: 'Mailroom is disabled in Settings' });
+      return;
+    }
     // This scheduled callback is established and healthy. Keep one small source
     // intake pass here as a reliable fallback when a source-specific Heartbeat is
     // delayed by the platform. Every operation is intentionally capped at one
@@ -444,6 +453,10 @@ export async function mailQaWeeklyHandler(req: Request, res: Response): Promise<
 export async function mailIngestGmailHandler(req: Request, res: Response): Promise<void> {
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
+    if (!await isMailroomFeatureEnabled(conn)) {
+      res.json({ ok: true, skipped: 'Mailroom is disabled in Settings' });
+      return;
+    }
     const gmail = buildRealGmailFetch(conn);
     const result = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 1);
     const attachmentRecovery = await recoverStaleGmailAttachments(conn, 1);
@@ -483,6 +496,9 @@ export async function runBoundedSlackIngest(
 ): Promise<MailIngestSlackResult> {
   const result: MailIngestSlackResult = { inserted: 0, skipped: 0, resolved: 0, totalFiles: 0, selected: 0, errors: [] };
   try {
+    if (!await isMailroomFeatureEnabled(conn)) {
+      return result;
+    }
     let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
     let channelId = 'C07R60KAC2C';
     const [[botConfig]] = await conn.execute<any[]>(
@@ -639,6 +655,10 @@ export async function runBoundedSlackIngest(
 export async function mailIngestSlackHandler(req: Request, res: Response): Promise<void> {
   const conn = await mysql.createConnection(process.env.DATABASE_URL!);
   try {
+    if (!await isMailroomFeatureEnabled(conn)) {
+      res.json({ ok: true, skipped: 'Mailroom is disabled in Settings' });
+      return;
+    }
     const result = await runBoundedSlackIngest(conn);
     res.status(result.errors.length ? 207 : 200).json({ ok: result.errors.length === 0, ...result });
   } catch (error) {

@@ -1,10 +1,11 @@
 import { getDb } from "./db";
 import {
-  mailBotAgents, mailBotAssignments, mailBotConfig, mailBotPto, mailBotRuns,
+  mailBotAgents, mailBotAssignments, mailBotConfig, mailBotPto, mailBotRuns, mailSettings,
 } from "../drizzle/schema";
 import type { MailBotAgent } from "../drizzle/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { MAILBOT_FEATURE_SETTING, isFeatureSettingEnabled } from "./mail/featureControls";
 
 // ─── Classification ────────────────────────────────────────────────────────────
 
@@ -308,6 +309,11 @@ export async function runMailBot(options: BotRunOptions): Promise<{ runId: strin
   const configRows = await db.select().from(mailBotConfig).where(eq(mailBotConfig.id, 1)).limit(1);
   const config = configRows[0];
   if (!config) throw new Error("Mail bot config not found");
+
+  const featureRows = await db.select().from(mailSettings).where(eq(mailSettings.key, MAILBOT_FEATURE_SETTING)).limit(1);
+  if (!isFeatureSettingEnabled(featureRows[0]?.value)) {
+    return { runId, assigned: 0, skipped: 0, errors: ["Mail / Fax Bot is temporarily disabled in Settings"] };
+  }
 
   const token = config.slackBotToken ?? process.env.SLACK_BOT_TOKEN ?? "";
   const batchSize = options.batchSize ?? config.batchSize;

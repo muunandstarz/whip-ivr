@@ -259,8 +259,10 @@ export default function HandlerDashboard() {
     { agentName: effectiveName },
     { enabled: canSeeLossIntake && !!effectiveName }
   );
+  const { data: mailFeatures } = trpc.settings.getMailFeatureControls.useQuery();
+  const mailroomEnabled = mailFeatures?.mailroomEnabled === true;
   const { data: mailPendingData } = trpc.mail.myPendingCount.useQuery(undefined, {
-    enabled: !!handlerId,
+    enabled: !!handlerId && mailroomEnabled,
   });
   const mailPendingCount = mailPendingData?.count ?? 0;
 
@@ -322,15 +324,16 @@ export default function HandlerDashboard() {
                 {overdueCount} overdue callback{overdueCount !== 1 ? "s" : ""}
               </Badge>
             )}
-            {/* Mailroom icon */}
-            <a href="/my-mailroom" className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted transition-colors" title={mailPendingCount > 0 ? `${mailPendingCount} pending mail items` : "myMailroom"}>
-              <img src="/manus-storage/mailbox-new_7d868b27.png" alt="Mailroom" className="w-8 h-8 object-contain" />
-              {mailPendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none shadow">
-                  {mailPendingCount > 99 ? "99+" : mailPendingCount}
-                </span>
-              )}
-            </a>
+            {mailroomEnabled && (
+              <a href="/my-mailroom" className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted transition-colors" title={mailPendingCount > 0 ? `${mailPendingCount} pending mail items` : "myMailroom"}>
+                <img src="/manus-storage/mailbox-new_7d868b27.png" alt="Mailroom" className="w-8 h-8 object-contain" />
+                {mailPendingCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none shadow">
+                    {mailPendingCount > 99 ? "99+" : mailPendingCount}
+                  </span>
+                )}
+              </a>
+            )}
             <Link href="/softphone">
               <Button size="sm" className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-1.5 h-8">
                 <Phone className="w-3.5 h-3.5" />

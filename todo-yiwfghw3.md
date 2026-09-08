@@ -632,5 +632,14 @@
 - [x] Verify the deployed image-refresh path creates an actionable Claims Mail summary (image record 630008 refreshed successfully)
 - [x] Prioritize recoverable attachment-backed records so empty legacy emails cannot repeatedly block later Claims Mail image and PDF summary refreshes
 
+## September 2026 Loss Intake QA Vision
+- [x] Provide a written description of the intended Loss Intake recorded-statement, notes, field-completion, and SnapSheet QA function without implementing process changes
+- [x] Expand the Loss Intake write-up to cover claims-channel monitoring, new-report tracking, member-contact speed, engagement scoring, documentation QA, and management reporting without process changes
+- [x] Correct the write-up so Claims Channels specifically means #claims and #claims-remotemarkets
+- [x] Add Helpdesk/processor channel posts, photo-triggered in-office timing, and remote-market statement-completion standards to the write-up
+
+## September 2026 Mail Feature Controls
+- [x] Temporarily disable Mailroom and Mail Bot activity, remove active Mailroom scheduled jobs, hide their sidebar and dashboard entries, block direct routes and background intake, and allow an administrator to restore each feature from Settings
+
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight

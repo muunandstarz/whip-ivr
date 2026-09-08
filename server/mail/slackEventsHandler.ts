@@ -14,6 +14,7 @@ import { getDb } from '../db.js';
 import { mailSettings } from '../../drizzle/schema.js';
 import { handleSlackFileEvent, buildRealSlackFetch } from './ingestSlack.js';
 import mysql from 'mysql2/promise';
+import { mapMailFeatureControls } from './featureControls.js';
 
 export const MAIL_SLACK_EVENTS_PATH = '/api/slack/mail-events';
 
@@ -90,6 +91,7 @@ async function processMailEvent(body: Record<string, unknown>): Promise<void> {
   const db = await getDb();
   if (!db) return;
   const settingsRows = await db.select().from(mailSettings);
+  if (!mapMailFeatureControls(settingsRows).mailroomEnabled) return;
   const settingsMap = Object.fromEntries(settingsRows.map(r => [r.key, r.value]));
   const reviewedEmoji = settingsMap['reviewed_emoji'] ?? 'white_check_mark';
   const botMarkerEmoji = settingsMap['bot_marker_emoji'] ?? 'robot_face';

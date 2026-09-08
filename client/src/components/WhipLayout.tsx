@@ -105,6 +105,12 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const { theme, setTheme } = useTheme();
 
   const isAdmin = user?.role === "admin";
+  const { data: mailFeatures } = trpc.settings.getMailFeatureControls.useQuery(undefined, {
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const mailroomEnabled = mailFeatures?.mailroomEnabled === true;
+  const mailBotEnabled = mailFeatures?.mailBotEnabled === true;
 
   // Fetch handlers list for admin impersonation dropdown
   const { data: handlersList } = trpc.handlers.list.useQuery(undefined, {
@@ -164,7 +170,11 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], HANDLER_NAV_ITEMS_BASE[2], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[3], HANDLER_NAV_ITEMS_BASE[4]]
     : HANDLER_NAV_ITEMS_BASE;
   const navItems: { href: string; label: string; icon: React.ElementType }[] =
-    isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems;
+    (isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems).filter((item) => {
+      if (["/mailroom", "/my-mailroom"].includes(item.href)) return mailroomEnabled;
+      if (item.href === "/mail-bot") return mailBotEnabled;
+      return true;
+    });
 
   return (
     <div className="h-screen flex bg-background">

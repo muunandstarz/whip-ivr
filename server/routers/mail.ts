@@ -10,7 +10,7 @@ import { TRPCError } from '@trpc/server';
 import { protectedProcedure, adminProcedure, router } from '../_core/trpc.js';
 import { getDb } from '../db.js';
 import {
-  mailItems, mailItemFiles, mailItemNotes, mailRoutingHistory,
+  mailItems, mailItemFiles, mailItemNotes, mailRoutingHistory, mailSettings,
 } from '../../drizzle/schema.js';
 import { eq, and, or, inArray, isNull, isNotNull, lt, desc, asc, sql, gte, lte } from 'drizzle-orm';
 import { storageGetSignedUrl, storagePut } from '../storage.js';
@@ -25,6 +25,7 @@ import { addMailBusinessDays, addMailBusinessHours, isLetterOfRepresentation } f
 import { forwardMailToClaim } from '../mail/forwardToClaim.js';
 import { runBoundedSlackIngest } from '../mail/jobs.js';
 import { markAssignedMailSource } from '../mail/sourceMarking.js';
+import { mapMailFeatureControls } from '../mail/featureControls.js';
 
 // ─── Shared middleware ────────────────────────────────────────────────────────
 
@@ -42,6 +43,17 @@ async function requireItem(db: Awaited<ReturnType<typeof getDb>>, itemId: number
   const rows = await db.select().from(mailItems).where(eq(mailItems.id, itemId)).limit(1);
   if (!rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: `Mail item ${itemId} not found` });
   return rows[0];
+}
+
+async function requireMailroomFeatureEnabled(db: Awaited<ReturnType<typeof getDb>>) {
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+  const controls = mapMailFeatureControls(await db.select().from(mailSettings));
+  if (!controls.mailroomEnabled) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'Mailroom is temporarily disabled in Settings.',
+    });
+  }
 }
 
 async function appendHistory(
@@ -853,6 +865,7 @@ export const mailRouter = router({
    * instead of preserving a browser session that will eventually be rejected.
    */
   setupCrons: adminProcedure.mutation(async () => {
+    await requireMailroomFeatureEnabled(await getDb());
     const sessionToken = '';
     const results: Record<string, string> = {};
     const jobs = [
@@ -902,6 +915,7 @@ export const mailRouter = router({
 
   /** Manual one-shot: run a small source-recovery pass, then leave deeper work to the scheduled processor. */
   triggerNow: adminProcedure.mutation(async () => {
+    await requireMailroomFeatureEnabled(await getDb());
     // Production requests are capped at one record from each source. This gives an
     // administrator an immediate, useful recovery action without reopening the
     // previous full-history request that could exceed the edge deadline.

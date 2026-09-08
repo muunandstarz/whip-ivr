@@ -12,6 +12,12 @@ import { mailBotRouter } from "./routers/mailBot";
 import { kbRouter } from "./routers/kb";
 import { claimsWorkspaceRouter } from "./routers/claimsWorkspace";
 import { announcementsRouter } from "./routers/announcements";
+import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
+import {
+  MAILBOT_FEATURE_SETTING,
+  MAILROOM_FEATURE_SETTING,
+  mapMailFeatureControls,
+} from "./mail/featureControls";
 import {
   getIntakeRecords,
   getIntakeRecordById,
@@ -72,6 +78,39 @@ const callerTypeEnum = z.enum([
   "police",
   "unknown",
 ]);
+
+const MAILROOM_HEARTBEAT_JOBS = [
+  { name: "mail-warmup", cron: "0 * * * * *", path: "/api/scheduled/mailWarmup", description: "Keep the Mailroom callback service warm every minute" },
+  { name: "mail-ingest-gmail", cron: "0 */5 * * * *", path: "/api/scheduled/mailIngestGmail", description: "Poll claims@ Gmail every 5 min" },
+  { name: "mail-process", cron: "0 2/5 * * * *", path: "/api/scheduled/mailProcess", description: "Classify + assign new mail_items every 5 min" },
+  { name: "mail-reminders", cron: "0 0 18 * * *", path: "/api/scheduled/mailReminders", description: "Send the ten oldest eligible overdue reminders once daily at 1:00 PM EST" },
+] as const;
+
+async function reconcileMailroomHeartbeat(enabled: boolean) {
+  const sessionToken = "";
+  const results: Record<string, string> = {};
+  const expectedNames = new Set<string>(MAILROOM_HEARTBEAT_JOBS.map((job) => job.name));
+  const existing = await listHeartbeatJobs(sessionToken);
+  const existingByName = new Map(existing.jobs.filter((job) => expectedNames.has(job.name)).map((job) => [job.name, job]));
+
+  if (!enabled) {
+    for (const [name, job] of Array.from(existingByName.entries())) {
+      await deleteHeartbeatJob(job.taskUid, sessionToken);
+      results[name] = "paused";
+    }
+    return results;
+  }
+
+  for (const job of MAILROOM_HEARTBEAT_JOBS) {
+    if (existingByName.has(job.name)) {
+      results[job.name] = "already active";
+      continue;
+    }
+    const created = await createHeartbeatJob(job, sessionToken);
+    results[job.name] = created.taskUid;
+  }
+  return results;
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -701,6 +740,45 @@ export const appRouter = router({
   reports: reportsRouter,
 
   settings: router({
+    getMailFeatureControls: protectedProcedure.query(async () => {
+      const db = await import("./db").then((m) => m.getDb());
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { mailSettings } = await import("../drizzle/schema");
+      const rows = await db.select().from(mailSettings);
+      return mapMailFeatureControls(rows);
+    }),
+    updateMailFeatureControls: protectedProcedure
+      .input(z.object({
+        mailroomEnabled: z.boolean().optional(),
+        mailBotEnabled: z.boolean().optional(),
+      }).refine((input) => input.mailroomEnabled !== undefined || input.mailBotEnabled !== undefined, {
+        message: "Select at least one feature to update",
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { mailSettings } = await import("../drizzle/schema");
+        const updates = [
+          input.mailroomEnabled === undefined ? null : { key: MAILROOM_FEATURE_SETTING, value: String(input.mailroomEnabled) },
+          input.mailBotEnabled === undefined ? null : { key: MAILBOT_FEATURE_SETTING, value: String(input.mailBotEnabled) },
+        ].filter(Boolean) as Array<{ key: string; value: string }>;
+        for (const update of updates) {
+          await db.insert(mailSettings).values(update).onDuplicateKeyUpdate({ set: { value: update.value } });
+        }
+
+        let scheduleResults: Record<string, string> | undefined;
+        if (input.mailroomEnabled !== undefined) {
+          try {
+            scheduleResults = await reconcileMailroomHeartbeat(input.mailroomEnabled);
+          } catch (error) {
+            scheduleResults = { scheduler: error instanceof Error ? error.message : String(error) };
+          }
+        }
+
+        const rows = await db.select().from(mailSettings);
+        return { ...mapMailFeatureControls(rows), scheduleResults };
+      }),
     getCallScripts: protectedProcedure.query(async () => {
       return getCallScripts();
     }),
