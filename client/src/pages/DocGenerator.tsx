@@ -42,6 +42,7 @@ import {
   Plus,
   Receipt,
   RefreshCw,
+  RotateCcw,
   Save,
   Scale,
   Send,
@@ -373,7 +374,9 @@ function downloadPDF(doc: jsPDF, filename: string) {
 }
 
 function getPDFDataUrl(doc: jsPDF): string {
-  return doc.output("datauristring");
+  // Use an object URL rather than a data URI. Browser security policies can
+  // block data: URLs inside preview iframes, leaving the formatted preview blank.
+  return URL.createObjectURL(doc.output("blob"));
 }
 
 // ─── Denial Templates ─────────────────────────────────────────────────────────
@@ -2880,6 +2883,10 @@ function TLSettlementTab() {
     vin: "",
     market: "MD",
     acv: "",
+    storage: "",
+    adminFee: "",
+    salesTax: "",
+    salvageDeducted: "",
     priorPayment: "",
     lienHolder: "",
     lienPayoff: "",
@@ -2899,11 +2906,15 @@ function TLSettlementTab() {
 
   const netAmount = (() => {
     const acv = parseFloat(form.acv) || 0;
+    const storage = parseFloat(form.storage) || 0;
+    const adminFee = parseFloat(form.adminFee) || 0;
+    const salesTax = parseFloat(form.salesTax) || 0;
+    const salvage = parseFloat(form.salvageDeducted) || 0;
     const prior = parseFloat(form.priorPayment) || 0;
     const lien = parseFloat(form.lienPayoff) || 0;
-    const storage = parseFloat(form.storageDeducted) || 0;
+    const storageDeducted = parseFloat(form.storageDeducted) || 0;
     const other = otherDeductions.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
-    const net = acv - prior - lien - storage - other;
+    const net = acv + storage + adminFee + salesTax - salvage - prior - lien - storageDeducted - other;
     return net > 0 ? net.toFixed(2) : "0.00";
   })();
 
@@ -2927,11 +2938,15 @@ function TLSettlementTab() {
     `Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}`,
     `Market: ${form.market}`,
     "",
-    "SETTLEMENT BREAKDOWN:",
-    `Actual Cash Value (ACV):                  $${form.acv || "[ACV]"}`,
+    "ITEMIZATION OF DAMAGES:",
+    `Vehicle Valuation (ACV):                  $${form.acv || "[ACV]"}`,
+    ...(form.storage ? [`Storage:                                  $${parseFloat(form.storage).toFixed(2)}`] : []),
+    ...(form.adminFee ? [`Admin Fee:                                $${parseFloat(form.adminFee).toFixed(2)}`] : []),
+    ...(form.salesTax ? [`Sales Tax:                                $${parseFloat(form.salesTax).toFixed(2)}`] : []),
+    ...(form.salvageDeducted ? [`Salvage (deducted):                    ($${parseFloat(form.salvageDeducted).toFixed(2)})`] : []),
     ...deductionLines,
     "─────────────────────────────────────────────────",
-    `Net Amount Payable to Claimant:           $${netAmount}`,
+    `Total:                                    $${netAmount}`,
     ...(form.lienHolder && form.lienPayoff ? [`Loan Payoff — ${form.lienHolder}:  $${parseFloat(form.lienPayoff).toFixed(2)}`] : []),
     "",
     ...(form.rentalCutoffDate ? [`Rental Review Cutoff: ${form.rentalCutoffDate}`, ""] : []),
@@ -2960,6 +2975,10 @@ function TLSettlementTab() {
         lienHolder: form.lienHolder,
         lienPayoff: form.lienPayoff,
         storageDeducted: form.storageDeducted,
+        storage: form.storage,
+        adminFee: form.adminFee,
+        salesTax: form.salesTax,
+        salvageDeducted: form.salvageDeducted,
         otherDeductions: otherDeductions.filter(d => d.label && d.amount),
         netAmount,
         adjusterName: form.adjusterName,
@@ -2994,40 +3013,41 @@ function TLSettlementTab() {
       if (form.market) y = wrapText(doc, `Market: ${form.market}`, 14, y, W - 28, 6.5);
       y += 4;
       const firstName = form.claimantName.split(/[\s,]+/)[0] || form.claimantName || "[Claimant]";
-      y = wrapText(doc, "Re: Total Loss Settlement Offer", 14, y, W - 28, 6.5); y += 4;
+      y = wrapText(doc, "RE: Total Loss Settlement Offer", 14, y, W - 28, 6.5); y += 4;
       y = wrapText(doc, `Dear ${firstName},`, 14, y, W - 28, 6.5); y += 4;
       y = wrapText(doc, `Following our investigation of the above-referenced claim, the ${form.vehicle || "vehicle"} has been determined to be a total loss. After review of the vehicle's condition, applicable market data, and comparable valuations, Metro Cars Leasing Corp. has calculated your net settlement as follows:`, 14, y, W - 28, 6.5); y += 5;
       doc.setFont("helvetica", "bold");
-      y = wrapText(doc, "Description / Amount", 14, y, W - 28, 6.5); y += 1;
-      doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
-      doc.line(14, y, W - 14, y); y += 3;
+      doc.setFontSize(10.5);
+      doc.text("ITEMIZATION OF DAMAGES", 14, y); y += 2;
+      doc.setDrawColor(185, 185, 185); doc.setLineWidth(0.3);
+      doc.line(14, y, W - 14, y); y += 5;
       doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
       const rightX = W - 14;
-      const acvAmt = parseFloat(form.acv) || 0;
-      doc.text("ACV / Gross Settlement Amount:", 14, y);
-      doc.text(`$${acvAmt.toFixed(2)}`, rightX, y, { align: "right" }); y += 5;
-      if (form.priorPayment && parseFloat(form.priorPayment) > 0) {
-        doc.text("Less: Prior Payment to Claimant:", 14, y);
-        doc.text(`($${parseFloat(form.priorPayment).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
-      }
-      if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) {
-        doc.text(`Less: Loan Payoff — ${form.lienHolder} (Lienholder):`, 14, y);
-        doc.text(`($${parseFloat(form.lienPayoff).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
-      }
-      if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) {
-        doc.text("Less: Storage — Reasonable & Customary Amount Allowed:", 14, y);
-        doc.text(`($${parseFloat(form.storageDeducted).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
-      }
-      for (const d of otherDeductions) {
-        if (d.label && d.amount && parseFloat(d.amount) > 0) {
-          doc.text(`Less: ${d.label}:`, 14, y);
-          doc.text(`($${parseFloat(d.amount).toFixed(2)})`, rightX, y, { align: "right" }); y += 5;
-        }
-      }
-      doc.line(14, y, W - 14, y); y += 3;
+      const writeDamageRow = (label: string, amount: number, deducted = false) => {
+        doc.text(label, 18, y);
+        doc.setDrawColor(185, 185, 185);
+        doc.setLineDashPattern([0.7, 1.3], 0);
+        doc.line(Math.min(168, 21 + doc.getTextWidth(label)), y - 1, rightX - 36, y - 1);
+        doc.setLineDashPattern([], 0);
+        doc.text(deducted ? `($${amount.toFixed(2)})` : `$ ${amount.toFixed(2)}`, rightX, y, { align: "right" });
+        y += 6.5;
+      };
+      writeDamageRow("Vehicle Valuation (ACV)", parseFloat(form.acv) || 0);
+      if (form.storage && parseFloat(form.storage) > 0) writeDamageRow("Storage", parseFloat(form.storage));
+      if (form.adminFee && parseFloat(form.adminFee) > 0) writeDamageRow("Admin Fee", parseFloat(form.adminFee));
+      if (form.salesTax && parseFloat(form.salesTax) > 0) writeDamageRow("Sales Tax", parseFloat(form.salesTax));
+      if (form.salvageDeducted && parseFloat(form.salvageDeducted) > 0) writeDamageRow("Salvage (deducted)", parseFloat(form.salvageDeducted), true);
+      if (form.priorPayment && parseFloat(form.priorPayment) > 0) writeDamageRow("Prior Payment to Claimant (deducted)", parseFloat(form.priorPayment), true);
+      if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) writeDamageRow(`Loan Payoff — ${form.lienHolder} (deducted)`, parseFloat(form.lienPayoff), true);
+      if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) writeDamageRow("Disallowed Storage (deducted)", parseFloat(form.storageDeducted), true);
+      for (const d of otherDeductions) if (d.label && d.amount && parseFloat(d.amount) > 0) writeDamageRow(`${d.label} (deducted)`, parseFloat(d.amount), true);
+      doc.setLineDashPattern([], 0);
+      doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.45);
+      doc.line(14, y, W - 14, y); y += 5;
       doc.setFont("helvetica", "bold");
-      doc.text("Net Amount Payable to Claimant:", 14, y);
-      doc.text(`$${netAmount}`, rightX, y, { align: "right" }); y += 6;
+      doc.text("Total", 18, y);
+      doc.text(`$ ${netAmount}`, rightX, y, { align: "right" }); y += 7;
       doc.setFont("helvetica", "normal");
       y = wrapText(doc, "Payment will be issued as follows:", 14, y, W - 28, 6.5); y += 2;
       if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) {
@@ -3080,8 +3100,15 @@ function TLSettlementTab() {
         </Panel>
         <Panel title="Settlement Breakdown">
           <div className="space-y-3">
-            <Field label="ACV / Gross Settlement ($)" id="tls-acv" value={form.acv} onChange={set("acv")} placeholder="e.g. 18500.00" />
-            <Field label="Less: Prior Payment to Claimant ($)" id="tls-prior" value={form.priorPayment} onChange={set("priorPayment")} placeholder="e.g. 0.00" />
+            <p className="text-xs text-muted-foreground">Enter the components that apply. The total adds ACV, storage, admin fee, and sales tax, then deducts salvage and any additional deductions.</p>
+            <Grid2 children={<>
+              <Field label="Vehicle Valuation (ACV) ($)" id="tls-acv" value={form.acv} onChange={set("acv")} placeholder="e.g. 23496.00" />
+              <Field label="Storage ($)" id="tls-storage-charge" value={form.storage} onChange={set("storage")} placeholder="e.g. 1260.00" />
+              <Field label="Admin Fee ($)" id="tls-admin-fee" value={form.adminFee} onChange={set("adminFee")} placeholder="e.g. 295.00" />
+              <Field label="Sales Tax ($)" id="tls-sales-tax" value={form.salesTax} onChange={set("salesTax")} placeholder="e.g. 1527.24" />
+              <Field label="Salvage (Deducted) ($)" id="tls-salvage" value={form.salvageDeducted} onChange={set("salvageDeducted")} placeholder="e.g. 6720.00" />
+              <Field label="Less: Prior Payment to Claimant ($)" id="tls-prior" value={form.priorPayment} onChange={set("priorPayment")} placeholder="e.g. 0.00" />
+            </>} />
             <Grid2 children={<>
               <Field label="Lienholder Name" id="tls-lien-name" value={form.lienHolder} onChange={set("lienHolder")} placeholder="e.g. Toyota Financial" />
               <Field label="Loan Payoff Amount ($)" id="tls-lien-amt" value={form.lienPayoff} onChange={set("lienPayoff")} placeholder="e.g. 12000.00" />
@@ -7738,6 +7765,7 @@ export default function DocGenerator() {
     return WHIP_STATES.includes(s) ? s : "MD";
   })();
   const [activeTab, setActiveTab] = useState<DocGenTab>(initialTab);
+  const [formResetKey, setFormResetKey] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRecentDocs, setShowRecentDocs] = useState(false);
   const [showMyDocs, setShowMyDocs] = useState(false);
@@ -7771,6 +7799,15 @@ export default function DocGenerator() {
 
   const handleToggleFavorite = () => {
     toggleFavMut.mutate({ tabKey: activeTab, tabLabel: activeLabel });
+  };
+
+  const handleClearForm = () => {
+    setFormResetKey((key) => key + 1);
+    setCurrentFormData({});
+    setCurrentDraftId(undefined);
+    setPreviewPdfUrl(null);
+    setFullScreenPreview(false);
+    toast.success(`${activeLabel} form cleared`);
   };
 
   const handleSaveDraft = () => {
@@ -7919,6 +7956,11 @@ export default function DocGenerator() {
               <Star className={`w-4 h-4 ${isFavorite ? "fill-amber-400" : ""}`} />
             </button>
             <div className="ml-auto flex items-center gap-2">
+              {activeTab !== "klutch-policy-declarations" && (
+                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleClearForm} title="Clear all fields and the preview for this generator">
+                  <RotateCcw className="w-3.5 h-3.5" /> Clear Form
+                </Button>
+              )}
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleSaveDraft} disabled={saveDraftMut.isPending}>
                 <Save className="w-3.5 h-3.5" />
                 {saveDraftMut.isPending ? "Saving..." : "Save Draft"}
@@ -8041,7 +8083,9 @@ export default function DocGenerator() {
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto">
             <div className="p-6">
-              {renderTab()}
+              <div key={`${activeTab}-${formResetKey}`}>
+                {renderTab()}
+              </div>
             </div>
           </div>
         </div>

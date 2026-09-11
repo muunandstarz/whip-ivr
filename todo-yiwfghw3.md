@@ -641,5 +641,16 @@
 ## September 2026 Mail Feature Controls
 - [x] Temporarily disable Mailroom and Mail Bot activity, remove active Mailroom scheduled jobs, hide their sidebar and dashboard entries, block direct routes and background intake, and allow an administrator to restore each feature from Settings
 
+## September 2026 Softphone Repair
+- [x] Diagnose the reported Softphone loading failure and confirm the live embedded Aircall workspace loads successfully without changing the paused Mailroom or Mail Bot state
+
+## September 2026 Mailroom Dropdown Repair
+- [ ] Diagnose and repair the reported Mailroom dropdown interaction failure while retaining administrator-controlled feature pausing
+
+## September 2026 Settlement Demand and Form Reset Repairs
+- [x] Add Total Loss itemized damages fields for ACV, storage, admin fee, sales tax, salvage deduction, and calculated total
+- [x] Repair Settlement Demand preview opening and RE-line PDF formatting
+- [x] Add a clear/reset action to every Document Generator form filler
+
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight
