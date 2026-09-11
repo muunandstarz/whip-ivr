@@ -651,6 +651,7 @@
 - [x] Add Total Loss itemized damages fields for ACV, storage, admin fee, sales tax, salvage deduction, and calculated total
 - [x] Repair Settlement Demand preview opening and RE-line PDF formatting
 - [x] Add a clear/reset action to every Document Generator form filler
+- [x] Confirm the published production bundle exposes the repaired Total Loss fields, preview, and Clear Form control
 
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight
