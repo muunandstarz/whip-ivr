@@ -653,5 +653,13 @@
 - [x] Add a clear/reset action to every Document Generator form filler
 - [x] Confirm the published production bundle exposes the repaired Total Loss fields, preview, and Clear Form control
 
+## September 2026 Loss Intake Dispatch Migration
+- [x] Replace the existing Loss Intake page with the specified Loss Intake Dispatch dashboard while preserving the Whip IVR visual system
+- [ ] Add a persistent dispatch data model for notices, duplicate-source links, claim filing state, intake work, and SLA audit data
+- [ ] Implement Slack and Claims Tracker source synchronization, duplicate collapse, and filing-state evaluation according to the specification
+- [ ] Implement the separate Unfiled Claims and Intake Follow-up views with business-hour SLA, on-site priority, and data-quality warnings
+- [ ] Add protected scheduled dispatches and editable-in-place Slack outputs only after live source credentials and required destination access are verified
+- [ ] Add automated test coverage and production validation for the Loss Intake Dispatch replacement
+
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight
