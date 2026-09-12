@@ -5,6 +5,7 @@ import {
   getLossIntakeSettings,
   getLossIntakeThreadState,
   getLossIntakeClaimBySlackKey,
+  findPrimaryLossIntakeClaimByDuplicateGroup,
   getActiveInStoreAgents,
   upsertLossIntakeClaimBundle,
   updateClaimsIntakeTag,
@@ -12,7 +13,7 @@ import {
 import { resyncLossIntakeThread } from "./lossIntakeSlackSync";
 import {
   analyzeFnolThread,
-  parseFnolParent,
+  parseLossNoticeParent,
   type IntakeAgentAssignment,
   type ParsedLossParent,
   type SlackFileRef,
@@ -25,7 +26,9 @@ export const SLACK_LOSS_INTAKE_TEAM_ID = "TFFUXNU57";
 export const SLACK_LOSS_INTAKE_APP_ID = "A0BHDG7RX7D";
 export const SLACK_LOSS_INTAKE_CHANNELS = new Map([
   ["CHWRXH4HK", "claims"],
-  ["C092UPKR79D", "claims-remotemarkets"],
+  ["C092UPKR79D", "remote-markets"],
+  ["C03LK1Z8XFG", "escalations"],
+  ["C08UF1Z61QE", "claims-processing"],
 ] as const);
 
 // The @claims-intake user group ID — tagging this starts the SLA clock
@@ -85,7 +88,7 @@ function nextBusinessOpenMs(fromMs: number, etOffsetMinutes: number): number {
   while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
   return d.getTime() - etOffsetMinutes * 60 * 1000; // back to UTC ms
 }
-type SlackLossIntakeChannelId = "CHWRXH4HK" | "C092UPKR79D";
+type SlackLossIntakeChannelId = "CHWRXH4HK" | "C092UPKR79D" | "C03LK1Z8XFG" | "C08UF1Z61QE";
 
 function approvedChannelName(channelId: string) {
   return SLACK_LOSS_INTAKE_CHANNELS.get(channelId as SlackLossIntakeChannelId);
@@ -261,6 +264,7 @@ function rehydrateParent(
     attachmentCount: claim.attachmentCount,
     rideshareStatus: claim.rideshareStatus,
     dateOfLoss: claim.dateOfLoss ?? null,
+    sourceKind: claim.sourceKind,
   };
 }
 
@@ -342,8 +346,16 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
         channelName,
         permalink: null,
       };
-      const parsedParent = parseFnolParent(parent);
+      const parsedParent = parseLossNoticeParent(parent);
       if (!parsedParent) return { status: "ignored" as const };
+      const replies = pendingReplies.get(threadKey) ?? [];
+      const analysis = analyzeFnolThread({
+        parent: parsedParent,
+        replies,
+        assignments,
+        slaMinutes: settings.firstContactSlaMinutes,
+        atRiskMinutes: settings.atRiskMinutes,
+      });
 
       // ── Duplicate FNOL detection ──────────────────────────────────────────
       // A forwarded message has an `attachments` array with `from_channel` + `ts`.
@@ -382,6 +394,14 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
           }
         }
       }
+      if (!isDuplicate) {
+        const primary = await findPrimaryLossIntakeClaimByDuplicateGroup(analysis.duplicateGroupKey);
+        if (primary && primary.slackKey !== parsedParent.slackKey && primary.postedAt.getTime() <= parsedParent.postedAt.getTime()) {
+          isDuplicate = true;
+          originalSlackKey = primary.slackKey;
+          console.log(`[Loss Intake] Identity duplicate detected: ${parsedParent.slackKey} → original ${originalSlackKey}`);
+        }
+      }
       // ─────────────────────────────────────────────────────────────────────
 
       // ── Overflow routing ─────────────────────────────────────────────────
@@ -400,14 +420,6 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
       }
       // ─────────────────────────────────────────────────────────────────────
 
-      const replies = pendingReplies.get(threadKey) ?? [];
-      const analysis = analyzeFnolThread({
-        parent: parsedParent,
-        replies,
-        assignments,
-        slaMinutes: settings.firstContactSlaMinutes,
-        atRiskMinutes: settings.atRiskMinutes,
-      });
       await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis, isDuplicate, originalSlackKey, overflowRouted });
       pendingReplies.delete(threadKey);
 

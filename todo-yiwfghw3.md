@@ -655,11 +655,20 @@
 
 ## September 2026 Loss Intake Dispatch Migration
 - [x] Replace the existing Loss Intake page with the specified Loss Intake Dispatch dashboard while preserving the Whip IVR visual system
-- [ ] Add a persistent dispatch data model for notices, duplicate-source links, claim filing state, intake work, and SLA audit data
-- [ ] Implement Slack and Claims Tracker source synchronization, duplicate collapse, and filing-state evaluation according to the specification
-- [ ] Implement the separate Unfiled Claims and Intake Follow-up views with business-hour SLA, on-site priority, and data-quality warnings
-- [ ] Add protected scheduled dispatches and editable-in-place Slack outputs only after live source credentials and required destination access are verified
-- [ ] Add automated test coverage and production validation for the Loss Intake Dispatch replacement
+- [x] Add a persistent dispatch data model for notices, duplicate-source links, claim filing state, intake work, and SLA audit data
+- [x] Implement Slack source synchronization, duplicate collapse, and Slack-thread filing-state evaluation according to the specification
+- [x] Implement the separate Unfiled Claims and Intake Follow-up views with business-hour SLA, on-site priority, and data-quality warnings
+- [x] Add protected, disabled-by-default scheduled dispatch controls and editable-in-place Slack output support for the specified processor and intake-rep destinations
+- [x] Add automated test coverage and development-preview validation for the Loss Intake Dispatch replacement
+- [ ] Enable Google Workspace access and add Claims Tracker corroboration before activating live Dispatch publishing schedules
+
+## September 2026 Dispatch Structure and Blank Letterhead Refinement
+- [x] Rebuild Loss Intake Dispatch to match the operational QA dashboard structure and visual hierarchy in the referenced completed dashboard task
+- [x] Make Blank Letterhead modular so handlers can add, omit, and reorder applicable content areas
+- [x] Keep a working formatted Blank Letterhead preview available throughout composition
+
+## September 2026 Development Service Recovery
+- [x] Restore the stopped Whip IVR development server and confirm the preview is healthy
 
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight

@@ -1,3 +1,13 @@
+import {
+  detectOnSiteSignal,
+  deriveFilingState,
+  duplicateGroupKey,
+  evaluateDispatchTiming,
+  extractClaimId,
+  type DispatchFilingState,
+  type DispatchSourceChannel,
+} from "./lossIntakeDispatchRules";
+
 export type LossVehicleType = "gas" | "ev_tesla" | "unknown";
 export type LossStage =
   | "awaiting_outreach"
@@ -57,6 +67,7 @@ export interface ParsedLossParent {
   attachmentCount: number;
   rideshareStatus: string | null;
   dateOfLoss: string | null;
+  sourceKind: "structured" | "unstructured";
 }
 
 export interface ParsedLossEvent {
@@ -112,6 +123,17 @@ export interface ThreadAnalysis {
   teslaFootageRequested: boolean | null;
   qualityScore: number;
   missingElements: string[];
+  firstResponseBusinessMinutes: number | null;
+  templateBusinessMinutes: number | null;
+  slaTargetBusinessMinutes: number;
+  onSiteFlag: boolean;
+  onSiteDetectedAt: Date | null;
+  onSiteReason: string | null;
+  claimId: string | null;
+  filingState: DispatchFilingState;
+  filingEvidence: string;
+  duplicateGroupKey: string | null;
+  dataWarnings: string[];
   events: ParsedLossEvent[];
   qualityItems: QualityCriterionResult[];
 }
@@ -312,6 +334,57 @@ export function parseFnolParent(parent: SlackLossParent): ParsedLossParent | nul
     attachmentCount: files.length,
     rideshareStatus: getLabel(values, "Rideshare Status at the Time of Loss (if known):"),
     dateOfLoss: extractDateOfLoss(values, parent.text),
+    sourceKind: "structured",
+  };
+}
+
+function seemsLikeLossReport(text: string) {
+  if (/A new accident report has been filed for[\s\S]*drivewhip\.com\/wp-admin/i.test(text)) return false;
+  const hasLossSignal = /\b(accident|collision|crash|damage|damaged|hit|struck|tow|towed|rear[- ]?end|side[- ]?swipe)\b/i.test(text);
+  const hasPersonSignal = /\b(member|driver|customer|mbr|insured)\b/i.test(text) || /\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(text);
+  return hasLossSignal && hasPersonSignal;
+}
+
+function extractUnstructuredMemberName(text: string) {
+  const labeled = text.match(/\b(?:member|driver|customer|insured)\s*(?:name)?\s*[:\-–]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i);
+  return labeled?.[1]?.trim() ?? null;
+}
+
+function extractUnstructuredCustomerId(text: string) {
+  return text.match(/\b(?:customer|member)\s*(?:ID|#)?\s*[:#\-–]?\s*(\d{3,})\b/i)?.[1] ?? null;
+}
+
+function extractUnstructuredVin(text: string) {
+  return text.match(/\b(?:VIN|last\s*6)\s*[:#\-–]?\s*([A-Z0-9]{6,17})\b/i)?.[1]?.replace(/\D/g, "").slice(-6) ?? null;
+}
+
+function extractUnstructuredMarket(text: string) {
+  return text.match(/\b(?:market|location|branch)\s*[:\-–]\s*([A-Za-z ]{2,40})/i)?.[1]?.trim() ?? null;
+}
+
+export function parseLossNoticeParent(parent: SlackLossParent): ParsedLossParent | null {
+  const structured = parseFnolParent(parent);
+  if (structured) return structured;
+  if (!seemsLikeLossReport(parent.text)) return null;
+  const files = parent.files ?? [];
+  return {
+    slackKey: `${parent.channelId}:${parent.ts}`,
+    channelId: parent.channelId,
+    channelName: parent.channelName,
+    slackMessageTs: parent.ts,
+    slackEventId: parent.eventId ?? null,
+    slackPermalink: parent.permalink ?? null,
+    postedAt: slackTsToDate(parent.ts),
+    memberName: extractUnstructuredMemberName(parent.text),
+    customerId: extractUnstructuredCustomerId(parent.text),
+    vinLastSix: extractUnstructuredVin(parent.text),
+    market: extractUnstructuredMarket(parent.text),
+    vehicleType: /\btesla|electric|\bev\b/i.test(parent.text) ? "ev_tesla" : /\bvehicle|car|truck|suv|van\b/i.test(parent.text) ? "gas" : "unknown",
+    hasPhotos: files.length > 0,
+    attachmentCount: files.length,
+    rideshareStatus: null,
+    dateOfLoss: extractDateOfLoss(new Map(), parent.text),
+    sourceKind: "unstructured",
   };
 }
 
@@ -656,6 +729,29 @@ export function analyzeFnolThread(input: {
   const templatePostMinutesFromReport = templatePostedAt
     ? minutesBetween(input.parent.postedAt, templatePostedAt)
     : null;
+  const dispatchChannel: DispatchSourceChannel = input.parent.channelName === "remote-markets"
+    ? "remote-markets"
+    : input.parent.channelName === "escalations"
+      ? "escalations"
+      : input.parent.channelName === "claims-processing"
+        ? "claims-processing"
+        : "claims";
+  const dispatchTiming = evaluateDispatchTiming({
+    postedAt: input.parent.postedAt,
+    firstResponseAt: firstContactAt,
+    now,
+    channel: dispatchChannel,
+    market: input.parent.market,
+  });
+  const claimId = [...replies]
+    .reverse()
+    .map(reply => extractClaimId(reply.text))
+    .find((value): value is string => Boolean(value)) ?? null;
+  const filingState = deriveFilingState({ templatePosted: Boolean(templatePostedAt), claimId });
+  const onSite = detectOnSiteSignal([
+    { text: "", files: input.parent.hasPhotos ? [{}] : [], occurredAt: input.parent.postedAt },
+    ...replies.map(reply => ({ text: reply.text, files: reply.files, occurredAt: eventDate(reply) })),
+  ]);
 
   // completedAt = template was posted AND at least 2 agent thread posts exist
   // OR agent made contact attempts + tagged store team (member unreachable but agent did their job)
@@ -762,6 +858,16 @@ export function analyzeFnolThread(input: {
   const missingElements = qualityItems
     .filter(criterion => criterion.result === "fail")
     .map(criterion => criterion.criterion);
+  const dataWarnings = [
+    !input.parent.vinLastSix && !input.parent.memberName ? "No VIN or member name was extracted from the source notice." : null,
+    firstContactAt && firstContactAt.getTime() < input.parent.postedAt.getTime() ? "First-response timestamp precedes the notice timestamp." : null,
+    (() => {
+      const templateName = templatePost?.text.match(/Member Name\s*[:\-–]\s*(.+)/i)?.[1]?.trim();
+      return templateName && input.parent.memberName && templateName.toLowerCase() !== input.parent.memberName.toLowerCase()
+        ? "Template member name does not match the source notice."
+        : null;
+    })(),
+  ].filter((warning): warning is string => Boolean(warning));
 
   const stage: LossStage = completedAt
     ? "complete"
@@ -811,9 +917,9 @@ export function analyzeFnolThread(input: {
     stage,
     firstContactAt,
     firstContactMinutes,
-    slaState,
-    slaType,
-    slaDeadlineAt,
+    slaState: dispatchTiming.slaState,
+    slaType: dispatchTiming.slaType === "in_store" ? "immediate" : "after_hours",
+    slaDeadlineAt: dispatchTiming.slaDeadlineAt,
     completedAt,
     intakeCycleMinutes,
     factsOfLoss,
@@ -829,6 +935,29 @@ export function analyzeFnolThread(input: {
     teslaFootageRequested,
     qualityScore,
     missingElements,
+    firstResponseBusinessMinutes: dispatchTiming.firstResponseBusinessMinutes,
+    templateBusinessMinutes: templatePostedAt
+      ? evaluateDispatchTiming({
+          postedAt: input.parent.postedAt,
+          firstResponseAt: templatePostedAt,
+          now,
+          channel: dispatchChannel,
+          market: input.parent.market,
+        }).firstResponseBusinessMinutes
+      : null,
+    slaTargetBusinessMinutes: dispatchTiming.targetBusinessMinutes,
+    onSiteFlag: onSite.onSite,
+    onSiteDetectedAt: onSite.detectedAt,
+    onSiteReason: onSite.reason,
+    claimId,
+    filingState,
+    filingEvidence: claimId
+      ? `Claim ID ${claimId} found in the Slack intake thread.`
+      : templatePostedAt
+        ? "Intake template posted without a claim ID."
+        : "No intake template or claim ID is documented in the source thread.",
+    duplicateGroupKey: duplicateGroupKey(input.parent),
+    dataWarnings,
     events,
     qualityItems,
   };

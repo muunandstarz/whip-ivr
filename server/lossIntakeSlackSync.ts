@@ -1,6 +1,7 @@
 import { ENV } from "./_core/env";
 import {
   finishLossIntakeSyncRun,
+  findPrimaryLossIntakeClaimByDuplicateGroup,
   getLossIntakeClaimBySlackKey,
   getLossIntakeSettings,
   listLossIntakeClaims,
@@ -9,7 +10,7 @@ import {
 } from "./lossIntakeDb";
 import {
   analyzeFnolThread,
-  parseFnolParent,
+  parseLossNoticeParent,
   type IntakeAgentAssignment,
   type SlackFileRef,
   type SlackLossMessage,
@@ -273,18 +274,22 @@ function addTarget(targets: Map<string, ThreadTarget>, target: ThreadTarget) {
 async function collectThreadTargets(input: {
   claimsChannelId: string;
   remoteMarketsChannelId: string;
+  escalationsChannelId: string;
+  claimsProcessingChannelId: string;
   oldest: string;
 }) {
   const targets = new Map<string, ThreadTarget>();
   const channels = [
     { channelId: input.claimsChannelId, channelName: "claims" },
     { channelId: input.remoteMarketsChannelId, channelName: "remote-markets" },
+    { channelId: input.escalationsChannelId, channelName: "escalations" },
+    { channelId: input.claimsProcessingChannelId, channelName: "claims-processing" },
   ];
 
   for (const channel of channels) {
     const parents = await fetchChannelParents({ ...channel, oldest: input.oldest });
     for (const parent of parents) {
-      if (!parseFnolParent(parent)) continue;
+      if (!parseLossNoticeParent(parent)) continue;
       // Skip posts that are already stored as duplicates — their original thread
       // is the source of truth and will be picked up via the stage/slaState queries below.
       const slackKey = `${parent.channelId}:${parent.ts}`;
@@ -333,7 +338,7 @@ async function collectThreadTargets(input: {
   }
 
   return Array.from(targets.values())
-    .sort((left, right) => Number(right.threadTs) - Number(left.threadTs))
+    .sort((left, right) => Number(left.threadTs) - Number(right.threadTs))
     .slice(0, MAX_THREADS_PER_RUN);
 }
 
@@ -370,7 +375,7 @@ export async function resyncLossIntakeThread(input: {
       channelName: input.channelName,
       permalink,
     };
-    const parsedParent = parseFnolParent(parent);
+    const parsedParent = parseLossNoticeParent(parent);
     if (!parsedParent) return false;
     const analysis = analyzeFnolThread({
       parent: parsedParent,
@@ -397,6 +402,8 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
     const targets = await collectThreadTargets({
       claimsChannelId: settings.claimsChannelId,
       remoteMarketsChannelId: settings.remoteMarketsChannelId,
+      escalationsChannelId: settings.escalationsChannelId,
+      claimsProcessingChannelId: settings.claimsProcessingChannelId,
       oldest: incrementalOldest(settings.lastSuccessfulSyncAt),
     });
 
@@ -419,7 +426,7 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
         channelName: target.channelName,
         permalink,
       };
-      const parsedParent = parseFnolParent(parent);
+      const parsedParent = parseLossNoticeParent(parent);
       if (!parsedParent) continue;
       if (target.discoveredParent) claimsDiscovered += 1;
 
@@ -430,7 +437,14 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
         slaMinutes: settings.firstContactSlaMinutes,
         atRiskMinutes: settings.atRiskMinutes,
       });
-      await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis });
+      const primary = await findPrimaryLossIntakeClaimByDuplicateGroup(analysis.duplicateGroupKey);
+      const isDuplicate = Boolean(primary && primary.slackKey !== parsedParent.slackKey);
+      await upsertLossIntakeClaimBundle({
+        parent: parsedParent,
+        analysis,
+        isDuplicate,
+        originalSlackKey: isDuplicate ? primary?.slackKey ?? null : null,
+      });
       claimsUpdated += 1;
       eventsProcessed += analysis.events.length;
       await delay(150);

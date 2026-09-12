@@ -1,5 +1,6 @@
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
+import { DispatchQaClaim, LossIntakeQaDashboard } from "@/components/LossIntakeQaDashboard";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Badge } from "@/components/ui/badge";
@@ -67,14 +68,14 @@ function formatMinutes(value: number | null | undefined) {
 }
 
 function priorityFor(claim: {
-  hasPhotos: boolean;
+  onSiteFlag: boolean;
   firstContactAt: Date | null;
   slaState: ClaimSlaState;
   completedAt: Date | null;
   channelName: string;
 }) {
   if (claim.completedAt) return { label: "Complete", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", order: 4 };
-  if (claim.hasPhotos && !claim.firstContactAt) return { label: "In office · act now", tone: "bg-red-50 text-red-700 border-red-200", order: 0 };
+  if (claim.onSiteFlag && !claim.firstContactAt) return { label: "In office · act now", tone: "bg-red-50 text-red-700 border-red-200", order: 0 };
   if (claim.slaState === "breached") return { label: "SLA breached", tone: "bg-red-50 text-red-700 border-red-200", order: 1 };
   if (claim.slaState === "at_risk") return { label: "At risk", tone: "bg-amber-50 text-amber-700 border-amber-200", order: 2 };
   return { label: claim.channelName === "remote-markets" ? "Remote market" : "New report", tone: "bg-blue-50 text-blue-700 border-blue-200", order: 3 };
@@ -134,6 +135,7 @@ export default function LossIntakeDispatch() {
   const overview = trpc.lossIntake.overview.useQuery(scopedHandlerId ? { handlerId: scopedHandlerId } : {});
   const claimsQuery = trpc.lossIntake.claims.list.useQuery(filters, { refetchInterval: 60_000 });
   const syncHealth = trpc.lossIntake.syncHealth.useQuery(undefined, { enabled: isAdmin && !isImpersonating });
+  const dispatchStatus = trpc.lossIntake.dispatch.scheduleStatus.useQuery(undefined, { enabled: isAdmin && !isImpersonating });
   const utils = trpc.useUtils();
   const runNow = trpc.lossIntake.sync.runNow.useMutation({
     onSuccess: async result => {
@@ -142,8 +144,26 @@ export default function LossIntakeDispatch() {
     },
     onError: error => toast.error(error.message),
   });
+  const publishDispatch = trpc.lossIntake.dispatch.publishNow.useMutation({
+    onSuccess: result => toast.success(`Dispatch updated: ${result.unfiled.length} unfiled and ${result.intake.length} intake follow-up item${result.intake.length === 1 ? "" : "s"}.`),
+    onError: error => toast.error(error.message),
+  });
+  const enableDispatchSchedule = trpc.lossIntake.dispatch.enableSchedule.useMutation({
+    onSuccess: async () => {
+      await dispatchStatus.refetch();
+      toast.success("Loss Intake Dispatch schedule enabled.");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const pauseDispatchSchedule = trpc.lossIntake.dispatch.pauseSchedule.useMutation({
+    onSuccess: async () => {
+      await dispatchStatus.refetch();
+      toast.success("Loss Intake Dispatch schedule paused.");
+    },
+    onError: error => toast.error(error.message),
+  });
 
-  const claims = claimsQuery.data?.claims ?? [];
+  const claims = (claimsQuery.data?.claims ?? []) as DispatchQaClaim[];
   const filteredClaims = useMemo(() => claims
     .filter(claim => channel === "all" || claim.channelName === channel)
     .filter(claim => status === "all" || (status === "open" ? !claim.completedAt : claim.stage === status))
@@ -154,9 +174,9 @@ export default function LossIntakeDispatch() {
     }), [claims, channel, status]);
 
   const active = claims.filter(claim => !claim.completedAt);
-  const inOffice = active.filter(claim => claim.hasPhotos && !claim.firstContactAt);
+  const inOffice = active.filter(claim => claim.onSiteFlag && !claim.firstContactAt);
   const attention = active.filter(claim => claim.slaState === "breached" || claim.slaState === "at_risk");
-  const pendingFilingVerification = active.filter(claim => !claim.templatePostedAt);
+  const pendingFilingVerification = active.filter(claim => claim.filingState === "unfiled" || claim.filingState === "unverified");
   const selectedClaim = claims.find(claim => claim.id === selectedClaimId) ?? null;
   const currentView = isImpersonating ? impersonating?.name ?? "Representative" : isAdmin ? "Team" : user?.name ?? "My";
 
@@ -172,11 +192,13 @@ export default function LossIntakeDispatch() {
                   <h1 className="text-2xl font-bold tracking-tight text-foreground">Loss Intake Dispatch</h1>
                   <Badge variant="outline" className="border-[#ff6221]/30 bg-[#ff6221]/10 text-[#c94d16]">{currentView} view</Badge>
                 </div>
-                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">A single operational board for new reports from <strong className="font-semibold text-foreground">#claims</strong> and <strong className="font-semibold text-foreground">#claims-remotemarkets</strong>, response timing, filing follow-up, and intake-quality review.</p>
+                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">A single operational board for new loss reports, response timing, claim-filing follow-up, and intake-quality review across the Claims, Remote Markets, Escalations, and Claims Processing feeds.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="gap-1.5 bg-background text-muted-foreground"><CircleDot className="h-3 w-3 text-[#ff6221]" /> #claims</Badge>
                 <Badge variant="outline" className="gap-1.5 bg-background text-muted-foreground"><CircleDot className="h-3 w-3 text-sky-500" /> #claims-remotemarkets</Badge>
+                <Badge variant="outline" className="gap-1.5 bg-background text-muted-foreground"><CircleDot className="h-3 w-3 text-violet-500" /> #escalations</Badge>
+                <Badge variant="outline" className="gap-1.5 bg-background text-muted-foreground"><CircleDot className="h-3 w-3 text-emerald-500" /> #claims-processing</Badge>
                 {isAdmin && !isImpersonating && <Button variant="outline" size="sm" className="gap-2" onClick={() => runNow.mutate()} disabled={runNow.isPending}><RefreshCw className={`h-3.5 w-3.5 ${runNow.isPending ? "animate-spin" : ""}`} /> Refresh sources</Button>}
               </div>
             </div>
@@ -184,6 +206,10 @@ export default function LossIntakeDispatch() {
         </section>
 
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <LossIntakeQaDashboard claims={claims} viewerName={currentView} isAdmin={isAdmin && !isImpersonating} onOpenClaim={setSelectedClaimId} />
+
+          <section className="border-t border-[#151d44]/10 pt-6">
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#dd571d]">Live operations</p><h2 className="mt-1 text-xl font-bold tracking-tight">Dispatch work queues</h2><p className="mt-1 text-sm text-muted-foreground">Use these operational queues to work, verify filing, and inspect source health.</p></div></div>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="Open intake work" value={String(active.length)} detail="New notices awaiting documented completion" icon={Users} tone="orange" />
             <Metric label="In-office now" value={String(inOffice.length)} detail="Photo-backed reports with a 10-minute attempt target" icon={MapPin} tone={inOffice.length ? "red" : "green"} />
@@ -212,7 +238,7 @@ export default function LossIntakeDispatch() {
             <TabsContent value="dispatch" className="mt-5 space-y-4">
               <div className="flex flex-col gap-3 rounded-xl border bg-background p-3 lg:flex-row lg:items-end">
                 <div className="min-w-0 flex-1 space-y-1"><Label className="text-xs text-muted-foreground">Search member, customer ID, market, or VIN</Label><div className="relative"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} className="pl-9" placeholder="Search dispatch queue" /></div></div>
-                <div className="w-full space-y-1 lg:w-48"><Label className="text-xs text-muted-foreground">Source channel</Label><Select value={channel} onValueChange={setChannel}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All channels</SelectItem><SelectItem value="claims">#claims</SelectItem><SelectItem value="remote-markets">#claims-remotemarkets</SelectItem></SelectContent></Select></div>
+                <div className="w-full space-y-1 lg:w-48"><Label className="text-xs text-muted-foreground">Source channel</Label><Select value={channel} onValueChange={setChannel}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All channels</SelectItem><SelectItem value="claims">#claims</SelectItem><SelectItem value="remote-markets">#claims-remotemarkets</SelectItem><SelectItem value="escalations">#escalations</SelectItem><SelectItem value="claims-processing">#claims-processing</SelectItem></SelectContent></Select></div>
                 <div className="w-full space-y-1 lg:w-52"><Label className="text-xs text-muted-foreground">Work state</Label><Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="open">Open work</SelectItem><SelectItem value="all">All records</SelectItem><SelectItem value="awaiting_outreach">Awaiting outreach</SelectItem><SelectItem value="outreach_started">Outreach started</SelectItem><SelectItem value="contact_attempts">Attempts underway</SelectItem><SelectItem value="complete">Complete</SelectItem></SelectContent></Select></div>
               </div>
 
@@ -224,7 +250,7 @@ export default function LossIntakeDispatch() {
                       <tbody className="divide-y">
                         {filteredClaims.map(claim => {
                           const priority = priorityFor(claim);
-                          return <tr key={claim.id} className="transition-colors hover:bg-muted/30"><td className="px-4 py-3"><Badge variant="outline" className={priority.tone}>{priority.label}</Badge></td><td className="px-4 py-3"><button onClick={() => setSelectedClaimId(claim.id)} className="text-left font-semibold text-foreground hover:text-[#dd571d] hover:underline">{claim.memberName ?? "Unidentified member"}</button><p className="mt-0.5 text-xs text-muted-foreground">{claim.customerId ? `Customer ${claim.customerId}` : "No customer ID"} · Reported {formatDate(claim.postedAt)}</p></td><td className="px-4 py-3 text-muted-foreground">{claim.market ?? "—"}</td><td className="px-4 py-3"><span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">#{claim.channelName === "remote-markets" ? "claims-remotemarkets" : claim.channelName}</span></td><td className="px-4 py-3">{claim.assignedAgent ?? <span className="text-muted-foreground">Unassigned</span>}</td><td className="px-4 py-3"><p className="font-medium text-foreground">{formatMinutes(claim.firstContactMinutes)}</p><p className="text-xs text-muted-foreground">{claim.firstContactAt ? formatDate(claim.firstContactAt) : claim.hasPhotos ? "In-office clock active" : "Awaiting documented action"}</p></td><td className="px-4 py-3"><Badge variant="outline" className={claim.completedAt ? "border-emerald-200 bg-emerald-50 text-emerald-700" : claim.slaState === "breached" ? "border-red-200 bg-red-50 text-red-700" : claim.slaState === "at_risk" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-blue-200 bg-blue-50 text-blue-700"}>{stageLabel[claim.stage]}</Badge></td><td className="px-4 py-3 text-right"><Button variant="ghost" size="icon" onClick={() => setSelectedClaimId(claim.id)} aria-label={`Open ${claim.memberName ?? "claim"} dispatch detail`}><ArrowUpRight className="h-4 w-4" /></Button></td></tr>;
+                          return <tr key={claim.id} className="transition-colors hover:bg-muted/30"><td className="px-4 py-3"><Badge variant="outline" className={priority.tone}>{priority.label}</Badge></td><td className="px-4 py-3"><button onClick={() => setSelectedClaimId(claim.id)} className="text-left font-semibold text-foreground hover:text-[#dd571d] hover:underline">{claim.memberName ?? "Unidentified member"}</button><p className="mt-0.5 text-xs text-muted-foreground">{claim.customerId ? `Customer ${claim.customerId}` : "No customer ID"} · Reported {formatDate(claim.postedAt)}</p></td><td className="px-4 py-3 text-muted-foreground">{claim.market ?? "—"}</td><td className="px-4 py-3"><span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">#{claim.channelName === "remote-markets" ? "claims-remotemarkets" : claim.channelName}</span></td><td className="px-4 py-3">{claim.assignedAgent ?? <span className="text-muted-foreground">Shared pull queue</span>}</td><td className="px-4 py-3"><p className="font-medium text-foreground">{formatMinutes(claim.firstResponseBusinessMinutes)}</p><p className="text-xs text-muted-foreground">{claim.firstContactAt ? `${claim.slaTargetBusinessMinutes ?? "—"}-min business target` : claim.onSiteFlag ? "In-office clock active" : "Awaiting documented action"}</p></td><td className="px-4 py-3"><Badge variant="outline" className={claim.completedAt ? "border-emerald-200 bg-emerald-50 text-emerald-700" : claim.slaState === "breached" ? "border-red-200 bg-red-50 text-red-700" : claim.slaState === "at_risk" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-blue-200 bg-blue-50 text-blue-700"}>{stageLabel[claim.stage]}</Badge></td><td className="px-4 py-3 text-right"><Button variant="ghost" size="icon" onClick={() => setSelectedClaimId(claim.id)} aria-label={`Open ${claim.memberName ?? "claim"} dispatch detail`}><ArrowUpRight className="h-4 w-4" /></Button></td></tr>;
                         })}
                       </tbody>
                     </table>
@@ -243,8 +269,9 @@ export default function LossIntakeDispatch() {
               <div className="overflow-hidden rounded-xl border bg-background"><div className="border-b px-4 py-3"><h2 className="font-semibold">Evidence exceptions</h2><p className="mt-1 text-sm text-muted-foreground">Use this list to identify documentation gaps before a quality review is issued.</p></div><div className="divide-y">{claims.filter(claim => !claim.completedAt && (!claim.factsOfLoss || !claim.preliminaryLiability || claim.contactAttempts === 0)).slice(0, 20).map(claim => <button key={claim.id} onClick={() => setSelectedClaimId(claim.id)} className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/30"><div><p className="font-medium">{claim.memberName ?? "Unidentified member"} <span className="font-normal text-muted-foreground">· {claim.market ?? "Market unknown"}</span></p><p className="mt-1 text-sm text-muted-foreground">{!claim.factsOfLoss ? "Facts of loss missing" : ""}{!claim.factsOfLoss && !claim.preliminaryLiability ? " · " : ""}{!claim.preliminaryLiability ? "Preliminary liability missing" : ""}{(!claim.factsOfLoss || !claim.preliminaryLiability) && claim.contactAttempts === 0 ? " · " : ""}{claim.contactAttempts === 0 ? "No documented contact attempt" : ""}</p></div><AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" /></button>)}{claims.filter(claim => !claim.completedAt && (!claim.factsOfLoss || !claim.preliminaryLiability || claim.contactAttempts === 0)).length === 0 && <EmptyDispatch title="No active evidence exceptions" detail="Open reports currently include the baseline intake evidence required for review." />}</div></div>
             </TabsContent>
 
-            <TabsContent value="health" className="mt-5"><div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle className="text-base">Source sync status</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><div className="flex justify-between gap-4"><span className="text-muted-foreground">Last successful source review</span><span className="font-medium">{formatDate(syncHealth.data?.settings.lastSuccessfulSyncAt)}</span></div><div className="flex justify-between gap-4"><span className="text-muted-foreground">Latest run</span><span className="font-medium">{syncHealth.data?.latestRun?.status ?? "No recorded run"}</span></div><div className="flex justify-between gap-4"><span className="text-muted-foreground">Last sync issue</span><span className="max-w-[60%] text-right font-medium text-red-600">{syncHealth.data?.settings.lastSyncError ?? "None"}</span></div></CardContent></Card><Card><CardHeader><CardTitle className="text-base">Configured coverage</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Slack source ingestion configured for #claims and #claims-remotemarkets</div><div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-500" /> Claims Tracker corroboration will remain review-only until its source connection is enabled</div><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Duplicate source posts remain excluded from queue counts</div></CardContent></Card></div></TabsContent>
+            <TabsContent value="health" className="mt-5"><div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle className="text-base">Source sync status</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><div className="flex justify-between gap-4"><span className="text-muted-foreground">Last successful source review</span><span className="font-medium">{formatDate(syncHealth.data?.settings.lastSuccessfulSyncAt)}</span></div><div className="flex justify-between gap-4"><span className="text-muted-foreground">Latest run</span><span className="font-medium">{syncHealth.data?.latestRun?.status ?? "No recorded run"}</span></div><div className="flex justify-between gap-4"><span className="text-muted-foreground">Last sync issue</span><span className="max-w-[60%] text-right font-medium text-red-600">{syncHealth.data?.settings.lastSyncError ?? "None"}</span></div></CardContent></Card><Card><CardHeader><CardTitle className="text-base">Dispatch controls</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Slack source ingestion configured for the four Dispatch source channels</div><div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-500" /> Claims Tracker corroboration remains review-only until its Google Sheet access is verified</div><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Duplicate source posts remain linked but excluded from queue counts</div><div className="mt-4 rounded-lg border bg-muted/30 p-3"><p className="font-medium text-foreground">Slack worklist schedule</p><p className="mt-1 text-xs text-muted-foreground">8:00 AM ET: unfiled Claims Processor digest. 9:00 AM–6:00 PM ET: editable Intake Rep follow-up queue.</p><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={publishDispatch.isPending} onClick={() => publishDispatch.mutate({ processors: false, intake: true })}>{publishDispatch.isPending ? "Publishing…" : "Publish intake queue now"}</Button>{dispatchStatus.data?.configured ? <Button size="sm" variant="outline" disabled={pauseDispatchSchedule.isPending} onClick={() => pauseDispatchSchedule.mutate()}>Pause schedule</Button> : <Button size="sm" className="bg-[#151d44] hover:bg-[#202b5d]" disabled={enableDispatchSchedule.isPending} onClick={() => enableDispatchSchedule.mutate()}>Enable schedule</Button>}</div><p className="mt-2 text-xs text-muted-foreground">{dispatchStatus.data?.configured ? `Scheduled task ${dispatchStatus.data.taskUid ?? "configured"} is active.` : "Schedule is not active; source synchronization remains independent."}</p></div></CardContent></Card></div></TabsContent>
           </Tabs>
+          </section>
         </div>
       </main>
 

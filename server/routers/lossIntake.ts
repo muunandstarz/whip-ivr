@@ -10,6 +10,7 @@ import {
   getLossIntakeClaimDetail,
   getLossIntakeOverview,
   getLossIntakeSettings,
+  getLossIntakeSettingsByDispatchScheduleTaskUid,
   getRepComparisonMetrics,
   getHandlerLossIntakeStats,
   getTodayRepActivity,
@@ -23,6 +24,7 @@ import {
   type RepComparisonPeriod,
 } from "../lossIntakeDb";
 import { runLossIntakeSlackSync } from "../lossIntakeSlackSync";
+import { publishLossIntakeDispatch } from "../lossIntakeDispatch";
 
 const stageSchema = z.enum([
   "awaiting_outreach",
@@ -336,6 +338,56 @@ export const lossIntakeRouter = router({
         sessionToken,
       );
       return { success: true };
+    }),
+  }),
+
+  dispatch: router({
+    publishNow: protectedProcedure
+      .input(z.object({ processors: z.boolean().default(false), intake: z.boolean().default(true) }))
+      .mutation(async ({ ctx, input }) => {
+        requireAdmin(ctx.user);
+        if (!input.processors && !input.intake) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Select at least one Dispatch output." });
+        }
+        return publishLossIntakeDispatch({ publishProcessors: input.processors, publishIntake: input.intake });
+      }),
+
+    enableSchedule: protectedProcedure.mutation(async ({ ctx }) => {
+      requireAdmin(ctx.user);
+      const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+      if (!sessionToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sign in again to enable Dispatch scheduling." });
+      const settings = await getLossIntakeSettings();
+      const schedule = {
+        cron: "0 0 * * * 1-5",
+        path: "/api/scheduled/loss-intake-dispatch",
+        method: "POST" as const,
+        payload: {},
+        description: "Publish 8 AM ET unfiled-claims and 9 AM–6 PM ET editable Loss Intake Dispatch worklists.",
+      };
+      if (settings.dispatchScheduleTaskUid) {
+        const result = await updateHeartbeatJob(settings.dispatchScheduleTaskUid, { ...schedule, enable: true }, sessionToken);
+        return { taskUid: settings.dispatchScheduleTaskUid, ...result };
+      }
+      const result = await createHeartbeatJob({ name: "loss-intake-dispatch", ...schedule }, sessionToken);
+      await updateLossIntakeSettings({ dispatchScheduleTaskUid: result.taskUid }, ctx.user.name ?? ctx.user.email ?? "Supervisor");
+      return result;
+    }),
+
+    pauseSchedule: protectedProcedure.mutation(async ({ ctx }) => {
+      requireAdmin(ctx.user);
+      const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+      const settings = await getLossIntakeSettings();
+      if (!settings.dispatchScheduleTaskUid) return { success: true, skipped: "not_configured" as const };
+      await updateHeartbeatJob(settings.dispatchScheduleTaskUid, { enable: false }, sessionToken);
+      return { success: true };
+    }),
+
+    scheduleStatus: protectedProcedure.query(async ({ ctx }) => {
+      requireAdmin(ctx.user);
+      const settings = await getLossIntakeSettings();
+      if (!settings.dispatchScheduleTaskUid) return { configured: false };
+      const matching = await getLossIntakeSettingsByDispatchScheduleTaskUid(settings.dispatchScheduleTaskUid);
+      return { configured: Boolean(matching), taskUid: settings.dispatchScheduleTaskUid };
     }),
   }),
 

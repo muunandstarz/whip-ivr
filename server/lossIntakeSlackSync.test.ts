@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
   finishLossIntakeSyncRun: vi.fn(),
+  findPrimaryLossIntakeClaimByDuplicateGroup: vi.fn(),
   getLossIntakeClaimBySlackKey: vi.fn(),
   getLossIntakeSettings: vi.fn(),
   listLossIntakeClaims: vi.fn(),
@@ -45,6 +46,8 @@ describe("runLossIntakeSlackSync", () => {
     dbMocks.getLossIntakeSettings.mockResolvedValue({
       claimsChannelId: "C-CLAIMS",
       remoteMarketsChannelId: "C-REMOTE",
+      escalationsChannelId: "C-ESCALATIONS",
+      claimsProcessingChannelId: "C-PROCESSING",
       firstContactSlaMinutes: 10,
       atRiskMinutes: 7,
       lastSuccessfulSyncAt: null,
@@ -54,6 +57,7 @@ describe("runLossIntakeSlackSync", () => {
     });
     dbMocks.listLossIntakeClaims.mockResolvedValue({ claims: [], total: 0 });
     dbMocks.getLossIntakeClaimBySlackKey.mockResolvedValue(null);
+    dbMocks.findPrimaryLossIntakeClaimByDuplicateGroup.mockResolvedValue(null);
     dbMocks.upsertLossIntakeClaimBundle.mockResolvedValue(99);
   });
 

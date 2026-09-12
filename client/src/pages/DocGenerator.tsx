@@ -696,6 +696,7 @@ function PreviewPanel({
   filename,
   extra,
   pdfUrl,
+  formattedPreview,
 }: {
   text: string;
   onCopy: () => void;
@@ -704,6 +705,7 @@ function PreviewPanel({
   filename?: string;
   extra?: React.ReactNode;
   pdfUrl?: string | null;
+  formattedPreview?: React.ReactNode;
 }) {
   const [showPdf, setShowPdf] = useState(true);
   const [fullScreen, setFullScreen] = useState(false);
@@ -753,7 +755,9 @@ function PreviewPanel({
           </Button>
         </div>
         {showPdf ? (
-          pdfUrl ? (
+          formattedPreview ? (
+            formattedPreview
+          ) : pdfUrl ? (
             <iframe
               src={pdfUrl}
               className="w-full bg-white"
@@ -801,49 +805,155 @@ function PreviewPanel({
 
 // ─── Tab: Blank Letterhead ────────────────────────────────────────────────────
 function BlankLetterheadTab() {
+  type CoreSectionId = "date" | "recipient" | "reference" | "subject" | "greeting" | "body" | "closing" | "signature" | "contact";
+  type CustomSection = { id: string; title: string; content: string; enabled: boolean };
   const [form, setForm] = useState({
+    letterDate: new Date().toISOString().slice(0, 10),
     claimNumber: "",
     dateOfLoss: "",
     recipient: "",
     recipientAddress: "",
     subject: "",
     body: "",
+    greeting: "Dear",
+    closing: "Sincerely,",
+    handlerName: "",
+    handlerTitle: "",
+    companyName: "Whip Claims Management",
+    companyAddress: "P.O. Box 10622, Rockville, MD 20849",
+    companyEmail: "claims@drivewhip.com",
+    companyPhone: "",
   });
+  const coreSections: { id: CoreSectionId; label: string }[] = [
+    { id: "date", label: "Letter date" },
+    { id: "recipient", label: "Recipient block" },
+    { id: "reference", label: "Claim reference" },
+    { id: "subject", label: "Subject line" },
+    { id: "greeting", label: "Greeting" },
+    { id: "body", label: "Letter body" },
+    { id: "closing", label: "Closing" },
+    { id: "signature", label: "Handler signature" },
+    { id: "contact", label: "Company contact block" },
+  ];
+  const [enabledSections, setEnabledSections] = useState<Record<CoreSectionId, boolean>>({
+    date: true,
+    recipient: true,
+    reference: true,
+    subject: true,
+    greeting: true,
+    body: true,
+    closing: true,
+    signature: true,
+    contact: true,
+  });
+  const [customSections, setCustomSections] = useState<CustomSection[]>([]);
+  const [sectionOrder, setSectionOrder] = useState<string[]>(coreSections.map(section => section.id));
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const improveMutation = trpc.docgen.improveWithAI.useMutation();
 
-  const set = (k: keyof typeof form) => (v: string) =>
-    setForm((p) => ({ ...p, [k]: v }));
+  const set = (k: keyof typeof form) => (v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const formattedDate = form.letterDate
+    ? new Date(`${form.letterDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : "[Letter Date]";
 
-  const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
+  const isEnabled = (id: string) => {
+    const custom = customSections.find(section => section.id === id);
+    return custom ? custom.enabled : enabledSections[id as CoreSectionId] !== false;
+  };
+
+  const sectionContent = (id: string) => {
+    const custom = customSections.find(section => section.id === id);
+    if (custom) return [custom.title, custom.content].filter(Boolean).join("\n");
+    switch (id as CoreSectionId) {
+      case "date": return formattedDate;
+      case "recipient": return [form.recipient || "[Recipient Name]", form.recipientAddress || "[Recipient Address]"].join("\n");
+      case "reference": return `Re: Claim #${form.claimNumber || "[Claim Number]"}${form.dateOfLoss ? ` — Date of Loss: ${form.dateOfLoss}` : ""}`;
+      case "subject": return form.subject;
+      case "greeting": return `${form.greeting || "Dear"} ${form.recipient || "[Recipient]"},`;
+      case "body": return form.body || "[Letter body will appear here]";
+      case "closing": return form.closing || "Sincerely,";
+      case "signature": return [form.handlerName || "[Handler Name]", form.handlerTitle].filter(Boolean).join("\n");
+      case "contact": return [form.companyName, form.companyAddress, form.companyPhone && `Phone: ${form.companyPhone}`, form.companyEmail].filter(Boolean).join("\n");
+      default: return "";
+    }
+  };
+
+  const preview = sectionOrder
+    .filter(isEnabled)
+    .map(sectionContent)
+    .filter(Boolean)
+    .join("\n\n");
+
+  const buildDocument = useCallback(() => {
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+    let y = addWhipLetterhead(doc);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+
+    const writeSection = (text: string, gap = 5, italic = false) => {
+      if (!text) return;
+      doc.setFont("helvetica", italic ? "italic" : "normal");
+      for (const paragraph of text.split("\n")) {
+        const lines = doc.splitTextToSize(paragraph || " ", W - 28) as string[];
+        for (const line of lines) {
+          if (y > H - 20) {
+            doc.addPage();
+            y = 18;
+          }
+          doc.text(line, 14, y);
+          y += 6.25;
+        }
+      }
+      y += gap;
+      doc.setFont("helvetica", "normal");
+    };
+
+    for (const id of sectionOrder) {
+      if (!isEnabled(id)) continue;
+      writeSection(sectionContent(id), id === "body" ? 7 : 4, id === "subject");
+    }
+    addLetterFooter(doc);
+    return doc;
+  }, [form, customSections, enabledSections, sectionOrder]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const nextUrl = getPDFDataUrl(buildDocument());
+      setPreviewPdfUrl(previous => {
+        if (previous) URL.revokeObjectURL(previous);
+        return nextUrl;
+      });
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [buildDocument]);
+
+  useEffect(() => () => {
+    if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+  }, [previewPdfUrl]);
+
+  const toggleCore = (id: CoreSectionId) => setEnabledSections(previous => ({ ...previous, [id]: !previous[id] }));
+  const moveSection = (id: string, direction: -1 | 1) => setSectionOrder(previous => {
+    const currentIndex = previous.indexOf(id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= previous.length) return previous;
+    const next = [...previous];
+    [next[currentIndex], next[nextIndex]] = [next[nextIndex], next[currentIndex]];
+    return next;
   });
-
-  const preview = [
-    today,
-    "",
-    form.recipient || "[Recipient Name]",
-    form.recipientAddress || "[Recipient Address]",
-    "",
-    `Re: Claim #${form.claimNumber || "[Claim Number]"}${form.dateOfLoss ? ` — Date of Loss: ${form.dateOfLoss}` : ""}`,
-    form.subject ? `     ${form.subject}` : "",
-    "",
-    "Dear " + (form.recipient || "[Recipient]") + ",",
-    "",
-    form.body || "[Letter body will appear here]",
-    "",
-    "Sincerely,",
-    "",
-    "[Handler Name]",
-    "Whip Claims Management",
-    "P.O. Box 10622, Rockville, MD 20849",
-    "claims@drivewhip.com",
-  ]
-    .filter((l) => l !== undefined)
-    .join("\n");
+  const addCustomSection = () => {
+    const id = `custom-${Date.now()}`;
+    setCustomSections(previous => [...previous, { id, title: "Additional area", content: "", enabled: true }]);
+    setSectionOrder(previous => [...previous, id]);
+  };
+  const updateCustom = (id: string, patch: Partial<CustomSection>) => setCustomSections(previous => previous.map(section => section.id === id ? { ...section, ...patch } : section));
+  const removeCustom = (id: string) => {
+    setCustomSections(previous => previous.filter(section => section.id !== id));
+    setSectionOrder(previous => previous.filter(sectionId => sectionId !== id));
+  };
 
   const handleImprove = async () => {
     if (!form.body.trim()) {
@@ -852,11 +962,7 @@ function BlankLetterheadTab() {
     }
     setAiLoading(true);
     try {
-      const result = await improveMutation.mutateAsync({
-        body: form.body,
-        claimNumber: form.claimNumber,
-        recipient: form.recipient,
-      });
+      const result = await improveMutation.mutateAsync({ body: form.body, claimNumber: form.claimNumber, recipient: form.recipient });
       set("body")(result.improved);
       toast.success("Letter improved with AI");
     } catch (e: unknown) {
@@ -867,100 +973,69 @@ function BlankLetterheadTab() {
   };
 
   const handleDownload = (shouldDownload = true) => {
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    y = wrapText(doc, today, 14, y, W - 28, 6);
-    y += 6;
-    if (form.recipient) y = wrapText(doc, form.recipient, 14, y, W - 28, 6.5);
-    if (form.recipientAddress) y = wrapText(doc, form.recipientAddress, 14, y, W - 28, 6.5);
-    y += 4;
-    y = wrapText(
-      doc,
-      `Re: Claim #${form.claimNumber || "[Claim Number]"}${form.dateOfLoss ? ` — Date of Loss: ${form.dateOfLoss}` : ""}`,
-      14,
-      y,
-      W - 28,
-      5
-    );
-    if (form.subject) {
-      y += 3;
-      doc.setFont("helvetica", "italic");
-      y = wrapText(doc, form.subject, 14, y, W - 28, 6.5);
-      doc.setFont("helvetica", "normal");
-    }
-    y += 6;
-    y = wrapText(doc, `Dear ${form.recipient || "[Recipient]"},`, 14, y, W - 28, 6.5);
-    y += 4;
-    y = wrapLetterText(doc, form.body || "[Letter body]", 14, y, W - 28, 6.5);
-    y += 8;
-    doc.text("Sincerely,", 14, y);
-    y += 10;
-    doc.text("[Handler Name]", 14, y);
-    y += 5;
-    doc.text("Whip Claims Management", 14, y);
-    addSOLNotice(doc);
-    addLetterFooter(doc);
-    setPreviewPdfUrl(getPDFDataUrl(doc));
+    const doc = buildDocument();
     if (shouldDownload) downloadPDF(doc, `Whip_Letter_${form.claimNumber || "Draft"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <div>
-        <Panel title="Letter Details" tag="REQUIRED">
+        <Panel title="Letter Details" tag="MODULAR">
           <Grid3>
+            <Field label="Letter Date" id="bl-date" value={form.letterDate} onChange={set("letterDate")} type="date" />
             <Field label="Claim Number" id="bl-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="bl-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
-            <Field label="Recipient Name" id="bl-recipient" value={form.recipient} onChange={set("recipient")} placeholder="e.g. John Smith" />
           </Grid3>
-          <div className="mt-3">
-            <Field label="Recipient Address" id="bl-addr" value={form.recipientAddress} onChange={set("recipientAddress")} placeholder="123 Main St, City, ST 00000" />
-          </div>
-          <div className="mt-3">
-            <Field label="Subject Line (optional)" id="bl-subject" value={form.subject} onChange={set("subject")} placeholder="e.g. Claim Status Update" />
-          </div>
+          <div className="mt-3"><Field label="Recipient Name" id="bl-recipient" value={form.recipient} onChange={set("recipient")} placeholder="e.g. John Smith" /></div>
+          <div className="mt-3"><Field label="Recipient Address" id="bl-addr" value={form.recipientAddress} onChange={set("recipientAddress")} placeholder="123 Main St, City, ST 00000" /></div>
+          <div className="mt-3"><Field label="Subject Line" id="bl-subject" value={form.subject} onChange={set("subject")} placeholder="e.g. Claim Status Update" /></div>
         </Panel>
-        <Panel title="Letter Body">
-          <TextareaField
-            label="Body"
-            id="bl-body"
-            value={form.body}
-            onChange={set("body")}
-            placeholder="Type your letter body here..."
-            rows={10}
-          />
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"
-              onClick={handleImprove}
-              disabled={aiLoading}
-            >
-              {aiLoading ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="w-3.5 h-3.5" />
-              )}
-              {aiLoading ? "Improving..." : "Improve with AI"}
-            </Button>
-          </div>
+
+        <Panel title="Letter Content">
+          <Grid2>
+            <Field label="Greeting" id="bl-greeting" value={form.greeting} onChange={set("greeting")} placeholder="Dear" />
+            <Field label="Closing" id="bl-closing" value={form.closing} onChange={set("closing")} placeholder="Sincerely," />
+          </Grid2>
+          <div className="mt-3"><TextareaField label="Body" id="bl-body" value={form.body} onChange={set("body")} placeholder="Type your letter body here..." rows={10} /></div>
+          <div className="mt-3 flex gap-2"><Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleImprove} disabled={aiLoading}>{aiLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}{aiLoading ? "Improving..." : "Improve with AI"}</Button></div>
         </Panel>
+
+        <Panel title="Signature & Contact">
+          <Grid2>
+            <HandlerSelect value={form.handlerName} onChange={set("handlerName")} label="Handler Name" id="bl-handler" />
+            <Field label="Handler Title" id="bl-title" value={form.handlerTitle} onChange={set("handlerTitle")} placeholder="e.g. Claims Handler" />
+            <Field label="Company Name" id="bl-company" value={form.companyName} onChange={set("companyName")} />
+            <Field label="Company Email" id="bl-email" value={form.companyEmail} onChange={set("companyEmail")} />
+          </Grid2>
+          <div className="mt-3"><Field label="Company Address" id="bl-company-address" value={form.companyAddress} onChange={set("companyAddress")} /></div>
+          <div className="mt-3"><Field label="Company Phone" id="bl-phone" value={form.companyPhone} onChange={set("companyPhone")} placeholder="(xxx) xxx-xxxx" /></div>
+        </Panel>
+
+        <Panel title="Sections & Layout">
+          <p className="mb-3 text-xs leading-5 text-muted-foreground">Toggle any standard area off, add your own area, and use the arrows to control the order used in both the live formatted preview and the downloaded PDF.</p>
+          <div className="space-y-2">{sectionOrder.map((id, index) => {
+            const custom = customSections.find(section => section.id === id);
+            const core = coreSections.find(section => section.id === id);
+            const label = custom ? custom.title || "Additional area" : core?.label || "Section";
+            return <div key={id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2"><Checkbox id={`bl-section-${id}`} checked={isEnabled(id)} onCheckedChange={() => custom ? updateCustom(id, { enabled: !custom.enabled }) : toggleCore(id as CoreSectionId)} /><Label htmlFor={`bl-section-${id}`} className="min-w-0 flex-1 cursor-pointer text-sm">{label}</Label>{custom && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Custom</span>}<button type="button" onClick={() => moveSection(id, -1)} disabled={index === 0} className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-30" aria-label={`Move ${label} up`}>↑</button><button type="button" onClick={() => moveSection(id, 1)} disabled={index === sectionOrder.length - 1} className="rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-30" aria-label={`Move ${label} down`}>↓</button>{custom && <button type="button" onClick={() => removeCustom(id)} className="rounded p-1 text-red-500 hover:bg-red-50" aria-label={`Remove ${label}`}><Trash2 className="h-3.5 w-3.5" /></button>}</div>;
+          })}</div>
+          <Button type="button" variant="outline" size="sm" className="mt-3 gap-1.5" onClick={addCustomSection}><Plus className="h-3.5 w-3.5" /> Add an area</Button>
+        </Panel>
+
+        {customSections.length > 0 && <Panel title="Custom Areas">{customSections.map(section => <div key={section.id} className="mb-4 rounded-lg border bg-muted/20 p-3 last:mb-0"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Additional area</p><Button type="button" variant="ghost" size="sm" className="h-7 gap-1 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => removeCustom(section.id)}><Trash2 className="h-3.5 w-3.5" /> Remove</Button></div><div className="mt-2"><Field label="Area Label" id={`${section.id}-label`} value={section.title} onChange={value => updateCustom(section.id, { title: value })} placeholder="e.g. Enclosures" /></div><div className="mt-2"><TextareaField label="Area Content" id={`${section.id}-content`} value={section.content} onChange={value => updateCustom(section.id, { content: value })} placeholder="Add any custom language, attachment list, or signature content..." rows={4} /></div></div>)}</Panel>}
       </div>
-      <PreviewPanel
-        text={preview}
-        onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
-        onDownload={handleDownload}
-        filename={`Whip_Letter_${form.claimNumber || "Draft"}.pdf`}
-      
-        pdfUrl={previewPdfUrl}
-      
-        onPreview={handlePreviewOnly}/>
+      <div className="xl:sticky xl:top-4 xl:self-start">
+        <PreviewPanel
+          text={preview}
+          onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
+          onDownload={() => handleDownload(true)}
+          filename={`Whip_Letter_${form.claimNumber || "Draft"}.pdf`}
+          pdfUrl={previewPdfUrl}
+          onPreview={() => handleDownload(false)}
+          extra={<span className="hidden text-[10px] font-medium text-emerald-700 sm:inline">Updates as you type</span>}
+          formattedPreview={<div className="min-h-[600px] bg-[#e9edf2] p-4 sm:p-6"><article className="mx-auto min-h-[560px] max-w-[760px] bg-white px-8 py-9 text-[11px] leading-[1.7] text-[#232a38] shadow-sm sm:px-12 sm:py-12"><div className="border-b border-[#ff6221]/60 pb-4"><p className="text-base font-semibold tracking-tight text-[#171b31]">Whip Claims Management</p><p className="mt-0.5 text-[10px] uppercase tracking-[0.13em] text-[#ff6221]">Letter preview</p></div><div className="mt-8 whitespace-pre-wrap">{preview}</div></article></div>}
+        />
+      </div>
     </div>
   );
 }

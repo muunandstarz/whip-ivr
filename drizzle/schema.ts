@@ -327,12 +327,40 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   // Overflow routing: set when both in-store agents are busy and this claim should go to Ana Padilla
   overflowRouted: boolean("overflow_routed").default(false).notNull(),
 
+  // Dispatch model: source normalization, business-hour SLA, on-site priority, and filing status.
+  sourceKind: mysqlEnum("source_kind", ["structured", "unstructured"]).default("structured").notNull(),
+  onSiteFlag: boolean("on_site_flag").default(false).notNull(),
+  onSiteDetectedAt: timestamp("on_site_detected_at"),
+  onSiteReason: text("on_site_reason"),
+  firstResponseBusinessMinutes: float("first_response_business_minutes"),
+  templateBusinessMinutes: float("template_business_minutes"),
+  slaTargetBusinessMinutes: int("sla_target_business_minutes"),
+  claimId: varchar("claim_id", { length: 128 }),
+  filingState: mysqlEnum("filing_state", ["filed", "unfiled", "pending_statement", "unverified"]).default("unverified").notNull(),
+  filingEvidence: text("filing_evidence"),
+  duplicateGroupKey: varchar("duplicate_group_key", { length: 255 }),
+  dataWarnings: text("data_warnings"),
+
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LossIntakeClaim = typeof lossIntakeClaims.$inferSelect;
 export type InsertLossIntakeClaim = typeof lossIntakeClaims.$inferInsert;
+
+export const lossIntakeSourceLinks = mysqlTable("loss_intake_source_links", {
+  id: int("id").autoincrement().primaryKey(),
+  claimId: int("claim_id").notNull(),
+  slackKey: varchar("slack_key", { length: 128 }).notNull().unique(),
+  channelId: varchar("channel_id", { length: 32 }).notNull(),
+  channelName: varchar("channel_name", { length: 128 }).notNull(),
+  slackPermalink: text("slack_permalink"),
+  postedAt: timestamp("posted_at").notNull(),
+  sourceRole: mysqlEnum("source_role", ["primary", "duplicate"]).default("primary").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type LossIntakeSourceLink = typeof lossIntakeSourceLinks.$inferSelect;
+export type InsertLossIntakeSourceLink = typeof lossIntakeSourceLinks.$inferInsert;
 
 export const lossIntakeEvents = mysqlTable("loss_intake_events", {
   id: int("id").autoincrement().primaryKey(),
@@ -393,12 +421,20 @@ export const lossIntakeSettings = mysqlTable("loss_intake_settings", {
   configKey: varchar("configKey", { length: 64 }).notNull().unique(),
   claimsChannelId: varchar("claimsChannelId", { length: 32 }).default("CHWRXH4HK").notNull(),
   remoteMarketsChannelId: varchar("remoteMarketsChannelId", { length: 32 }).default("C092UPKR79D").notNull(),
+  escalationsChannelId: varchar("escalations_channel_id", { length: 32 }).default("C03LK1Z8XFG").notNull(),
+  claimsProcessingChannelId: varchar("claims_processing_channel_id", { length: 32 }).default("C08UF1Z61QE").notNull(),
+  claimsProcessorsChannelId: varchar("claims_processors_channel_id", { length: 32 }).default("C0C1F9BRM6Y").notNull(),
+  claimsIntakeRepsChannelId: varchar("claims_intake_reps_channel_id", { length: 32 }).default("C0C1DHLHKND").notNull(),
   firstContactSlaMinutes: int("firstContactSlaMinutes").default(10).notNull(),
   atRiskMinutes: int("atRiskMinutes").default(7).notNull(),
   qaDueHours: int("qaDueHours").default(24).notNull(),
   scoringWeights: json("scoringWeights"),
   agentAssignments: json("agentAssignments"),
   scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+  dispatchScheduleTaskUid: varchar("dispatch_schedule_task_uid", { length: 65 }),
+  processorsDigestMessageTs: varchar("processors_digest_message_ts", { length: 32 }),
+  intakeDigestMessageTs: varchar("intake_digest_message_ts", { length: 32 }),
+  intakeDigestDateKey: varchar("intake_digest_date_key", { length: 16 }),
   lastSuccessfulSyncAt: timestamp("lastSuccessfulSyncAt"),
   lastSyncError: text("lastSyncError"),
   updatedBy: varchar("updatedBy", { length: 255 }),

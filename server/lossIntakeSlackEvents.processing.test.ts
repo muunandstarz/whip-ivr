@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
+  findPrimaryLossIntakeClaimByDuplicateGroup: vi.fn(),
   getActiveInStoreAgents: vi.fn(),
   getLossIntakeSettings: vi.fn(),
   getLossIntakeThreadState: vi.fn(),
@@ -102,6 +103,7 @@ describe("Slack Loss Intake same-thread processing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbMocks.getActiveInStoreAgents.mockResolvedValue(new Set());
+    dbMocks.findPrimaryLossIntakeClaimByDuplicateGroup.mockResolvedValue(null);
     dbMocks.getLossIntakeSettings.mockResolvedValue({
       firstContactSlaMinutes: 10,
       atRiskMinutes: 7,

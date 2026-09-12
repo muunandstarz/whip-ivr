@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
 import {
   handlers,
   lossIntakeClaims,
@@ -6,12 +6,14 @@ import {
   lossIntakeQas,
   lossIntakeQualityItems,
   lossIntakeSettings,
+  lossIntakeSourceLinks,
   lossIntakeSyncRuns,
   type InsertLossIntakeClaim,
   type InsertLossIntakeEvent,
   type InsertLossIntakeQa,
   type InsertLossIntakeQualityItem,
   type InsertLossIntakeSetting,
+  type InsertLossIntakeSourceLink,
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import type {
@@ -23,6 +25,10 @@ export const DEFAULT_LOSS_INTAKE_SETTINGS = {
   configKey: "default",
   claimsChannelId: "CHWRXH4HK",
   remoteMarketsChannelId: "C092UPKR79D",
+  escalationsChannelId: "C03LK1Z8XFG",
+  claimsProcessingChannelId: "C08UF1Z61QE",
+  claimsProcessorsChannelId: "C0C1F9BRM6Y",
+  claimsIntakeRepsChannelId: "C0C1DHLHKND",
   firstContactSlaMinutes: 10,
   atRiskMinutes: 7,
   qaDueHours: 24,
@@ -41,6 +47,10 @@ export const DEFAULT_LOSS_INTAKE_SETTINGS = {
   lastSuccessfulSyncAt: null,
   lastSyncError: null,
   scheduleCronTaskUid: null,
+  dispatchScheduleTaskUid: null,
+  processorsDigestMessageTs: null,
+  intakeDigestMessageTs: null,
+  intakeDigestDateKey: null,
 } satisfies InsertLossIntakeSetting;
 
 function requireDb<T>(db: T | null): T {
@@ -145,6 +155,18 @@ export async function upsertLossIntakeClaimBundle(input: {
     teslaFootageRequested: input.analysis.teslaFootageRequested,
     qualityScore: input.analysis.qualityScore,
     missingElements: JSON.stringify(input.analysis.missingElements),
+    sourceKind: input.parent.sourceKind,
+    onSiteFlag: input.analysis.onSiteFlag,
+    onSiteDetectedAt: input.analysis.onSiteDetectedAt,
+    onSiteReason: input.analysis.onSiteReason,
+    firstResponseBusinessMinutes: input.analysis.firstResponseBusinessMinutes,
+    templateBusinessMinutes: input.analysis.templateBusinessMinutes,
+    slaTargetBusinessMinutes: input.analysis.slaTargetBusinessMinutes,
+    claimId: input.analysis.claimId,
+    filingState: input.analysis.filingState,
+    filingEvidence: input.analysis.filingEvidence,
+    duplicateGroupKey: input.analysis.duplicateGroupKey,
+    dataWarnings: JSON.stringify(input.analysis.dataWarnings),
     lastSyncedAt: new Date(),
   };
 
@@ -184,6 +206,18 @@ export async function upsertLossIntakeClaimBundle(input: {
       teslaFootageRequested: sql`VALUES(\`teslaFootageRequested\`)`,
       qualityScore: sql`VALUES(\`qualityScore\`)`,
       missingElements: sql`VALUES(\`missingElements\`)`,
+      sourceKind: sql`VALUES(\`source_kind\`)`,
+      onSiteFlag: sql`VALUES(\`on_site_flag\`)`,
+      onSiteDetectedAt: sql`VALUES(\`on_site_detected_at\`)`,
+      onSiteReason: sql`VALUES(\`on_site_reason\`)`,
+      firstResponseBusinessMinutes: sql`VALUES(\`first_response_business_minutes\`)`,
+      templateBusinessMinutes: sql`VALUES(\`template_business_minutes\`)`,
+      slaTargetBusinessMinutes: sql`VALUES(\`sla_target_business_minutes\`)`,
+      claimId: sql`VALUES(\`claim_id\`)`,
+      filingState: sql`VALUES(\`filing_state\`)`,
+      filingEvidence: sql`VALUES(\`filing_evidence\`)`,
+      duplicateGroupKey: sql`VALUES(\`duplicate_group_key\`)`,
+      dataWarnings: sql`VALUES(\`data_warnings\`)`,
       isDuplicate: sql`VALUES(\`is_duplicate\`)`,
       originalSlackKey: sql`VALUES(\`original_slack_key\`)`,
       overflowRouted: sql`VALUES(\`overflow_routed\`)`,
@@ -198,6 +232,33 @@ export async function upsertLossIntakeClaimBundle(input: {
     .limit(1);
   const claimId = claimRows[0]?.id;
   if (!claimId) throw new Error("Loss Intake claim upsert did not return a claim ID");
+
+  let linkedClaimId = claimId;
+  if (input.isDuplicate && input.originalSlackKey) {
+    const original = await db
+      .select({ id: lossIntakeClaims.id })
+      .from(lossIntakeClaims)
+      .where(eq(lossIntakeClaims.slackKey, input.originalSlackKey))
+      .limit(1);
+    linkedClaimId = original[0]?.id ?? claimId;
+  }
+  const sourceLink: InsertLossIntakeSourceLink = {
+    claimId: linkedClaimId,
+    slackKey: input.parent.slackKey,
+    channelId: input.parent.channelId,
+    channelName: input.parent.channelName,
+    slackPermalink: input.parent.slackPermalink,
+    postedAt: input.parent.postedAt,
+    sourceRole: input.isDuplicate ? "duplicate" : "primary",
+  };
+  await db.insert(lossIntakeSourceLinks).values(sourceLink).onDuplicateKeyUpdate({
+    set: {
+      claimId: linkedClaimId,
+      slackPermalink: input.parent.slackPermalink,
+      postedAt: input.parent.postedAt,
+      sourceRole: sourceLink.sourceRole,
+    },
+  });
 
   if (input.analysis.events.length > 0) {
     const eventValues: InsertLossIntakeEvent[] = input.analysis.events.map(event => ({
@@ -263,6 +324,26 @@ export async function getLossIntakeClaimBySlackKey(slackKey: string) {
     })
     .from(lossIntakeClaims)
     .where(eq(lossIntakeClaims.slackKey, slackKey))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function findPrimaryLossIntakeClaimByDuplicateGroup(duplicateGroupKey: string | null) {
+  if (!duplicateGroupKey) return null;
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({
+      id: lossIntakeClaims.id,
+      slackKey: lossIntakeClaims.slackKey,
+      postedAt: lossIntakeClaims.postedAt,
+    })
+    .from(lossIntakeClaims)
+    .where(and(
+      eq(lossIntakeClaims.duplicateGroupKey, duplicateGroupKey),
+      eq(lossIntakeClaims.isDuplicate, false),
+    ))
+    .orderBy(asc(lossIntakeClaims.postedAt))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -598,6 +679,17 @@ export async function getLossIntakeSettingsByScheduleTaskUid(taskUid: string) {
     .select()
     .from(lossIntakeSettings)
     .where(eq(lossIntakeSettings.scheduleCronTaskUid, taskUid))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getLossIntakeSettingsByDispatchScheduleTaskUid(taskUid: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(lossIntakeSettings)
+    .where(eq(lossIntakeSettings.dispatchScheduleTaskUid, taskUid))
     .limit(1);
   return rows[0] ?? null;
 }

@@ -12,6 +12,7 @@ import { serveStatic, setupVite } from "./vite";
 import { aircallRouter } from "../aircall";
 import { startAircallSyncJob } from "../aircallSync";
 import { scheduledLossIntakeSyncHandler } from "../lossIntakeScheduled";
+import { scheduledLossIntakeDispatchHandler } from "../lossIntakeDispatchScheduled";
 import {
   SLACK_LOSS_INTAKE_PATH,
   slackLossIntakeEventsHandler,
@@ -170,6 +171,7 @@ async function startServer() {
 
   app.use("/api/aircall", aircallRouter);
   app.post("/api/scheduled/loss-intake-sync", scheduledLossIntakeSyncHandler);
+  app.post("/api/scheduled/loss-intake-dispatch", scheduledLossIntakeDispatchHandler);
 
   // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
