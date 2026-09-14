@@ -684,3 +684,6 @@
 
 ## September 2026 Standard Release Layout Refinement
 - [x] Use approved 2–3 page legal-document margins and a centered title for BI/PD releases while keeping all non-title content standard weight
+
+## September 2026 Loss Intake Backfill Reconciliation
+- [x] Reconcile September 7–11 Loss Intake records for unique losses, duplicate collapse, overall and segmented SLA attainment, median first-contact business minutes, statements obtained, and template posting
