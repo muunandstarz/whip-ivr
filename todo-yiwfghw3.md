@@ -676,8 +676,8 @@
 - [x] Inventory Whip Claims knowledge-base content, claims operations, loss-intake processes, and document-generation workflows for export
 - [x] Create a structured Claude Cowork knowledge package with source-grounded Markdown content and a CSV knowledge index
 - [x] Deliver a ZIP containing the reusable knowledge package and CSV index
-- [ ] Verify the live Loss Intake Dispatch board exposes the connected Claims Tracker state, source health, and disabled-by-default publishing controls
-- [ ] Repair Dispatch rows that render an incomplete SLA target and surface the live Claims Tracker connection state in Source Health
+- [x] Verify the live Loss Intake Dispatch board exposes the connected Claims Tracker state, source health, and disabled-by-default publishing controls
+- [x] Repair Dispatch rows that render an incomplete SLA target and surface the live Claims Tracker connection state in Source Health
 
 ## September 2026 Development Service Recovery
 - [x] Restore the stopped Whip IVR development server and confirm the preview is healthy
