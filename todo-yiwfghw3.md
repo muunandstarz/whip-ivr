@@ -667,6 +667,14 @@
 - [x] Make Blank Letterhead modular so handlers can add, omit, and reorder applicable content areas
 - [x] Keep a working formatted Blank Letterhead preview available throughout composition
 
+## September 2026 Claims Tracker and Knowledge Export
+- [ ] Enable Google Workspace access and connect Claims Tracker corroboration to Loss Intake Dispatch before scheduling live publish output
+- [ ] Implement corroboration against the specified Liability Claims Tracker workbook (`1kh3QUnUBYolTmffRCnO1rGYEIEkSvm8ltLrn_Y0ua8A`), with Slack remaining authoritative when sources disagree
+- [ ] Add a separate app-level, read-only Google Sheets authorization path so deployed Loss Intake Dispatch can query the authorized Claims Tracker workbook at runtime
+- [x] Inventory Whip Claims knowledge-base content, claims operations, loss-intake processes, and document-generation workflows for export
+- [x] Create a structured Claude Cowork knowledge package with source-grounded Markdown content and a CSV knowledge index
+- [ ] Deliver a ZIP containing the reusable knowledge package and CSV index
+
 ## September 2026 Development Service Recovery
 - [x] Restore the stopped Whip IVR development server and confirm the preview is healthy
 

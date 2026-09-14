@@ -41,6 +41,10 @@ import {
   buildGmailOAuthUrl,
   exchangeGmailCode,
 } from "../mail/ingestGmail";
+import {
+  buildClaimsTrackerOAuthUrl,
+  exchangeClaimsTrackerCode,
+} from "../claimsTrackerCorroboration";
 import mysql from "mysql2/promise";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -190,7 +194,9 @@ async function startServer() {
   app.post("/api/scheduled/mailQaWeekly", mailQaWeeklyHandler);
 
   // ─── Gmail OAuth connect ──────────────────────────────────────────────────
-  const GMAIL_REDIRECT_URI = `${process.env.VITE_APP_URL ?? "https://whipivr-tyswfku7.manus.space"}/api/mail/gmail-oauth-callback`;
+  const APP_BASE_URL = process.env.VITE_APP_URL ?? "https://whipivr-tyswfku7.manus.space";
+  const GMAIL_REDIRECT_URI = `${APP_BASE_URL}/api/mail/gmail-oauth-callback`;
+  const CLAIMS_TRACKER_REDIRECT_URI = `${APP_BASE_URL}/api/loss-intake/claims-tracker-oauth-callback`;
 
   /** Step 1: redirect admin to Google consent screen */
   // File proxy: stream S3 file to browser without X-Frame-Options blocking iframe preview
@@ -348,6 +354,18 @@ async function startServer() {
     }
     let conn: mysql.Connection | null = null;
     try {
+      if (req.query.state === "claims-tracker-readonly") {
+        const tokens = await exchangeClaimsTrackerCode(code, GMAIL_REDIRECT_URI);
+        if (!tokens.refresh_token) throw new Error("Google did not return a refresh token. Reconnect and approve the read-only Sheets permission.");
+        conn = await mysql.createConnection(process.env.DATABASE_URL!);
+        await conn.execute(
+          `INSERT INTO mail_settings (\`key\`, value) VALUES ('claims_tracker_refresh_token', ?)
+           ON DUPLICATE KEY UPDATE value = VALUES(value)`,
+          [tokens.refresh_token],
+        );
+        res.redirect("/#/loss-intake?claimsTracker=connected");
+        return;
+      }
       const tokens = await exchangeGmailCode(code, GMAIL_REDIRECT_URI);
       conn = await mysql.createConnection(process.env.DATABASE_URL!);
       // Upsert the refresh token into mail_settings
@@ -377,6 +395,49 @@ async function startServer() {
       res.json({ connected: !!row?.value });
     } catch (e) {
       res.json({ connected: false, error: String(e) });
+    } finally {
+      if (conn) await conn.end();
+    }
+  });
+
+  /** Starts a dedicated, read-only Google Sheets grant for Claims Tracker corroboration. */
+  app.get("/api/loss-intake/claims-tracker-oauth-start", (_req, res) => {
+    // Reuse the existing registered Google redirect URI. `state` routes the callback
+    // to a separate Sheets-only token store, so this never replaces Gmail access.
+    res.redirect(buildClaimsTrackerOAuthUrl(GMAIL_REDIRECT_URI));
+  });
+
+  /** Stores the Claims Tracker refresh token separately from claims-mail OAuth. */
+  app.get("/api/loss-intake/claims-tracker-oauth-callback", async (req, res) => {
+    const code = req.query.code as string;
+    if (!code) { res.status(400).send("Missing authorization code."); return; }
+    let conn: mysql.Connection | null = null;
+    try {
+      const tokens = await exchangeClaimsTrackerCode(code, CLAIMS_TRACKER_REDIRECT_URI);
+      if (!tokens.refresh_token) throw new Error("Google did not return a refresh token. Reconnect and approve the read-only Sheets permission.");
+      conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      await conn.execute(
+        `INSERT INTO mail_settings (\`key\`, value) VALUES ('claims_tracker_refresh_token', ?)
+         ON DUPLICATE KEY UPDATE value = VALUES(value)`,
+        [tokens.refresh_token],
+      );
+      res.redirect("/#/loss-intake?claimsTracker=connected");
+    } catch (error) {
+      console.error("[claims-tracker-oauth-callback] error:", error);
+      res.redirect(`/#/loss-intake?claimsTracker=error&msg=${encodeURIComponent(String(error))}`);
+    } finally {
+      if (conn) await conn.end();
+    }
+  });
+
+  app.get("/api/loss-intake/claims-tracker-status", async (_req, res) => {
+    let conn: mysql.Connection | null = null;
+    try {
+      conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      const [[row]] = await conn.execute<any[]>("SELECT value FROM mail_settings WHERE `key` = 'claims_tracker_refresh_token'");
+      res.json({ connected: Boolean(row?.value), mode: "read_only" });
+    } catch (error) {
+      res.json({ connected: false, mode: "read_only", error: String(error) });
     } finally {
       if (conn) await conn.end();
     }

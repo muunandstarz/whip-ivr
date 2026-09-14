@@ -16,6 +16,10 @@ import {
   type SlackLossMessage,
   type SlackLossParent,
 } from "./lossIntakeDomain";
+import {
+  applyClaimsTrackerCorroboration,
+  getClaimsTrackerIndex,
+} from "./claimsTrackerCorroboration";
 
 const SLACK_API_BASE = "https://slack.com/api";
 const INITIAL_BACKFILL_DAYS = 30;
@@ -377,13 +381,14 @@ export async function resyncLossIntakeThread(input: {
     };
     const parsedParent = parseLossNoticeParent(parent);
     if (!parsedParent) return false;
-    const analysis = analyzeFnolThread({
+    const slackAnalysis = analyzeFnolThread({
       parent: parsedParent,
       replies: thread.slice(1),
       assignments: input.assignments,
       slaMinutes: input.slaMinutes,
       atRiskMinutes: input.atRiskMinutes,
     });
+    const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex());
     await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis });
     console.log(`[Loss Intake] Reconciled original thread ${input.channelId}:${input.threadTs} — stage=${analysis.stage}, completed=${!!analysis.completedAt}`);
     return true;
@@ -406,6 +411,7 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
       claimsProcessingChannelId: settings.claimsProcessingChannelId,
       oldest: incrementalOldest(settings.lastSuccessfulSyncAt),
     });
+    const claimsTrackerIndex = await getClaimsTrackerIndex();
 
     let claimsDiscovered = 0;
     let claimsUpdated = 0;
@@ -430,13 +436,14 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
       if (!parsedParent) continue;
       if (target.discoveredParent) claimsDiscovered += 1;
 
-      const analysis = analyzeFnolThread({
+      const slackAnalysis = analyzeFnolThread({
         parent: parsedParent,
         replies: thread.slice(1),
         assignments,
         slaMinutes: settings.firstContactSlaMinutes,
         atRiskMinutes: settings.atRiskMinutes,
       });
+      const analysis = applyClaimsTrackerCorroboration(slackAnalysis, claimsTrackerIndex);
       const primary = await findPrimaryLossIntakeClaimByDuplicateGroup(analysis.duplicateGroupKey);
       const isDuplicate = Boolean(primary && primary.slackKey !== parsedParent.slackKey);
       await upsertLossIntakeClaimBundle({

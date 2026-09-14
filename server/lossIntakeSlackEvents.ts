@@ -20,6 +20,10 @@ import {
   type SlackLossMessage,
   type SlackLossParent,
 } from "./lossIntakeDomain";
+import {
+  applyClaimsTrackerCorroboration,
+  getClaimsTrackerIndex,
+} from "./claimsTrackerCorroboration";
 
 export const SLACK_LOSS_INTAKE_PATH = "/api/slack/loss-intake-events";
 export const SLACK_LOSS_INTAKE_TEAM_ID = "TFFUXNU57";
@@ -349,13 +353,14 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
       const parsedParent = parseLossNoticeParent(parent);
       if (!parsedParent) return { status: "ignored" as const };
       const replies = pendingReplies.get(threadKey) ?? [];
-      const analysis = analyzeFnolThread({
+      const slackAnalysis = analyzeFnolThread({
         parent: parsedParent,
         replies,
         assignments,
         slaMinutes: settings.firstContactSlaMinutes,
         atRiskMinutes: settings.atRiskMinutes,
       });
+      const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex());
 
       // ── Duplicate FNOL detection ──────────────────────────────────────────
       // A forwarded message has an `attachments` array with `from_channel` + `ts`.
@@ -457,13 +462,14 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
 
     const parent = rehydrateParent(threadState);
     const replies = mergeReplies(rehydrateReplies(threadState), [message]);
-    const analysis = analyzeFnolThread({
+    const slackAnalysis = analyzeFnolThread({
       parent,
       replies,
       assignments,
       slaMinutes: settings.firstContactSlaMinutes,
       atRiskMinutes: settings.atRiskMinutes,
     });
+    const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex());
     await upsertLossIntakeClaimBundle({ parent, analysis });
 
     // If this reply mentions @claims-intake, start the SLA clock on the existing claim
