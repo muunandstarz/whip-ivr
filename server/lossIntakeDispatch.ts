@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ENV } from "./_core/env";
 import {
   getLossIntakeSettings,
@@ -47,6 +48,18 @@ function formatBusinessMinutes(minutes: number | null) {
   if (minutes === null) return "not started";
   if (minutes < 60) return `${Math.round(minutes)} business min`;
   return `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m business time`;
+}
+
+export function dispatchMessageSignature(message: string) {
+  return createHash("sha256").update(message).digest("hex");
+}
+
+export function shouldPublishDispatchMessage(input: {
+  previousSignature: string | null | undefined;
+  previousMessageTs: string | null | undefined;
+  nextMessage: string;
+}) {
+  return !input.previousMessageTs || input.previousSignature !== dispatchMessageSignature(input.nextMessage);
 }
 
 function dispatchTargetMinutes(claim: DispatchWorkClaim) {
@@ -139,19 +152,29 @@ export async function publishLossIntakeDispatch(input: { now?: Date; publishProc
   const messages = buildDispatchMessages(claims as DispatchWorkClaim[], now);
   const patch: Record<string, string | null> = {};
 
-  if (input.publishProcessors) {
+  if (input.publishProcessors && shouldPublishDispatchMessage({
+    previousSignature: settings.processorsDigestSignature,
+    previousMessageTs: settings.processorsDigestMessageTs,
+    nextMessage: messages.processorsMessage,
+  })) {
     patch.processorsDigestMessageTs = await slackPostOrUpdate({
       channel: settings.claimsProcessorsChannelId,
       text: messages.processorsMessage,
     });
+    patch.processorsDigestSignature = dispatchMessageSignature(messages.processorsMessage);
   }
-  if (input.publishIntake) {
+  if (input.publishIntake && shouldPublishDispatchMessage({
+    previousSignature: settings.intakeDigestSignature,
+    previousMessageTs: settings.intakeDigestMessageTs,
+    nextMessage: messages.intakeMessage,
+  })) {
     const sameDay = settings.intakeDigestDateKey === messages.dateKey;
     patch.intakeDigestMessageTs = await slackPostOrUpdate({
       channel: settings.claimsIntakeRepsChannelId,
       text: messages.intakeMessage,
       messageTs: sameDay ? settings.intakeDigestMessageTs : null,
     });
+    patch.intakeDigestSignature = dispatchMessageSignature(messages.intakeMessage);
     patch.intakeDigestDateKey = messages.dateKey;
   }
   if (Object.keys(patch).length) {

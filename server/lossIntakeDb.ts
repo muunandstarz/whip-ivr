@@ -49,7 +49,9 @@ export const DEFAULT_LOSS_INTAKE_SETTINGS = {
   scheduleCronTaskUid: null,
   dispatchScheduleTaskUid: null,
   processorsDigestMessageTs: null,
+  processorsDigestSignature: null,
   intakeDigestMessageTs: null,
+  intakeDigestSignature: null,
   intakeDigestDateKey: null,
 } satisfies InsertLossIntakeSetting;
 

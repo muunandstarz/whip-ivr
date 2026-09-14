@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDispatchMessages, type DispatchWorkClaim } from "./lossIntakeDispatch";
+import { buildDispatchMessages, dispatchMessageSignature, shouldPublishDispatchMessage, type DispatchWorkClaim } from "./lossIntakeDispatch";
 
 function claim(overrides: Partial<DispatchWorkClaim> = {}): DispatchWorkClaim {
   return {
@@ -49,5 +49,24 @@ describe("Loss Intake Dispatch outputs", () => {
     ], new Date("2026-09-11T14:00:00.000Z"));
     expect(result.intakeMessage).toContain("of 240-minute target");
     expect(result.intakeMessage).not.toContain("of —-minute target");
+  });
+
+  it("suppresses a repeat Dispatch post when the destination already has the same content", () => {
+    const message = buildDispatchMessages([claim()], new Date("2026-09-11T14:00:00.000Z")).processorsMessage;
+    expect(shouldPublishDispatchMessage({
+      previousMessageTs: "1757600000.000100",
+      previousSignature: dispatchMessageSignature(message),
+      nextMessage: message,
+    })).toBe(false);
+    expect(shouldPublishDispatchMessage({
+      previousMessageTs: "1757600000.000100",
+      previousSignature: dispatchMessageSignature(message),
+      nextMessage: `${message}\nNew source evidence`,
+    })).toBe(true);
+    expect(shouldPublishDispatchMessage({
+      previousMessageTs: null,
+      previousSignature: dispatchMessageSignature(message),
+      nextMessage: message,
+    })).toBe(true);
   });
 });
