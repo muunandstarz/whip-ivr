@@ -197,6 +197,7 @@ async function startServer() {
   const APP_BASE_URL = process.env.VITE_APP_URL ?? "https://whipivr-tyswfku7.manus.space";
   const GMAIL_REDIRECT_URI = `${APP_BASE_URL}/api/mail/gmail-oauth-callback`;
   const CLAIMS_TRACKER_REDIRECT_URI = `${APP_BASE_URL}/api/loss-intake/claims-tracker-oauth-callback`;
+  const CLAIMS_TRACKER_OAUTH_START_PATH = "/api/loss-intake/claims-tracker-oauth-start";
 
   /** Step 1: redirect admin to Google consent screen */
   // File proxy: stream S3 file to browser without X-Frame-Options blocking iframe preview
@@ -401,7 +402,7 @@ async function startServer() {
   });
 
   /** Starts a dedicated, read-only Google Sheets grant for Claims Tracker corroboration. */
-  app.get("/api/loss-intake/claims-tracker-oauth-start", (_req, res) => {
+  app.get(CLAIMS_TRACKER_OAUTH_START_PATH, (_req, res) => {
     // Reuse the existing registered Google redirect URI. `state` routes the callback
     // to a separate Sheets-only token store, so this never replaces Gmail access.
     res.redirect(buildClaimsTrackerOAuthUrl(GMAIL_REDIRECT_URI));
