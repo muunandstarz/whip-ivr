@@ -444,7 +444,11 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
         atRiskMinutes: settings.atRiskMinutes,
       });
       const analysis = applyClaimsTrackerCorroboration(slackAnalysis, claimsTrackerIndex);
-      const primary = await findPrimaryLossIntakeClaimByDuplicateGroup(analysis.duplicateGroupKey);
+      const primary = await findPrimaryLossIntakeClaimByDuplicateGroup({
+        duplicateGroupKey: analysis.duplicateGroupKey,
+        customerId: parsedParent.customerId,
+        vinLastSix: parsedParent.vinLastSix,
+      });
       const isDuplicate = Boolean(primary && primary.slackKey !== parsedParent.slackKey);
       await upsertLossIntakeClaimBundle({
         parent: parsedParent,

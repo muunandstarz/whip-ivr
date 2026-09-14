@@ -330,24 +330,36 @@ export async function getLossIntakeClaimBySlackKey(slackKey: string) {
   return rows[0] ?? null;
 }
 
-export async function findPrimaryLossIntakeClaimByDuplicateGroup(duplicateGroupKey: string | null) {
-  if (!duplicateGroupKey) return null;
+export async function findPrimaryLossIntakeClaimByDuplicateGroup(input: {
+  duplicateGroupKey: string | null;
+  customerId?: string | null;
+  vinLastSix?: string | null;
+}) {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db
-    .select({
-      id: lossIntakeClaims.id,
-      slackKey: lossIntakeClaims.slackKey,
-      postedAt: lossIntakeClaims.postedAt,
-    })
-    .from(lossIntakeClaims)
-    .where(and(
-      eq(lossIntakeClaims.duplicateGroupKey, duplicateGroupKey),
-      eq(lossIntakeClaims.isDuplicate, false),
-    ))
-    .orderBy(asc(lossIntakeClaims.postedAt))
-    .limit(1);
-  return rows[0] ?? null;
+  const selection = {
+    id: lossIntakeClaims.id,
+    slackKey: lossIntakeClaims.slackKey,
+    postedAt: lossIntakeClaims.postedAt,
+  };
+  const primary = eq(lossIntakeClaims.isDuplicate, false);
+  const rows = input.duplicateGroupKey
+    ? await db.select(selection).from(lossIntakeClaims).where(and(
+      eq(lossIntakeClaims.duplicateGroupKey, input.duplicateGroupKey),
+      primary,
+    )).orderBy(asc(lossIntakeClaims.postedAt)).limit(1)
+    : [];
+  if (rows[0]) return rows[0];
+
+  // Older rows predate duplicate_group_key. Exact customer-and-VIN identity is
+  // sufficient for a safe fallback and prevents a later repeat from inflating the queue.
+  if (!input.customerId || !input.vinLastSix) return null;
+  const legacyRows = await db.select(selection).from(lossIntakeClaims).where(and(
+    eq(lossIntakeClaims.customerId, input.customerId),
+    eq(lossIntakeClaims.vinLastSix, input.vinLastSix),
+    primary,
+  )).orderBy(asc(lossIntakeClaims.postedAt)).limit(1);
+  return legacyRows[0] ?? null;
 }
 
 /** Called when @claims-intake is tagged in a remote-ops thread — starts the SLA clock on the existing claim */

@@ -146,4 +146,17 @@ describe("Slack Loss Intake same-thread processing", () => {
     expect(dbMocks.getLossIntakeThreadState).toHaveBeenCalledTimes(2);
     expect(dbMocks.upsertLossIntakeClaimBundle).toHaveBeenCalledTimes(2);
   });
+
+  it("passes exact customer and VIN identity into the duplicate-primary lookup", async () => {
+    dbMocks.getLossIntakeThreadState.mockResolvedValue(null);
+    dbMocks.upsertLossIntakeClaimBundle.mockResolvedValue(undefined);
+
+    await expect(processSlackLossIntakeEvent(parentEnvelope)).resolves.toMatchObject({ status: "created" });
+
+    expect(dbMocks.findPrimaryLossIntakeClaimByDuplicateGroup).toHaveBeenCalledWith(expect.objectContaining({
+      duplicateGroupKey: "customer:10944:vin:391546",
+      customerId: "10944",
+      vinLastSix: "391546",
+    }));
+  });
 });

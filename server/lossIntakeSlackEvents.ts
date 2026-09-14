@@ -400,7 +400,11 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
         }
       }
       if (!isDuplicate) {
-        const primary = await findPrimaryLossIntakeClaimByDuplicateGroup(analysis.duplicateGroupKey);
+        const primary = await findPrimaryLossIntakeClaimByDuplicateGroup({
+          duplicateGroupKey: analysis.duplicateGroupKey,
+          customerId: parsedParent.customerId,
+          vinLastSix: parsedParent.vinLastSix,
+        });
         if (primary && primary.slackKey !== parsedParent.slackKey && primary.postedAt.getTime() <= parsedParent.postedAt.getTime()) {
           isDuplicate = true;
           originalSlackKey = primary.slackKey;

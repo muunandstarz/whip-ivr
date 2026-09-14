@@ -690,6 +690,6 @@
 
 ## September 2026 Loss Intake Data and Safeguard Audit
 - [ ] Audit the September 10 Gravity Forms exclusion, Eddie Jones duplicate pair, Chasten Baker and John Montague SLA clocks, unfiled evidence, Chicago routing, in-office detection, Contina Smith status, processor wording, and quiet-hours behavior without creating live Slack posts
-- [ ] Repair the discovered historical duplicate-collapse gap for the Eddie Jones / member 12850 / VIN 672938 pair without overwriting source links or operational evidence
+- [x] Repair the discovered historical duplicate-collapse gap for the Eddie Jones / member 12850 / VIN 672938 pair without overwriting source links or operational evidence
 - [x] Prevent unchanged Loss Intake Dispatch processor and intake worklist runs from posting or updating Slack messages
 - [ ] Restore authorized Slack source-history access for the configured Loss Intake channels so excluded Gravity Forms posts and absent source notices can be counted and audited
