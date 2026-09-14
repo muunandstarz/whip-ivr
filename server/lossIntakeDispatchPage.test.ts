@@ -17,4 +17,10 @@ describe("Loss Intake Dispatch page", () => {
     expect(page).toContain("10-minute attempt target");
     expect(page).toContain("Remote-market reports are evaluated");
   });
+
+  it("shows the live read-only Claims Tracker state and never renders a blank SLA target", () => {
+    expect(page).toContain("claimsTrackerStatus");
+    expect(page).toContain("Connected read-only");
+    expect(page).toContain("dispatchTargetLabel(claim)");
+  });
 });

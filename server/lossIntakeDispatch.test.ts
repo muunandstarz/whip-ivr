@@ -7,6 +7,7 @@ function claim(overrides: Partial<DispatchWorkClaim> = {}): DispatchWorkClaim {
     memberName: "Alex Member",
     customerId: "1001",
     market: "Atlanta",
+    channelName: "claims",
     vinLastSix: "123456",
     postedAt: new Date("2026-09-11T13:00:00.000Z"),
     slackPermalink: "https://example.test/thread",
@@ -40,5 +41,13 @@ describe("Loss Intake Dispatch outputs", () => {
     expect(result.processorsMessage).toContain("File with the information available. Do not call the member.");
     expect(result.intake[0]?.memberName).toBe("Remote Member");
     expect(result.intakeMessage).toContain("(this driver appears to be in office)");
+  });
+
+  it("uses a safe default target for legacy claims whose persisted SLA target is absent", () => {
+    const result = buildDispatchMessages([
+      claim({ slaTargetBusinessMinutes: null, channelName: "remote-markets", firstResponseBusinessMinutes: 30 }),
+    ], new Date("2026-09-11T14:00:00.000Z"));
+    expect(result.intakeMessage).toContain("of 240-minute target");
+    expect(result.intakeMessage).not.toContain("of —-minute target");
   });
 });

@@ -12,6 +12,7 @@ export type DispatchWorkClaim = {
   memberName: string | null;
   customerId: string | null;
   market: string | null;
+  channelName: string;
   vinLastSix: string | null;
   postedAt: Date;
   slackPermalink: string | null;
@@ -46,6 +47,10 @@ function formatBusinessMinutes(minutes: number | null) {
   if (minutes === null) return "not started";
   if (minutes < 60) return `${Math.round(minutes)} business min`;
   return `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m business time`;
+}
+
+function dispatchTargetMinutes(claim: DispatchWorkClaim) {
+  return claim.slaTargetBusinessMinutes ?? (claim.channelName === "remote-markets" ? 240 : 10);
 }
 
 function sourceLink(claim: DispatchWorkClaim) {
@@ -93,7 +98,7 @@ export function buildDispatchMessages(claims: DispatchWorkClaim[], now = new Dat
     ? ["No active recorded-statement follow-up is currently required."]
     : intake.map((claim, index) => [
       `*${index + 1}. ${claim.onSiteFlag ? "(this driver appears to be in office) " : ""}${claim.memberName ?? "Unidentified member"}${claim.customerId ? ` · Customer ${claim.customerId}` : ""}*`,
-      `${claim.market ?? "Market unknown"} · VIN ${claim.vinLastSix ?? "not captured"} · ${formatBusinessMinutes(claim.firstResponseBusinessMinutes)} of ${claim.slaTargetBusinessMinutes ?? "—"}-minute target`,
+      `${claim.market ?? "Market unknown"} · VIN ${claim.vinLastSix ?? "not captured"} · ${formatBusinessMinutes(claim.firstResponseBusinessMinutes)} of ${dispatchTargetMinutes(claim)}-minute target`,
       `Status: ${claim.slaState.replace("_", " ")} · Attempts documented: ${claim.contactAttempts}`,
       claim.onSiteReason ? `On-site evidence: ${claim.onSiteReason}` : null,
       `Thread: ${sourceLink(claim)}`,

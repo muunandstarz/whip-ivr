@@ -25,6 +25,7 @@ import {
 } from "../lossIntakeDb";
 import { runLossIntakeSlackSync } from "../lossIntakeSlackSync";
 import { publishLossIntakeDispatch } from "../lossIntakeDispatch";
+import { getClaimsTrackerIndex } from "../claimsTrackerCorroboration";
 
 const stageSchema = z.enum([
   "awaiting_outreach",
@@ -286,6 +287,18 @@ export const lossIntakeRouter = router({
       getLatestLossIntakeSyncRun(),
     ]);
     return { settings, latestRun };
+  }),
+
+  claimsTrackerStatus: protectedProcedure.query(async ({ ctx }) => {
+    requireAdmin(ctx.user);
+    const index = await getClaimsTrackerIndex();
+    return {
+      connected: index.available,
+      filedVinCount: index.filedVins.size,
+      pendingVinCount: index.unfiledVins.size,
+      warning: index.warning ?? null,
+      mode: "read_only" as const,
+    };
   }),
 
   sync: router({
