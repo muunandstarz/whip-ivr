@@ -10,8 +10,8 @@ describe('Unified COI insurer subscription-start rule', () => {
     expect(source).toContain('form.subscriptionStartDate >= KLUTCH_SUBSCRIPTION_START_CUTOFF ? "klutch" : "metrocars"');
   });
 
-  it('collects Subscription Start Date and labels carrier guidance accordingly', () => {
-    expect(source).toContain('<Field label="Subscription Start Date" id="coi-subscription-start"');
+  it('collects one Date Issued and Subscription Start Date and labels carrier guidance accordingly', () => {
+    expect(source).toContain('<Field label="Date Issued / Subscription Start Date" id="coi-issue-start-date"');
     expect(source).toContain('Subscription Start Date July 1, 2026 or later');
     expect(source).toContain('Subscription Start Date before July 1, 2026');
     expect(source).not.toContain('Date of loss July 1, 2026 or later');

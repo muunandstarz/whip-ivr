@@ -12,11 +12,11 @@ describe('Klutch coverage navigation', () => {
 
   it('retains the approved Klutch Policy Declarations entry', () => {
     expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText }');
-    expect(source).toContain('src="/klutch-policy-declarations.html"');
+    expect(source).toContain('case "klutch-policy-declarations": return <KlutchDecPageTab initialState={initialMemberState} />');
   });
 
-  it('also exposes the separate interactive Klutch Dec Page form', () => {
-    expect(source).toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText }');
-    expect(source).toContain('case "dec-page-whip": return <KlutchDecPageTab initialState={initialMemberState} />');
+  it('removes the separate Klutch Dec Page entry and routes legacy links to the approved page', () => {
+    expect(source).not.toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText }');
+    expect(source).toContain('if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;');
   });
 });

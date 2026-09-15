@@ -85,7 +85,6 @@ type DocGenTab =
   | "lou-calculator"
   | "coi-whip"
   | "coi-klutch"
-  | "dec-page-whip"
   | "klutch-policy-declarations"
   | "dv-calculator";
 
@@ -110,7 +109,6 @@ const NAV_GROUPS: NavGroup[] = [
 
       { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
       { id: "coi-whip", label: "Certificate of Insurance", icon: Shield },
-      { id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText },
       { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText },
     ],
   },
@@ -6372,25 +6370,28 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     expirationDate: "",
     dateOfLoss: "",
     subscriptionStartDate: "",
-    certDate: new Date().toISOString().slice(0, 10),
     certNumber: "",
     revisionNumber: "",
     specialProvisions: "",
   });
   const set = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
+  const setCoiIssueAndSubscriptionDate = (value: string) => setForm(p => ({
+    ...p,
+    subscriptionStartDate: value,
+  }));
   const isAutomaticUmRejection = state === "FL" || state === "GA";
   const isFloridaPipMandatory = state === "FL";
   React.useEffect(() => {
     setUmRejected(isAutomaticUmRejection);
     if (isFloridaPipMandatory) setPipWaived(false);
   }, [isAutomaticUmRejection, isFloridaPipMandatory]);
-  // Auto-compute coverage-through date whenever effectiveDate, state, or stillInRental changes
+  // Date Issued and Subscription Start Date are a single COI date.
   const coiCoverage = React.useMemo(() => computeCoverageThrough({
-    startDateStr: form.certDate,
+    startDateStr: form.subscriptionStartDate,
     state,
     stillInRental: stillInRentalCOI,
     dateOfLossStr: form.dateOfLoss,
-  }), [form.certDate, form.dateOfLoss, state, stillInRentalCOI]);
+  }), [form.subscriptionStartDate, form.dateOfLoss, state, stillInRentalCOI]);
   React.useEffect(() => {
     if (stillInRentalCOI && coiCoverage.throughDate && !coiCoverage.warning) {
       setForm(p => ({ ...p, expirationDate: formatDateISO(coiCoverage.throughDate!) }));
@@ -6499,7 +6500,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(0, 0, 0);
-    doc.text(fmtDate(form.certDate) || new Date().toLocaleDateString("en-US"), rm, y + 7, { align: "right" });
+    doc.text(fmtDate(form.subscriptionStartDate) || new Date().toLocaleDateString("en-US"), rm, y + 7, { align: "right" });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
@@ -6597,7 +6598,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
       doc.text("INSURER A:", c3x, y + 7);
       doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-      doc.text("Klutch Insurance Company", c3x + 14, y + 7);
+      doc.text("Klutch Insurance Company · NAIC 17966", c3x + 14, y + 7);
       doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
       doc.text("CERT. NO:", c3x, y + 10.5);
       doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", c3x + 14, y + 10.5);
@@ -6962,7 +6963,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
                 <Checkbox checked={stillInRentalCOI} onCheckedChange={(v) => setStillInRentalCOI(!!v)} />
                 <div>
                   <div className="text-xs font-semibold">Driver is still in the rental</div>
-                  <div className="text-xs text-muted-foreground">Auto-computes Coverage Through from Date Issued + state rules</div>
+                  <div className="text-xs text-muted-foreground">Auto-computes Coverage Through from the Date Issued / Subscription Start Date + state rules</div>
                 </div>
               </label>
             </div>
@@ -6973,11 +6974,10 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{coiCoverage.helperText}</div>
             )}
             <Grid2>
-              <Field label="Subscription Start Date" id="coi-subscription-start" value={form.subscriptionStartDate} onChange={set("subscriptionStartDate")} type="date" />
+              <Field label="Date Issued / Subscription Start Date" id="coi-issue-start-date" value={form.subscriptionStartDate} onChange={setCoiIssueAndSubscriptionDate} type="date" />
               <Field label="Date of Loss" id="coi-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
             </Grid2>
             <Grid2>
-              <Field label="Date Issued" id="coi-certdate" value={form.certDate} onChange={set("certDate")} type="date" />
               <Field label="Expiration Date" id="coi-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid2>
             <Grid2>
@@ -7024,8 +7024,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             `CERTIFICATE OF INSURANCE`,
             `Issuing Carrier: ${isKlutch ? "Klutch Insurance Company" : "Metrocars Leasing Corp (Self-Insured)"}`,
             `Certificate No.: ${form.certNumber || "—"}`,
-            `Subscription Start Date: ${form.subscriptionStartDate ? new Date(form.subscriptionStartDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
-            `Date Issued: ${form.certDate ? new Date(form.certDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
+            `Date Issued / Subscription Start Date: ${form.subscriptionStartDate ? new Date(form.subscriptionStartDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"}`,
             ``,
             `Named Operator: ${form.namedOperator || "—"}`,
             `Vehicle: ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}`,
@@ -7095,7 +7094,6 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     effectiveDate: "",
     expirationDate: "",
     dateOfLoss: "",
-    issuedDate: "",
     weeklyRate: "",
     collisionDeductible: "$1,000",
     compDeductible: "$1,000",
@@ -7136,13 +7134,6 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   };
 
   const rules = DEC_STATE_RULES[state] || DEC_STATE_RULES["MD"];
-
-  // Auto-sync issued date to effective date
-  React.useEffect(() => {
-    if (form.effectiveDate && !form.issuedDate) {
-      setForm(p => ({ ...p, issuedDate: p.effectiveDate }));
-    }
-  }, [form.effectiveDate]);
 
   // Auto-generate policy number when state changes
   React.useEffect(() => {
@@ -7443,7 +7434,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFont("helvetica", "bold"); doc.setFontSize(6.3); C(GRAY);
     doc.text("YOUR POLICY IS WRITTEN BY", sideX + 3, syi); syi += 3.4;
     doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); C(INK);
-    doc.text("Klutch Insurance Company", sideX + 3, syi);
+    doc.text("Klutch Insurance Company · NAIC 17966", sideX + 3, syi);
     sy += sumH + 4;
 
     sideBar("How to Report a Claim");
@@ -7545,7 +7536,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   doc.text("President & CEO, Klutch Insurance Company", lm, y + 18);
   D(INK); doc.line(lm + 75, y + 10, lm + 120, y + 10);
   doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
-  doc.text(fmtDate(form.issuedDate || form.effectiveDate), lm + 75, y + 8);
+  doc.text(fmtDate(form.effectiveDate), lm + 75, y + 8);
   doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); C(GRAY);
   doc.text("Date Issued", lm + 75, y + 14);
 
@@ -7636,7 +7627,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
                 <Checkbox checked={stillInRentalDec} onCheckedChange={(v) => setStillInRentalDec(!!v)} />
                 <div>
                   <div className="text-xs font-semibold">Driver is still in the rental</div>
-                  <div className="text-xs text-muted-foreground">Auto-computes Expiration Date from Date Issued + state rules</div>
+                  <div className="text-xs text-muted-foreground">Auto-computes Expiration Date from the Date Issued / Subscription Start Date + state rules</div>
                 </div>
               </label>
             </div>
@@ -7647,7 +7638,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
               <div className="mb-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">{decCoverage.helperText}</div>
             )}
             <Grid2>
-              <Field label="Date Issued" id="dp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
+              <Field label="Date Issued / Subscription Start Date" id="dp-eff" value={form.effectiveDate} onChange={set("effectiveDate")} type="date" />
               <Field label="Expiration Date" id="dp-exp" value={form.expirationDate} onChange={set("expirationDate")} type="date" />
             </Grid2>
             <Grid3>
@@ -7830,7 +7821,8 @@ export default function DocGenerator() {
   const initialTab = (() => {
     const params = new URLSearchParams(search);
     const t = params.get("tab");
-    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","dec-page-whip","klutch-policy-declarations","dv-calculator"];
+    if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;
+    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","klutch-policy-declarations","dv-calculator"];
     return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
   })();
   const initialMemberState = (() => {
@@ -7934,8 +7926,7 @@ export default function DocGenerator() {
       case "pip-bill-review": return <MedicalBillReviewTab />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
-      case "dec-page-whip": return <KlutchDecPageTab initialState={initialMemberState} />;
-      case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;
+      case "klutch-policy-declarations": return <KlutchDecPageTab initialState={initialMemberState} />;
       case "dv-calculator": return <DVCalculatorTab />;
       default: return null;
     }

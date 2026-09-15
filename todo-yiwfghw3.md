@@ -693,3 +693,9 @@
 - [x] Repair the discovered historical duplicate-collapse gap for the Eddie Jones / member 12850 / VIN 672938 pair without overwriting source links or operational evidence
 - [x] Prevent unchanged Loss Intake Dispatch processor and intake worklist runs from posting or updating Slack messages
 - [ ] Restore authorized Slack source-history access for the configured Loss Intake channels so excluded Gravity Forms posts and absent source notices can be counted and audited
+
+## September 2026 Approved Klutch Declarations Consolidation
+- [x] Remove the obsolete interactive Klutch Dec Page sidebar entry and retain the approved Klutch Policy Declarations entry
+- [x] Add the still-in-rental expiration calculator to the approved Klutch Declarations page and unify Subscription Start Date with Date Issued in the COI and approved declarations workflows
+- [x] Add Klutch Insurance Company NAIC 17966 to the appropriate insurer-identification area of the COI and approved Declarations output
+- [x] Defer the pending Slack source-history audit per the user's request to put a pin in it; do not create an external Slack pin or post
