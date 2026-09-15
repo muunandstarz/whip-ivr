@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("./DocGenerator.tsx", import.meta.url), "utf8");
 
 describe("approved Klutch Declarations navigation", () => {
-  it("keeps one approved entry and renders its interactive calculator instead of an isolated static iframe", () => {
+  it("keeps one approved entry and preserves its approved HTML view", () => {
     expect(source).not.toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page"');
     expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)"');
-    expect(source).toContain('case "klutch-policy-declarations": return <KlutchDecPageTab initialState={initialMemberState} />;');
+    expect(source).toContain('case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html"');
     expect(source).toContain('if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;');
   });
 

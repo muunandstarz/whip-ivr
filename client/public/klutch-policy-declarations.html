@@ -61,6 +61,9 @@
   .state-option input[type="checkbox"] { margin: 0; }
   .state-option label { font-size: 11.5px; font-weight: 500; color: var(--black); text-transform: none; letter-spacing: 0; }
   .state-options.hidden { display: none; }
+  .rental-toggle { display: flex; align-items: center; gap: 8px; min-height: 31px; padding-top: 4px; font-size: 12px; font-weight: 600; color: var(--black); }
+  .rental-helper { grid-column: 1 / -1; padding: 8px 10px; border: 1px solid #cbd8e7; background: #f4f8fc; color: var(--mid); font-size: 11px; line-height: 1.45; }
+  .rental-helper.warning { border-color: #e6d88a; background: #fefbe8; color: #725c00; }
   .hidden { display: none !important; }
 
   /* ── PAGE ────────────────────────────────────── */
@@ -201,7 +204,6 @@
         <option value="IL">IL — Illinois</option>
         <option value="MA">MA — Massachusetts</option>
         <option value="PA">PA — Pennsylvania</option>
-        <option value="NJ">NJ — New Jersey</option>
         <option value="TX">TX — Texas</option>
       </select>
     </div>
@@ -210,13 +212,24 @@
       <input type="text" id="f_policynum" placeholder="MD-000S0137" readonly="">
     </div>
     <div class="filler-field">
-      <label>Effective Date (Pick-Up Date)</label>
-      <input type="date" id="f_eff" onchange="calcWeeks(); syncIssuedToEff();">
+      <label>Date Issued / Subscription Start Date (Pick-Up Date)</label>
+      <input type="date" id="f_eff" onchange="handleIssueDateChange()">
     </div>
     <div class="filler-field">
       <label>Expiration Date</label>
       <input type="date" id="f_exp" onchange="calcWeeks()">
     </div>
+
+    <div class="filler-section">Rental Status &amp; Expiration</div>
+    <div class="filler-field">
+      <label>Rental Status</label>
+      <label class="rental-toggle"><input type="checkbox" id="f_still_rental" onchange="updateRentalExpiration()"> Driver is still in the rental</label>
+    </div>
+    <div class="filler-field">
+      <label>Last Rental Day / Date of Loss</label>
+      <input type="date" id="f_last_rental" onchange="updateRentalExpiration()">
+    </div>
+    <div class="rental-helper" id="rentalHelper">Enter the Date Issued / Subscription Start Date. When the rental has ended, enter the editable last rental day.</div>
 
     <div class="filler-section">Named Operator / Member</div>
     <div class="filler-field" style="grid-column: span 2;">
@@ -247,7 +260,7 @@
       </select>
     </div>
 
-    <div class="filler-section">Deductibles &amp; Issue</div>
+    <div class="filler-section">Deductibles</div>
     <div class="filler-field">
       <label>Collision Deductible</label>
       <select id="f_collded">
@@ -262,11 +275,6 @@
         <option value="1000">$1,000</option>
       </select>
     </div>
-    <div class="filler-field">
-      <label>Date Issued (auto — follows Effective)</label>
-      <input type="date" id="f_issued" readonly="">
-    </div>
-    <div class="filler-field"></div>
 
     <div class="filler-section">Premium</div>
     <div class="filler-field">
@@ -485,7 +493,7 @@
         <div class="fl">Policy Number</div>
         <div class="fv" id="sb_policynum" style="opacity:0.5;">—</div>
         <div class="fl">Contact Information</div>
-        <div class="fv" style="font-size:10.5px; font-weight:400; opacity:0.88;">Klutch Insurance Company<br>P.O. Box 10622<br>Rockville, MD 20850<br>(855) 906-5949</div>
+        <div class="fv" style="font-size:10.5px; font-weight:400; opacity:0.88;">Klutch Insurance Company<br>NAIC 17966<br>P.O. Box 10622<br>Rockville, MD 20850<br>(855) 906-5949</div>
         <div class="fl">Policy Period (Membership Term)</div>
         <div class="fv">
           Effective: <span id="sb_eff" style="opacity:0.5;">MM/DD/YYYY</span><br>
@@ -661,13 +669,85 @@
   // ═══════════════════════════════════════════════════════════════
   // AUTO-CALCULATE WEEKS OF COVERAGE
   // ═══════════════════════════════════════════════════════════════
-  function syncIssuedToEff() {
-    // Date Issued follows the Effective (Pick-Up) Date
-    var eff = document.getElementById("f_eff").value;
-    if (eff) {
-      document.getElementById("f_issued").value = eff;
+  function localDate(value) {
+    return value ? new Date(value + "T00:00:00") : null;
+  }
+
+  function isoDate(value) {
+    var yyyy = value.getFullYear();
+    var mm = String(value.getMonth() + 1).padStart(2, "0");
+    var dd = String(value.getDate()).padStart(2, "0");
+    return yyyy + "-" + mm + "-" + dd;
+  }
+
+  function addCalendarDays(value, days) {
+    var result = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    result.setDate(result.getDate() + days);
+    return result;
+  }
+
+  function addCalendarMonths(value, months) {
+    var targetMonth = value.getMonth() + months;
+    var year = value.getFullYear() + Math.floor(targetMonth / 12);
+    var month = ((targetMonth % 12) + 12) % 12;
+    var lastDay = new Date(year, month + 1, 0).getDate();
+    return new Date(year, month, Math.min(value.getDate(), lastDay));
+  }
+
+  function startOfToday() {
+    var now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  function updateRentalExpiration() {
+    var state = document.getElementById("f_market").value;
+    var issuedValue = document.getElementById("f_eff").value;
+    var lastRentalValue = document.getElementById("f_last_rental").value;
+    var stillInRental = document.getElementById("f_still_rental").checked;
+    var expiration = document.getElementById("f_exp");
+    var helper = document.getElementById("rentalHelper");
+    helper.classList.remove("warning");
+
+    if (!stillInRental) {
+      if (lastRentalValue) expiration.value = lastRentalValue;
+      helper.textContent = "Rental ended — Expiration Date uses the editable last rental day / date of loss. No weekly rounding is applied.";
+      calcWeeks();
       applyAll();
+      return;
     }
+
+    if (!issuedValue || !state) {
+      helper.textContent = "Select the market and enter the Date Issued / Subscription Start Date to calculate the current coverage expiration.";
+      calcWeeks();
+      applyAll();
+      return;
+    }
+
+    var issued = localDate(issuedValue);
+    var today = startOfToday();
+    if (today < issued) {
+      helper.classList.add("warning");
+      helper.textContent = "Reference date is before the Date Issued / Subscription Start Date. Expiration was not calculated.";
+      calcWeeks();
+      applyAll();
+      return;
+    }
+
+    var initialTermEnd = state === "MD" ? addCalendarDays(issued, 30) : addCalendarMonths(issued, 12);
+    var expirationDate = initialTermEnd;
+    if (today > initialTermEnd) {
+      var elapsedDays = Math.floor((today - initialTermEnd) / (24 * 60 * 60 * 1000));
+      var renewalWeeks = Math.ceil(elapsedDays / 7);
+      expirationDate = addCalendarDays(initialTermEnd, renewalWeeks * 7);
+    }
+    expiration.value = isoDate(expirationDate);
+    helper.textContent = "Still in rental — " + state + " initial term ended " + fmtDate(isoDate(initialTermEnd)) + ", renews weekly, currently covered through " + fmtDate(isoDate(expirationDate)) + ".";
+    calcWeeks();
+    applyAll();
+  }
+
+  function handleIssueDateChange() {
+    updateRentalExpiration();
   }
 
   function calcWeeks() {
@@ -870,6 +950,7 @@
     }
 
     panel.classList.toggle("hidden", !showPanel);
+    updateRentalExpiration();
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -887,7 +968,7 @@
     var vtype    = document.getElementById("f_vtype").value;
     var collded  = document.getElementById("f_collded").value;
     var compded  = document.getElementById("f_compded").value;
-    var issuedRaw = document.getElementById("f_issued").value;
+    var issuedRaw = effRaw;
     var weekly   = parseFloat(document.getElementById("f_weekly").value) || 0;
     var weeks    = parseInt(document.getElementById("f_weeks").value) || 0;
 
@@ -1100,6 +1181,10 @@
     document.getElementById("f_policynum").value = "";
     document.getElementById("f_eff").value = "";
     document.getElementById("f_exp").value = "";
+    document.getElementById("f_still_rental").checked = false;
+    document.getElementById("f_last_rental").value = "";
+    document.getElementById("rentalHelper").classList.remove("warning");
+    document.getElementById("rentalHelper").textContent = "Enter the Date Issued / Subscription Start Date. When the rental has ended, enter the editable last rental day.";
     document.getElementById("f_member").value = "";
     document.getElementById("f_addr").value = "14670 Southlawn Lane, Rockville, MD 20850";
     document.getElementById("f_vehicle").value = "";
@@ -1117,13 +1202,6 @@
     document.getElementById("opt_pip_additional").checked = false;
     document.getElementById("opt_um_rejected").checked = false;
     document.getElementById("opt_pip_deductible").checked = false;
-
-    // Reset issued date to today
-    var today = new Date();
-    var yyyy = today.getFullYear();
-    var mm = String(today.getMonth() + 1).padStart(2, '0');
-    var dd = String(today.getDate()).padStart(2, '0');
-    document.getElementById("f_issued").value = yyyy + "-" + mm + "-" + dd;
 
     // Reset display placeholders
     var placeholders = {
@@ -1187,18 +1265,6 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // INITIALIZATION
-  // ═══════════════════════════════════════════════════════════════
-  (function() {
-    // Auto-populate Date Issued to today
-    var today = new Date();
-    var yyyy = today.getFullYear();
-    var mm = String(today.getMonth() + 1).padStart(2, '0');
-    var dd = String(today.getDate()).padStart(2, '0');
-    var el = document.getElementById("f_issued");
-    if (el) el.value = yyyy + "-" + mm + "-" + dd;
-  })();
 </script>
 
 </body></html>

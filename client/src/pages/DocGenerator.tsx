@@ -7926,7 +7926,7 @@ export default function DocGenerator() {
       case "pip-bill-review": return <MedicalBillReviewTab />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
-      case "klutch-policy-declarations": return <KlutchDecPageTab initialState={initialMemberState} />;
+      case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;
       case "dv-calculator": return <DVCalculatorTab />;
       default: return null;
     }

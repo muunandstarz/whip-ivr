@@ -12,7 +12,7 @@ describe('Klutch coverage navigation', () => {
 
   it('retains the approved Klutch Policy Declarations entry', () => {
     expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText }');
-    expect(source).toContain('case "klutch-policy-declarations": return <KlutchDecPageTab initialState={initialMemberState} />');
+    expect(source).toContain('case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html"');
   });
 
   it('removes the separate Klutch Dec Page entry and routes legacy links to the approved page', () => {

@@ -699,3 +699,6 @@
 - [x] Add the still-in-rental expiration calculator to the approved Klutch Declarations page and unify Subscription Start Date with Date Issued in the COI and approved declarations workflows
 - [x] Add Klutch Insurance Company NAIC 17966 to the appropriate insurer-identification area of the COI and approved Declarations output
 - [x] Defer the pending Slack source-history audit per the user's request to put a pin in it; do not create an external Slack pin or post
+
+## September 2026 Approved Klutch HTML Preservation
+- [x] Restore the approved Klutch Policy Declarations HTML as the source-of-truth document view and integrate only the required rental-expiration/date behavior without replacing its layout
