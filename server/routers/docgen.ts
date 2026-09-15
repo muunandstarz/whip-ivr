@@ -11,15 +11,26 @@ import {
 import { lookupClaimForDocgen } from "../db";
 
 function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
-  const content = result.choices?.[0]?.message?.content;
-  if (typeof content === "string") return content.trim();
+  const message = result.choices?.[0]?.message as (Awaited<ReturnType<typeof invokeLLM>>["choices"][number]["message"] & {
+    parsed?: unknown;
+    refusal?: string;
+  }) | undefined;
+  const content = message?.content;
+  if (typeof content === "string") {
+    const text = content.trim();
+    if (text) return text;
+  }
   if (Array.isArray(content)) {
-    return content
+    const text = content
       .filter((p) => p.type === "text")
       .map((p) => (p as { type: "text"; text: string }).text)
       .join("")
       .trim();
+    if (text) return text;
   }
+  if (message?.parsed && typeof message.parsed === "object") return JSON.stringify(message.parsed);
+  const toolArguments = message?.tool_calls?.[0]?.function?.arguments;
+  if (toolArguments) return toolArguments.trim();
   return "";
 }
 
@@ -67,6 +78,15 @@ const ESTIMATE_OUTPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
+  const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName"];
+  return scalarFields.some((field) => String(parsed[field] ?? "").trim().length > 0)
+    || (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0);
+}
+
+const estimatePrompt = (fileName?: string) =>
+  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+
 
 function getStateCoverageInfo(state: string): string {
   const rules: Record<string, string> = {
@@ -96,26 +116,54 @@ export const docgenRouter = router({
       fileName: z.string().max(255).optional(),
     }))
     .mutation(async ({ input }) => {
-      const result = await invokeLLM({
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${input.fileName ? ` The uploaded filename is ${input.fileName}.` : ""}`,
-            },
-            { type: "file_url", file_url: { url: input.fileUrl, mime_type: "application/pdf" } },
-          ] as any,
-        }],
-        outputSchema: {
-          name: "repair_estimate",
-          strict: true,
-          schema: ESTIMATE_OUTPUT_SCHEMA,
-        },
-      });
-      const raw = extractText(result);
-      if (!raw) throw new Error("Estimate parser returned an empty structured response");
-      const parsed = parseJsonObject(raw);
+      const messages = [{
+        role: "user" as const,
+        content: [
+          { type: "text" as const, text: estimatePrompt(input.fileName) },
+          { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } },
+        ],
+      }];
+      const readParsedResult = (result: Awaited<ReturnType<typeof invokeLLM>>) => {
+        const raw = extractText(result);
+        if (!raw) return null;
+        try {
+          const parsed = parseJsonObject(raw);
+          return hasEstimateEvidence(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      };
+
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        const primary = await invokeLLM({
+          model: "gpt-5-mini",
+          messages,
+          outputSchema: {
+            name: "repair_estimate",
+            strict: true,
+            schema: ESTIMATE_OUTPUT_SCHEMA,
+          },
+        });
+        parsed = readParsedResult(primary);
+      } catch (error) {
+        console.warn("[Docgen] Primary repair-estimate extraction failed; retrying with multimodal fallback", error);
+      }
+
+      // Some providers can return blank content for a strict PDF extraction even when the file is readable.
+      // Retry once through the multimodal long-context path before surfacing a user-facing extraction failure.
+      if (!parsed) {
+        const fallback = await invokeLLM({
+          model: "gemini-3-flash-preview",
+          messages,
+          responseFormat: { type: "json_object" },
+        });
+        parsed = readParsedResult(fallback);
+      }
+
+      if (!parsed) {
+        throw new Error("Could not extract usable estimate fields from this document. The upload is retained; try a text-based PDF or enter the estimate manually.");
+      }
       const amount = (value: unknown) => {
         const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
         return normalized && Number.isFinite(Number(normalized)) ? Number(normalized).toFixed(2) : "";

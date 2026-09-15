@@ -702,3 +702,6 @@
 
 ## September 2026 Approved Klutch HTML Preservation
 - [x] Restore the approved Klutch Policy Declarations HTML as the source-of-truth document view and integrate only the required rental-expiration/date behavior without replacing its layout
+
+## September 2026 Shared Estimate Parser Repair
+- [x] Repair empty structured-response handling in the shared estimate parser used by Subro Demand and Carrier Rebuttal uploads
