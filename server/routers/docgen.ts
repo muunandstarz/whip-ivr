@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
+import { storageGetSignedUrl } from "../storage";
+import { PDFParse } from "pdf-parse";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import {
   saveDocgenDraft, getDocgenDrafts, deleteDocgenDraft,
   toggleDocgenFavorite, getDocgenFavorites,
@@ -84,8 +91,54 @@ function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
     || (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0);
 }
 
+const execFileAsync = promisify(execFile);
+
 const estimatePrompt = (fileName?: string) =>
   `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+
+async function downloadUploadedEstimate(storageKey: string): Promise<Buffer> {
+  const signedUrl = await storageGetSignedUrl(storageKey);
+  const response = await fetch(signedUrl, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`retained upload download failed (${response.status})`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function extractUploadedEstimateText(bytes: Buffer): Promise<string> {
+  let parser: PDFParse | undefined;
+  try {
+    parser = new PDFParse({ data: bytes });
+    const parsed = await parser.getText({ partial: Array.from({ length: 20 }, (_, index) => index + 1) });
+    return parsed.text?.trim().slice(0, 100_000) ?? "";
+  } finally {
+    await parser?.destroy().catch(() => undefined);
+  }
+}
+
+async function rasterizeEstimatePdf(bytes: Buffer): Promise<string[]> {
+  const dir = await mkdtemp(join(tmpdir(), "whip-estimate-"));
+  const input = join(dir, "estimate.pdf");
+  const prefix = join(dir, "page");
+  try {
+    await writeFile(input, bytes);
+    await execFileAsync("pdftoppm", [
+      "-f", "1", "-l", "3", "-jpeg", "-jpegopt", "quality=82", "-r", "130", input, prefix,
+    ], { timeout: 45_000, maxBuffer: 2 * 1024 * 1024 });
+    const files = (await readdir(dir))
+      .filter((name) => /^page-\d+\.jpg$/i.test(name))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .slice(0, 3);
+    const dataUrls: string[] = [];
+    for (const name of files) {
+      const image = await readFile(join(dir, name));
+      if (image.length > 0 && image.length <= 6 * 1024 * 1024) {
+        dataUrls.push(`data:image/jpeg;base64,${image.toString("base64")}`);
+      }
+    }
+    return dataUrls;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 
 
 function getStateCoverageInfo(state: string): string {
@@ -114,6 +167,7 @@ export const docgenRouter = router({
     .input(z.object({
       fileUrl: z.string().url(),
       fileName: z.string().max(255).optional(),
+      storageKey: z.string().regex(/^docgen-uploads\/[A-Za-z0-9._/-]+$/).optional(),
     }))
     .mutation(async ({ input }) => {
       const messages = [{
@@ -161,8 +215,56 @@ export const docgenRouter = router({
         parsed = readParsedResult(fallback);
       }
 
+      // The model proxy can be unable to read an otherwise healthy presigned S3 URL.
+      // When the browser supplied the secure upload key, extract PDF text server-side and
+      // give that evidence to the same structured parser before asking the handler to type it.
+      if (!parsed && input.storageKey && /\.pdf$/i.test(input.fileName ?? "")) {
+        try {
+          const uploadBytes = await downloadUploadedEstimate(input.storageKey);
+          const uploadedText = await extractUploadedEstimateText(uploadBytes);
+          if (uploadedText) {
+            const textResult = await invokeLLM({
+              model: "gpt-5-mini",
+              messages: [{
+                role: "user",
+                content: `${estimatePrompt(input.fileName)}\n\nSERVER-EXTRACTED PDF TEXT (use only this evidence):\n${uploadedText}`,
+              }],
+              outputSchema: {
+                name: "repair_estimate",
+                strict: true,
+                schema: ESTIMATE_OUTPUT_SCHEMA,
+              },
+            });
+            parsed = readParsedResult(textResult);
+          }
+          if (!parsed) {
+            const pageImages = await rasterizeEstimatePdf(uploadBytes);
+            if (pageImages.length) {
+              const visionResult = await invokeLLM({
+                model: "gemini-3-flash-preview",
+                messages: [{
+                  role: "user",
+                  content: [
+                    { type: "text", text: `${estimatePrompt(input.fileName)}\n\nThese are the first pages of the retained PDF rendered as images. Read only the visible estimate fields.` },
+                    ...pageImages.map((url) => ({ type: "image_url" as const, image_url: { url, detail: "high" as const } })),
+                  ],
+                }],
+                outputSchema: {
+                  name: "repair_estimate",
+                  strict: true,
+                  schema: ESTIMATE_OUTPUT_SCHEMA,
+                },
+              });
+              parsed = readParsedResult(visionResult);
+            }
+          }
+        } catch (error) {
+          console.warn("[Docgen] Server-side estimate extraction fallback failed", error);
+        }
+      }
+
       if (!parsed) {
-        throw new Error("Could not extract usable estimate fields from this document. The upload is retained; try a text-based PDF or enter the estimate manually.");
+        throw new Error("Could not extract usable estimate fields from this document. Try an unencrypted PDF or image; the fields can also be entered manually.");
       }
       const amount = (value: unknown) => {
         const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");

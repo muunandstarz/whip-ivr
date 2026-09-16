@@ -705,3 +705,5 @@
 
 ## September 2026 Shared Estimate Parser Repair
 - [x] Repair empty structured-response handling in the shared estimate parser used by Subro Demand and Carrier Rebuttal uploads
+- [x] Diagnose and repair the actual retained-upload parsing path when both structured model attempts return no usable estimate fields
+- [x] Add scan-image recovery for retained PDF estimates so image-only source documents can be parsed without requiring manual field entry

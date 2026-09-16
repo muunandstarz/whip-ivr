@@ -3356,10 +3356,10 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
       fd.append("file", file);
       const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
       if (!upload.ok) throw new Error(`Upload failed: ${file.name}`);
-      const payload = await upload.json() as { url?: string; signedUrl?: string };
+      const payload = await upload.json() as { url?: string; signedUrl?: string; key?: string };
       const fileUrl = payload.signedUrl || payload.url;
       if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: file.name });
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: file.name, storageKey: payload.key });
       setForm(p => ({
         ...p,
         repair: parsed.repairTotal || p.repair,
@@ -3816,10 +3816,10 @@ function CarrierRebuttalTab() {
       fd.append("file", ourEstimateDoc);
       const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
       if (!upload.ok) throw new Error(`Upload failed: ${ourEstimateDoc.name}`);
-      const payload = await upload.json() as { url?: string; signedUrl?: string };
+      const payload = await upload.json() as { url?: string; signedUrl?: string; key?: string };
       const fileUrl = payload.signedUrl || payload.url;
       if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: ourEstimateDoc.name });
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: ourEstimateDoc.name, storageKey: payload.key });
       setForm(p => ({
         ...p,
         claimNumber: parsed.claimNumber || p.claimNumber,
