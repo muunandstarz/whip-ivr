@@ -711,3 +711,8 @@
 
 ## September 2026 Total Loss Settlement Itemization
 - [x] Add the ACV, storage, admin fee, sales tax, salvage deduction, and calculated total itemization block to the Total Loss Settlement form and formatted PDF preview
+
+## September 2026 Estimate Workflow Field and Preview Enhancements
+- [x] Extract claimant and insurer fields from usable repair-estimate evidence when present, while retaining editable handler fields
+- [x] Add the requested insurance-company dropdown to Subro Demand and Carrier Rebuttal: Whip Claims Management, Assurant Claim Management, Klutch Insurance, Total Recon, Whip Inc., and Metrocars Leasing Corp.
+- [x] Make the adjuster selection and formatted Preview action visible and usable in Subro Demand and Carrier Rebuttal

@@ -68,6 +68,9 @@ const ESTIMATE_OUTPUT_SCHEMA = {
     claimNumber: { type: "string" },
     dateOfLoss: { type: "string" },
     shopName: { type: "string" },
+    insurerName: { type: "string" },
+    claimantName: { type: "string" },
+    adjusterName: { type: "string" },
     lineItems: {
       type: "array",
       items: {
@@ -81,12 +84,12 @@ const ESTIMATE_OUTPUT_SCHEMA = {
       },
     },
   },
-  required: ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "lineItems"],
+  required: ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName", "lineItems"],
   additionalProperties: false,
 } as const;
 
 function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
-  const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName"];
+  const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName"];
   return scalarFields.some((field) => String(parsed[field] ?? "").trim().length > 0)
     || (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0);
 }
@@ -94,7 +97,7 @@ function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
 const execFileAsync = promisify(execFile);
 
 const estimatePrompt = (fileName?: string) =>
-  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","insurerName":"insurance carrier name or empty string","claimantName":"claimant, owner, or driver name when clearly identified or empty string","adjusterName":"carrier adjuster or estimator contact name when clearly identified or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
 
 async function downloadUploadedEstimate(storageKey: string): Promise<Buffer> {
   const signedUrl = await storageGetSignedUrl(storageKey);
@@ -294,6 +297,9 @@ export const docgenRouter = router({
         claimNumber: String(parsed.claimNumber ?? "").trim().slice(0, 100),
         dateOfLoss: isoDate(parsed.dateOfLoss),
         shopName: String(parsed.shopName ?? "").trim().slice(0, 160),
+        insurerName: String(parsed.insurerName ?? "").trim().slice(0, 160),
+        claimantName: String(parsed.claimantName ?? "").trim().slice(0, 160),
+        adjusterName: String(parsed.adjusterName ?? "").trim().slice(0, 160),
         lineItems,
       };
     }),
@@ -322,6 +328,7 @@ export const docgenRouter = router({
       dateOfLoss: z.string(),
       carrier: z.string(),
       adjuster: z.string(),
+      claimantName: z.string().optional(),
       accidentType: z.string().optional(),
       lineItems: z.array(z.object({ item: z.string(), ours: z.number(), theirs: z.number(), reason: z.string().optional() })),
       carrierDocUrl: z.string().optional(),
@@ -329,7 +336,7 @@ export const docgenRouter = router({
       ourImageReportUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, accidentType, lineItems, carrierDocUrl, ourEstimateUrl, ourImageReportUrl } = input;
+      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, claimantName, accidentType, lineItems, carrierDocUrl, ourEstimateUrl, ourImageReportUrl } = input;
       const totalOurs = lineItems.reduce((s, r) => s + r.ours, 0);
       const totalTheirs = lineItems.reduce((s, r) => s + r.theirs, 0);
       const gap = totalOurs - totalTheirs;

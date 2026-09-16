@@ -50,7 +50,7 @@ describe('docgen.parseEstimate structured upload parsing', () => {
     mocks.invokeLLM.mockResolvedValue({
       choices: [{
         message: {
-          content: '{"repairTotal":"$1,234.50","vehicle":"2024 Toyota Camry SE","vin":"1HGCM82633A004352","claimNumber":"PF438367","dateOfLoss":"September 1, 2026","shopName":"Example Collision","lineItems":[{"description":"Replace bumper cover","amount":"800.00"}]}',
+          content: '{"repairTotal":"$1,234.50","vehicle":"2024 Toyota Camry SE","vin":"1HGCM82633A004352","claimNumber":"PF438367","dateOfLoss":"September 1, 2026","shopName":"Example Collision","insurerName":"Klutch Insurance","claimantName":"Taylor Morgan","adjusterName":"Jordan Smith","lineItems":[{"description":"Replace bumper cover","amount":"800.00"}]}',
         },
       }],
     });
@@ -67,6 +67,9 @@ describe('docgen.parseEstimate structured upload parsing', () => {
       vin: '1HGCM82633A004352',
       claimNumber: 'PF438367',
       dateOfLoss: '2026-09-01',
+      insurerName: 'Klutch Insurance',
+      claimantName: 'Taylor Morgan',
+      adjusterName: 'Jordan Smith',
       lineItems: [{ description: 'Replace bumper cover', amount: '800.00' }],
     });
     expect(mocks.invokeLLM).toHaveBeenCalledWith(expect.objectContaining({

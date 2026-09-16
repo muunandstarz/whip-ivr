@@ -583,6 +583,59 @@ export function computeCoverageThrough(opts: {
 // ─── Shared: Handler Select Dropdown ─────────────────────────────────────────
 // Priority handlers shown first; rest sorted alphabetically
 const PRIORITY_HANDLERS = ["Tim Chan", "Daniel Giono"];
+const INSURANCE_COMPANIES = [
+  "Whip Claims Management",
+  "Assurant Claim Management",
+  "Klutch Insurance",
+  "Total Recon",
+  "Whip Inc.",
+  "Metrocars Leasing Corp.",
+] as const;
+
+function InsuranceCompanySelect({
+  value,
+  onChange,
+  id,
+  label = "Insurance Company",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  id: string;
+  label?: string;
+}) {
+  const isListed = INSURANCE_COMPANIES.includes(value as typeof INSURANCE_COMPANIES[number]);
+  const [isCustom, setIsCustom] = React.useState(() => Boolean(value && !isListed));
+  React.useEffect(() => {
+    if (value && !isListed) setIsCustom(true);
+  }, [isListed, value]);
+  const selectedValue = isCustom ? "other" : (isListed ? value : undefined);
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs font-semibold text-foreground/80">{label}</Label>
+      <Select value={selectedValue} onValueChange={(next) => {
+        const nextIsCustom = next === "other";
+        setIsCustom(nextIsCustom);
+        if (!nextIsCustom) onChange(next);
+      }}>
+        <SelectTrigger id={id} className="h-8 text-sm"><SelectValue placeholder="Select insurance company…" /></SelectTrigger>
+        <SelectContent>
+          {INSURANCE_COMPANIES.map((company) => <SelectItem key={company} value={company}>{company}</SelectItem>)}
+          <SelectItem value="other">Other / enter manually</SelectItem>
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Insurer from estimate or other carrier"
+          className="h-8 text-sm"
+          aria-label={`${label} custom value`}
+        />
+      )}
+    </div>
+  );
+}
+
 function HandlerSelect({
   value,
   onChange,
@@ -3397,6 +3450,9 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
         vin: parsed.vin || p.vin,
         ourClaim: parsed.claimNumber || p.ourClaim,
         dol: parsed.dateOfLoss || p.dol,
+        carrier: parsed.insurerName || p.carrier,
+        driver: parsed.claimantName || p.driver,
+        adjusterName: parsed.adjusterName || p.adjusterName,
       }));
       setSelectedAttachments(prev => prev.includes("Estimate") ? prev : ["Estimate", ...prev]);
       toast.success(parsed.repairTotal ? `Estimate read — $${parsed.repairTotal} added to the demand` : "Estimate read — review the pre-filled fields");
@@ -3643,7 +3699,7 @@ This demand is made without waiver of any rights or remedies available to Metroc
       <div>
         <Panel title="Claim Information" tag="REQUIRED">
           <Grid3>
-            <Field label="Insurance Company" id="sd-carrier" value={form.carrier} onChange={set("carrier")} placeholder="e.g. State Farm" required />
+            <InsuranceCompanySelect label="Insurance Company" id="sd-carrier" value={form.carrier} onChange={set("carrier")} />
             <Field label="Adjuster Name" id="sd-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. John Smith" />
             <Field label="Their Claim #" id="sd-advclaim" value={form.advClaim} onChange={set("advClaim")} placeholder="e.g. 2091T657S" />
           </Grid3>
@@ -3771,6 +3827,9 @@ This demand is made without waiver of any rights or remedies available to Metroc
           </div>
           <div className="mt-3">
             <HandlerSelect value={handlerName} onChange={setHandlerName} label="Handler / Signatory" id="sd-handler" />
+            <Button type="button" variant="outline" size="sm" className="mt-2 h-8 w-full gap-1.5 border-[#ff6221]/50 text-xs text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handlePreview}>
+              <Eye className="h-3.5 w-3.5" /> Preview formatted demand PDF
+            </Button>
           </div>
         </Panel>
       </div>
@@ -3802,6 +3861,7 @@ function CarrierRebuttalTab() {
     dateOfLoss: "",
     carrier: "",
     adjuster: "",
+    claimantName: "",
     accidentType: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
@@ -3855,6 +3915,9 @@ function CarrierRebuttalTab() {
         claimNumber: parsed.claimNumber || p.claimNumber,
         vehicle: parsed.vehicle || p.vehicle,
         dateOfLoss: parsed.dateOfLoss || p.dateOfLoss,
+        carrier: parsed.insurerName || p.carrier,
+        adjuster: parsed.adjusterName || p.adjuster,
+        claimantName: parsed.claimantName || p.claimantName,
       }));
       if (parsed.lineItems.length) {
         setLineItems(parsed.lineItems.map(item => ({ item: item.description, ours: item.amount, theirs: "", reason: "" })));
@@ -3921,7 +3984,18 @@ function CarrierRebuttalTab() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    y = wrapLetterText(doc, draft || "(No draft yet)", 14, y, W - 28, 6.5);
+    const previewDraft = draft || `${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+
+${form.carrier || "[Adverse Carrier]"}
+Attn: ${form.adjuster || "[Adjuster Name]"}
+
+RE: Carrier Rebuttal — Whip Claim No. ${form.claimNumber || "[Whip Claim #]"}${form.theirClaimNumber ? ` / Their Claim No. ${form.theirClaimNumber}` : ""}
+Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
+Vehicle: ${form.vehicle || "[Vehicle]"}${form.claimantName ? `
+Claimant / Driver: ${form.claimantName}` : ""}
+
+This preview uses the current claim details and disputed line items. Generate or enter a draft to preview the complete rebuttal language.`;
+    y = wrapLetterText(doc, previewDraft, 14, y, W - 28, 6.5);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
@@ -3937,11 +4011,14 @@ function CarrierRebuttalTab() {
           <Field label="Their Claim #" id="rb-theirclaim" value={form.theirClaimNumber} onChange={set("theirClaimNumber")} placeholder="Carrier's claim number" />
           <Field label="Date of Loss" id="rb-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           <Field label="Vehicle" id="rb-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" required />
-          <Field label="Adverse Carrier" id="rb-carrier" value={form.carrier} onChange={set("carrier")} placeholder="e.g. GEICO" required />
+          <InsuranceCompanySelect label="Adverse Carrier" id="rb-carrier" value={form.carrier} onChange={set("carrier")} />
           <Field label="Adjuster Name" id="rb-adjuster" value={form.adjuster} onChange={set("adjuster")} placeholder="e.g. Jane Smith" />
         </div>
         <div className="mt-3">
-          <Field label="Accident Type (optional)" id="rb-type" value={form.accidentType} onChange={set("accidentType")} placeholder="e.g. Rear-end, T-bone, Sideswipe" />
+          <Grid2 children={<>
+            <Field label="Claimant / Driver Name" id="rb-claimant" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" />
+            <Field label="Accident Type (optional)" id="rb-type" value={form.accidentType} onChange={set("accidentType")} placeholder="e.g. Rear-end, T-bone, Sideswipe" />
+          </>} />
         </div>
       </Panel>
 
@@ -4124,6 +4201,15 @@ function CarrierRebuttalTab() {
               >
                 {polishLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 {polishLoading ? "Polishing..." : "AI Polish Draft"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-7 border-[#ff6221]/50 text-[#ff6221] hover:bg-[#ff6221]/10"
+                onClick={handlePreviewOnly}
+              >
+                <Eye className="w-3.5 h-3.5" /> Preview formatted PDF
               </Button>
             </div>
           </Panel>
