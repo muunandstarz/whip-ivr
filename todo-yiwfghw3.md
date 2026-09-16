@@ -707,3 +707,7 @@
 - [x] Repair empty structured-response handling in the shared estimate parser used by Subro Demand and Carrier Rebuttal uploads
 - [x] Diagnose and repair the actual retained-upload parsing path when both structured model attempts return no usable estimate fields
 - [x] Add scan-image recovery for retained PDF estimates so image-only source documents can be parsed without requiring manual field entry
+- [x] Capture privacy-preserving stage diagnostics for the still-failing real sandbox estimate upload and repair the identified extraction stage
+
+## September 2026 Total Loss Settlement Itemization
+- [x] Add the ACV, storage, admin fee, sales tax, salvage deduction, and calculated total itemization block to the Total Loss Settlement form and formatted PDF preview

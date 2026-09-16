@@ -28,6 +28,16 @@ describe('Total Loss settlement and form reset repairs', () => {
     expect(source).toContain('"RE: Total Loss Settlement Offer"');
   });
 
+  it('keeps applicable damage rows visible in the form, formatted preview, and AI-generated PDF branch', () => {
+    expect(source).toContain('const visibleDamageRows = damageRows.filter');
+    expect(source).toContain('aria-label="Itemization of Damages preview"');
+    expect(source).toContain('text={aiLetter ? `${aiLetter}\\n\\n${itemizationPreview}` : preview}');
+    expect(source).toContain('doc.addPage();');
+    expect(source).toContain('if (!aiLetter) {');
+    expect(source).toContain('doc.text("ITEMIZATION OF DAMAGES", 14, y);');
+    expect(source).toContain('writeDamageRow("Vehicle Valuation (ACV)", parseFloat(form.acv) || 0);');
+  });
+
   it('uses browser-safe blob URLs for formatted previews and a shared clear-form action', () => {
     expect(source).toContain('URL.createObjectURL(doc.output("blob"))');
     expect(source).toContain('const [formResetKey, setFormResetKey] = useState(0);');

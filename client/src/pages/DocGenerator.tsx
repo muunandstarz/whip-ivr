@@ -3001,6 +3001,23 @@ function TLSettlementTab() {
   if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) deductionLines.push(`Less: Storage — Reasonable & Customary:   ($${parseFloat(form.storageDeducted).toFixed(2)})`);
   for (const d of otherDeductions) if (d.label && d.amount && parseFloat(d.amount) > 0) deductionLines.push(`Less: ${d.label}:  ($${parseFloat(d.amount).toFixed(2)})`);
 
+  const damageRows = [
+    { label: "Vehicle Valuation (ACV)", amount: parseFloat(form.acv) || 0, required: true },
+    { label: "Storage", amount: parseFloat(form.storage) || 0 },
+    { label: "Admin Fee", amount: parseFloat(form.adminFee) || 0 },
+    { label: "Sales Tax", amount: parseFloat(form.salesTax) || 0 },
+    { label: "Salvage (deducted)", amount: parseFloat(form.salvageDeducted) || 0, deducted: true },
+  ];
+  const visibleDamageRows = damageRows.filter((row) => row.required || row.amount > 0);
+  const formatSettlementAmount = (amount: number, deducted = false) =>
+    deducted ? `($${amount.toFixed(2)})` : `$${amount.toFixed(2)}`;
+  const itemizationPreview = [
+    "ITEMIZATION OF DAMAGES",
+    ...visibleDamageRows.map((row) => `${row.label}: ${formatSettlementAmount(row.amount, row.deducted)}`),
+    ...deductionLines,
+    `Total: $${netAmount}`,
+  ].join("\n");
+
   const preview = [
     "TOTAL LOSS SETTLEMENT OFFER",
     `Claim #: ${form.claimNumber || "[Claim Number]"}`,
@@ -3011,15 +3028,7 @@ function TLSettlementTab() {
     `Vehicle: ${form.vehicle || "[Vehicle]"} | VIN: ${form.vin || "[VIN]"}`,
     `Market: ${form.market}`,
     "",
-    "ITEMIZATION OF DAMAGES:",
-    `Vehicle Valuation (ACV):                  $${form.acv || "[ACV]"}`,
-    ...(form.storage ? [`Storage:                                  $${parseFloat(form.storage).toFixed(2)}`] : []),
-    ...(form.adminFee ? [`Admin Fee:                                $${parseFloat(form.adminFee).toFixed(2)}`] : []),
-    ...(form.salesTax ? [`Sales Tax:                                $${parseFloat(form.salesTax).toFixed(2)}`] : []),
-    ...(form.salvageDeducted ? [`Salvage (deducted):                    ($${parseFloat(form.salvageDeducted).toFixed(2)})`] : []),
-    ...deductionLines,
-    "─────────────────────────────────────────────────",
-    `Total:                                    $${netAmount}`,
+    itemizationPreview,
     ...(form.lienHolder && form.lienPayoff ? [`Loan Payoff — ${form.lienHolder}:  $${parseFloat(form.lienPayoff).toFixed(2)}`] : []),
     "",
     ...(form.rentalCutoffDate ? [`Rental Review Cutoff: ${form.rentalCutoffDate}`, ""] : []),
@@ -3076,7 +3085,13 @@ function TLSettlementTab() {
     doc.setTextColor(60, 60, 60);
     if (aiLetter) {
       y = wrapText(doc, aiLetter, 14, y, W - 28, 6.5);
-    } else {
+      doc.addPage();
+      y = addWhipLetterhead(doc);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+    }
+    if (!aiLetter) {
       const todayStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
       y = wrapText(doc, todayStr, 14, y, W - 28, 6.5); y += 4;
       y = wrapText(doc, `Claimant: ${form.claimantName || "[Claimant Name]"}`, 14, y, W - 28, 6.5);
@@ -3089,6 +3104,7 @@ function TLSettlementTab() {
       y = wrapText(doc, "RE: Total Loss Settlement Offer", 14, y, W - 28, 6.5); y += 4;
       y = wrapText(doc, `Dear ${firstName},`, 14, y, W - 28, 6.5); y += 4;
       y = wrapText(doc, `Following our investigation of the above-referenced claim, the ${form.vehicle || "vehicle"} has been determined to be a total loss. After review of the vehicle's condition, applicable market data, and comparable valuations, Metro Cars Leasing Corp. has calculated your net settlement as follows:`, 14, y, W - 28, 6.5); y += 5;
+    }
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10.5);
       doc.text("ITEMIZATION OF DAMAGES", 14, y); y += 2;
@@ -3143,7 +3159,6 @@ function TLSettlementTab() {
       doc.setFont("helvetica", "normal");
       y = wrapText(doc, "Claims Adjuster | Metro Cars Leasing Corp. — Claims Management", 14, y, W - 28, 6.5);
       wrapText(doc, "claims@drivewhip.com", 14, y, W - 28, 6.5);
-    }
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
@@ -3210,6 +3225,21 @@ function TLSettlementTab() {
               <span className="text-lg font-bold text-[#ff6221]">${netAmount}</span>
             </div>
           </div>
+          <div className="mt-3 rounded-lg border border-border bg-background overflow-hidden" aria-label="Itemization of Damages preview">
+            <div className="px-3 py-2 border-b border-border bg-muted/30 text-xs font-bold tracking-wide">ITEMIZATION OF DAMAGES</div>
+            <div className="px-3 py-2.5 space-y-1.5 text-sm">
+              {visibleDamageRows.map((row) => (
+                <div key={row.label} className="grid grid-cols-[auto_1fr_auto] items-baseline gap-2">
+                  <span>{row.label}</span>
+                  <span className="border-b border-dotted border-muted-foreground/45 translate-y-[-2px]" />
+                  <span className="tabular-nums">{formatSettlementAmount(row.amount, row.deducted)}</span>
+                </div>
+              ))}
+              <div className="mt-2 pt-2 border-t border-foreground/55 grid grid-cols-[auto_1fr_auto] items-baseline gap-2 font-bold">
+                <span>Total</span><span /><span className="tabular-nums">${netAmount}</span>
+              </div>
+            </div>
+          </div>
         </Panel>
         <Panel title="Additional Details">
           <Grid2 children={<>
@@ -3244,8 +3274,8 @@ function TLSettlementTab() {
         </Panel>
       </div>
       <PreviewPanel
-        text={aiLetter || preview}
-        onCopy={() => { navigator.clipboard.writeText(aiLetter || preview); toast.success("Copied"); }}
+        text={aiLetter ? `${aiLetter}\n\n${itemizationPreview}` : preview}
+        onCopy={() => { navigator.clipboard.writeText(aiLetter ? `${aiLetter}\n\n${itemizationPreview}` : preview); toast.success("Copied"); }}
         onDownload={handleDownload}
       
         pdfUrl={previewPdfUrl}

@@ -112,10 +112,11 @@ async function startServer() {
       const { originalname, mimetype, buffer } = req.file;
       const safeFilename = originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
       const key = `docgen-uploads/${Date.now()}_${safeFilename}`;
-      const { url } = await storagePut(key, buffer, mimetype);
-      // Get a presigned S3 URL so the LLM can read the file directly
-      const signedUrl = await storageGetSignedUrl(key).catch(() => url);
-      res.json({ url, signedUrl, key, filename: originalname, mimetype });
+      const { url, key: storageKey } = await storagePut(key, buffer, mimetype);
+      // storagePut appends a collision-safe suffix. The model and server fallback
+      // must use that final object key rather than the pre-upload filename.
+      const signedUrl = await storageGetSignedUrl(storageKey).catch(() => url);
+      res.json({ url, signedUrl, key: storageKey, filename: originalname, mimetype });
     } catch (err) {
       console.error("[upload/document] Error:", err);
       res.status(500).json({ error: "Upload failed" });
