@@ -205,4 +205,32 @@ describe('docgen.parseEstimate structured upload parsing', () => {
     expect(visionCall.messages[0].content.some((part: { type: string }) => part.type === 'image_url')).toBe(true);
     fetchMock.mockRestore();
   });
+
+  it('extracts the carrier name, claim number, offer, stated reason, and line position for a rebuttal', async () => {
+    mocks.invokeLLM.mockResolvedValue({
+      choices: [{
+        message: {
+          content: '{"carrierName":"Geico","carrierClaimNumber":"047819485010130","adjusterName":"Daniel Rodriguez","offerTotal":"1527.24","denialReasons":"Applied an unsupported betterment deduction to the bumper assembly.","lineItems":[{"description":"Rear bumper assembly","offer":"1527.24","reason":"Betterment deduction applied"}]}',
+        },
+      }],
+    });
+    const caller = docgenRouter.createCaller({
+      user: { id: 90001, openId: 'test', name: 'Test User', email: 'test@example.com', role: 'admin' },
+    } as any);
+
+    await expect(caller.parseCarrierResponse({
+      fileUrl: 'https://files.example.com/geico-response.pdf',
+      fileName: 'geico-response.pdf',
+    })).resolves.toEqual({
+      carrierName: 'Geico',
+      carrierClaimNumber: '047819485010130',
+      adjusterName: 'Daniel Rodriguez',
+      offerTotal: '1527.24',
+      denialReasons: 'Applied an unsupported betterment deduction to the bumper assembly.',
+      lineItems: [{ description: 'Rear bumper assembly', offer: '1527.24', reason: 'Betterment deduction applied' }],
+    });
+    expect(mocks.invokeLLM).toHaveBeenCalledWith(expect.objectContaining({
+      outputSchema: expect.objectContaining({ name: 'carrier_response', strict: true }),
+    }));
+  });
 });

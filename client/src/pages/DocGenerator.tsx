@@ -3493,12 +3493,12 @@ ${form.carrier || "[Insurance Company]"}
 Attn: ${form.adjusterName || "[Adjuster Name]"}
 [ADDRESS ON FILE]
 
-RE:  Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}
+RE: Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}
 Date of Loss: ${form.dol || "[Date of Loss]"}
 Vehicle: ${form.vehicle || "[Vehicle]"} — VIN ${form.vin || "[VIN]"}
 Our Insured: Metrocars Leasing Corp. (Driver: ${form.driver || "[Driver Name]"})
 
-Dear ${form.adjusterName ? "Mr./Ms. " + form.adjusterName.split(" ").pop() : "[Adjuster Name]"}:
+Dear ${form.adjusterName || form.carrier || "[Carrier / Adjuster]"},
 
 This office represents Metrocars Leasing Corp., the owner of the above-referenced vehicle, in connection with the loss that occurred on ${form.dol || "[Date of Loss]"}. Based on our investigation — including our review of the available police report, vehicle damage documentation, photographs, and supporting records — we have determined that your insured bears sole liability for this loss. Your insured's negligent operation of their vehicle was the direct and proximate cause of the damage sustained to the ${form.vehicle || "[Vehicle]"} described above, a vehicle owned by and registered to Metrocars Leasing Corp.
 
@@ -3552,17 +3552,17 @@ Whip Claims Management
     doc.setFont("helvetica", "bold");
     doc.text("RE:", lm, y);
     doc.setFont("helvetica", "normal");
-    const reText = `  Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}`;
-    const reLines = doc.splitTextToSize(reText, tw - 10);
-    doc.text(reLines, lm, y);
+    const reStart = lm + 8;
+    const reText = `Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}`;
+    const reLines = doc.splitTextToSize(reText, tw - 8);
+    doc.text(reLines, reStart, y);
     y += reLines.length * 5;
-    doc.text(`       Date of Loss: ${form.dol ? new Date(form.dol + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date of Loss]"}`, lm, y); nl(5);
-    doc.text(`       Vehicle: ${form.vehicle || "[Vehicle]"} — VIN ${form.vin || "[VIN]"}`, lm, y); nl(5);
-    doc.text(`       Our Insured: Metrocars Leasing Corp. (Driver: ${form.driver || "[Driver Name]"})`, lm, y); nl(10);
+    doc.text(`Date of Loss: ${form.dol ? new Date(form.dol + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date of Loss]"}`, reStart, y); nl(5);
+    doc.text(`Vehicle: ${form.vehicle || "[Vehicle]"} — VIN ${form.vin || "[VIN]"}`, reStart, y); nl(5);
+    doc.text(`Our Insured: Metrocars Leasing Corp. (Driver: ${form.driver || "[Driver Name]"})`, reStart, y); nl(10);
 
     // ── Salutation ──
-    const lastName = (form.adjusterName || "").split(" ").pop() || "[Adjuster]";
-    doc.text(`Dear Mr./Ms. ${lastName}:`, lm, y); nl(7);
+    doc.text(`Dear ${form.adjusterName || form.carrier || "[Carrier / Adjuster]"},`, lm, y); nl(7);
 
     // ── Opening paragraph (editable) ──
     const openingText = form.openingParagraph ||
@@ -3862,6 +3862,8 @@ function CarrierRebuttalTab() {
     carrier: "",
     adjuster: "",
     claimantName: "",
+    carrierOfferTotal: "",
+    carrierReason: "",
     accidentType: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
@@ -3878,6 +3880,7 @@ function CarrierRebuttalTab() {
   const [estimateParsing, setEstimateParsing] = useState(false);
   const generateMutation = trpc.docgen.generateRebuttal.useMutation();
   const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
+  const parseCarrierResponseMutation = trpc.docgen.parseCarrierResponse.useMutation();
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
 
   const set = (k: keyof typeof form) => (v: string) =>
@@ -3932,6 +3935,42 @@ function CarrierRebuttalTab() {
     }
   };
 
+  const uploadDocument = async (file: File): Promise<{ url: string; key?: string; fileName: string }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const response = await fetch("/api/upload/document", { method: "POST", body: fd });
+    if (!response.ok) throw new Error(`Upload failed: ${file.name}`);
+    const payload = await response.json() as { url?: string; signedUrl?: string; key?: string };
+    const url = payload.signedUrl || payload.url;
+    if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Upload did not return a readable document URL for ${file.name}`);
+    return { url, key: payload.key, fileName: file.name };
+  };
+
+  const mergeCarrierResponseRows = (
+    current: RebuttalLineItem[],
+    response: { lineItems: Array<{ description: string; offer: string; reason: string }>; offerTotal: string; denialReasons: string },
+  ) => {
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const merged = current.map((row) => {
+      const matched = response.lineItems.find((item) => {
+        const rowKey = normalize(row.item);
+        const itemKey = normalize(item.description);
+        return rowKey && itemKey && (rowKey.includes(itemKey) || itemKey.includes(rowKey));
+      });
+      return matched ? { ...row, theirs: matched.offer || row.theirs, reason: matched.reason || row.reason } : row;
+    });
+    const unmatched = response.lineItems.filter((item) => !merged.some((row) => {
+      const rowKey = normalize(row.item);
+      const itemKey = normalize(item.description);
+      return rowKey && itemKey && (rowKey.includes(itemKey) || itemKey.includes(rowKey));
+    }));
+    const responseRows = unmatched.map((item) => ({ item: item.description || "Carrier response", ours: "", theirs: item.offer, reason: item.reason }));
+    if (!responseRows.length && (response.offerTotal || response.denialReasons)) {
+      responseRows.push({ item: "Carrier total offer / position", ours: "", theirs: response.offerTotal, reason: response.denialReasons });
+    }
+    return [...merged.filter((row) => row.item || row.ours || row.theirs || row.reason), ...responseRows];
+  };
+
   const handleGenerate = async () => {
     if (!form.claimNumber || !form.vehicle || !form.carrier) {
       toast.error("Fill in Claim #, Vehicle, and Carrier first");
@@ -3953,6 +3992,79 @@ function CarrierRebuttalTab() {
     } catch (e: unknown) {
       toast.error((e as Error).message || "AI error");
     } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAnalyzeAndGenerate = async () => {
+    if (!ourEstimateDoc && !ourImageReportDoc && !carrierDoc) {
+      toast.error("Upload at least one document first");
+      return;
+    }
+    setDocUploading(true);
+    try {
+      const [ourEstimateUpload, ourImageReportUpload, carrierDocUpload] = await Promise.all([
+        ourEstimateDoc ? uploadDocument(ourEstimateDoc) : Promise.resolve(undefined),
+        ourImageReportDoc ? uploadDocument(ourImageReportDoc) : Promise.resolve(undefined),
+        carrierDoc ? uploadDocument(carrierDoc) : Promise.resolve(undefined),
+      ]);
+      setDocUploading(false);
+      setAiLoading(true);
+      let nextForm = { ...form };
+      let nextLineItems = [...lineItems];
+      if (ourEstimateUpload) {
+        const parsed = await parseEstimateMutation.mutateAsync({
+          fileUrl: ourEstimateUpload.url,
+          fileName: ourEstimateUpload.fileName,
+          storageKey: ourEstimateUpload.key,
+        });
+        nextForm = {
+          ...nextForm,
+          claimNumber: parsed.claimNumber || nextForm.claimNumber,
+          vehicle: parsed.vehicle || nextForm.vehicle,
+          dateOfLoss: parsed.dateOfLoss || nextForm.dateOfLoss,
+          claimantName: parsed.claimantName || nextForm.claimantName,
+        };
+        if (parsed.lineItems.length) {
+          nextLineItems = parsed.lineItems.map((item) => ({ item: item.description, ours: item.amount, theirs: "", reason: "" }));
+        } else if (parsed.repairTotal) {
+          nextLineItems = [{ item: "Repair estimate", ours: parsed.repairTotal, theirs: "", reason: "" }];
+        }
+      }
+      if (carrierDocUpload) {
+        const response = await parseCarrierResponseMutation.mutateAsync({
+          fileUrl: carrierDocUpload.url,
+          fileName: carrierDocUpload.fileName,
+          storageKey: carrierDocUpload.key,
+        });
+        nextForm = {
+          ...nextForm,
+          carrier: response.carrierName || nextForm.carrier,
+          theirClaimNumber: response.carrierClaimNumber || nextForm.theirClaimNumber,
+          adjuster: response.adjusterName || nextForm.adjuster,
+          carrierOfferTotal: response.offerTotal || nextForm.carrierOfferTotal,
+          carrierReason: response.denialReasons || nextForm.carrierReason,
+        };
+        nextLineItems = mergeCarrierResponseRows(nextLineItems, response);
+      }
+      if (!nextForm.claimNumber || !nextForm.vehicle || !nextForm.carrier) {
+        throw new Error("Review the pre-filled Claim #, Vehicle, and Adverse Carrier before generating the rebuttal");
+      }
+      setForm(nextForm);
+      setLineItems(nextLineItems);
+      const result = await generateMutation.mutateAsync({
+        ...nextForm,
+        lineItems: nextLineItems.map((row) => ({ item: row.item, ours: parseFloat(row.ours) || 0, theirs: parseFloat(row.theirs) || 0, reason: row.reason })),
+        ourEstimateUrl: ourEstimateUpload?.url,
+        ourImageReportUrl: ourImageReportUpload?.url,
+        carrierDocUrl: carrierDocUpload?.url,
+      });
+      setDraft(result.letter);
+      toast.success("Documents analyzed — review and edit the rebuttal draft before downloading");
+    } catch (error: unknown) {
+      toast.error((error as Error).message || "Could not analyze the uploaded documents");
+    } finally {
+      setDocUploading(false);
       setAiLoading(false);
     }
   };
@@ -4014,16 +4126,20 @@ This preview uses the current claim details and disputed line items. Generate or
           <InsuranceCompanySelect label="Adverse Carrier" id="rb-carrier" value={form.carrier} onChange={set("carrier")} />
           <Field label="Adjuster Name" id="rb-adjuster" value={form.adjuster} onChange={set("adjuster")} placeholder="e.g. Jane Smith" />
         </div>
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
           <Grid2 children={<>
             <Field label="Claimant / Driver Name" id="rb-claimant" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" />
             <Field label="Accident Type (optional)" id="rb-type" value={form.accidentType} onChange={set("accidentType")} placeholder="e.g. Rear-end, T-bone, Sideswipe" />
+          </>} />
+          <Grid2 children={<>
+            <Field label="Carrier Offer / Allowed Amount" id="rb-offer" value={form.carrierOfferTotal} onChange={set("carrierOfferTotal")} placeholder="0.00" type="number" />
+            <TextareaField label="Carrier's Stated Reason" id="rb-carrier-reason" value={form.carrierReason} onChange={set("carrierReason")} placeholder="Reason stated in the carrier response or denial" rows={2} />
           </>} />
         </div>
       </Panel>
 
       <Panel title="Carrier Document Upload (Optional)">
-        <p className="text-xs text-muted-foreground mb-3">Upload documents to let AI analyze and build the rebuttal. All three are optional — upload what you have.</p>
+        <p className="text-xs text-muted-foreground mb-3">Use step 1 only to read our estimate into the left-side loss fields. Use step 2 to analyze all uploads—especially the carrier response—then create an editable rebuttal draft.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Our Estimate */}
           {[
@@ -4069,7 +4185,7 @@ This preview uses the current claim details and disputed line items. Generate or
             onClick={() => void parseOurEstimate()}
           >
             {estimateParsing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            {estimateParsing ? "Reading estimate…" : "Read our estimate & pre-fill rebuttal"}
+            {estimateParsing ? "Reading estimate…" : "1. Read our estimate & pre-fill our loss"}
           </Button>
         )}
         {(ourEstimateDoc || ourImageReportDoc || carrierDoc) && (
@@ -4077,48 +4193,10 @@ This preview uses the current claim details and disputed line items. Generate or
             size="sm"
             className="mt-3 gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white w-full"
             disabled={docUploading || aiLoading}
-            onClick={async () => {
-              if (!form.claimNumber || !form.vehicle || !form.carrier) {
-                toast.error("Fill in Claim #, Vehicle, and Carrier first");
-                return;
-              }
-              setDocUploading(true);
-              try {
-                const uploadFile = async (file: File | null): Promise<string | undefined> => {
-                  if (!file) return undefined;
-                  const fd = new FormData();
-                  fd.append("file", file);
-                  const res = await fetch("/api/upload/document", { method: "POST", body: fd });
-                  if (!res.ok) throw new Error(`Upload failed: ${file.name}`);
-                  const { url } = await res.json() as { url: string };
-                  return url;
-                };
-                const [ourEstimateUrl, ourImageReportUrl, carrierDocUrl] = await Promise.all([
-                  uploadFile(ourEstimateDoc),
-                  uploadFile(ourImageReportDoc),
-                  uploadFile(carrierDoc),
-                ]);
-                setDocUploading(false);
-                setAiLoading(true);
-                const result = await generateMutation.mutateAsync({
-                  ...form,
-                  lineItems: lineItems.map((r) => ({ item: r.item, ours: parseFloat(r.ours) || 0, theirs: parseFloat(r.theirs) || 0, reason: r.reason })),
-                  ourEstimateUrl,
-                  ourImageReportUrl,
-                  carrierDocUrl,
-                });
-                setDraft(result.letter);
-                toast.success("Rebuttal generated from uploaded documents");
-              } catch (e: unknown) {
-                toast.error((e as Error).message || "Upload or generation failed");
-              } finally {
-                setDocUploading(false);
-                setAiLoading(false);
-              }
-            }}
+            onClick={() => void handleAnalyzeAndGenerate()}
           >
             {(docUploading || aiLoading) ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {docUploading ? "Uploading documents..." : aiLoading ? "Analyzing & generating..." : "Upload All & Generate Rebuttal"}
+            {docUploading ? "Uploading documents..." : aiLoading ? "Analyzing & generating..." : "2. Analyze uploads & generate editable rebuttal"}
           </Button>
         )}
       </Panel>
@@ -4174,7 +4252,8 @@ This preview uses the current claim details and disputed line items. Generate or
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div>
-          <Panel title="Draft Rebuttal" tag="AI">
+          <Panel title="Editable Rebuttal Draft" tag="AI">
+            <p className="mb-2 text-xs text-muted-foreground">Review and edit this letter before previewing or downloading. The carrier offer and stated reason above are used to build the response.</p>
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -7985,6 +8064,13 @@ export default function DocGenerator() {
   };
 
   const handleClearForm = () => {
+    if (activeTab === "lou-calculator") {
+      sessionStorage.removeItem("lou_calc_state");
+      sessionStorage.removeItem("lou_total");
+      sessionStorage.removeItem("lou_claim");
+      sessionStorage.removeItem("lou_days");
+      sessionStorage.removeItem("lou_rate");
+    }
     setFormResetKey((key) => key + 1);
     setCurrentFormData({});
     setCurrentDraftId(undefined);

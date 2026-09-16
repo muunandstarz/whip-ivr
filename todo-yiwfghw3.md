@@ -716,3 +716,11 @@
 - [x] Extract claimant and insurer fields from usable repair-estimate evidence when present, while retaining editable handler fields
 - [x] Add the requested insurance-company dropdown to Subro Demand and Carrier Rebuttal: Whip Claims Management, Assurant Claim Management, Klutch Insurance, Total Recon, Whip Inc., and Metrocars Leasing Corp.
 - [x] Make the adjuster selection and formatted Preview action visible and usable in Subro Demand and Carrier Rebuttal
+
+## September 2026 Carrier Rebuttal, Subro Demand, LOU, and Announcements
+- [x] Parse the carrier offer, denial/rebuttal reason, adverse carrier, and adverse claim number from the appropriate Carrier Rebuttal uploads
+- [x] Make the Carrier Rebuttal upload actions unambiguous and ensure the generated draft is an editable rebuttal letter rather than an unused field
+- [x] Correct Subro Demand RE/salutation spacing and remove honorifics so it addresses the carrier or handling adjuster by name
+- [x] Make LOU Calculator Clear Form reset all calculator inputs and output state rather than only showing a confirmation toast
+- [ ] Add controlled in-dashboard release notices that expire after 48 hours, fall away after a birthday has been supplied, and recognize upcoming/today teammate birthdays
+- [ ] Add a daily morning message behavior and choose a managed trigger that does not affect the paused Mailroom, Mail Bot, or Dispatch publishing schedules

@@ -88,6 +88,32 @@ const ESTIMATE_OUTPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const CARRIER_RESPONSE_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    carrierName: { type: "string" },
+    carrierClaimNumber: { type: "string" },
+    adjusterName: { type: "string" },
+    offerTotal: { type: "string" },
+    denialReasons: { type: "string" },
+    lineItems: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          description: { type: "string" },
+          offer: { type: "string" },
+          reason: { type: "string" },
+        },
+        required: ["description", "offer", "reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["carrierName", "carrierClaimNumber", "adjusterName", "offerTotal", "denialReasons", "lineItems"],
+  additionalProperties: false,
+} as const;
+
 function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
   const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName"];
   return scalarFields.some((field) => String(parsed[field] ?? "").trim().length > 0)
@@ -98,6 +124,15 @@ const execFileAsync = promisify(execFile);
 
 const estimatePrompt = (fileName?: string) =>
   `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","insurerName":"insurance carrier name or empty string","claimantName":"claimant, owner, or driver name when clearly identified or empty string","adjusterName":"carrier adjuster or estimator contact name when clearly identified or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+
+const carrierResponsePrompt = (fileName?: string) =>
+  `You are extracting only objective information from an adverse carrier's response, denial, valuation, or rebuttal for an automobile subrogation claim. Read the attached carrier document and respond with one JSON object only. Use this exact shape: {"carrierName":"carrier company name or empty string","carrierClaimNumber":"carrier claim or reference number or empty string","adjusterName":"handling adjuster or sender name or empty string","offerTotal":"total offer, approved amount, or payment amount without currency punctuation or empty string","denialReasons":"short factual explanation of why the carrier reduced or denied payment, or empty string","lineItems":[{"description":"item, operation, or charge name","offer":"carrier allowed, offered, or denied amount without currency punctuation or empty string","reason":"carrier explanation for that line item or empty string"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+
+function hasCarrierResponseEvidence(parsed: Record<string, unknown>): boolean {
+  const scalarFields = ["carrierName", "carrierClaimNumber", "adjusterName", "offerTotal", "denialReasons"];
+  return scalarFields.some((field) => String(parsed[field] ?? "").trim().length > 0)
+    || (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0);
+}
 
 async function downloadUploadedEstimate(storageKey: string): Promise<Buffer> {
   const signedUrl = await storageGetSignedUrl(storageKey);
@@ -304,6 +339,102 @@ export const docgenRouter = router({
       };
     }),
 
+  parseCarrierResponse: protectedProcedure
+    .input(z.object({
+      fileUrl: z.string().url(),
+      fileName: z.string().max(255).optional(),
+      storageKey: z.string().regex(/^docgen-uploads\/[A-Za-z0-9._/-]+$/).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const messages = [{
+        role: "user" as const,
+        content: [
+          { type: "text" as const, text: carrierResponsePrompt(input.fileName) },
+          { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } },
+        ],
+      }];
+      const readParsedResult = (result: Awaited<ReturnType<typeof invokeLLM>>) => {
+        const raw = extractText(result);
+        if (!raw) return null;
+        try {
+          const parsed = parseJsonObject(raw);
+          return hasCarrierResponseEvidence(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      };
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        parsed = readParsedResult(await invokeLLM({
+          model: "gpt-5-mini",
+          messages,
+          outputSchema: { name: "carrier_response", strict: true, schema: CARRIER_RESPONSE_OUTPUT_SCHEMA },
+        }));
+      } catch (error) {
+        console.warn("[Docgen] Primary carrier-response extraction failed; retrying with multimodal fallback", error);
+      }
+      if (!parsed) {
+        try {
+          parsed = readParsedResult(await invokeLLM({
+            model: "gemini-3-flash-preview",
+            messages,
+            responseFormat: { type: "json_object" },
+          }));
+        } catch (error) {
+          console.warn("[Docgen] Multimodal carrier-response extraction failed", error);
+        }
+      }
+      if (!parsed && input.storageKey && /\.pdf$/i.test(input.fileName ?? "")) {
+        try {
+          const uploadBytes = await downloadUploadedEstimate(input.storageKey);
+          const uploadedText = await extractUploadedEstimateText(uploadBytes);
+          if (uploadedText) {
+            parsed = readParsedResult(await invokeLLM({
+              model: "gpt-5-mini",
+              messages: [{ role: "user", content: `${carrierResponsePrompt(input.fileName)}\n\nSERVER-EXTRACTED PDF TEXT (use only this evidence):\n${uploadedText}` }],
+              outputSchema: { name: "carrier_response", strict: true, schema: CARRIER_RESPONSE_OUTPUT_SCHEMA },
+            }));
+          }
+          if (!parsed) {
+            const pageImages = await rasterizeEstimatePdf(uploadBytes);
+            if (pageImages.length) {
+              parsed = readParsedResult(await invokeLLM({
+                model: "gemini-3-flash-preview",
+                messages: [{
+                  role: "user",
+                  content: [
+                    { type: "text", text: `${carrierResponsePrompt(input.fileName)}\n\nThese are the first pages of the retained carrier document rendered as images. Read only the visible facts.` },
+                    ...pageImages.map((url) => ({ type: "image_url" as const, image_url: { url, detail: "high" as const } })),
+                  ],
+                }],
+                outputSchema: { name: "carrier_response", strict: true, schema: CARRIER_RESPONSE_OUTPUT_SCHEMA },
+              }));
+            }
+          }
+        } catch (error) {
+          console.warn("[Docgen] Server-side carrier-response extraction fallback failed", error);
+        }
+      }
+      if (!parsed) throw new Error("Could not extract usable carrier response fields from this document. Try an unencrypted PDF or image; the fields can also be entered manually.");
+      const amount = (value: unknown) => {
+        const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
+        return normalized && Number.isFinite(Number(normalized)) ? Number(normalized).toFixed(2) : "";
+      };
+      const rawLines = Array.isArray(parsed.lineItems) ? parsed.lineItems : [];
+      return {
+        carrierName: String(parsed.carrierName ?? "").trim().slice(0, 160),
+        carrierClaimNumber: String(parsed.carrierClaimNumber ?? "").trim().slice(0, 100),
+        adjusterName: String(parsed.adjusterName ?? "").trim().slice(0, 160),
+        offerTotal: amount(parsed.offerTotal),
+        denialReasons: String(parsed.denialReasons ?? "").trim().slice(0, 2_000),
+        lineItems: rawLines.map((item) => ({
+          description: String((item as Record<string, unknown>)?.description ?? "").trim().slice(0, 180),
+          offer: amount((item as Record<string, unknown>)?.offer),
+          reason: String((item as Record<string, unknown>)?.reason ?? "").trim().slice(0, 500),
+        })).filter((item) => item.description || item.offer || item.reason).slice(0, 12),
+      };
+    }),
+
   improveWithAI: protectedProcedure
     .input(z.object({
       body: z.string().min(10),
@@ -329,6 +460,8 @@ export const docgenRouter = router({
       carrier: z.string(),
       adjuster: z.string(),
       claimantName: z.string().optional(),
+      carrierOfferTotal: z.string().optional(),
+      carrierReason: z.string().optional(),
       accidentType: z.string().optional(),
       lineItems: z.array(z.object({ item: z.string(), ours: z.number(), theirs: z.number(), reason: z.string().optional() })),
       carrierDocUrl: z.string().optional(),
@@ -336,12 +469,13 @@ export const docgenRouter = router({
       ourImageReportUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, claimantName, accidentType, lineItems, carrierDocUrl, ourEstimateUrl, ourImageReportUrl } = input;
+      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, claimantName, carrierOfferTotal, carrierReason, accidentType, lineItems, carrierDocUrl, ourEstimateUrl, ourImageReportUrl } = input;
       const totalOurs = lineItems.reduce((s, r) => s + r.ours, 0);
-      const totalTheirs = lineItems.reduce((s, r) => s + r.theirs, 0);
+      const documentedOffer = Number(String(carrierOfferTotal ?? "").replace(/[^0-9.-]/g, ""));
+      const totalTheirs = Number.isFinite(documentedOffer) && documentedOffer > 0 ? documentedOffer : lineItems.reduce((s, r) => s + r.theirs, 0);
       const gap = totalOurs - totalTheirs;
       const lines = lineItems.filter(r => r.ours - r.theirs > 0).map(r => `- ${r.item}: We claim $${r.ours.toFixed(2)}, carrier offered $${r.theirs.toFixed(2)} (gap: $${(r.ours - r.theirs).toFixed(2)})${r.reason ? ` — Carrier reason: ${r.reason}` : ""}`).join("\n");
-      const promptText = `You are a senior insurance claims attorney for Whip Claims Management / DriveWhip, a commercial rideshare fleet operator. Write a complete formal carrier rebuttal letter.\n\nCLAIM DETAILS:\n- Claim #: ${claimNumber}${theirClaimNumber ? `\n- Their Claim #: ${theirClaimNumber}` : ""}\n- Vehicle: ${vehicle}\n- Date of Loss: ${dateOfLoss}\n- Adverse Carrier / Adjuster: ${carrier} / ${adjuster}${accidentType ? `\n- Accident Type: ${accidentType}` : ""}\n- Total we claim: $${totalOurs.toFixed(2)}\n- Carrier offered: $${totalTheirs.toFixed(2)}\n- Gap: $${gap.toFixed(2)}\n\nDISPUTED LINE ITEMS:\n${lines}\n\nWrite a complete formal rebuttal that opens with our address (Whip Claims Management, P.O. Box 10622, Rockville, MD 20849), cites I-CAR MRC standards/OEM procedures/state insurance code for each disputed item, demands full payment of $${gap.toFixed(2)} within 30 days, and closes with a professional signature block. FOR SETTLEMENT PURPOSES ONLY. Output only the letter.`;
+      const promptText = `You are a senior insurance claims attorney for Whip Claims Management / DriveWhip, a commercial rideshare fleet operator. Write a complete formal carrier rebuttal letter.\n\nCLAIM DETAILS:\n- Claim #: ${claimNumber}${theirClaimNumber ? `\n- Their Claim #: ${theirClaimNumber}` : ""}\n- Vehicle: ${vehicle}\n- Date of Loss: ${dateOfLoss}\n- Adverse Carrier / Adjuster: ${carrier} / ${adjuster}${claimantName ? `\n- Claimant / Driver: ${claimantName}` : ""}${carrierReason ? `\n- Carrier's stated position: ${carrierReason}` : ""}${accidentType ? `\n- Accident Type: ${accidentType}` : ""}\n- Total we claim: $${totalOurs.toFixed(2)}\n- Carrier offered: $${totalTheirs.toFixed(2)}\n- Gap: $${gap.toFixed(2)}\n\nDISPUTED LINE ITEMS:\n${lines}\n\nWrite a complete formal rebuttal that opens with our address (Whip Claims Management, P.O. Box 10622, Rockville, MD 20849), squarely addresses the carrier's stated position when supplied, cites I-CAR MRC standards/OEM procedures/state insurance code for each disputed item, demands full payment of $${gap.toFixed(2)} within 30 days, and closes with a professional signature block. FOR SETTLEMENT PURPOSES ONLY. Output only the letter.`;
       const hasAttachments = ourEstimateUrl || ourImageReportUrl || carrierDocUrl;
       let result;
       if (hasAttachments) {
