@@ -23,7 +23,6 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   annie:      { id: 5,     name: "Annie Ortiz",        email: "annie.ortiz@drivewhip.com" },
   ana:        { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
   mary:       { id: 6,     name: "Ana Padilla",        email: "anap@drivewhip.com" },
-  catherine:  { id: 7,     name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
   lorraine:   { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   raine:      { id: 9,     name: "Lorraine Tria",      email: "lorraine.tria@drivewhip.com" },
   daniel:     { id: 10,    name: "Daniel Giono",       email: "daniel.giono@drivewhip.com" },
@@ -34,8 +33,8 @@ const HANDLER_ROUTING: Record<string, { id: number; name: string; email: string 
   jovel:      { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   jobs:       { id: 30001, name: "Jovel Villa",         email: "jovel.villa@drivewhip.com" },
   daryl:      { id: 30002, name: "Daryl Ochate",        email: "daryl.ochate@drivewhip.com" },
-  madeline:   { id: 30004, name: "Madeline Green",      email: "madeline.green@drivewhip.com" },
-  demily:     { id: 30005, name: "Demily Flores",       email: "demily.flores@drivewhip.com" },
+  // Madeline's former call coverage is now handled by Tim Chan.
+  madeline:   { id: 90001, name: "Tim Chan",            email: "tim.chan@drivewhip.com" },
 };
 
 // Triage queue — for unknowns with no caller info; MJ and Daryl alternate
@@ -50,9 +49,8 @@ function nextTriageHandler() {
   return h;
 }
 
-// Outbound subro team — 1P vehicle recovery (Madeline, Daniel, Tim Chan); round-robin
+// Outbound subro team — 1P vehicle recovery (Daniel and Tim); round-robin.
 const OUTBOUND_SUBRO_TEAM = [
-  { id: 30004, name: "Madeline Green", email: "madeline.green@drivewhip.com" },
   { id: 10,    name: "Daniel Giono",  email: "daniel.giono@drivewhip.com" },
   { id: 90001, name: "Tim Chan",       email: "tim.chan@drivewhip.com" },
 ];
@@ -63,10 +61,9 @@ function nextOutboundSubroHandler() {
   return h;
 }
 
-// Inbound subro team — 3P vehicle / property damage (Carlito, Catherine); round-robin
+// Inbound subro team — 3P vehicle / property damage (Carlito).
 const INBOUND_SUBRO_TEAM = [
   { id: 4, name: "Carlito Legarde Jr", email: "carlito.legarde@drivewhip.com" },
-  { id: 7, name: "Catherine Cestina",  email: "catherine.cestina@drivewhip.com" },
 ];
 let _inboundSubroIndex = 0;
 function nextInboundSubroHandler() {
@@ -93,7 +90,7 @@ function nextFirstPartyHandler() {
 // 1P subro: caller is seeking recovery FOR our vehicle / our insured (outbound subro team)
 const SUBRO_1P_REGEX = /\b(subro(gation)?|demand( letter| package)?|recovery package|reimbursement)\b/i;
 const SUBRO_1P_VEHICLE_REGEX = /\b(your (vehicle|insured|client|driver|member)|our vehicle|1p|first.?party|your claim|your insured'?s? vehicle|whip vehicle|whip driver)\b/i;
-// 3P subro: caller is asserting a claim AGAINST us for their vehicle (inbound subro / Carlito+Catherine)
+// 3P subro: caller is asserting a claim AGAINST us for their vehicle (inbound subro / Carlito)
 const SUBRO_3P_REGEX = /\b(subro(gation)?|demand( letter| package)?|settlement|lien|reimbursement|recovery package)\b/i;
 const SUBRO_3P_VEHICLE_REGEX = /\b(my (vehicle|car|truck)|our (vehicle|car)|their vehicle|third.?party|3rd.?party|property damage|pd claim)\b/i;
 const INJURY_REGEX   = /\b(pip|personal injury|bodily injury|bi claim|injury claim|medical treatment|pain and suffering|attorney|represented|lawsuit|litigation)\b/i;
@@ -131,7 +128,7 @@ function resolveHandler(
     const text = ((message ?? "") + " " + transcript).toLowerCase();
 
   // Law offices ALWAYS go to Jayla — no exceptions.
-  // Madeline/Daniel/Tim Chan handle outbound subro; they do NOT take attorney calls.
+  // Daniel and Tim Chan handle outbound subro; they do NOT take attorney calls.
   // PD law offices also go to Jayla (she coordinates with Carlito as needed).
   if (callerType === "law_office") {
     return HANDLER_ROUTING.jayla;
@@ -142,19 +139,19 @@ function resolveHandler(
 
   // 2. Content-based routing (topic takes priority over caller type)
   // Subro routing — split by direction:
-  //   1P outbound subro (recovery for our vehicle) → Madeline / Daniel / Tim Chan
-  //   3P inbound subro (claim against us for their vehicle) → Carlito / Catherine
+  //   1P outbound subro (recovery for our vehicle) → Daniel / Tim Chan
+  //   3P inbound subro (claim against us for their vehicle) → Carlito
   if (SUBRO_1P_REGEX.test(text) && SUBRO_1P_VEHICLE_REGEX.test(text)) return nextOutboundSubroHandler();
   if (SUBRO_3P_REGEX.test(text) && SUBRO_3P_VEHICLE_REGEX.test(text)) return nextInboundSubroHandler();
   // Generic subro keyword without clear direction → outbound subro team (safer default)
   if (SUBRO_1P_REGEX.test(text)) return nextOutboundSubroHandler();
   // Injury (PIP / BI) → Jayla
   if (INJURY_REGEX.test(text)) return HANDLER_ROUTING.jayla;
-  // Total loss → Demily
-  if (TOTAL_LOSS_REGEX.test(text)) return HANDLER_ROUTING.demily;
+  // Total loss calls remain in the active first-party coverage pool.
+  if (TOTAL_LOSS_REGEX.test(text)) return nextFirstPartyHandler();
   // Active repairs / claim status → First Party team (round-robin)
   if (REPAIRS_REGEX.test(text)) return nextFirstPartyHandler();
-  // PD / 3rd-party property damage → Carlito / Catherine (inbound subro team)
+  // PD / 3rd-party property damage → Carlito (inbound subro team)
   if (PD_REGEX.test(text)) return nextInboundSubroHandler();
   if (callerType === "carrier")          return nextFirstPartyHandler(); // carriers default to first-party team
   // Members/claimants wanting to FILE A NEW CLAIM → processors (MJ / Daryl round-robin)
@@ -595,7 +592,6 @@ const CLAIMS_AGENT_USER_IDS = new Set([
   1774596, // Bennet Carlos
   1756923, // Carlito Legarde
   1756924, // Natashia Edulan
-  1763684, // Demily Flores
   1827146, // Daryl Ochate
   1836484, // Jovel Villa
   1836944, // Annie Ortiz
@@ -613,7 +609,6 @@ const AGENT_EXTENSIONS: Record<number, string> = {
   1774596: '175', // Bennet Carlos
   1756923: '325', // Carlito Legarde
   1756924: '326', // Natashia Edulan
-  1763684: '011', // Demily Flores
   1827146: '017', // Daryl Ochate
   1836484: '018', // Jovel Villa
   1836944: '019', // Annie Ortiz

@@ -32,7 +32,14 @@ describe('announcement automation helpers', () => {
 
 describe('call performance team definitions', () => {
   it('includes each requested operating team and handler', () => {
-    expect(PERFORMANCE_TEAMS.map((team) => team.name)).toEqual(['Processors', 'Intake', 'First Party', 'Liability']);
+    expect(PERFORMANCE_TEAMS.map((team) => team.name)).toEqual(['Processors', 'Subrogation', 'Intake', 'First Party', 'Liability']);
+    expect(PERFORMANCE_TEAMS.flatMap((team) => team.members)).toEqual([
+      'Daryl Ochate', 'MJ Badua',
+      'Tim Chan', 'Daniel Giono',
+      'Ana Padilla', 'Bennet Carlos', 'Carlito Legarde',
+      'Jovel Villa', 'Annie Ortiz', 'Natashia Edulan', 'Lorraine Tria',
+      'Giovanni Cabrera', 'Jayla Bernard',
+    ]);
     expect(teamForAgent('MJ Badua')).toBe('Processors');
     expect(teamForAgent('Ana Padilla')).toBe('Intake');
     expect(teamForAgent('Lorraine Tria')).toBe('First Party');
@@ -49,9 +56,16 @@ describe('call performance team definitions', () => {
   it('aggregates the live call history into the requested operational teams', async () => {
     const dashboard = await getCallPerformanceDashboard('90d');
     expect(dashboard.periodLabel).toBe('Last 90 days');
-    expect(dashboard.teams.map((team) => team.name)).toEqual(['Processors', 'Intake', 'First Party', 'Liability']);
+    expect(dashboard.teams.map((team) => team.name)).toEqual(['Processors', 'Subrogation', 'Intake', 'First Party', 'Liability']);
     expect(dashboard.agents.some((agent) => agent.agent === 'Daryl Ochate' && agent.team === 'Processors')).toBe(true);
     expect(dashboard.monthlyTrend.length).toBeGreaterThan(0);
     expect(dashboard.unassigned.total).toBeGreaterThanOrEqual(0);
+  });
+
+  it('supports a selected calendar month and compares it to the previous month', async () => {
+    const dashboard = await getCallPerformanceDashboard('month', '2026-08', new Date('2026-09-18T12:00:00.000Z'));
+    expect(dashboard.periodLabel).toBe('August 2026');
+    expect(dashboard.previousPeriodLabel).toBe('July 2026');
+    expect(dashboard.selectedMonth).toBe('2026-08');
   });
 });

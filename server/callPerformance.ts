@@ -1,12 +1,18 @@
 import { sql } from 'drizzle-orm';
 import { getDb } from './db.js';
 
-export type PerformancePeriod = '30d' | '90d' | 'all';
+export type PerformancePeriod = '30d' | '90d' | 'all' | 'month';
 
 type TeamDefinition = { name: string; members: string[]; aliases: string[] };
 
+/**
+ * The operating roster deliberately contains only the team the user asked to
+ * manage in Call Performance. Raw Aircall records are retained elsewhere, but
+ * they are never credited to this view's claims-team metrics.
+ */
 export const PERFORMANCE_TEAMS: TeamDefinition[] = [
   { name: 'Processors', members: ['Daryl Ochate', 'MJ Badua'], aliases: ['daryl ochate', 'mj badua', 'mary joy badua'] },
+  { name: 'Subrogation', members: ['Tim Chan', 'Daniel Giono'], aliases: ['tim chan', 'daniel giono'] },
   { name: 'Intake', members: ['Ana Padilla', 'Bennet Carlos', 'Carlito Legarde'], aliases: ['ana padilla', 'bennet carlos', 'carlito legarde', 'carlito legarde jr'] },
   { name: 'First Party', members: ['Jovel Villa', 'Annie Ortiz', 'Natashia Edulan', 'Lorraine Tria'], aliases: ['jovel villa', 'annie ortiz', 'natashia edulan', 'lorraine tria'] },
   { name: 'Liability', members: ['Giovanni Cabrera', 'Jayla Bernard'], aliases: ['giovanni cabrera', 'geovanni cabrera', 'jayla bernard'] },
@@ -21,6 +27,8 @@ const DISPLAY_ALIASES: Record<string, string> = {
   'giovanni cabrera': 'Giovanni Cabrera',
 };
 
+const TRACKED_ROSTER = new Set(PERFORMANCE_TEAMS.flatMap((team) => team.members));
+
 export function normalizePerformanceAgent(name: string | null | undefined) {
   const normalized = (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
   if (!normalized) return 'Unassigned';
@@ -28,8 +36,12 @@ export function normalizePerformanceAgent(name: string | null | undefined) {
 }
 
 export function teamForAgent(name: string) {
-  const normalized = name.toLowerCase();
+  const normalized = name.trim().toLowerCase();
   return PERFORMANCE_TEAMS.find((team) => team.aliases.includes(normalized))?.name ?? 'Other';
+}
+
+export function isTrackedPerformanceAgent(name: string | null | undefined) {
+  return TRACKED_ROSTER.has(normalizePerformanceAgent(name));
 }
 
 export function percentage(numerator: number, denominator: number) {
@@ -68,6 +80,15 @@ type AgentMetrics = {
   answerRateChange: number;
 };
 
+type DateWindow = {
+  currentStart: Date | null;
+  currentEnd: Date | null;
+  previousStart: Date | null;
+  previousEnd: Date | null;
+  label: string;
+  previousLabel: string;
+};
+
 function rollupRows(rows: AggregateRow[]) {
   const map = new Map<string, Omit<AgentMetrics, 'team' | 'answerRate' | 'previousTotal' | 'totalChange' | 'previousAnswerRate' | 'answerRateChange'>>();
   for (const row of rows) {
@@ -90,12 +111,44 @@ function rollupRows(rows: AggregateRow[]) {
   return map;
 }
 
-function dateWindow(period: PerformancePeriod, now: Date) {
-  if (period === 'all') return { currentStart: null as Date | null, previousStart: null as Date | null, previousEnd: null as Date | null, label: 'Since tracking began' };
+function calendarMonthStart(month: string): Date | null {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return null;
+  const [year, monthIndex] = month.split('-').map(Number);
+  return new Date(Date.UTC(year, monthIndex - 1, 1));
+}
+
+function monthLabel(date: Date) {
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+function dateWindow(period: PerformancePeriod, now: Date, selectedMonth?: string): DateWindow {
+  if (period === 'month') {
+    const currentStart = calendarMonthStart(selectedMonth ?? '') ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const currentEnd = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth() + 1, 1));
+    const previousStart = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth() - 1, 1));
+    return {
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd: currentStart,
+      label: monthLabel(currentStart),
+      previousLabel: monthLabel(previousStart),
+    };
+  }
+  if (period === 'all') {
+    return { currentStart: null, currentEnd: null, previousStart: null, previousEnd: null, label: 'Since tracking began', previousLabel: 'No prior comparison' };
+  }
   const days = period === '30d' ? 30 : 90;
   const currentStart = new Date(now.getTime() - days * 86_400_000);
   const previousStart = new Date(now.getTime() - days * 2 * 86_400_000);
-  return { currentStart, previousStart, previousEnd: currentStart, label: period === '30d' ? 'Last 30 days' : 'Last 90 days' };
+  return {
+    currentStart,
+    currentEnd: null,
+    previousStart,
+    previousEnd: currentStart,
+    label: period === '30d' ? 'Last 30 days' : 'Last 90 days',
+    previousLabel: `Previous ${days} days`,
+  };
 }
 
 async function aggregateForWindow(start: Date | null, end: Date | null) {
@@ -123,34 +176,51 @@ async function aggregateForWindow(start: Date | null, end: Date | null) {
 async function monthlyTrend() {
   const db = await getDb();
   if (!db) throw new Error('Database unavailable');
-  const results = await db.execute<{ month: string; total: number | string; answered: number | string; missed: number | string }>(sql`
+  const results = await db.execute<AggregateRow & { month: string }>(sql`
     SELECT DATE_FORMAT(startedAt, '%Y-%m') AS month,
+      COALESCE(agentName, 'Unassigned') AS agent,
       CAST(COUNT(*) AS SIGNED) AS total,
+      CAST(SUM(CASE WHEN direction = 'inbound' THEN 1 ELSE 0 END) AS SIGNED) AS inbound,
+      CAST(SUM(CASE WHEN direction = 'outbound' THEN 1 ELSE 0 END) AS SIGNED) AS outbound,
       CAST(SUM(CASE WHEN status = 'answered' THEN 1 ELSE 0 END) AS SIGNED) AS answered,
-      CAST(SUM(CASE WHEN status = 'missed' THEN 1 ELSE 0 END) AS SIGNED) AS missed
+      CAST(SUM(CASE WHEN status = 'missed' THEN 1 ELSE 0 END) AS SIGNED) AS missed,
+      CAST(SUM(CASE WHEN status = 'voicemail' THEN 1 ELSE 0 END) AS SIGNED) AS voicemail,
+      ROUND(AVG(COALESCE(durationSeconds, 0))) AS averageDuration
     FROM call_history
-    GROUP BY DATE_FORMAT(startedAt, '%Y-%m')
+    GROUP BY DATE_FORMAT(startedAt, '%Y-%m'), agentName
     ORDER BY month ASC
   `);
-  return ((results as unknown as Array<Array<{ month: string; total: number | string; answered: number | string; missed: number | string }>>)[0] ?? []).map((row) => {
-    const total = Number(row.total);
-    const answered = Number(row.answered);
-    return { month: row.month, total, answered, missed: Number(row.missed), answerRate: percentage(answered, total) };
+  const raw = (results as unknown as Array<Array<AggregateRow & { month: string }>>)[0] ?? [];
+  const byMonth = new Map<string, AggregateRow[]>();
+  for (const row of raw) {
+    if (!isTrackedPerformanceAgent(row.agent)) continue;
+    const bucket = byMonth.get(row.month) ?? [];
+    bucket.push(row);
+    byMonth.set(row.month, bucket);
+  }
+  return Array.from(byMonth.entries()).map(([month, rows]) => {
+    const agents = Array.from(rollupRows(rows).values()).map((agent) => ({
+      ...agent,
+      team: teamForAgent(agent.agent),
+      answerRate: percentage(agent.answered, agent.total),
+    }));
+    const total = agents.reduce((sum, agent) => sum + agent.total, 0);
+    const answered = agents.reduce((sum, agent) => sum + agent.answered, 0);
+    const missed = agents.reduce((sum, agent) => sum + agent.missed, 0);
+    return { month, total, answered, missed, answerRate: percentage(answered, total), agentTotals: agents };
   });
 }
 
-export async function getCallPerformanceDashboard(period: PerformancePeriod = '90d', now = new Date()) {
-  const window = dateWindow(period, now);
+export async function getCallPerformanceDashboard(period: PerformancePeriod = '90d', selectedMonth?: string, now = new Date()) {
+  const window = dateWindow(period, now, selectedMonth);
   const [currentRows, previousRows, trend] = await Promise.all([
-    aggregateForWindow(window.currentStart, null),
+    aggregateForWindow(window.currentStart, window.currentEnd),
     window.previousStart && window.previousEnd ? aggregateForWindow(window.previousStart, window.previousEnd) : Promise.resolve([]),
     monthlyTrend(),
   ]);
   const current = rollupRows(currentRows);
   const previous = rollupRows(previousRows);
-  const roster = new Set(PERFORMANCE_TEAMS.flatMap((team) => team.members));
-  const agentNames = Array.from(new Set([...Array.from(roster), ...Array.from(current.keys())]));
-  const agents: AgentMetrics[] = agentNames
+  const agents: AgentMetrics[] = Array.from(TRACKED_ROSTER)
     .map((agent) => {
       const metrics = current.get(agent) ?? { agent, total: 0, inbound: 0, outbound: 0, answered: 0, missed: 0, voicemail: 0, averageDurationSeconds: 0 };
       const prior = previous.get(agent);
@@ -158,6 +228,7 @@ export async function getCallPerformanceDashboard(period: PerformancePeriod = '9
       const previousAnswerRate = prior ? percentage(prior.answered, prior.total) : 0;
       return {
         ...metrics,
+        agent,
         team: teamForAgent(agent),
         answerRate: percentage(metrics.answered, metrics.total),
         previousTotal,
@@ -193,27 +264,31 @@ export async function getCallPerformanceDashboard(period: PerformancePeriod = '9
   });
 
   const allCurrent = agents.reduce((sum, agent) => ({ total: sum.total + agent.total, answered: sum.answered + agent.answered, missed: sum.missed + agent.missed, voicemail: sum.voicemail + agent.voicemail, inbound: sum.inbound + agent.inbound, outbound: sum.outbound + agent.outbound, previousTotal: sum.previousTotal + agent.previousTotal }), { total: 0, answered: 0, missed: 0, voicemail: 0, inbound: 0, outbound: 0, previousTotal: 0 });
-  const unassigned = agents.find((agent) => agent.agent === 'Unassigned') ?? null;
+  const rawUnassigned = current.get('Unassigned');
+  const unassigned = rawUnassigned ? {
+    total: rawUnassigned.total,
+    missed: rawUnassigned.missed,
+    inbound: rawUnassigned.inbound,
+    answerRate: percentage(rawUnassigned.answered, rawUnassigned.total),
+  } : { total: 0, missed: 0, inbound: 0, answerRate: 0 };
 
   return {
     period,
+    selectedMonth: period === 'month' ? `${window.currentStart!.getUTCFullYear()}-${String(window.currentStart!.getUTCMonth() + 1).padStart(2, '0')}` : null,
     periodLabel: window.label,
+    previousPeriodLabel: window.previousLabel,
     generatedAt: now,
     earliestMonth: trend[0]?.month ?? null,
+    availableMonths: trend.map((row) => row.month),
     totals: {
       ...allCurrent,
       answerRate: percentage(allCurrent.answered, allCurrent.total),
       volumeChange: change(allCurrent.total, allCurrent.previousTotal),
     },
-    unassigned: unassigned ? {
-      total: unassigned.total,
-      missed: unassigned.missed,
-      inbound: unassigned.inbound,
-      answerRate: unassigned.answerRate,
-    } : { total: 0, missed: 0, inbound: 0, answerRate: 0 },
+    unassigned,
     teams: teamSummaries,
-    agents: agents.filter((agent) => agent.agent !== 'Unassigned'),
+    agents,
     monthlyTrend: trend,
-    methodology: 'Answer rate is based on recorded Aircall outcomes. Calls without a named Aircall agent remain separately visible as unassigned queue coverage; comparison figures use the immediately preceding period when available.',
+    methodology: 'Claims-team performance includes only the named Processors, Intake, First Party, and Liability roster. Queue calls without a named Aircall agent remain separate. Changes compare the immediately preceding matching period and describe recorded movement, not proof of a specific cause.',
   };
 }

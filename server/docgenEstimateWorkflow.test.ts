@@ -32,6 +32,22 @@ describe('estimate workflow fields and previews', () => {
     expect(pageSource).toContain('Preview formatted PDF');
   });
 
+  it('keeps adverse claim references out of our-estimate fields and supports a complete recipient address', () => {
+    expect(routerSource).toContain('claimNumberRole');
+    expect(routerSource).toContain('Never classify an adverse carrier claim number as our claim number');
+    expect(pageSource).toContain('ourClaim: parsed.claimNumberRole !== "adverse"');
+    expect(pageSource).toContain('claimNumber: parsed.claimNumberRole !== "adverse"');
+    expect(pageSource).toContain('Carrier Mailing Address');
+    expect(pageSource).toContain('form.carrierAddress || "[Carrier Mailing Address]"');
+  });
+
+  it('uses retained extraction before external document retries and generates rebuttals from verified fields', () => {
+    expect(routerSource).toContain('if (!input.storageKey) await parseFileUrl();');
+    expect(routerSource).toContain('if (!parsed && input.storageKey) await parseFileUrl();');
+    expect(routerSource).toContain('Sending all original PDFs through a second');
+    expect(routerSource).not.toContain('ourImageReportUrl: ourImageReportUpload?.url');
+  });
+
   it('extracts carrier-response offer, reason, and reference fields for an editable rebuttal', () => {
     expect(routerSource).toContain('parseCarrierResponse: protectedProcedure');
     expect(routerSource).toContain('carrierClaimNumber: { type: "string" }');

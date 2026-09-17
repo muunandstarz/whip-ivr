@@ -38,6 +38,13 @@ import {
 import { format } from "date-fns";
 
 const PAGE_SIZE = 50;
+const CLAIMS_AGENT_OPTIONS = [
+  "Daryl Ochate", "MJ Badua",
+  "Tim Chan", "Daniel Giono",
+  "Ana Padilla", "Bennet Carlos", "Carlito Legarde",
+  "Jovel Villa", "Annie Ortiz", "Natashia Edulan", "Lorraine Tria",
+  "Giovanni Cabrera", "Jayla Bernard",
+];
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   answered: { label: "Answered", icon: PhoneCall, className: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" },
@@ -344,26 +351,12 @@ export default function CallTracking() {
   const { data, isLoading } = trpc.calls.list.useQuery({
     status: statusFilter === "all" ? undefined : statusFilter,
     agentName: agentFilter === "all" ? undefined : agentFilter,
+    claimsRosterOnly: true,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   });
 
-  const { data: analytics } = trpc.calls.analytics.useQuery();
-
   const totalPages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
-
-  const totalCalls = analytics?.byStatus?.reduce((sum: number, s: { count: number }) => sum + Number(s.count), 0) ?? 0;
-  const answeredCount = analytics?.byStatus?.find((s: { status: string }) => s.status === "answered")?.count ?? 0;
-  const missedCount = analytics?.byStatus?.find((s: { status: string }) => s.status === "missed")?.count ?? 0;
-  const answerRate = totalCalls > 0 ? Math.round((Number(answeredCount) / totalCalls) * 100) : 0;
-
-  const agents = Array.from(
-    new Set(
-      (analytics?.byAgent ?? [])
-        .map((a: { agentName: string | null }) => a.agentName)
-        .filter(Boolean)
-    )
-  ) as string[];
 
   return (
     <WhipLayout>
@@ -380,121 +373,6 @@ export default function CallTracking() {
         </div>
 
         <CallPerformanceBoard />
-
-        {/* Summary stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
-                  <PhoneIncoming className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">{totalCalls.toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Total Calls</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-green-500/15 flex items-center justify-center">
-                  <PhoneCall className="w-4 h-4 text-green-600" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">{Number(answeredCount).toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Answered</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center">
-                  <PhoneMissed className="w-4 h-4 text-red-600" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">{Number(missedCount).toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Missed</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#ff6221]/10 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-[#ff6221]" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">{answerRate}%</div>
-                  <div className="text-xs text-muted-foreground">Answer Rate</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Agent performance table */}
-        {analytics?.byAgent && analytics.byAgent.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-muted-foreground" />
-                Raw Agent Call Log (Last 30 Days)
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">Detailed Aircall records by assigned agent. Use the performance overview above for team-normalized comparisons.</p>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Agent</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Total</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Answered</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Missed</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Voicemail</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Avg Duration</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Answer Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {analytics.byAgent.map((agent: {
-                      agentName: string | null;
-                      total: number;
-                      answered: number;
-                      missed: number;
-                      voicemail: number;
-                      avgDuration: number;
-                    }) => {
-                      const rate = agent.total > 0 ? Math.round((Number(agent.answered) / Number(agent.total)) * 100) : 0;
-                      return (
-                        <tr key={agent.agentName ?? "unknown"} className="hover:bg-muted/20">
-                          <td className="px-4 py-2.5 font-medium text-foreground">
-                            {agent.agentName || "Unassigned"}
-                          </td>
-                          <td className="px-4 py-2.5 text-right text-muted-foreground">{Number(agent.total).toLocaleString()}</td>
-                          <td className="px-4 py-2.5 text-right text-green-700">{Number(agent.answered).toLocaleString()}</td>
-                          <td className="px-4 py-2.5 text-right text-red-600">{Number(agent.missed).toLocaleString()}</td>
-                          <td className="px-4 py-2.5 text-right text-blue-600">{Number(agent.voicemail).toLocaleString()}</td>
-                          <td className="px-4 py-2.5 text-right text-muted-foreground">{formatSeconds(Math.round(Number(agent.avgDuration)))}</td>
-                          <td className="px-4 py-2.5 text-right">
-                            <span className={`font-medium ${rate >= 80 ? "text-green-600" : rate >= 60 ? "text-yellow-600" : "text-red-600"}`}>
-                              {rate}%
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
@@ -516,7 +394,7 @@ export default function CallTracking() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Agents</SelectItem>
-              {agents.map((a) => (
+              {CLAIMS_AGENT_OPTIONS.map((a) => (
                 <SelectItem key={a} value={a}>{a}</SelectItem>
               ))}
             </SelectContent>

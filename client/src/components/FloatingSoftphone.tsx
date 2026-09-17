@@ -32,7 +32,7 @@ import { Label } from "@/components/ui/label";
 import {
   Phone, PhoneIncoming, PhoneOutgoing,
   ExternalLink, X, Mic, MicOff, Pause, Play,
-  CheckCircle2, ChevronDown, ChevronUp, Wifi, WifiOff,
+  CheckCircle2, ChevronDown, ChevronUp, Wifi, WifiOff, GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -112,7 +112,9 @@ function callStateLabel(state: string) {
 // This hook creates the container once and updates its CSS position/size
 // based on mode. The container NEVER moves between DOM parents.
 
-function useAircallContainer(isOnSoftphonePage: boolean, widgetVisible: boolean) {
+type DockPosition = { right: number; bottom: number };
+
+function useAircallContainer(isOnSoftphonePage: boolean, widgetVisible: boolean, dockPosition: DockPosition) {
   const { initAircall } = useSoftphone();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const initializedRef = useRef(false);
@@ -229,8 +231,8 @@ function useAircallContainer(isOnSoftphonePage: boolean, widgetVisible: boolean)
       // Container sits at bottom: 16+44=60px so it appears above the header.
       Object.assign(container.style, {
         top: "auto",
-        bottom: "60px",
-        right: "16px",
+        bottom: `${dockPosition.bottom + 44}px`,
+        right: `${dockPosition.right}px`,
         left: "auto",
         width: "356px",
         height: "500px",
@@ -240,7 +242,7 @@ function useAircallContainer(isOnSoftphonePage: boolean, widgetVisible: boolean)
         zIndex: "9995",
       });
     }
-  }, [isOnSoftphonePage, widgetVisible]);
+  }, [isOnSoftphonePage, widgetVisible, dockPosition]);
 
   return containerRef;
 }
@@ -261,6 +263,8 @@ export default function FloatingSoftphone() {
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
   const [showDisposition, setShowDisposition] = useState(false);
+  const [dockPosition, setDockPosition] = useState<DockPosition>({ right: 16, bottom: 16 });
+  const dragOrigin = useRef<{ x: number; y: number; right: number; bottom: number } | null>(null);
   const isOnSoftphonePage = location.startsWith("/softphone");
 
   // widgetVisible = the Aircall iframe is shown in widget mode.
@@ -271,7 +275,40 @@ export default function FloatingSoftphone() {
   const widgetVisible = !isOnSoftphonePage && widgetOpen && (widgetExpanded || callIsLive);
 
   // Manage the persistent container (never reparented)
-  useAircallContainer(isOnSoftphonePage, widgetVisible);
+  useAircallContainer(isOnSoftphonePage, widgetVisible, dockPosition);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("whip.softphone.dockPosition");
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as Partial<DockPosition>;
+      if (typeof parsed.right === "number" && typeof parsed.bottom === "number") setDockPosition(parsed as DockPosition);
+    } catch {
+      // A local preference must never prevent the call client from loading.
+    }
+  }, []);
+
+  const startDockDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    dragOrigin.current = { x: event.clientX, y: event.clientY, right: dockPosition.right, bottom: dockPosition.bottom };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, [dockPosition]);
+  const moveDockDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const origin = dragOrigin.current;
+    if (!origin) return;
+    setDockPosition({
+      right: Math.max(8, Math.min(Math.max(8, window.innerWidth - 74), origin.right - (event.clientX - origin.x))),
+      bottom: Math.max(8, Math.min(Math.max(8, window.innerHeight - 54), origin.bottom - (event.clientY - origin.y))),
+    });
+  }, []);
+  const endDockDrag = useCallback(() => {
+    if (!dragOrigin.current) return;
+    dragOrigin.current = null;
+    setDockPosition((position) => {
+      window.localStorage.setItem("whip.softphone.dockPosition", JSON.stringify(position));
+      return position;
+    });
+  }, []);
 
   // Show disposition panel when wrap_up starts
   useEffect(() => {
@@ -425,7 +462,8 @@ export default function FloatingSoftphone() {
       {showLauncher && (
         <button
           onClick={() => { setWidgetOpen(true); setWidgetExpanded(true); }}
-          className="fixed bottom-6 right-6 z-[9999] w-14 h-14 rounded-full bg-[#171b31] border-2 border-[#ff6221] shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
+          className="fixed z-[9999] flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#ff6221] bg-[#171b31] shadow-lg transition-transform hover:scale-110"
+          style={{ right: `${dockPosition.right}px`, bottom: `${dockPosition.bottom}px` }}
           title="Open Softphone"
         >
           <Phone className="w-6 h-6 text-[#ff6221]" />
@@ -445,8 +483,8 @@ export default function FloatingSoftphone() {
             <div
               className="fixed z-[10001] border border-white/10 rounded-2xl shadow-2xl overflow-hidden bg-[#171b31]"
               style={{
-                bottom: "60px",
-                right: "16px",
+                bottom: `${dockPosition.bottom + 44}px`,
+                right: `${dockPosition.right}px`,
                 width: "356px",
               }}
             >
@@ -458,12 +496,22 @@ export default function FloatingSoftphone() {
           <div
             className="fixed z-[10000] border border-white/10 rounded-2xl shadow-2xl bg-[#0f1220]"
             style={{
-              bottom: "16px",
-              right: "16px",
+              bottom: `${dockPosition.bottom}px`,
+              right: `${dockPosition.right}px`,
               width: "356px",
             }}
           >
             <div className="flex items-center gap-2 px-3 py-2">
+              <button
+                type="button"
+                className="touch-none cursor-grab rounded p-0.5 text-gray-400 hover:text-white active:cursor-grabbing"
+                onPointerDown={startDockDrag}
+                onPointerMove={moveDockDrag}
+                onPointerUp={endDockDrag}
+                onPointerCancel={endDockDrag}
+                aria-label="Move softphone"
+                title="Drag to move this softphone"
+              ><GripVertical className="h-4 w-4" /></button>
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${callStateColor(callState)}`} />
               <span className="text-xs font-semibold text-white flex-1 truncate">
                 {callState !== "idle"

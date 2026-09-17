@@ -1,4 +1,4 @@
-import { eq, desc, like, and, or, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, desc, like, and, or, sql, inArray, isNull, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -428,6 +428,7 @@ export async function upsertCallHistory(data: InsertCallHistory): Promise<void> 
 export async function getCallHistory(opts: {
   status?: string;
   agentName?: string;
+  claimsRosterOnly?: boolean;
   limit?: number;
   offset?: number;
   startDate?: Date;
@@ -439,6 +440,20 @@ export async function getCallHistory(opts: {
   const conditions = [];
   if (opts.status) conditions.push(eq(callHistory.status, opts.status as any));
   if (opts.agentName) conditions.push(like(callHistory.agentName, `%${opts.agentName}%`));
+  if (opts.claimsRosterOnly) {
+    // This page is an operational Claims view. Keep unnamed queue calls visible,
+    // but do not mix other departments into handler attribution or filters.
+    conditions.push(or(
+      isNull(callHistory.agentName),
+      inArray(callHistory.agentName, [
+        "Daryl Ochate", "MJ Badua", "Mary Joy Badua",
+        "Tim Chan", "Daniel Giono",
+        "Ana Padilla", "Bennet Carlos", "Carlito Legarde", "Carlito Legarde Jr",
+        "Jovel Villa", "Annie Ortiz", "Natashia Edulan", "Lorraine Tria",
+        "Giovanni Cabrera", "Geovanni Cabrera", "Jayla Bernard",
+      ]),
+    ));
+  }
   if (opts.startDate) conditions.push(sql`${callHistory.startedAt} >= ${opts.startDate}`);
   if (opts.endDate) conditions.push(sql`${callHistory.startedAt} <= ${opts.endDate}`);
 

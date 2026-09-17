@@ -148,10 +148,8 @@ describe('docgen.parseEstimate structured upload parsing', () => {
     expect(mocks.invokeLLM).toHaveBeenCalledTimes(2);
   });
 
-  it('uses retained-upload PDF text after both file-url model attempts are blank', async () => {
+  it('uses retained-upload PDF text before costly file-url model attempts', async () => {
     mocks.invokeLLM
-      .mockResolvedValueOnce({ choices: [{ message: { content: '' } }] })
-      .mockResolvedValueOnce({ choices: [{ message: { content: '' } }] })
       .mockResolvedValueOnce({
         choices: [{
           message: {
@@ -173,14 +171,13 @@ describe('docgen.parseEstimate structured upload parsing', () => {
     })).resolves.toMatchObject({ repairTotal: '1875.00', claimNumber: 'SUB-109' });
     expect(mocks.storageGetSignedUrl).toHaveBeenCalledWith('docgen-uploads/123_repair-estimate.pdf');
     expect(mocks.pdfGetText).toHaveBeenCalled();
-    expect(mocks.invokeLLM).toHaveBeenCalledTimes(3);
+    expect(mocks.invokeLLM).toHaveBeenCalledTimes(1);
+    expect(mocks.invokeLLM.mock.calls[0]?.[0].messages[0].content).toContain('SERVER-EXTRACTED PDF TEXT');
     fetchMock.mockRestore();
   });
 
   it('renders a scan-only retained PDF and uses vision extraction when no embedded text is available', async () => {
     mocks.invokeLLM
-      .mockResolvedValueOnce({ choices: [{ message: { content: '' } }] })
-      .mockResolvedValueOnce({ choices: [{ message: { content: '' } }] })
       .mockResolvedValueOnce({
         choices: [{
           message: {
@@ -200,7 +197,8 @@ describe('docgen.parseEstimate structured upload parsing', () => {
       fileName: 'scan-only.pdf',
       storageKey: 'docgen-uploads/124_scan-only.pdf',
     })).resolves.toMatchObject({ repairTotal: '3000.00', claimNumber: 'SCAN-1' });
-    const visionCall = mocks.invokeLLM.mock.calls[2]?.[0];
+    expect(mocks.invokeLLM).toHaveBeenCalledTimes(1);
+    const visionCall = mocks.invokeLLM.mock.calls[0]?.[0];
     expect(visionCall).toMatchObject({ model: 'gemini-3-flash-preview' });
     expect(visionCall.messages[0].content.some((part: { type: string }) => part.type === 'image_url')).toBe(true);
     fetchMock.mockRestore();

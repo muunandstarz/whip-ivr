@@ -66,6 +66,7 @@ const ESTIMATE_OUTPUT_SCHEMA = {
     vehicle: { type: "string" },
     vin: { type: "string" },
     claimNumber: { type: "string" },
+    claimNumberRole: { type: "string" },
     dateOfLoss: { type: "string" },
     shopName: { type: "string" },
     insurerName: { type: "string" },
@@ -84,7 +85,7 @@ const ESTIMATE_OUTPUT_SCHEMA = {
       },
     },
   },
-  required: ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName", "lineItems"],
+  required: ["repairTotal", "vehicle", "vin", "claimNumber", "claimNumberRole", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName", "lineItems"],
   additionalProperties: false,
 } as const;
 
@@ -123,7 +124,7 @@ function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
 const execFileAsync = promisify(execFile);
 
 const estimatePrompt = (fileName?: string) =>
-  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","insurerName":"insurance carrier name or empty string","claimantName":"claimant, owner, or driver name when clearly identified or empty string","adjusterName":"carrier adjuster or estimator contact name when clearly identified or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","claimNumberRole":"our when explicitly labeled as Whip, Metrocars, member, repair-facility, or insured claim/file; adverse when explicitly labeled as the other carrier's claim; unknown when the label or ownership is not visible","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","insurerName":"insurance carrier name or empty string","claimantName":"claimant, owner, or driver name when clearly identified or empty string","adjusterName":"carrier adjuster or estimator contact name when clearly identified or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document. Never classify an adverse carrier claim number as our claim number.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
 
 const carrierResponsePrompt = (fileName?: string) =>
   `You are extracting only objective information from an adverse carrier's response, denial, valuation, or rebuttal for an automobile subrogation claim. Read the attached carrier document and respond with one JSON object only. Use this exact shape: {"carrierName":"carrier company name or empty string","carrierClaimNumber":"carrier claim or reference number or empty string","adjusterName":"handling adjuster or sender name or empty string","offerTotal":"total offer, approved amount, or payment amount without currency punctuation or empty string","denialReasons":"short factual explanation of why the carrier reduced or denied payment, or empty string","lineItems":[{"description":"item, operation, or charge name","offer":"carrier allowed, offered, or denied amount without currency punctuation or empty string","reason":"carrier explanation for that line item or empty string"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
@@ -206,14 +207,18 @@ export const docgenRouter = router({
       fileUrl: z.string().url(),
       fileName: z.string().max(255).optional(),
       storageKey: z.string().regex(/^docgen-uploads\/[A-Za-z0-9._/-]+$/).optional(),
+      mimeType: z.string().max(120).optional(),
     }))
     .mutation(async ({ input }) => {
+      const documentPart = input.mimeType?.startsWith("image/")
+        ? { type: "image_url" as const, image_url: { url: input.fileUrl, detail: "high" as const } }
+        : { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } };
       const messages = [{
         role: "user" as const,
         content: [
           { type: "text" as const, text: estimatePrompt(input.fileName) },
-          { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } },
-        ],
+          documentPart,
+        ] as any,
       }];
       const readParsedResult = (result: Awaited<ReturnType<typeof invokeLLM>>) => {
         const raw = extractText(result);
@@ -227,36 +232,35 @@ export const docgenRouter = router({
       };
 
       let parsed: Record<string, unknown> | null = null;
-      try {
-        const primary = await invokeLLM({
-          model: "gpt-5-mini",
-          messages,
-          outputSchema: {
-            name: "repair_estimate",
-            strict: true,
-            schema: ESTIMATE_OUTPUT_SCHEMA,
-          },
-        });
-        parsed = readParsedResult(primary);
-      } catch (error) {
-        console.warn("[Docgen] Primary repair-estimate extraction failed; retrying with multimodal fallback", error);
-      }
+      const parseFileUrl = async () => {
+        try {
+          const primary = await invokeLLM({
+            model: "gpt-5-mini",
+            messages,
+            outputSchema: { name: "repair_estimate", strict: true, schema: ESTIMATE_OUTPUT_SCHEMA },
+          });
+          parsed = readParsedResult(primary);
+        } catch (error) {
+          console.warn("[Docgen] Primary repair-estimate extraction failed; retrying with multimodal fallback", error);
+        }
+        if (!parsed) {
+          try {
+            const fallback = await invokeLLM({ model: "gemini-3-flash-preview", messages, responseFormat: { type: "json_object" } });
+            parsed = readParsedResult(fallback);
+          } catch (error) {
+            console.warn("[Docgen] Multimodal repair-estimate extraction failed", error);
+          }
+        }
+      };
 
-      // Some providers can return blank content for a strict PDF extraction even when the file is readable.
-      // Retry once through the multimodal long-context path before surfacing a user-facing extraction failure.
-      if (!parsed) {
-        const fallback = await invokeLLM({
-          model: "gemini-3-flash-preview",
-          messages,
-          responseFormat: { type: "json_object" },
-        });
-        parsed = readParsedResult(fallback);
-      }
+      // Retained PDF text is normally the fastest and most reliable source.
+      // URL parsing remains as a recovery path or for callers without an upload key.
+      if (!input.storageKey) await parseFileUrl();
 
       // The model proxy can be unable to read an otherwise healthy presigned S3 URL.
       // When the browser supplied the secure upload key, extract PDF text server-side and
       // give that evidence to the same structured parser before asking the handler to type it.
-      if (!parsed && input.storageKey && /\.pdf$/i.test(input.fileName ?? "")) {
+      if (!parsed && input.storageKey && (/\.pdf$/i.test(input.fileName ?? "") || input.mimeType === "application/pdf")) {
         try {
           const uploadBytes = await downloadUploadedEstimate(input.storageKey);
           const uploadedText = await extractUploadedEstimateText(uploadBytes);
@@ -301,6 +305,8 @@ export const docgenRouter = router({
         }
       }
 
+      if (!parsed && input.storageKey) await parseFileUrl();
+
       if (!parsed) {
         throw new Error("Could not extract usable estimate fields from this document. Try an unencrypted PDF or image; the fields can also be entered manually.");
       }
@@ -330,6 +336,9 @@ export const docgenRouter = router({
         vehicle: String(parsed.vehicle ?? "").trim().slice(0, 160),
         vin: /^[A-HJ-NPR-Z0-9]{17}$/.test(vin) ? vin : "",
         claimNumber: String(parsed.claimNumber ?? "").trim().slice(0, 100),
+        claimNumberRole: ["our", "adverse", "unknown"].includes(String(parsed.claimNumberRole ?? "").trim().toLowerCase())
+          ? String(parsed.claimNumberRole ?? "").trim().toLowerCase()
+          : "unknown",
         dateOfLoss: isoDate(parsed.dateOfLoss),
         shopName: String(parsed.shopName ?? "").trim().slice(0, 160),
         insurerName: String(parsed.insurerName ?? "").trim().slice(0, 160),
@@ -344,14 +353,18 @@ export const docgenRouter = router({
       fileUrl: z.string().url(),
       fileName: z.string().max(255).optional(),
       storageKey: z.string().regex(/^docgen-uploads\/[A-Za-z0-9._/-]+$/).optional(),
+      mimeType: z.string().max(120).optional(),
     }))
     .mutation(async ({ input }) => {
+      const documentPart = input.mimeType?.startsWith("image/")
+        ? { type: "image_url" as const, image_url: { url: input.fileUrl, detail: "high" as const } }
+        : { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } };
       const messages = [{
         role: "user" as const,
         content: [
           { type: "text" as const, text: carrierResponsePrompt(input.fileName) },
-          { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } },
-        ],
+          documentPart,
+        ] as any,
       }];
       const readParsedResult = (result: Awaited<ReturnType<typeof invokeLLM>>) => {
         const raw = extractText(result);
@@ -364,27 +377,26 @@ export const docgenRouter = router({
         }
       };
       let parsed: Record<string, unknown> | null = null;
-      try {
-        parsed = readParsedResult(await invokeLLM({
-          model: "gpt-5-mini",
-          messages,
-          outputSchema: { name: "carrier_response", strict: true, schema: CARRIER_RESPONSE_OUTPUT_SCHEMA },
-        }));
-      } catch (error) {
-        console.warn("[Docgen] Primary carrier-response extraction failed; retrying with multimodal fallback", error);
-      }
-      if (!parsed) {
+      const parseFileUrl = async () => {
         try {
           parsed = readParsedResult(await invokeLLM({
-            model: "gemini-3-flash-preview",
+            model: "gpt-5-mini",
             messages,
-            responseFormat: { type: "json_object" },
+            outputSchema: { name: "carrier_response", strict: true, schema: CARRIER_RESPONSE_OUTPUT_SCHEMA },
           }));
         } catch (error) {
-          console.warn("[Docgen] Multimodal carrier-response extraction failed", error);
+          console.warn("[Docgen] Primary carrier-response extraction failed; retrying with multimodal fallback", error);
         }
-      }
-      if (!parsed && input.storageKey && /\.pdf$/i.test(input.fileName ?? "")) {
+        if (!parsed) {
+          try {
+            parsed = readParsedResult(await invokeLLM({ model: "gemini-3-flash-preview", messages, responseFormat: { type: "json_object" } }));
+          } catch (error) {
+            console.warn("[Docgen] Multimodal carrier-response extraction failed", error);
+          }
+        }
+      };
+      if (!input.storageKey) await parseFileUrl();
+      if (!parsed && input.storageKey && (/\.pdf$/i.test(input.fileName ?? "") || input.mimeType === "application/pdf")) {
         try {
           const uploadBytes = await downloadUploadedEstimate(input.storageKey);
           const uploadedText = await extractUploadedEstimateText(uploadBytes);
@@ -415,6 +427,7 @@ export const docgenRouter = router({
           console.warn("[Docgen] Server-side carrier-response extraction fallback failed", error);
         }
       }
+      if (!parsed && input.storageKey) await parseFileUrl();
       if (!parsed) throw new Error("Could not extract usable carrier response fields from this document. Try an unencrypted PDF or image; the fields can also be entered manually.");
       const amount = (value: unknown) => {
         const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
@@ -464,38 +477,19 @@ export const docgenRouter = router({
       carrierReason: z.string().optional(),
       accidentType: z.string().optional(),
       lineItems: z.array(z.object({ item: z.string(), ours: z.number(), theirs: z.number(), reason: z.string().optional() })),
-      carrierDocUrl: z.string().optional(),
-      ourEstimateUrl: z.string().optional(),
-      ourImageReportUrl: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, claimantName, carrierOfferTotal, carrierReason, accidentType, lineItems, carrierDocUrl, ourEstimateUrl, ourImageReportUrl } = input;
+      const { claimNumber, theirClaimNumber, vehicle, dateOfLoss, carrier, adjuster, claimantName, carrierOfferTotal, carrierReason, accidentType, lineItems } = input;
       const totalOurs = lineItems.reduce((s, r) => s + r.ours, 0);
       const documentedOffer = Number(String(carrierOfferTotal ?? "").replace(/[^0-9.-]/g, ""));
       const totalTheirs = Number.isFinite(documentedOffer) && documentedOffer > 0 ? documentedOffer : lineItems.reduce((s, r) => s + r.theirs, 0);
       const gap = totalOurs - totalTheirs;
       const lines = lineItems.filter(r => r.ours - r.theirs > 0).map(r => `- ${r.item}: We claim $${r.ours.toFixed(2)}, carrier offered $${r.theirs.toFixed(2)} (gap: $${(r.ours - r.theirs).toFixed(2)})${r.reason ? ` — Carrier reason: ${r.reason}` : ""}`).join("\n");
       const promptText = `You are a senior insurance claims attorney for Whip Claims Management / DriveWhip, a commercial rideshare fleet operator. Write a complete formal carrier rebuttal letter.\n\nCLAIM DETAILS:\n- Claim #: ${claimNumber}${theirClaimNumber ? `\n- Their Claim #: ${theirClaimNumber}` : ""}\n- Vehicle: ${vehicle}\n- Date of Loss: ${dateOfLoss}\n- Adverse Carrier / Adjuster: ${carrier} / ${adjuster}${claimantName ? `\n- Claimant / Driver: ${claimantName}` : ""}${carrierReason ? `\n- Carrier's stated position: ${carrierReason}` : ""}${accidentType ? `\n- Accident Type: ${accidentType}` : ""}\n- Total we claim: $${totalOurs.toFixed(2)}\n- Carrier offered: $${totalTheirs.toFixed(2)}\n- Gap: $${gap.toFixed(2)}\n\nDISPUTED LINE ITEMS:\n${lines}\n\nWrite a complete formal rebuttal that opens with our address (Whip Claims Management, P.O. Box 10622, Rockville, MD 20849), squarely addresses the carrier's stated position when supplied, cites I-CAR MRC standards/OEM procedures/state insurance code for each disputed item, demands full payment of $${gap.toFixed(2)} within 30 days, and closes with a professional signature block. FOR SETTLEMENT PURPOSES ONLY. Output only the letter.`;
-      const hasAttachments = ourEstimateUrl || ourImageReportUrl || carrierDocUrl;
-      let result;
-      if (hasAttachments) {
-        const userContent: Array<any> = [{ type: "text", text: promptText }];
-        if (ourEstimateUrl) {
-          userContent.push({ type: "text", text: "Our repair estimate (attached):" });
-          userContent.push({ type: "file_url", file_url: { url: ourEstimateUrl, mime_type: "application/pdf" } });
-        }
-        if (ourImageReportUrl) {
-          userContent.push({ type: "text", text: "Our vehicle image/damage report (attached):" });
-          userContent.push({ type: "file_url", file_url: { url: ourImageReportUrl, mime_type: "application/pdf" } });
-        }
-        if (carrierDocUrl) {
-          userContent.push({ type: "text", text: "Carrier's rebuttal/denial document (attached):" });
-          userContent.push({ type: "file_url", file_url: { url: carrierDocUrl, mime_type: "application/pdf" } });
-        }
-        result = await invokeLLM({ messages: [{ role: "user", content: userContent as any }] });
-      } else {
-        result = await invokeLLM({ messages: [{ role: "user", content: promptText }] });
-      }
+      // The estimate and carrier response have already been independently extracted
+      // and mapped into these fields. Sending all original PDFs through a second
+      // multimodal call adds latency and can override those verified fields.
+      const result = await invokeLLM({ model: "gpt-5-mini", messages: [{ role: "user", content: promptText }] });
       const letter = extractText(result);
       if (!letter) throw new Error("AI returned empty response");
       return { letter };

@@ -70,13 +70,12 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
       "carlito.legarde@drivewhip.com":     { id: 4,     name: "Carlito Legarde Jr" },
       "annie.ortiz@drivewhip.com":         { id: 5,     name: "Annie Ortiz" },
       "anap@drivewhip.com":                { id: 6,     name: "Ana Padilla" },
-      "catherine.cestina@drivewhip.com":   { id: 7,     name: "Catherine Cestina" },
       "lorraine.tria@drivewhip.com":       { id: 9,     name: "Lorraine Tria" },
       "daniel.giono@drivewhip.com":        { id: 10,    name: "Daniel Giono" },
       "jovel.villa@drivewhip.com":         { id: 30001, name: "Jovel Villa" },
       "daryl.ochate@drivewhip.com":        { id: 30002, name: "Daryl Ochate" },
-      "madeline.green@drivewhip.com":      { id: 30004, name: "Madeline Green" },
-      "demily.flores@drivewhip.com":       { id: 30005, name: "Demily Flores" },
+      // Former Madeline coverage now resolves to Tim rather than a retired roster row.
+      "madeline.green@drivewhip.com":      { id: 90001, name: "Tim Chan" },
       "tim.chan@drivewhip.com":            { id: 90001, name: "Tim Chan" },
       "geovanni.cabrera@drivewhip.com":    { id: 90002, name: "Geovanni Cabrera" },
     };
@@ -104,12 +103,14 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
           if (fullName) newUserIdToName.set(aircallUserId, fullName);
         }
 
-        // Only process drivewhip.com accounts for handler routing
-        if (!email.endsWith("@drivewhip.com")) continue;
+        // Only active claims agents are allowed to expand the Claims call scope.
+        // This prevents users from other departments from polluting Claims routing.
+        const routedHandler = EMAIL_TO_HANDLER[email];
+        if (!routedHandler) continue;
 
         // Map aircall user ID → handler for extension routing
-        if (aircallUserId && EMAIL_TO_HANDLER[email]) {
-          newUserMap.set(aircallUserId, EMAIL_TO_HANDLER[email]);
+        if (aircallUserId) {
+          newUserMap.set(aircallUserId, routedHandler);
         }
 
         // Collect all number IDs/names assigned to this user

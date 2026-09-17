@@ -239,6 +239,7 @@ export const appRouter = router({
         z.object({
           status: z.string().optional(),
           agentName: z.string().optional(),
+          claimsRosterOnly: z.boolean().optional(),
           limit: z.number().min(1).max(200).default(100),
           offset: z.number().min(0).default(0),
         })
@@ -256,9 +257,12 @@ export const appRouter = router({
     }),
 
     performanceDashboard: protectedProcedure
-      .input(z.object({ period: z.enum(["30d", "90d", "all"]).default("90d") }))
+      .input(z.object({
+        period: z.enum(["30d", "90d", "all", "month"]).default("90d"),
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      }))
       .query(async ({ input }) => {
-        return getCallPerformanceDashboard(input.period);
+        return getCallPerformanceDashboard(input.period, input.month);
       }),
 
     callerHistory: protectedProcedure

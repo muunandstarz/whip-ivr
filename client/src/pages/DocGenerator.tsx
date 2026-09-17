@@ -296,10 +296,12 @@ function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSigna
   };
 
   renderLine(labelForSigner);
-  renderLine(printLabel, details.signerName);
+  // Releases are signed by the claimant or guardian. Do not pre-populate any
+  // signature, printed name, relationship, or date fields from form data.
+  renderLine(printLabel);
   if (details.signerType === "guardian") {
-    renderLine("Relationship to Minor:", "Parent and Natural Guardian");
-    renderLine("Minor's Name:", details.minorName || "[Minor's Name]");
+    renderLine("Relationship to Minor:");
+    renderLine("Minor's Name:");
   }
   renderLine("Date:");
   y += 7;
@@ -313,8 +315,8 @@ function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignature
   const marginX = 19.05;
   const marginTop = 19.05;
   const marginBottom = 19.05;
-  const bodyLineH = 4.6;
-  const paragraphGap = 5.8;
+  const bodyLineH = 4.45;
+  const paragraphGap = 2.4;
   const pageWidth = doc.internal.pageSize.getWidth();
   const maxY = doc.internal.pageSize.getHeight() - marginBottom;
   const blocks = text.trim().split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
@@ -2693,7 +2695,7 @@ function ReleaseBITab() {
     const doc = new jsPDF();
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
+    doc.setTextColor(0, 0, 0);
     writeReleaseText(doc, releaseText, {
       signerName: form.isMinor ? form.minorGuardianName || "[Parent/Guardian Name]" : form.claimantName || "[Claimant Full Name]",
       signerType: form.isMinor ? "guardian" : "claimant",
@@ -2888,7 +2890,7 @@ function ReleasePDTab() {
     const doc = new jsPDF();
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
+    doc.setTextColor(0, 0, 0);
     writeReleaseText(doc, releaseText, {
       signerName,
       signerType: form.isMinor ? "guardian" : form.isCarrierPayee ? "carrier" : "claimant",
@@ -3343,6 +3345,7 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
   const [form, setForm] = useState({
     carrier: "",
     adjusterName: "",
+    carrierAddress: "",
     advClaim: "",
     ourClaim: "",
     dol: "",
@@ -3442,13 +3445,15 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
       const payload = await upload.json() as { url?: string; signedUrl?: string; key?: string };
       const fileUrl = payload.signedUrl || payload.url;
       if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: file.name, storageKey: payload.key });
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: file.name, storageKey: payload.key, mimeType: file.type || undefined });
       setForm(p => ({
         ...p,
         repair: parsed.repairTotal || p.repair,
         vehicle: parsed.vehicle || p.vehicle,
         vin: parsed.vin || p.vin,
-        ourClaim: parsed.claimNumber || p.ourClaim,
+        // An estimate may display both parties' claim numbers. Only carry an explicitly
+        // identified Whip/member/repair-file reference into the "our" claim field.
+        ourClaim: parsed.claimNumberRole !== "adverse" ? (parsed.claimNumber || p.ourClaim) : p.ourClaim,
         dol: parsed.dateOfLoss || p.dol,
         carrier: parsed.insurerName || p.carrier,
         driver: parsed.claimantName || p.driver,
@@ -3491,7 +3496,7 @@ claims@drivewhip.com
 
 ${form.carrier || "[Insurance Company]"}
 Attn: ${form.adjusterName || "[Adjuster Name]"}
-[ADDRESS ON FILE]
+${form.carrierAddress || "[Carrier Mailing Address]"}
 
 RE: Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}
 Date of Loss: ${form.dol || "[Date of Loss]"}
@@ -3546,7 +3551,8 @@ Whip Claims Management
     doc.setFontSize(9); doc.setFont("helvetica", "normal");
     doc.text(form.carrier || "[Insurance Company]", lm, y); nl(5);
     doc.text(`Attn: ${form.adjusterName || "[Adjuster Name]"}`, lm, y); nl(5);
-    doc.text("[ADDRESS ON FILE]", lm, y); nl(10);
+    const recipientAddress = doc.splitTextToSize(form.carrierAddress || "[Carrier Mailing Address]", tw) as string[];
+    doc.text(recipientAddress, lm, y); y += recipientAddress.length * 5 + 5;
 
     // ── RE block ──
     doc.setFont("helvetica", "bold");
@@ -3636,19 +3642,19 @@ This demand is made without waiver of any rights or remedies available to Metroc
     doc.text(demandLines, lm, y);
     y += demandLines.length * 5 + 10;
 
-    // ── PAYMENT INSTRUCTIONS ──
-    checkPage(35);
+    // ── PAYMENT INSTRUCTIONS + SIGNATURE ──
+    // Reserve the signature block with this final section so it cannot be orphaned on page three.
+    const payText = `Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
+    const payLines = doc.splitTextToSize(payText, tw) as string[];
+    checkPage(payLines.length * 5 + 48);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("PAYMENT INSTRUCTIONS", lm, y); nl(2);
     doc.setDrawColor(23, 27, 49); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    const payText = `Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
-    const payLines = doc.splitTextToSize(payText, tw);
     doc.text(payLines, lm, y);
     y += payLines.length * 5 + 12;
 
     // ── Signature block ──
-    checkPage(30);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text("Respectfully,", lm, y); nl(12);
     if (handlerName) { doc.setFont("helvetica", "bold"); doc.text(handlerName, lm, y); nl(5); doc.setFont("helvetica", "normal"); }
@@ -3703,6 +3709,9 @@ This demand is made without waiver of any rights or remedies available to Metroc
             <Field label="Adjuster Name" id="sd-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. John Smith" />
             <Field label="Their Claim #" id="sd-advclaim" value={form.advClaim} onChange={set("advClaim")} placeholder="e.g. 2091T657S" />
           </Grid3>
+          <div className="mt-3">
+            <TextareaField label="Carrier Mailing Address" id="sd-carrier-address" value={form.carrierAddress} onChange={set("carrierAddress")} placeholder={'Carrier name\nMailing address line 1\nCity, State ZIP'} rows={3} />
+          </div>
           <Grid3 children={<>
             <Field label="Our Claim # (Whip)" id="sd-claim" value={form.ourClaim} onChange={set("ourClaim")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="sd-dol" value={form.dol} onChange={set("dol")} type="date" />
@@ -3912,14 +3921,12 @@ function CarrierRebuttalTab() {
       const payload = await upload.json() as { url?: string; signedUrl?: string; key?: string };
       const fileUrl = payload.signedUrl || payload.url;
       if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: ourEstimateDoc.name, storageKey: payload.key });
+      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: ourEstimateDoc.name, storageKey: payload.key, mimeType: ourEstimateDoc.type || undefined });
       setForm(p => ({
         ...p,
-        claimNumber: parsed.claimNumber || p.claimNumber,
+        claimNumber: parsed.claimNumberRole !== "adverse" ? (parsed.claimNumber || p.claimNumber) : p.claimNumber,
         vehicle: parsed.vehicle || p.vehicle,
         dateOfLoss: parsed.dateOfLoss || p.dateOfLoss,
-        carrier: parsed.insurerName || p.carrier,
-        adjuster: parsed.adjusterName || p.adjuster,
         claimantName: parsed.claimantName || p.claimantName,
       }));
       if (parsed.lineItems.length) {
@@ -3935,7 +3942,7 @@ function CarrierRebuttalTab() {
     }
   };
 
-  const uploadDocument = async (file: File): Promise<{ url: string; key?: string; fileName: string }> => {
+  const uploadDocument = async (file: File): Promise<{ url: string; key?: string; fileName: string; mimeType?: string }> => {
     const fd = new FormData();
     fd.append("file", file);
     const response = await fetch("/api/upload/document", { method: "POST", body: fd });
@@ -3943,7 +3950,7 @@ function CarrierRebuttalTab() {
     const payload = await response.json() as { url?: string; signedUrl?: string; key?: string };
     const url = payload.signedUrl || payload.url;
     if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Upload did not return a readable document URL for ${file.name}`);
-    return { url, key: payload.key, fileName: file.name };
+    return { url, key: payload.key, fileName: file.name, mimeType: file.type || undefined };
   };
 
   const mergeCarrierResponseRows = (
@@ -4003,7 +4010,7 @@ function CarrierRebuttalTab() {
     }
     setDocUploading(true);
     try {
-      const [ourEstimateUpload, ourImageReportUpload, carrierDocUpload] = await Promise.all([
+      const [ourEstimateUpload, , carrierDocUpload] = await Promise.all([
         ourEstimateDoc ? uploadDocument(ourEstimateDoc) : Promise.resolve(undefined),
         ourImageReportDoc ? uploadDocument(ourImageReportDoc) : Promise.resolve(undefined),
         carrierDoc ? uploadDocument(carrierDoc) : Promise.resolve(undefined),
@@ -4017,6 +4024,7 @@ function CarrierRebuttalTab() {
           fileUrl: ourEstimateUpload.url,
           fileName: ourEstimateUpload.fileName,
           storageKey: ourEstimateUpload.key,
+          mimeType: ourEstimateUpload.mimeType,
         });
         nextForm = {
           ...nextForm,
@@ -4036,6 +4044,7 @@ function CarrierRebuttalTab() {
           fileUrl: carrierDocUpload.url,
           fileName: carrierDocUpload.fileName,
           storageKey: carrierDocUpload.key,
+          mimeType: carrierDocUpload.mimeType,
         });
         nextForm = {
           ...nextForm,
@@ -4055,9 +4064,6 @@ function CarrierRebuttalTab() {
       const result = await generateMutation.mutateAsync({
         ...nextForm,
         lineItems: nextLineItems.map((row) => ({ item: row.item, ours: parseFloat(row.ours) || 0, theirs: parseFloat(row.theirs) || 0, reason: row.reason })),
-        ourEstimateUrl: ourEstimateUpload?.url,
-        ourImageReportUrl: ourImageReportUpload?.url,
-        carrierDocUrl: carrierDocUpload?.url,
       });
       setDraft(result.letter);
       toast.success("Documents analyzed — review and edit the rebuttal draft before downloading");
@@ -5135,51 +5141,26 @@ function LimitedLiabilityBITab() {
     isMinor: false,
     minorGuardianName: "",
     state: "Georgia",
-    additionalContext: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [aiValidating, setAiValidating] = useState(false);
   const emailMutation = trpc.docgen.generateSettlementEmail.useMutation();
-  const validateMutation = trpc.docgen.validateReleaseLanguage.useMutation();
 
   const set = (k: keyof typeof form) => (v: string | boolean) =>
     setForm((p) => ({ ...p, [k]: v }));
 
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
-  const releaseText = `LIMITED LIABILITY RELEASE — BODILY INJURY
-GEORGIA
+  const releaseText = `LIMITED LIABILITY RELEASE AND SETTLEMENT AGREEMENT
 
-Date: ${today}
+KNOW ALL PERSONS BY THESE PRESENTS, that ${form.isMinor ? `${form.minorGuardianName || "[Parent/Guardian Name]"}, as parent or legal guardian of ${form.claimantName || "[Minor Claimant Name]"}, a minor` : form.claimantName || "[Claimant Name]"} ("Releasor"), for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which are hereby acknowledged, releases, acquits, and forever discharges Metrocars Leasing Corp., Whip Inc., Whip Claims Management, and each of their past and present affiliates, members, officers, directors, employees, agents, drivers, insurers, successors, and assigns (collectively, the "Released Parties") from any and all claims, demands, actions, causes of action, damages, costs, expenses, and compensation of every kind, whether known or unknown, arising from the motor vehicle incident occurring on or about ${formatReleaseDate(form.dateOfLoss)} involving ${form.vehicle || "[Vehicle]"}.
 
-Claimant: ${form.claimantName || "[Claimant Name]"}${form.isMinor ? ` (Minor, by Guardian: ${form.minorGuardianName || "[Guardian Name]"})` : ""}
-Claim Number: ${form.claimNumber || "[Claim Number]"}
-Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-Vehicle: ${form.vehicle || "[Vehicle]"}
-Settlement Amount: $${form.settlementAmount || "[Amount]"}
+This Agreement is intended as a limited settlement and release only to the extent of the consideration stated above. Nothing in this Agreement is an admission of liability by any Released Party. Releasor acknowledges that this settlement resolves the bodily injury claims described in this Agreement, including claimed medical expenses, lost wages, pain and suffering, and other damages arising from the Incident, subject to the terms stated here.
 
-In consideration of the payment of ${form.settlementAmount ? `$${form.settlementAmount}` : "[Settlement Amount]"} ("Settlement Amount"), the receipt and sufficiency of which are hereby acknowledged, the undersigned Releasor(s) hereby release and forever discharge Metrocars Leasing Corp d/b/a Whip, Whip Claims Management, their officers, directors, employees, agents, successors, and assigns (collectively "Released Parties") from any and all claims, demands, actions, causes of action, damages, losses, costs, and expenses of any kind or nature whatsoever, known or unknown, arising out of or related to the incident described above, including but not limited to all bodily injury claims, medical expenses, lost wages, pain and suffering, and any other damages of any kind.
+The Releasor represents that no released claim has been sold, assigned, pledged, or otherwise transferred; that Releasor has authority to execute this Agreement; and that Releasor has had the opportunity to consult counsel of Releasor's choosing before signing. ${form.isMinor ? `The undersigned further represents that they have authority to sign for ${form.claimantName || "[Minor Claimant Name]"}; any court approval required by applicable law remains the responsibility of the signing representative.` : ""}
 
-GEORGIA LIMITED LIABILITY PROVISION: This release is executed pursuant to O.C.G.A. § 33-7-11 and applicable Georgia law. The Released Parties' liability, if any, is limited to the applicable policy limits. This release does not constitute an admission of liability by any Released Party.
-
-${form.isMinor ? `MINOR CLAIMANT PROVISION: The undersigned Guardian/Parent represents that they have the legal authority to execute this release on behalf of the minor claimant, ${form.claimantName || "[Minor's Name]"}, and that this settlement is in the best interest of the minor. Court approval may be required under Georgia law for settlements involving minors. Consult with an attorney to confirm whether court approval is required in this matter.\n\n` : ""}The Releasor represents and warrants that: (1) they have the full legal authority to execute this Release; (2) they have not assigned or transferred any claims released herein; and (3) they have had the opportunity to consult with legal counsel prior to executing this Release.
-
-RELEASOR SIGNATURE:
-
-_________________________________    Date: _______________
-${form.claimantName || "[Claimant Name]"}
-${form.isMinor ? `\n_________________________________\n${form.minorGuardianName || "[Guardian Name]"} — Guardian/Parent\n` : ""}
-_________________________________
-Printed Name
-
-_________________________________
-Address
-
-Accepted by:
-${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management`;
+This Agreement shall be construed under the laws of the State of Georgia. The consideration is tendered in compromise of disputed claims and does not constitute an admission of fault or liability.`;
 
   const handleGenerateEmail = async () => {
     if (!form.claimantName || !form.claimNumber || !form.settlementAmount) {
@@ -5211,14 +5192,14 @@ Whip Claims Management`;
 
   const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = 14; // No letterhead on releases
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    y = wrapText(doc, releaseText, 14, y, W - 28, 6.5);
-    addSOLNotice(doc, "Georgia");
-    addLetterFooter(doc);
+    doc.setTextColor(0, 0, 0);
+    writeReleaseText(doc, releaseText, {
+      signerName: "",
+      signerType: form.isMinor ? "guardian" : "claimant",
+      minorName: "",
+    });
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `Whip_LimitedLiability_BI_${form.claimNumber || "Draft"}.pdf`);
   };
@@ -5244,7 +5225,7 @@ Whip Claims Management`;
         <Panel title="Georgia-Specific Options">
           <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 mb-3">
             <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-400">This release includes Georgia limited liability language per O.C.G.A. § 33-7-11. Use the AI validator to confirm language is appropriate for the specific claim.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">This release uses the approved Georgia limited-liability format. Review the completed document and use the minor option only when a guardian must sign.</p>
           </div>
           <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
             <Checkbox
@@ -5261,9 +5242,6 @@ Whip Claims Management`;
               <Field label="Guardian / Parent Name" id="llbi-guardian" value={form.minorGuardianName} onChange={set("minorGuardianName")} placeholder="Guardian's full name" />
             </div>
           )}
-          <div className="mt-3">
-            <Field label="Additional Context (for AI validation)" id="llbi-context" value={form.additionalContext} onChange={set("additionalContext")} placeholder="e.g. claimant represented by attorney, disputed liability..." />
-          </div>
         </Panel>
         <Panel title="Handler Info">
           <Grid2>
