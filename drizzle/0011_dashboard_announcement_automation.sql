@@ -1,6 +1,8 @@
 ALTER TABLE `dashboard_announcements`
   ADD COLUMN `is_automated` boolean NOT NULL DEFAULT false,
-  ADD COLUMN `automated_for_date` varchar(10),
+  ADD COLUMN `automated_for_date` varchar(10);
+
+ALTER TABLE `dashboard_announcements`
   ADD CONSTRAINT `dashboard_announcements_automated_for_date_unique` UNIQUE(`automated_for_date`);
 
 CREATE TABLE `dashboard_announcement_automation` (

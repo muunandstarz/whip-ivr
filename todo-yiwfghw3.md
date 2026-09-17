@@ -722,5 +722,10 @@
 - [x] Make the Carrier Rebuttal upload actions unambiguous and ensure the generated draft is an editable rebuttal letter rather than an unused field
 - [x] Correct Subro Demand RE/salutation spacing and remove honorifics so it addresses the carrier or handling adjuster by name
 - [x] Make LOU Calculator Clear Form reset all calculator inputs and output state rather than only showing a confirmation toast
-- [ ] Add controlled in-dashboard release notices that expire after 48 hours, fall away after a birthday has been supplied, and recognize upcoming/today teammate birthdays
-- [ ] Add a daily morning message behavior and choose a managed trigger that does not affect the paused Mailroom, Mail Bot, or Dispatch publishing schedules
+- [x] Add controlled in-dashboard release notices that expire after 48 hours, fall away after a birthday has been supplied, and recognize upcoming/today teammate birthdays
+- [x] Add a daily morning message behavior and choose a managed trigger that does not affect the paused Mailroom, Mail Bot, or Dispatch publishing schedules
+
+## September 2026 Call Performance Tracking
+- [x] Rebuild Call Tracking with a readable performance overview, period controls, and progress since tracking began
+- [x] Segment live Aircall performance for Processors (Daryl/MJ), Intake (Ana/Bennet/Carlito), First Party (Jovel/Annie/Natashia/Lorraine), and Liability (Giovanni/Jayla)
+- [x] Separate unnamed queue/ring-group calls from named-handler performance so missed-call coverage is not attributed incorrectly

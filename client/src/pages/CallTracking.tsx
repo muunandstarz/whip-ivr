@@ -443,8 +443,9 @@ export default function CallTracking() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <User className="w-4 h-4 text-muted-foreground" />
-                Agent Performance (Last 30 Days)
+                Raw Agent Call Log (Last 30 Days)
               </CardTitle>
+              <p className="text-xs text-muted-foreground">Detailed Aircall records by assigned agent. Use the performance overview above for team-normalized comparisons.</p>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
