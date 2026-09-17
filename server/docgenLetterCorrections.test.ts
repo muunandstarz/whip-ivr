@@ -31,4 +31,13 @@ describe('Document Generator letter corrections', () => {
     expect(source).toContain('doc.text(title, pageWidth / 2, y, { align: "center" });');
     expect(source).not.toContain('"Whip Claims Management / Metrocars Leasing Corp",\n  ].join("\\n");');
   });
+
+  it('keeps releases plain, compact, and claimant-completed at signature', () => {
+    expect(source).toContain('doc.setTextColor(0, 0, 0);');
+    expect(source).toContain('renderLine(printLabel);');
+    expect(source).toContain('renderLine("Relationship to Minor:");');
+    expect(source).not.toContain('renderLine(printLabel, details.signerName);');
+    expect(source).toContain('const bodyLineH = 4.45;');
+    expect(source).toContain('const paragraphGap = 2.4;');
+  });
 });
