@@ -1,6 +1,7 @@
 import { useState } from "react";
 import WhipLayout from "@/components/WhipLayout";
 import { trpc } from "@/lib/trpc";
+import CallPerformanceBoard from "@/components/CallPerformanceBoard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -372,11 +373,13 @@ export default function CallTracking() {
       <div className="p-6 space-y-5">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Call Tracking</h1>
+          <h1 className="text-2xl font-bold text-foreground">Call Performance &amp; Tracking</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            All inbound calls — answered, missed, and voicemail. Click any row to view full caller profile.
+            Progress over time, team and handler performance, and the detailed call history in one place.
           </p>
         </div>
+
+        <CallPerformanceBoard />
 
         {/* Summary stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

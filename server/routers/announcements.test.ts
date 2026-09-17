@@ -56,6 +56,7 @@ describe('dashboard announcements', () => {
     const user = appRouter.createCaller(context('user'));
     const dashboard = await user.announcements.getDashboardMessage();
     expect(dashboard.announcement).toMatchObject({ id: announcementId, kind: 'feature', actionHref: '/claims-workspace' });
+    expect(new Date(dashboard.announcement!.endsAt!).getTime() - new Date(dashboard.announcement!.startsAt!).getTime()).toBe(48 * 60 * 60 * 1000);
     expect(dashboard.fallback.message).toBeTruthy();
   });
 

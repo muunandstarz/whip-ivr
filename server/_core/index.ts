@@ -19,6 +19,7 @@ import {
 } from "../lossIntakeSlackEvents";
 import { dailyDigestHandler } from "../scheduled/dailyDigest";
 import { weeklyQAPostHandler } from "../scheduled/weeklyQAPost";
+import { dailyAnnouncementsHandler } from "../scheduled/dailyAnnouncements";
 import {
   REMOTE_OPS_SLACK_PATH,
   remoteOpsSlackEventsHandler,
@@ -181,6 +182,7 @@ async function startServer() {
   // Scheduled endpoints — must be registered before tRPC/Vite fallthrough
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
   app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
+  app.post("/api/scheduled/dailyAnnouncements", dailyAnnouncementsHandler);
   // ─── Claims Mail Triage jobs ─────────────────────────────────────────────────
   // Keep the autoscaling service warm before the source-recovery callbacks. This
   // route intentionally avoids database and third-party work so a cold start is

@@ -1,24 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
-import { dashboardAnnouncements, userBirthdayPreferences, users } from '../../drizzle/schema.js';
+import { dashboardAnnouncementAutomation, dashboardAnnouncements, userBirthdayPreferences, users } from '../../drizzle/schema.js';
 import { getDb } from '../db.js';
 import { adminProcedure, protectedProcedure, router } from '../_core/trpc.js';
-
-const DAILY_MESSAGES = [
-  'Start with the facts, document the decision, and keep the next step clear.',
-  'Small, accurate follow-through is how a well-handled claim moves forward.',
-  'Keep the file organized, the communication clear, and the momentum steady.',
-  'Today’s advantage is a clear plan, a complete note, and one timely follow-up.',
-  'Good claims handling is disciplined work made visible through strong documentation.',
-  'Focus on the evidence, the timeline, and the action that keeps the claim moving.',
-  'A thoughtful next step now prevents a difficult follow-up later.',
-];
-
-function dailyMessage(now: Date) {
-  const day = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86_400_000);
-  return DAILY_MESSAGES[Math.abs(day) % DAILY_MESSAGES.length];
-}
+import { featureAnnouncementWindow, dailyMessage, summarizeBirthdays } from '../announcementsAutomation.js';
 
 const announcementInput = z.object({
   id: z.number().int().positive().optional(),
@@ -41,18 +27,26 @@ export const announcementsRouter = router({
       eq(dashboardAnnouncements.isActive, true),
       or(isNull(dashboardAnnouncements.startsAt), lte(dashboardAnnouncements.startsAt, now)),
       or(isNull(dashboardAnnouncements.endsAt), gte(dashboardAnnouncements.endsAt, now)),
-    )).orderBy(desc(dashboardAnnouncements.updatedAt), desc(dashboardAnnouncements.id)).limit(1);
-    const birthdays = await db.select({ name: users.name }).from(userBirthdayPreferences)
-      .innerJoin(users, eq(userBirthdayPreferences.userId, users.id))
-      .where(and(
-        eq(userBirthdayPreferences.isOptedIn, true),
-        eq(userBirthdayPreferences.birthMonth, now.getMonth() + 1),
-        eq(userBirthdayPreferences.birthDay, now.getDate()),
-      ));
+    )).orderBy(desc(dashboardAnnouncements.updatedAt), desc(dashboardAnnouncements.id));
+    // New-feature messages take precedence over the automated daily message. A manual
+    // non-feature message is next; the persisted daily entry is the final fallback.
+    const announcement = active.find((item) => item.kind === 'feature')
+      ?? active.find((item) => !item.isAutomated)
+      ?? active[0]
+      ?? null;
+    const preferences = await db.select({
+      name: users.name,
+      birthMonth: userBirthdayPreferences.birthMonth,
+      birthDay: userBirthdayPreferences.birthDay,
+      isOptedIn: userBirthdayPreferences.isOptedIn,
+    }).from(userBirthdayPreferences)
+      .innerJoin(users, eq(userBirthdayPreferences.userId, users.id));
+    const birthdays = summarizeBirthdays(preferences, now);
     return {
-      announcement: active[0] ?? null,
+      announcement,
       fallback: { title: 'Good morning, team', message: dailyMessage(now) },
-      birthdayNames: birthdays.map((person) => person.name).filter((name): name is string => Boolean(name)),
+      birthdayNames: birthdays.todayBirthdays,
+      upcomingBirthdays: birthdays.upcomingBirthdays,
     };
   }),
 
@@ -88,6 +82,13 @@ export const announcementsRouter = router({
     return { ok: true };
   }),
 
+  automationStatus: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+    const rows = await db.select().from(dashboardAnnouncementAutomation).limit(1);
+    return rows[0] ?? null;
+  }),
+
   list: adminProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
@@ -97,7 +98,14 @@ export const announcementsRouter = router({
   save: adminProcedure.input(announcementInput).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
-    if (input.startsAt && input.endsAt && input.startsAt > input.endsAt) {
+    const now = new Date();
+    // MySQL DATETIME may discard milliseconds. Starting one second in the past
+    // keeps a newly published feature visible in the same request everywhere.
+    const immediateStart = new Date(now.getTime() - 1_000);
+    const featureWindow = input.kind === 'feature' ? featureAnnouncementWindow(input.startsAt ?? immediateStart) : null;
+    const startsAt = featureWindow?.startsAt ?? input.startsAt ?? null;
+    const endsAt = featureWindow?.endsAt ?? input.endsAt ?? null;
+    if (startsAt && endsAt && startsAt > endsAt) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'End date must be after the start date.' });
     }
     const values = {
@@ -107,15 +115,17 @@ export const announcementsRouter = router({
       actionLabel: input.actionLabel || null,
       actionHref: input.actionHref || null,
       isActive: input.isActive,
-      startsAt: input.startsAt ?? null,
-      endsAt: input.endsAt ?? null,
+      startsAt,
+      endsAt,
+      isAutomated: false,
+      automatedForDate: null,
     };
     if (input.id) {
       await db.update(dashboardAnnouncements).set(values).where(eq(dashboardAnnouncements.id, input.id));
-      return { id: input.id };
+      return { id: input.id, endsAt };
     }
     const result = await db.insert(dashboardAnnouncements).values({ ...values, createdByUserId: ctx.user.id });
-    return { id: Number(result[0].insertId) };
+    return { id: Number(result[0].insertId), endsAt };
   }),
 
   archive: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {

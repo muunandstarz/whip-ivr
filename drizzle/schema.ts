@@ -927,6 +927,10 @@ export const dashboardAnnouncements = mysqlTable('dashboard_announcements', {
   isActive: boolean('is_active').default(true).notNull(),
   startsAt: datetime('starts_at'),
   endsAt: datetime('ends_at'),
+  /** True only for the daily persisted morning-message history. */
+  isAutomated: boolean('is_automated').default(false).notNull(),
+  /** Eastern calendar day, used to keep a retried daily job idempotent. */
+  automatedForDate: varchar('automated_for_date', { length: 10 }).unique(),
   createdByUserId: int('created_by_user_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
@@ -934,6 +938,18 @@ export const dashboardAnnouncements = mysqlTable('dashboard_announcements', {
   activeWindow: index('dashboard_announcements_active_window_idx').on(t.isActive, t.startsAt, t.endsAt),
 }));
 export type DashboardAnnouncement = typeof dashboardAnnouncements.$inferSelect;
+
+/** Single project-level control and durable task UID for daily announcement Heartbeat. */
+export const dashboardAnnouncementAutomation = mysqlTable('dashboard_announcement_automation', {
+  id: int('id').primaryKey().autoincrement(),
+  isEnabled: boolean('is_enabled').default(true).notNull(),
+  scheduleCronTaskUid: varchar('schedule_cron_task_uid', { length: 65 }).unique(),
+  lastRunAt: timestamp('last_run_at'),
+  lastRunError: text('last_run_error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+});
+export type DashboardAnnouncementAutomation = typeof dashboardAnnouncementAutomation.$inferSelect;
 
 /** Birthday is intentionally limited to month/day and requires opt-in; no birth year is collected. */
 export const userBirthdayPreferences = mysqlTable('user_birthday_preferences', {

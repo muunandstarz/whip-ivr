@@ -12,6 +12,7 @@ import { mailBotRouter } from "./routers/mailBot";
 import { kbRouter } from "./routers/kb";
 import { claimsWorkspaceRouter } from "./routers/claimsWorkspace";
 import { announcementsRouter } from "./routers/announcements";
+import { getCallPerformanceDashboard } from "./callPerformance";
 import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
 import {
   MAILBOT_FEATURE_SETTING,
@@ -253,6 +254,12 @@ export const appRouter = router({
     fullAnalytics: protectedProcedure.query(async () => {
       return getFullCallAnalytics();
     }),
+
+    performanceDashboard: protectedProcedure
+      .input(z.object({ period: z.enum(["30d", "90d", "all"]).default("90d") }))
+      .query(async ({ input }) => {
+        return getCallPerformanceDashboard(input.period);
+      }),
 
     callerHistory: protectedProcedure
       .input(z.object({ phone: z.string() }))
