@@ -26,6 +26,7 @@ export async function refreshLossIntakeSources(now = new Date()) {
   let slackError: string | null = null;
   try {
     slack = await runLossIntakeSlackSync();
+    if (slack.channelErrors.length) slackError = slack.channelErrors.join(" | ");
   } catch (error) {
     slackError = error instanceof Error ? error.message : String(error);
   }

@@ -737,3 +737,6 @@
 - [x] Add read-only market inspection scheduling to prioritize today’s plan after confirmed Slack arrivals without treating the schedule as attendance evidence
 - [x] Build one claimable shared Intake queue for Ana, Bennet, and Carlito, with atomic ownership, 30-second shared refresh, daily productivity, and visible store/remote depths
 - [x] Schedule source refreshes at 8 AM, 11 AM, 2 PM, and 5 PM Eastern on business days using the existing Heartbeat gate; keep Slack digest destination-configured and disabled until a channel is supplied
+- [x] Restore the prior leadership, Intake QA, metrics, filters, detail drawer, and source-health composition for the shared Intake workspace
+- [x] Allow #claims and #claims-remotemarkets to refresh independently when one configured Slack source cannot be read; persist the exact missing-source warning and suppress the digest on partial coverage
+- [ ] Restore production bot membership/read access for the configured #escalations source (`C03LK1Z8XFG`); live bot token receives `channel_not_found`, while #claims and #claims-remotemarkets read successfully

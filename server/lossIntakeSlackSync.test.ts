@@ -109,6 +109,7 @@ describe("runLossIntakeSlackSync", () => {
       claimsUpdated: 1,
       eventsProcessed: 2,
       targetsProcessed: 1,
+      channelErrors: [],
     });
     expect(dbMocks.upsertLossIntakeClaimBundle).toHaveBeenCalledTimes(1);
     const bundle = dbMocks.upsertLossIntakeClaimBundle.mock.calls[0][0];
@@ -120,6 +121,7 @@ describe("runLossIntakeSlackSync", () => {
     expect(dbMocks.finishLossIntakeSyncRun).toHaveBeenCalledWith(7, {
       status: "success",
       ...result,
+      errorMessage: null,
     });
   });
 
@@ -132,5 +134,24 @@ describe("runLossIntakeSlackSync", () => {
       expect.objectContaining({ status: "failed" }),
     );
     expect(dbMocks.upsertLossIntakeClaimBundle).not.toHaveBeenCalled();
+  });
+
+  it("continues readable source channels when one configured channel cannot be read", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const method = url.pathname.split("/").pop();
+      if (method === "conversations.history" && url.searchParams.get("channel") === "C-ESCALATIONS") {
+        return slackResponse({ ok: false, error: "channel_not_found" });
+      }
+      if (method === "conversations.history") return slackResponse({ ok: true, messages: [], response_metadata: { next_cursor: "" } });
+      throw new Error(`Unexpected Slack method: ${method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runLossIntakeSlackSync();
+
+    expect(result.claimsUpdated).toBe(0);
+    expect(result.channelErrors).toEqual([expect.stringContaining("#escalations")]);
+    expect(dbMocks.finishLossIntakeSyncRun).toHaveBeenCalledWith(7, expect.objectContaining({ status: "success", errorMessage: expect.stringContaining("#escalations") }));
   });
 });

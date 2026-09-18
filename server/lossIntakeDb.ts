@@ -684,7 +684,7 @@ export async function finishLossIntakeSyncRun(
     .update(lossIntakeSettings)
     .set(
       result.status === "success"
-        ? { lastSuccessfulSyncAt: new Date(), lastSyncError: null }
+        ? { lastSuccessfulSyncAt: new Date(), lastSyncError: result.errorMessage ?? null }
         : { lastSyncError: result.errorMessage ?? "Loss Intake sync failed" },
     )
     .where(eq(lossIntakeSettings.configKey, "default"));

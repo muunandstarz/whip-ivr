@@ -333,6 +333,7 @@ async function collectThreadTargets(input: {
   oldest: string;
 }) {
   const targets = new Map<string, ThreadTarget>();
+  const channelErrors: string[] = [];
   const channels = [
     { channelId: input.claimsChannelId, channelName: "claims" },
     { channelId: input.remoteMarketsChannelId, channelName: "remote-markets" },
@@ -340,7 +341,17 @@ async function collectThreadTargets(input: {
   ];
 
   for (const channel of channels) {
-    const parents = await fetchChannelParents({ ...channel, oldest: input.oldest });
+    let parents: SlackLossParent[];
+    try {
+      parents = await fetchChannelParents({ ...channel, oldest: input.oldest });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      // One private or renamed channel must not freeze #claims and remote-market
+      // refreshes. Preserve the exact source warning for the admin source panel.
+      channelErrors.push(`#${channel.channelName}: ${detail}`);
+      console.warn(`[Loss Intake Sync] Skipping unreadable #${channel.channelName}: ${detail}`);
+      continue;
+    }
     for (const parent of parents) {
       if (!parseLossNoticeParent(parent)) continue;
       // Skip posts that are already stored as duplicates — their original thread
@@ -390,9 +401,12 @@ async function collectThreadTargets(input: {
     }
   }
 
-  return Array.from(targets.values())
-    .sort((left, right) => Number(left.threadTs) - Number(right.threadTs))
-    .slice(0, MAX_THREADS_PER_RUN);
+  return {
+    targets: Array.from(targets.values())
+      .sort((left, right) => Number(left.threadTs) - Number(right.threadTs))
+      .slice(0, MAX_THREADS_PER_RUN),
+    channelErrors,
+  };
 }
 
 export interface LossIntakeSyncResult {
@@ -400,6 +414,7 @@ export interface LossIntakeSyncResult {
   claimsUpdated: number;
   eventsProcessed: number;
   targetsProcessed: number;
+  channelErrors: string[];
 }
 
 /**
@@ -457,12 +472,13 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
     requireSlackToken();
     const settings = await getLossIntakeSettings();
     const assignments = parseAssignments(settings.agentAssignments);
-    const targets = await collectThreadTargets({
+    const targetResult = await collectThreadTargets({
       claimsChannelId: settings.claimsChannelId,
       remoteMarketsChannelId: settings.remoteMarketsChannelId,
       escalationsChannelId: settings.escalationsChannelId,
       oldest: incrementalOldest(settings.lastSuccessfulSyncAt),
     });
+    const targets = targetResult.targets;
     const claimsTrackerIndex = await getClaimsTrackerIndex();
 
     let claimsDiscovered = 0;
@@ -522,8 +538,13 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
       claimsUpdated,
       eventsProcessed,
       targetsProcessed: targets.length,
+      channelErrors: targetResult.channelErrors,
     };
-    await finishLossIntakeSyncRun(runId, { status: "success", ...result });
+    await finishLossIntakeSyncRun(runId, {
+      status: "success",
+      ...result,
+      errorMessage: targetResult.channelErrors.length ? targetResult.channelErrors.join(" | ") : null,
+    });
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
