@@ -62,6 +62,8 @@ export interface ParsedLossParent {
   memberName: string | null;
   customerId: string | null;
   vinLastSix: string | null;
+  memberPhone: string | null;
+  preferredLanguage: string | null;
   market: string | null;
   vehicleType: LossVehicleType;
   hasPhotos: boolean;
@@ -133,6 +135,8 @@ export interface ThreadAnalysis {
   onSiteReason: string | null;
   inspectionScheduledAt: Date | null;
   inspectionScheduleSource: string | null;
+  correctedVinLastSix: string | null;
+  vinCorrectionEvidence: string | null;
   claimId: string | null;
   filingState: DispatchFilingState;
   filingEvidence: string;
@@ -332,6 +336,8 @@ export function parseFnolParent(parent: SlackLossParent): ParsedLossParent | nul
     memberName: member.memberName,
     customerId: member.customerId,
     vinLastSix: getLabel(values, "Last 6 of VIN")?.replace(/\D/g, "").slice(-6) ?? null,
+    memberPhone: getLabel(values, "Member Phone Number (Confirm Active)"),
+    preferredLanguage: getLabel(values, "Member Preferred Language") ?? getLabel(values, "Preferred Language"),
     market: getLabel(values, "Market"),
     vehicleType: normalizeVehicleType(getLabel(values, "Vehicle Type")),
     hasPhotos: files.length > 0,
@@ -367,6 +373,14 @@ function extractUnstructuredMarket(text: string) {
   return text.match(/\b(?:market|location|branch)\s*[:\-–]\s*([A-Za-z ]{2,40})/i)?.[1]?.trim() ?? null;
 }
 
+function extractUnstructuredPhone(text: string) {
+  return text.match(/\b(?:phone|mobile|callback)\s*(?:number)?\s*[:\-–]?\s*(\+?1?[\s.(\-]*\d{3}[\s.)\-]*\d{3}[\s.\-]*\d{4})/i)?.[1]?.trim() ?? null;
+}
+
+function extractUnstructuredLanguage(text: string) {
+  return text.match(/\b(?:preferred\s+)?language\s*[:\-–]\s*([A-Za-z ]{2,40})/i)?.[1]?.trim() ?? null;
+}
+
 export function parseLossNoticeParent(parent: SlackLossParent): ParsedLossParent | null {
   const structured = parseFnolParent(parent);
   if (structured) return structured;
@@ -383,6 +397,8 @@ export function parseLossNoticeParent(parent: SlackLossParent): ParsedLossParent
     memberName: extractUnstructuredMemberName(parent.text),
     customerId: extractUnstructuredCustomerId(parent.text),
     vinLastSix: extractUnstructuredVin(parent.text),
+    memberPhone: extractUnstructuredPhone(parent.text),
+    preferredLanguage: extractUnstructuredLanguage(parent.text),
     market: extractUnstructuredMarket(parent.text),
     vehicleType: /\btesla|electric|\bev\b/i.test(parent.text) ? "ev_tesla" : /\bvehicle|car|truck|suv|van\b/i.test(parent.text) ? "gas" : "unknown",
     hasPhotos: files.length > 0,
@@ -758,6 +774,21 @@ export function analyzeFnolThread(input: {
     .reverse()
     .map(reply => extractClaimId(reply.text))
     .find((value): value is string => Boolean(value)) ?? null;
+  const correctedVinFromThread = [...replies]
+    .reverse()
+    .map(reply => {
+      const explicit = reply.text.match(/\b(?:correct(?:ed|ion)?\s*(?:last\s*6\s*(?:of\s*)?vin|vin)|(?:last\s*6\s*(?:of\s*)?vin|vin)\s*(?:is|was|should\s*be|correct(?:ed)?\s*to))\s*[:#\-–]?\s*([A-Z0-9]{6,17})\b/i)?.[1];
+      if (explicit) return explicit.replace(/\D/g, "").slice(-6);
+      const formattedClaim = extractClaimId(reply.text)?.match(/^[A-Z]{2,4}-\d{2,}-([0-9]{6})-\d{4,}$/i)?.[1];
+      return formattedClaim ?? null;
+    })
+    .find((value): value is string => Boolean(value));
+  const correctedVinLastSix = correctedVinFromThread && correctedVinFromThread !== input.parent.vinLastSix
+    ? correctedVinFromThread
+    : null;
+  const vinCorrectionEvidence = correctedVinLastSix
+    ? `Slack thread corrected source VIN ${input.parent.vinLastSix ?? "not captured"} to ${correctedVinLastSix}.`
+    : null;
   const filingState = deriveFilingState({ templatePosted: Boolean(templatePostedAt), claimId });
   // completedAt = template was posted AND at least 2 agent thread posts exist
   // OR agent made contact attempts + tagged store team (member unreachable but agent did their job)
@@ -957,6 +988,8 @@ export function analyzeFnolThread(input: {
     onSiteReason: onSite.reason,
     inspectionScheduledAt: null,
     inspectionScheduleSource: null,
+    correctedVinLastSix,
+    vinCorrectionEvidence,
     claimId,
     filingState,
     filingEvidence: claimId
@@ -964,7 +997,7 @@ export function analyzeFnolThread(input: {
       : templatePostedAt
         ? "Intake template posted without a claim ID."
         : "No intake template or claim ID is documented in the source thread.",
-    duplicateGroupKey: duplicateGroupKey(input.parent),
+    duplicateGroupKey: duplicateGroupKey({ ...input.parent, vinLastSix: correctedVinLastSix ?? input.parent.vinLastSix }),
     dataWarnings,
     events,
     qualityItems,

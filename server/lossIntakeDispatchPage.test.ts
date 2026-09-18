@@ -5,23 +5,24 @@ import { resolve } from "node:path";
 const page = readFileSync(resolve(process.cwd(), "client/src/pages/LossIntakeDispatch.tsx"), "utf8");
 
 describe("Loss Intake Dispatch page", () => {
-  it("separates the Intake and dedicated Processors queues", () => {
+  it("renders one shared Intake queue without any processor view", () => {
     expect(page).toContain("Loss Intake Dispatch");
-    expect(page).toContain("Two independent queues");
-    expect(page).toContain("Processors");
-    expect(page).toContain("LossIntakeProcessorQueue");
+    expect(page).toContain("One live queue for Ana, Bennet, and Carlito");
+    expect(page).toContain("Claim item");
+    expect(page).not.toContain("LossIntakeProcessorQueue");
+    expect(page).not.toContain("File with the information available");
   });
 
-  it("keeps Slack arrival evidence and scheduling-only market rules visible", () => {
-    expect(page).toContain("Store Operations Slack post");
-    expect(page).toContain("Market tabs are scheduling only");
-    expect(page).toContain("10-minute attempt target");
+  it("makes the call-plan source and order visible", () => {
+    expect(page).toContain("confirmed in-office arrivals, today’s inspections, past-SLA no-statement items, then oldest");
+    expect(page).toContain("Slack store-operations posts or branch photos establish an in-office arrival");
+    expect(page).toContain("Market tabs only document inspection scheduling");
   });
 
-  it("shows the binary read-only filed source and never renders a blank SLA target", () => {
-    expect(page).toContain("claimsTrackerStatus");
-    expect(page).toContain("All Reported IncidentsStatus");
-    expect(page).toContain("blank Claim File link does not change filed status");
-    expect(page).toContain("dispatchTargetLabel(claim)");
+  it("uses live queue, Tracker, and productivity procedures", () => {
+    expect(page).toContain("lossIntake.workQueue.list");
+    expect(page).toContain("lossIntake.claimsTrackerStatus");
+    expect(page).toContain("lossIntake.workQueue.dailyMetrics");
+    expect(page).toContain("refetchInterval: 30_000");
   });
 });

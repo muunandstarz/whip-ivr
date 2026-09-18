@@ -9,6 +9,7 @@ import {
   boolean,
   float,
   json,
+  unique,
 } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
@@ -289,8 +290,14 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   memberName: varchar("memberName", { length: 255 }),
   customerId: varchar("customerId", { length: 128 }),
   vinLastSix: varchar("vinLastSix", { length: 16 }),
+  // Preserve the source fragment when a correction in the Slack thread changes
+  // the working VIN. The corrected value owns matching and duplicate collapse.
+  reportedVinLastSix: varchar("reported_vin_last_six", { length: 16 }),
+  vinCorrectionEvidence: text("vin_correction_evidence"),
   market: varchar("market", { length: 128 }),
   vehicleType: mysqlEnum("vehicleType", ["gas", "ev_tesla", "unknown"]).default("unknown").notNull(),
+  memberPhone: varchar("member_phone", { length: 64 }),
+  preferredLanguage: varchar("preferred_language", { length: 128 }),
   assignedHandlerId: int("assignedHandlerId"),
   assignedAgent: varchar("assignedAgent", { length: 128 }),
   stage: mysqlEnum("stage", ["awaiting_outreach", "outreach_started", "contact_attempts", "complete"]).default("awaiting_outreach").notNull(),
@@ -326,6 +333,11 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   originalSlackKey: varchar("original_slack_key", { length: 255 }),
   // Overflow routing: set when both in-store agents are busy and this claim should go to Ana Padilla
   overflowRouted: boolean("overflow_routed").default(false).notNull(),
+  // A representative claims an item before working it. This is independent of
+  // contact/template completion, preventing parallel duplicate outreach.
+  intakeClaimedByHandlerId: int("intake_claimed_by_handler_id"),
+  intakeClaimedByName: varchar("intake_claimed_by_name", { length: 128 }),
+  intakeClaimedAt: timestamp("intake_claimed_at"),
 
   // Dispatch model: source normalization, business-hour SLA, on-site priority, and filing status.
   sourceKind: mysqlEnum("source_kind", ["structured", "unstructured"]).default("structured").notNull(),
@@ -364,6 +376,24 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
 });
 export type LossIntakeClaim = typeof lossIntakeClaims.$inferSelect;
 export type InsertLossIntakeClaim = typeof lossIntakeClaims.$inferInsert;
+
+/** Daily productivity is computed from live Intake records and frozen at 5 PM ET. */
+export const lossIntakeDailyMetrics = mysqlTable("loss_intake_daily_metrics", {
+  id: int("id").autoincrement().primaryKey(),
+  dateKey: varchar("date_key", { length: 16 }).notNull(),
+  handlerId: int("handler_id").notNull(),
+  handlerName: varchar("handler_name", { length: 128 }).notNull(),
+  itemsClaimed: int("items_claimed").default(0).notNull(),
+  firstContacts: int("first_contacts").default(0).notNull(),
+  statementsObtained: int("statements_obtained").default(0).notNull(),
+  templatesPosted: int("templates_posted").default(0).notNull(),
+  openAtClose: int("open_at_close").default(0).notNull(),
+  medianBusinessMinutes: float("median_business_minutes"),
+  snapshotAt: timestamp("snapshot_at").defaultNow().notNull(),
+}, table => ({
+  handlerDate: unique("loss_intake_daily_metrics_handler_date_unique").on(table.dateKey, table.handlerId),
+}));
+export type LossIntakeDailyMetric = typeof lossIntakeDailyMetrics.$inferSelect;
 
 // Processor-confirmed exclusions are VIN-scoped so a duplicate or erroneous
 // notice does not reappear in subsequent source sweeps. The reason remains
@@ -469,6 +499,9 @@ export const lossIntakeSettings = mysqlTable("loss_intake_settings", {
   intakeDigestMessageTs: varchar("intake_digest_message_ts", { length: 32 }),
   intakeDigestSignature: varchar("intake_digest_signature", { length: 64 }),
   intakeDigestDateKey: varchar("intake_digest_date_key", { length: 16 }),
+  // Daily Slack copy is opt-in and its destination is administrator-configured.
+  intakeSlackDestinationChannelId: varchar("intake_slack_destination_channel_id", { length: 32 }),
+  intakeSlackPublishingEnabled: boolean("intake_slack_publishing_enabled").default(false).notNull(),
   lastSuccessfulSyncAt: timestamp("lastSuccessfulSyncAt"),
   lastSyncError: text("lastSyncError"),
   updatedBy: varchar("updatedBy", { length: 255 }),

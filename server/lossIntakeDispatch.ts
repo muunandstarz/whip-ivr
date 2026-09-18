@@ -1,48 +1,12 @@
 import { createHash } from "node:crypto";
 import { ENV } from "./_core/env";
-import {
-  getLossIntakeSettings,
-  listLossIntakeClaims,
-  updateLossIntakeSettings,
-} from "./lossIntakeDb";
-import { listLossIntakeProcessorQueue, type ProcessorQueueItem } from "./lossIntakeProcessorQueue";
+import { getLossIntakeSettings, updateLossIntakeSettings } from "./lossIntakeDb";
+import { listLossIntakeSharedQueue, type IntakeQueueClaim } from "./lossIntakeSharedQueue";
 
 const SLACK_API_BASE = "https://slack.com/api";
 
-export type DispatchWorkClaim = {
-  id: number;
-  memberName: string | null;
-  customerId: string | null;
-  market: string | null;
-  channelName: string;
-  vinLastSix: string | null;
-  postedAt: Date;
-  slackPermalink: string | null;
-  factsOfLoss: string | null;
-  preliminaryLiability: string | null;
-  rideshareStatus: string | null;
-  hasPhotos: boolean;
-  attachmentCount: number;
-  stage: "awaiting_outreach" | "outreach_started" | "contact_attempts" | "complete";
-  completedAt: Date | null;
-  firstResponseBusinessMinutes: number | null;
-  slaTargetBusinessMinutes: number | null;
-  slaState: "within_sla" | "at_risk" | "breached";
-  onSiteFlag: boolean;
-  onSiteReason: string | null;
-  contactAttempts: number;
-  filingState: "filed" | "unfiled" | "pending_statement" | "unverified";
-  filingEvidence: string | null;
-  dataWarnings: string | null;
-};
-
 function etDateKey(now: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
 function formatBusinessMinutes(minutes: number | null) {
@@ -55,180 +19,75 @@ export function dispatchMessageSignature(message: string) {
   return createHash("sha256").update(message).digest("hex");
 }
 
-export function shouldPublishDispatchMessage(input: {
-  previousSignature: string | null | undefined;
-  previousMessageTs: string | null | undefined;
-  nextMessage: string;
-}) {
+export function shouldPublishDispatchMessage(input: { previousSignature: string | null | undefined; previousMessageTs: string | null | undefined; nextMessage: string }) {
   return !input.previousMessageTs || input.previousSignature !== dispatchMessageSignature(input.nextMessage);
 }
 
-function dispatchTargetMinutes(claim: DispatchWorkClaim) {
-  return claim.slaTargetBusinessMinutes ?? (claim.channelName === "remote-markets" ? 240 : 10);
+function todayEastern(value: Date | null, now: Date) {
+  return value ? etDateKey(value) === etDateKey(now) : false;
 }
 
-function sourceLink(claim: DispatchWorkClaim) {
-  return claim.slackPermalink ? `<${claim.slackPermalink}|Open Slack thread>` : "Slack permalink unavailable";
-}
-
-function dispatchPriority(claim: DispatchWorkClaim) {
-  if (claim.onSiteFlag) return 0;
-  if (claim.slaState === "breached") return 1;
-  if (claim.slaState === "at_risk") return 2;
+function priorityForDigest(claim: IntakeQueueClaim, now: Date) {
+  if (claim.onSiteFlag && !claim.firstContactAt) return 0;
+  if (todayEastern(claim.inspectionScheduledAt, now) && !claim.firstContactAt) return 1;
+  if (claim.slaState === "breached" && !claim.completedAt) return 2;
   return 3;
 }
 
-export function buildDispatchMessages(claims: DispatchWorkClaim[], now = new Date()) {
-  const dateKey = etDateKey(now);
-  const active = claims.filter(claim => !claim.completedAt);
-  const unfiled = active
-    .filter(claim => claim.filingState === "unfiled")
-    .sort((left, right) => left.postedAt.getTime() - right.postedAt.getTime());
-  const intake = active
-    .filter(claim => claim.stage !== "complete")
-    .sort((left, right) => dispatchPriority(left) - dispatchPriority(right) || left.postedAt.getTime() - right.postedAt.getTime());
-
-  const processorLines = unfiled.length === 0
-    ? ["No unfiled loss reports are currently identified."]
-    : unfiled.map((claim, index) => [
-      `*${index + 1}. ${claim.memberName ?? "Unidentified member"}${claim.customerId ? ` · Customer ${claim.customerId}` : ""}*`,
-      `${claim.market ?? "Market unknown"} · VIN ${claim.vinLastSix ?? "not captured"} · Reported ${claim.postedAt.toLocaleString("en-US", { timeZone: "America/New_York" })}`,
-      `Source: ${sourceLink(claim)}`,
-      `Facts captured: ${claim.factsOfLoss ?? "Not documented"}`,
-      `Liability: ${claim.preliminaryLiability ?? "Not documented"} · Rideshare: ${claim.rideshareStatus ?? "Not documented"}`,
-      `Evidence: ${claim.attachmentCount ? `${claim.attachmentCount} file(s)` : "No files"}${claim.hasPhotos ? ", photos present" : ""}`,
-      `Filing evidence: ${claim.filingEvidence ?? "No claim ID or filing evidence documented"}`,
-      claim.dataWarnings ? `Warning: ${claim.dataWarnings}` : null,
-    ].filter(Boolean).join("\n"));
-  const processorsMessage = [
-    `*Unfiled Claims — ${dateKey}* (${unfiled.length})`,
-    "*File with the information available. Do not call the member.*",
-    "Member outreach and recorded statements remain with the Intake team.",
-    "",
-    ...processorLines,
-  ].join("\n");
-
-  const intakeLines = intake.length === 0
-    ? ["No active recorded-statement follow-up is currently required."]
-    : intake.map((claim, index) => [
+/** The Slack copy is the same Intake work queue: no processor work or separate source. */
+export function buildIntakeDigest(claims: IntakeQueueClaim[], now = new Date()) {
+  const active = claims.filter(claim => !claim.completedAt)
+    .sort((left, right) => priorityForDigest(left, now) - priorityForDigest(right, now) || left.postedAt.getTime() - right.postedAt.getTime());
+  const lines = active.length === 0
+    ? ["No active Intake follow-up is currently required."]
+    : active.map((claim, index) => [
       `*${index + 1}. ${claim.onSiteFlag ? "(this driver appears to be in office) " : ""}${claim.memberName ?? "Unidentified member"}${claim.customerId ? ` · Customer ${claim.customerId}` : ""}*`,
-      `${claim.market ?? "Market unknown"} · VIN ${claim.vinLastSix ?? "not captured"} · ${formatBusinessMinutes(claim.firstResponseBusinessMinutes)} of ${dispatchTargetMinutes(claim)}-minute target`,
-      `Status: ${claim.slaState.replace("_", " ")} · Attempts documented: ${claim.contactAttempts}`,
-      claim.onSiteReason ? `On-site evidence: ${claim.onSiteReason}` : null,
-      `Thread: ${sourceLink(claim)}`,
+      `${claim.market ?? "Market unknown"} · VIN ${claim.vinLastSix ?? "not captured"} · ${claim.dateOfLoss ? `Loss ${claim.dateOfLoss}` : "Loss date not captured"}`,
+      claim.inspectionScheduledAt && todayEastern(claim.inspectionScheduledAt, now) ? `Inspection today: ${claim.inspectionScheduledAt.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} ET.` : null,
+      `Status: ${claim.claimedByName ? `claimed by ${claim.claimedByName}` : "unclaimed"} · ${formatBusinessMinutes(claim.firstResponseBusinessMinutes)} · ${claim.contactAttempts} attempt${claim.contactAttempts === 1 ? "" : "s"}`,
+      claim.slackPermalink ? `<${claim.slackPermalink}|Open Slack thread>` : "Slack permalink unavailable",
     ].filter(Boolean).join("\n"));
-  const intakeMessage = [
-    `*Loss Intake Follow-up — ${dateKey}* (${intake.length} active)`,
-    "Shared pull queue. Work top-down; do not assign by market.",
-    "",
-    ...intakeLines,
-  ].join("\n");
-
-  return { dateKey, unfiled, intake, processorsMessage, intakeMessage };
-}
-
-/** Uses the exact Processor board membership rather than legacy template status. */
-export function buildProcessorDigest(items: ProcessorQueueItem[], now = new Date()) {
-  const dateKey = etDateKey(now);
-  const lines = items.length === 0
-    ? ["No unreported claims are currently identified."]
-    : items.map((item, index) => [
-      `*${index + 1}. ${item.memberName ?? "Unidentified member"}${item.customerId ? ` · Customer ${item.customerId}` : ""}*`,
-      `${item.market ?? "Market unknown"} · VIN ${item.vinLastSix ?? "not captured"} · Date of loss ${item.dateOfLoss ?? "not captured"} · ${item.daysUnfiled} day${item.daysUnfiled === 1 ? "" : "s"} unfiled`,
-      `Status: ${item.status.replace("_", " ")}${item.takenByName ? ` · ${item.takenByName}` : ""}`,
-      `Thread: ${item.slackPermalink ? `<${item.slackPermalink}|Open Slack thread>` : "Slack permalink unavailable"}`,
-      `Missing: ${item.details.missing.length ? item.details.missing.join(", ") : "No baseline fields missing"}`,
-    ].join("\n"));
   return [
-    `*Unreported Claims — ${dateKey}* (${items.length})`,
-    "*File with the information available. Do not call the member.*",
-    "Member contact belongs to the Intake reps. Where a field is unavailable, file with what exists and note the gap.",
+    `*Loss Intake Follow-up — ${etDateKey(now)}* (${active.length} active)`,
+    "Shared queue: claim an item before working it. Store arrivals first, today’s inspections next, then overdue and oldest reports.",
     "",
     ...lines,
   ].join("\n");
 }
 
 async function slackPostOrUpdate(input: { channel: string; text: string; messageTs?: string | null }) {
-  if (!ENV.slackBotToken) throw new Error("SLACK_BOT_TOKEN is not configured for Dispatch publishing.");
+  if (!ENV.slackBotToken) throw new Error("SLACK_BOT_TOKEN is not configured for Intake publishing.");
   const method = input.messageTs ? "chat.update" : "chat.postMessage";
   const response = await fetch(`${SLACK_API_BASE}/${method}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${ENV.slackBotToken}`,
-      "Content-Type": "application/json; charset=utf-8",
-    },
-    body: JSON.stringify(input.messageTs
-      ? { channel: input.channel, ts: input.messageTs, text: input.text }
-      : { channel: input.channel, text: input.text }),
+    headers: { Authorization: `Bearer ${ENV.slackBotToken}`, "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(input.messageTs ? { channel: input.channel, ts: input.messageTs, text: input.text } : { channel: input.channel, text: input.text }),
   });
   const payload = await response.json() as { ok?: boolean; error?: string; ts?: string };
   if (!response.ok || !payload.ok || !payload.ts) throw new Error(`Slack ${method} failed: ${payload.error ?? response.statusText}`);
   return payload.ts;
 }
 
-/** Publishes only when called by an enabled Dispatch schedule or an admin-controlled run. */
-export async function publishLossIntakeDispatch(input: { now?: Date; publishProcessors?: boolean; publishIntake?: boolean } = {}) {
+/** Posts or updates one configured daily Intake message. No destination is hardcoded. */
+export async function publishLossIntakeDispatch(input: { now?: Date } = {}) {
   const now = input.now ?? new Date();
   const settings = await getLossIntakeSettings();
-  const [{ claims }, processorQueue] = await Promise.all([
-    listLossIntakeClaims({ limit: 200, offset: 0 }),
-    input.publishProcessors ? listLossIntakeProcessorQueue(now) : Promise.resolve(null),
-  ]);
-  const baseMessages = buildDispatchMessages(claims as DispatchWorkClaim[], now);
-  const messages = {
-    ...baseMessages,
-    processorsMessage: processorQueue?.available ? buildProcessorDigest(processorQueue.items, now) : baseMessages.processorsMessage,
-  };
-  const patch: Record<string, string | null> = {};
-
-  if (input.publishProcessors && shouldPublishDispatchMessage({
-    previousSignature: settings.processorsDigestSignature,
-    previousMessageTs: settings.processorsDigestMessageTs,
-    nextMessage: messages.processorsMessage,
-  })) {
-    const sameDay = settings.processorsDigestDateKey === messages.dateKey;
-    patch.processorsDigestMessageTs = await slackPostOrUpdate({
-      channel: settings.claimsProcessorsChannelId,
-      text: messages.processorsMessage,
-      messageTs: sameDay ? settings.processorsDigestMessageTs : null,
-    });
-    patch.processorsDigestSignature = dispatchMessageSignature(messages.processorsMessage);
-    patch.processorsDigestDateKey = messages.dateKey;
+  if (!settings.intakeSlackPublishingEnabled || !settings.intakeSlackDestinationChannelId) {
+    return { published: {}, skipped: "destination_not_configured" as const, intake: [] as IntakeQueueClaim[], intakeMessage: null };
   }
-  if (input.publishIntake && shouldPublishDispatchMessage({
-    previousSignature: settings.intakeDigestSignature,
-    previousMessageTs: settings.intakeDigestMessageTs,
-    nextMessage: messages.intakeMessage,
-  })) {
-    const sameDay = settings.intakeDigestDateKey === messages.dateKey;
-    patch.intakeDigestMessageTs = await slackPostOrUpdate({
-      channel: settings.claimsIntakeRepsChannelId,
-      text: messages.intakeMessage,
-      messageTs: sameDay ? settings.intakeDigestMessageTs : null,
-    });
-    patch.intakeDigestSignature = dispatchMessageSignature(messages.intakeMessage);
-    patch.intakeDigestDateKey = messages.dateKey;
+  const intake = await listLossIntakeSharedQueue();
+  const intakeMessage = buildIntakeDigest(intake, now);
+  if (!shouldPublishDispatchMessage({ previousSignature: settings.intakeDigestSignature, previousMessageTs: settings.intakeDigestMessageTs, nextMessage: intakeMessage })) {
+    return { published: {}, skipped: "unchanged" as const, intake, intakeMessage };
   }
-  if (Object.keys(patch).length) {
-    await updateLossIntakeSettings(patch, "Loss Intake Dispatch");
-  }
-  return { ...messages, published: patch };
-}
-
-/**
- * Reflects a processor board action in the standing digest without creating a
- * second Slack post. It intentionally does nothing until a digest already
- * exists, preserving the protected disabled publisher behavior.
- */
-export async function updateExistingProcessorDigest(now = new Date()) {
-  const settings = await getLossIntakeSettings();
   const dateKey = etDateKey(now);
-  if (!settings.processorsDigestMessageTs || settings.processorsDigestDateKey !== dateKey) return { updated: false, reason: "no_current_digest" as const };
-  const queue = await listLossIntakeProcessorQueue(now);
-  if (!queue.available) return { updated: false, reason: "queue_unavailable" as const };
-  const message = buildProcessorDigest(queue.items, now);
-  if (settings.processorsDigestSignature === dispatchMessageSignature(message)) return { updated: false, reason: "unchanged" as const };
-  await slackPostOrUpdate({ channel: settings.claimsProcessorsChannelId, text: message, messageTs: settings.processorsDigestMessageTs });
-  await updateLossIntakeSettings({ processorsDigestSignature: dispatchMessageSignature(message) }, "Loss Intake Processor Queue");
-  return { updated: true, reason: "updated" as const };
+  const sameDay = settings.intakeDigestDateKey === dateKey;
+  const messageTs = await slackPostOrUpdate({ channel: settings.intakeSlackDestinationChannelId, text: intakeMessage, messageTs: sameDay ? settings.intakeDigestMessageTs : null });
+  const patch = {
+    intakeDigestMessageTs: messageTs,
+    intakeDigestSignature: dispatchMessageSignature(intakeMessage),
+    intakeDigestDateKey: dateKey,
+  };
+  await updateLossIntakeSettings(patch, "Loss Intake Dispatch");
+  return { published: patch, skipped: null, intake, intakeMessage };
 }

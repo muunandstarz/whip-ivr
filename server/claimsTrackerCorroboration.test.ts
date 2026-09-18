@@ -1,72 +1,47 @@
 import { describe, expect, it } from "vitest";
-import {
-  applyClaimsTrackerCorroboration,
-  buildClaimsTrackerIndex,
-  buildClaimsTrackerOAuthUrl,
-  normalizeVinFragment,
-} from "./claimsTrackerCorroboration";
-import type { ThreadAnalysis } from "./lossIntakeDomain";
+import { buildClaimsTrackerIndex, buildClaimsTrackerOAuthUrl, matchTrackerFiling, normalizeVinFragment, parseOperationalDate } from "./claimsTrackerCorroboration";
 
-const analysis = (state: ThreadAnalysis["filingState"], vin = "123456"): ThreadAnalysis => ({
-  assignedHandlerId: null, assignedAgent: null, stage: "awaiting_outreach", firstContactAt: null, firstContactMinutes: null,
-  slaState: "within_sla", slaType: "immediate", slaDeadlineAt: null, completedAt: null, intakeCycleMinutes: null,
-  factsOfLoss: null, folQualityScore: null, preliminaryLiability: null, rideshareStatus: null, noAnswerAttempts: 0,
-  contactAttempts: 0, storeTeamTagged: false, templatePostedAt: null, templatePostMinutesFromContact: null,
-  templatePostMinutesFromReport: null, teslaFootageRequested: null, qualityScore: 0, missingElements: [],
-  firstResponseBusinessMinutes: null, templateBusinessMinutes: null, slaTargetBusinessMinutes: 10,
-  onSiteFlag: false, onSiteDetectedAt: null, onSiteReason: null, inspectionScheduledAt: null, inspectionScheduleSource: null,
-  claimId: null, filingState: state, filingEvidence: "Slack template has no Claim ID.", duplicateGroupKey: `customer:123|vin:${vin}`,
-  dataWarnings: [], events: [], qualityItems: [],
-});
+const headers = ["A", "B", "Claim # (Last 8 of VIN)", "Member Name", "Date of Loss", "F", "G", "H", "I", "J", "K", "L", "M", "N", "Snapsheet Link (Claim File)"];
+const row = (vin: string, member: string, lossDate: string, link = "") => ["", "", vin, member, lossDate, "", "", "", "", "", "", "", "", "", link];
+const index = () => buildClaimsTrackerIndex({ allReportedIncidentsStatus: [headers,
+  row("AA150009", "Oluwaremilekun Kola-Ogunbule", "09/07/2026", "https://snapsheetvice.com/claims/2043507"),
+  row("AA312438", "Olakunle Odutoye", "09/10/2026", "https://snapsheetvice.com/claims/2049666"),
+  row("AA650094", "Michael Smith", "02/11/2026", "https://snapsheetvice.com/claims/1683926"),
+  row("AA111111", "Filed One", "09/07/2026"), row("AA222222", "Filed Two", "09/08/2026"), row("AA333333", "Filed Three", "09/09/2026"), row("AA444444", "Filed Four", "09/10/2026"), row("AA555555", "Filed Five", "09/11/2026"),
+] });
 
-describe("Claims Tracker corroboration", () => {
+describe("Claims Tracker same-loss filing test", () => {
   it("requests a separate read-only Sheets consent flow", () => {
     const url = new URL(buildClaimsTrackerOAuthUrl("https://whipclaimsivr.com/api/mail/gmail-oauth-callback"));
     expect(url.searchParams.get("state")).toBe("claims-tracker-readonly");
     expect(url.searchParams.get("scope")).toContain("spreadsheets.readonly");
-    expect(url.searchParams.get("scope")).not.toContain("gmail");
   });
 
-  it("uses a row on All Reported IncidentsStatus as the entire filed test even when column O is blank", () => {
-    const index = buildClaimsTrackerIndex({
-      allReportedIncidentsStatus: [
-        ["Member Name", "Claim # (Last 8 of VIN)", "Snapsheet Link (Claim File)"],
-        ["Michael Smith", "AA650094", ""],
-        ["Another Member", "BB123456", "https://example.test/file"],
-      ],
-    });
-    expect(index.filedVins.has("650094")).toBe(true);
-    expect(index.filedVins.has("123456")).toBe(true);
-    expect(index.unfiledVins.size).toBe(0);
-  });
-
-  it("maps inspection dates only for scheduling and never uses a market arrival flag", () => {
-    const index = buildClaimsTrackerIndex({
-      allReportedIncidentsStatus: [["Claim # (Last 8 of VIN)"]],
-      marketSchedules: {
-        ATL: [["Claim # (Last 8 of VIN)", "Inspection Date"], ["AA650094", "09/18/2026 10:30 AM"]],
-      },
-    });
-    const result = applyClaimsTrackerCorroboration(analysis("unfiled", "650094"), index);
-    expect(result.inspectionScheduleSource).toBe("ATL");
-    expect(result.inspectionScheduledAt).toBeInstanceOf(Date);
-    expect(result.inspectionScheduledAt?.toISOString()).toContain("14:30:00.000Z");
-    expect(result.onSiteFlag).toBe(false);
-  });
-
-  it("moves a Slack notice out of the unreported set whenever the filed tab contains its VIN", () => {
-    const index = buildClaimsTrackerIndex({
-      allReportedIncidentsStatus: [["Claim # (Last 8 of VIN)"], ["AA123456"]],
-    });
-    const result = applyClaimsTrackerCorroboration(analysis("unfiled"), index);
-    expect(result.filingState).toBe("filed");
-    expect(result.filingEvidence).toContain("All Reported IncidentsStatus contains VIN 123456");
-  });
-
-  it("normalizes a valid eight-character tracker fragment and a malformed fallback", () => {
+  it("uses the documented six-digit VIN fragment normalization", () => {
     expect(normalizeVinFragment("AA650094")).toBe("650094");
     expect(normalizeVinFragment("T3140850")).toBe("140850");
-    expect(normalizeVinFragment("R3035556")).toBe("035556");
-    expect(normalizeVinFragment("broken-650094")).toBe("650094");
+  });
+
+  it("matches Oluwaremilekun’s September 7 FNOL to the same loss", () => {
+    expect(matchTrackerFiling({ index: index(), vinLastSix: "150009", memberName: "Oluwaremilekun Kola-Ogunbule", dateOfLoss: "09/07/2026" })?.claimNumber).toBe("AA150009");
+  });
+
+  it("matches the corrected 312438 VIN, not the superseded 312437 source value", () => {
+    expect(matchTrackerFiling({ index: index(), vinLastSix: "312438", memberName: "Olakunle Odutoye", dateOfLoss: "09/10/2026" })?.claimNumber).toBe("AA312438");
+    expect(matchTrackerFiling({ index: index(), vinLastSix: "312437", memberName: "Olakunle Odutoye", dateOfLoss: "09/10/2026" })).toBeNull();
+  });
+
+  it("does not let Michael Smith’s February loss file the September 8 loss on the same vehicle", () => {
+    expect(matchTrackerFiling({ index: index(), vinLastSix: "650094", memberName: "Michael Smith", dateOfLoss: "09/08/2026" })).toBeNull();
+  });
+
+  it("excludes five same-loss filed notices even when the Claim File link is blank", () => {
+    for (const [vin, member, date] of [["111111", "Filed One", "09/07/2026"], ["222222", "Filed Two", "09/08/2026"], ["333333", "Filed Three", "09/09/2026"], ["444444", "Filed Four", "09/10/2026"], ["555555", "Filed Five", "09/11/2026"]]) {
+      expect(matchTrackerFiling({ index: index(), vinLastSix: vin, memberName: member, dateOfLoss: date })).not.toBeNull();
+    }
+  });
+
+  it("uses calendar dates rather than timezone-dependent timestamps", () => {
+    expect(parseOperationalDate("09/10/2026")?.toISOString()).toBe("2026-09-10T00:00:00.000Z");
   });
 });

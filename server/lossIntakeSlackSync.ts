@@ -330,7 +330,6 @@ async function collectThreadTargets(input: {
   claimsChannelId: string;
   remoteMarketsChannelId: string;
   escalationsChannelId: string;
-  claimsProcessingChannelId: string;
   oldest: string;
 }) {
   const targets = new Map<string, ThreadTarget>();
@@ -338,7 +337,6 @@ async function collectThreadTargets(input: {
     { channelId: input.claimsChannelId, channelName: "claims" },
     { channelId: input.remoteMarketsChannelId, channelName: "remote-markets" },
     { channelId: input.escalationsChannelId, channelName: "escalations" },
-    { channelId: input.claimsProcessingChannelId, channelName: "claims-processing" },
   ];
 
   for (const channel of channels) {
@@ -439,7 +437,11 @@ export async function resyncLossIntakeThread(input: {
       slaMinutes: input.slaMinutes,
       atRiskMinutes: input.atRiskMinutes,
     });
-    const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex());
+    const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex(), {
+      memberName: parsedParent.memberName,
+      dateOfLoss: parsedParent.dateOfLoss,
+      vinLastSix: slackAnalysis.correctedVinLastSix ?? parsedParent.vinLastSix,
+    });
     await upsertLossIntakeClaimBundle({ parent: parsedParent, analysis });
     console.log(`[Loss Intake] Reconciled original thread ${input.channelId}:${input.threadTs} — stage=${analysis.stage}, completed=${!!analysis.completedAt}`);
     return true;
@@ -459,7 +461,6 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
       claimsChannelId: settings.claimsChannelId,
       remoteMarketsChannelId: settings.remoteMarketsChannelId,
       escalationsChannelId: settings.escalationsChannelId,
-      claimsProcessingChannelId: settings.claimsProcessingChannelId,
       oldest: incrementalOldest(settings.lastSuccessfulSyncAt),
     });
     const claimsTrackerIndex = await getClaimsTrackerIndex();
@@ -494,11 +495,15 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
         slaMinutes: settings.firstContactSlaMinutes,
         atRiskMinutes: settings.atRiskMinutes,
       });
-      const analysis = applyClaimsTrackerCorroboration(slackAnalysis, claimsTrackerIndex);
+      const analysis = applyClaimsTrackerCorroboration(slackAnalysis, claimsTrackerIndex, {
+        memberName: parsedParent.memberName,
+        dateOfLoss: parsedParent.dateOfLoss,
+        vinLastSix: slackAnalysis.correctedVinLastSix ?? parsedParent.vinLastSix,
+      });
       const primary = await findPrimaryLossIntakeClaimByDuplicateGroup({
         duplicateGroupKey: analysis.duplicateGroupKey,
         customerId: parsedParent.customerId,
-        vinLastSix: parsedParent.vinLastSix,
+        vinLastSix: analysis.correctedVinLastSix ?? parsedParent.vinLastSix,
       });
       const isDuplicate = Boolean(primary && primary.slackKey !== parsedParent.slackKey);
       await upsertLossIntakeClaimBundle({

@@ -23,13 +23,16 @@ import {
   updateLossIntakeSettings,
   type RepComparisonPeriod,
 } from "../lossIntakeDb";
-import { runLossIntakeSlackSync } from "../lossIntakeSlackSync";
-import { publishLossIntakeDispatch, updateExistingProcessorDigest } from "../lossIntakeDispatch";
+import { publishLossIntakeDispatch } from "../lossIntakeDispatch";
 import { getClaimsTrackerIndex } from "../claimsTrackerCorroboration";
 import {
-  listLossIntakeProcessorQueue,
-  updateLossIntakeProcessorStatus,
-} from "../lossIntakeProcessorQueue";
+  claimLossIntakeItem,
+  getLossIntakeDailyMetrics,
+  listLossIntakeSharedQueue,
+  releaseLossIntakeItem,
+  sharedQueueDepth,
+} from "../lossIntakeSharedQueue";
+import { refreshLossIntakeSources } from "../lossIntakeRefresh";
 
 const stageSchema = z.enum([
   "awaiting_outreach",
@@ -54,22 +57,13 @@ function requireAdmin(user: { role: string }) {
   }
 }
 
-// Handler IDs authorized to access Loss Intake (Carlito=4, Ana=6, Bennet=30003)
+// Handler IDs authorized to access the shared Loss Intake queue (Carlito, Ana, Bennet).
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
 
 function requireLossIntakeAccess(user: { role: string; handlerProfileId?: number | null }) {
   if (user.role === "admin") return;
-  if (user.handlerProfileId && (LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId) || user.handlerProfileId === 3 || user.handlerProfileId === 30002)) return;
+  if (user.handlerProfileId && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId)) return;
   throw new TRPCError({ code: "FORBIDDEN", message: "Loss Intake access is restricted." });
-}
-
-function requireProcessorQueueAccess(user: { role: string; handlerProfileId?: number | null }) {
-  // Supervisors can oversee the queue. The two active processor profiles own
-  // live filing actions; this prevents unrelated handler accounts from taking
-  // work in the double-filing prevention queue.
-  if (user.role === "admin") return;
-  if (user.handlerProfileId === 3 || user.handlerProfileId === 30002) return;
-  throw new TRPCError({ code: "FORBIDDEN", message: "Processor queue access is restricted to Claims Processors." });
 }
 
 function scopeHandlerId(
@@ -250,6 +244,8 @@ export const lossIntakeRouter = router({
           firstContactSlaMinutes: z.number().int().min(1).max(120).optional(),
           atRiskMinutes: z.number().int().min(1).max(119).optional(),
           qaDueHours: z.number().int().min(1).max(168).optional(),
+          intakeSlackDestinationChannelId: z.string().trim().min(1).max(32).nullable().optional(),
+          intakeSlackPublishingEnabled: z.boolean().optional(),
           agentAssignments: z
             .array(
               z.object({
@@ -314,47 +310,49 @@ export const lossIntakeRouter = router({
     };
   }),
 
-  processors: router({
-    queue: protectedProcedure.query(async ({ ctx }) => {
-      requireProcessorQueueAccess(ctx.user);
-      return listLossIntakeProcessorQueue();
+  workQueue: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      requireLossIntakeAccess(ctx.user);
+      const rows = await listLossIntakeSharedQueue();
+      return { items: rows, depth: sharedQueueDepth(rows) };
     }),
 
-    setStatus: protectedProcedure
-      .input(z.object({
-        claimId: z.number().int().positive(),
-        status: z.enum(["not_started", "filing", "filed", "not_a_claim"]),
-        claimNumber: z.string().trim().max(128).nullable().optional(),
-        notAClaimReason: z.string().trim().max(500).nullable().optional(),
-      }))
+    claim: protectedProcedure
+      .input(z.object({ claimId: z.number().int().positive(), effectiveHandlerId: z.number().int().positive().optional(), effectiveHandlerName: z.string().trim().min(1).max(128).optional() }))
       .mutation(async ({ ctx, input }) => {
-        requireProcessorQueueAccess(ctx.user);
-        const result = await updateLossIntakeProcessorStatus({
+        requireLossIntakeAccess(ctx.user);
+        const handlerId = ctx.user.role === "admin" ? input.effectiveHandlerId : ctx.user.handlerProfileId;
+        const handlerName = ctx.user.role === "admin" ? input.effectiveHandlerName : (ctx.user.name ?? ctx.user.email ?? "Intake representative");
+        if (!handlerId || !handlerName) throw new TRPCError({ code: "FORBIDDEN", message: "Select an Intake representative view to claim work." });
+        return claimLossIntakeItem({
           claimId: input.claimId,
-          status: input.status,
-          claimNumber: input.claimNumber,
-          notAClaimReason: input.notAClaimReason,
-          actor: {
-            handlerId: ctx.user.handlerProfileId ?? null,
-            name: ctx.user.name ?? ctx.user.email ?? "Processor",
-          },
+          handlerId,
+          handlerName,
         });
-        // A standing processor digest is only ever updated in place. This
-        // does not activate Dispatch publishing or create a new Slack post.
-        await updateExistingProcessorDigest().catch(error => {
-          console.warn("[Loss Intake] Processor digest update skipped:", error instanceof Error ? error.message : error);
-        });
-        return result;
       }),
+
+    release: protectedProcedure
+      .input(z.object({ claimId: z.number().int().positive(), effectiveHandlerId: z.number().int().positive().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        requireLossIntakeAccess(ctx.user);
+        const handlerId = ctx.user.role === "admin" ? input.effectiveHandlerId : ctx.user.handlerProfileId;
+        if (!handlerId) throw new TRPCError({ code: "FORBIDDEN", message: "Select an Intake representative view to release work." });
+        return releaseLossIntakeItem({ claimId: input.claimId, handlerId });
+      }),
+
+    dailyMetrics: protectedProcedure.query(async ({ ctx }) => {
+      requireLossIntakeAccess(ctx.user);
+      return getLossIntakeDailyMetrics();
+    }),
   }),
 
   sync: router({
     runNow: protectedProcedure.mutation(async ({ ctx }) => {
       requireAdmin(ctx.user);
-      return runLossIntakeSlackSync();
+      return refreshLossIntakeSources();
     }),
 
-    enableFiveMinuteSchedule: protectedProcedure.mutation(async ({ ctx }) => {
+    enableBusinessDaySchedule: protectedProcedure.mutation(async ({ ctx }) => {
       requireAdmin(ctx.user);
       const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
       if (!sessionToken) {
@@ -362,11 +360,13 @@ export const lossIntakeRouter = router({
       }
       const settings = await getLossIntakeSettings();
       const schedule = {
-        cron: "0 */5 * * * *",
+        // Hourly weekday Heartbeat calls are cheap; the endpoint itself admits
+        // only the four Eastern-time refresh slots, remaining DST-safe.
+        cron: "0 0 * * * 1-5",
         path: "/api/scheduled/loss-intake-sync",
         method: "POST" as const,
         payload: {},
-        description: "Poll approved Slack claims channels every five minutes for Loss Intake SLA and QA monitoring.",
+        description: "Refresh Loss Intake sources at 8 AM, 11 AM, 2 PM, and 5 PM Eastern on business days; other hourly callbacks safely skip.",
       };
       if (settings.scheduleCronTaskUid) {
         const result = await updateHeartbeatJob(
@@ -402,53 +402,10 @@ export const lossIntakeRouter = router({
   }),
 
   dispatch: router({
-    publishNow: protectedProcedure
-      .input(z.object({ processors: z.boolean().default(false), intake: z.boolean().default(true) }))
-      .mutation(async ({ ctx, input }) => {
+    publishNow: protectedProcedure.mutation(async ({ ctx }) => {
         requireAdmin(ctx.user);
-        if (!input.processors && !input.intake) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Select at least one Dispatch output." });
-        }
-        return publishLossIntakeDispatch({ publishProcessors: input.processors, publishIntake: input.intake });
+        return publishLossIntakeDispatch();
       }),
-
-    enableSchedule: protectedProcedure.mutation(async ({ ctx }) => {
-      requireAdmin(ctx.user);
-      const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
-      if (!sessionToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sign in again to enable Dispatch scheduling." });
-      const settings = await getLossIntakeSettings();
-      const schedule = {
-        cron: "0 0 * * * 1-5",
-        path: "/api/scheduled/loss-intake-dispatch",
-        method: "POST" as const,
-        payload: {},
-        description: "Publish 8 AM ET unfiled-claims and 9 AM–6 PM ET editable Loss Intake Dispatch worklists.",
-      };
-      if (settings.dispatchScheduleTaskUid) {
-        const result = await updateHeartbeatJob(settings.dispatchScheduleTaskUid, { ...schedule, enable: true }, sessionToken);
-        return { taskUid: settings.dispatchScheduleTaskUid, ...result };
-      }
-      const result = await createHeartbeatJob({ name: "loss-intake-dispatch", ...schedule }, sessionToken);
-      await updateLossIntakeSettings({ dispatchScheduleTaskUid: result.taskUid }, ctx.user.name ?? ctx.user.email ?? "Supervisor");
-      return result;
-    }),
-
-    pauseSchedule: protectedProcedure.mutation(async ({ ctx }) => {
-      requireAdmin(ctx.user);
-      const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
-      const settings = await getLossIntakeSettings();
-      if (!settings.dispatchScheduleTaskUid) return { success: true, skipped: "not_configured" as const };
-      await updateHeartbeatJob(settings.dispatchScheduleTaskUid, { enable: false }, sessionToken);
-      return { success: true };
-    }),
-
-    scheduleStatus: protectedProcedure.query(async ({ ctx }) => {
-      requireAdmin(ctx.user);
-      const settings = await getLossIntakeSettings();
-      if (!settings.dispatchScheduleTaskUid) return { configured: false };
-      const matching = await getLossIntakeSettingsByDispatchScheduleTaskUid(settings.dispatchScheduleTaskUid);
-      return { configured: Boolean(matching), taskUid: settings.dispatchScheduleTaskUid };
-    }),
   }),
 
   /** Side-by-side comparison metrics for all 3 loss intake reps */

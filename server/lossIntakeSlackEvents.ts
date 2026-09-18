@@ -32,7 +32,6 @@ export const SLACK_LOSS_INTAKE_CHANNELS = new Map([
   ["CHWRXH4HK", "claims"],
   ["C092UPKR79D", "remote-markets"],
   ["C03LK1Z8XFG", "escalations"],
-  ["C08UF1Z61QE", "claims-processing"],
 ] as const);
 
 // The @claims-intake user group ID — tagging this starts the SLA clock
@@ -92,7 +91,7 @@ function nextBusinessOpenMs(fromMs: number, etOffsetMinutes: number): number {
   while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
   return d.getTime() - etOffsetMinutes * 60 * 1000; // back to UTC ms
 }
-type SlackLossIntakeChannelId = "CHWRXH4HK" | "C092UPKR79D" | "C03LK1Z8XFG" | "C08UF1Z61QE";
+type SlackLossIntakeChannelId = "CHWRXH4HK" | "C092UPKR79D" | "C03LK1Z8XFG";
 
 function approvedChannelName(channelId: string) {
   return SLACK_LOSS_INTAKE_CHANNELS.get(channelId as SlackLossIntakeChannelId);
@@ -262,6 +261,8 @@ function rehydrateParent(
     memberName: claim.memberName,
     customerId: claim.customerId,
     vinLastSix: claim.vinLastSix,
+    memberPhone: claim.memberPhone,
+    preferredLanguage: claim.preferredLanguage,
     market: claim.market,
     vehicleType: claim.vehicleType,
     hasPhotos: claim.hasPhotos,
@@ -363,7 +364,11 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
         slaMinutes: settings.firstContactSlaMinutes,
         atRiskMinutes: settings.atRiskMinutes,
       });
-      const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex());
+      const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex(), {
+        memberName: parsedParent.memberName,
+        dateOfLoss: parsedParent.dateOfLoss,
+        vinLastSix: slackAnalysis.correctedVinLastSix ?? parsedParent.vinLastSix,
+      });
 
       // ── Duplicate FNOL detection ──────────────────────────────────────────
       // A forwarded message has an `attachments` array with `from_channel` + `ts`.
@@ -406,7 +411,7 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
         const primary = await findPrimaryLossIntakeClaimByDuplicateGroup({
           duplicateGroupKey: analysis.duplicateGroupKey,
           customerId: parsedParent.customerId,
-          vinLastSix: parsedParent.vinLastSix,
+          vinLastSix: analysis.correctedVinLastSix ?? parsedParent.vinLastSix,
         });
         if (primary && primary.slackKey !== parsedParent.slackKey && primary.postedAt.getTime() <= parsedParent.postedAt.getTime()) {
           isDuplicate = true;
@@ -476,7 +481,11 @@ export async function processSlackLossIntakeEvent(payload: SlackEventEnvelope) {
       slaMinutes: settings.firstContactSlaMinutes,
       atRiskMinutes: settings.atRiskMinutes,
     });
-    const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex());
+    const analysis = applyClaimsTrackerCorroboration(slackAnalysis, await getClaimsTrackerIndex(), {
+      memberName: parent.memberName,
+      dateOfLoss: parent.dateOfLoss,
+      vinLastSix: slackAnalysis.correctedVinLastSix ?? parent.vinLastSix,
+    });
     await upsertLossIntakeClaimBundle({ parent, analysis });
 
     // If this reply mentions @claims-intake, start the SLA clock on the existing claim

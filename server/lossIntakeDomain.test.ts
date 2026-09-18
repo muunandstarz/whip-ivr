@@ -193,4 +193,21 @@ Please check if we have Tesla footage.
     });
     expect(analysis.teslaFootageRequested).toBeNull();
   });
+
+  it("carries a thread-corrected VIN forward without creating a second loss", () => {
+    const parent = parseFnolParent(makeParent({
+      text: makeParent().text.replace("391546", "312437"),
+    }));
+    expect(parent).not.toBeNull();
+    if (!parent) return;
+    const analysis = analyzeFnolThread({
+      parent,
+      assignments: [assignment],
+      replies: [{ ts: String(Number(parent.slackMessageTs) + 60), text: "Correction: VIN should be 312438.", userId: assignment.slackUserId, userName: assignment.handlerName }],
+      now: parent.postedAt,
+    });
+    expect(analysis.correctedVinLastSix).toBe("312438");
+    expect(analysis.vinCorrectionEvidence).toContain("312437");
+    expect(analysis.duplicateGroupKey).toContain("312438");
+  });
 });

@@ -143,10 +143,15 @@ export function evaluateDispatchTiming(input: {
 }
 
 export function extractClaimId(text: string) {
-  const url = text.match(/snapsheet(?:vice)?\.com\/claims\/([A-Za-z0-9-]+)\/details/i);
+  const url = text.match(/snapsheet(?:vice)?\.com\/claims\/([A-Za-z0-9-]+)/i);
   if (url?.[1]) return url[1];
-  const labeled = text.match(/\bClaim\s*(?:ID|#)\s*[:\-–]\s*([A-Za-z]{2,4}-\d{2,}-\d{4,}-\d{4,}|[A-Za-z0-9-]{8,})/i);
-  return labeled?.[1] ?? null;
+  const formatted = text.match(/\b([A-Za-z]{2,4}-\d{2,}-\d{4,}-\d{4,})\b/);
+  if (formatted?.[1]) return formatted[1];
+  const labeled = text.match(/\bClaim\s*(?:ID|#)\s*[:\-–]\s*(\d{6,}|[A-Za-z0-9-]{8,})/i);
+  if (labeled?.[1]) return labeled[1];
+  // A bare six-or-more-digit number is filing evidence only when the thread
+  // explicitly calls it a Snapsheet file; ordinary member IDs stay excluded.
+  return /\b(?:snapsheet|claim file)\b[^\n]{0,80}\b(\d{6,})\b/i.exec(text)?.[1] ?? null;
 }
 
 export function deriveFilingState(input: { templatePosted: boolean; claimId: string | null }): DispatchFilingState {
