@@ -59,6 +59,15 @@ interface SlackPermalinkResponse extends SlackApiEnvelope {
   permalink?: string;
 }
 
+interface SlackUserInfoResponse extends SlackApiEnvelope {
+  user?: {
+    profile?: { title?: string; display_name?: string; real_name?: string };
+    real_name?: string;
+  };
+}
+
+const storeOpsUserCache = new Map<string, { isStoreOps: boolean; name: string | null }>();
+
 export class SlackApiError extends Error {
   constructor(
     message: string,
@@ -160,6 +169,48 @@ function toDomainMessage(message: SlackApiMessage): SlackLossMessage | null {
     userName: null,
     files: toDomainFiles(message.files),
   };
+}
+
+function isStoreOperationsProfile(profile: SlackUserInfoResponse["user"]) {
+  const identity = [profile?.profile?.title, profile?.profile?.display_name, profile?.profile?.real_name, profile?.real_name]
+    .filter(Boolean)
+    .join(" ");
+  return /\b(?:store|branch)\b.*\b(?:ops|operations)\b|\b(?:ops|operations)\b.*\b(?:store|branch)\b/i.test(identity);
+}
+
+async function resolveStoreOpsPoster(userId: string | null | undefined) {
+  if (!userId) return { isStoreOps: false, name: null };
+  const cached = storeOpsUserCache.get(userId);
+  if (cached) return cached;
+  try {
+    const payload = await slackGet<SlackUserInfoResponse>("users.info", { user: userId });
+    const result = {
+      isStoreOps: isStoreOperationsProfile(payload.user),
+      name: payload.user?.profile?.display_name || payload.user?.profile?.real_name || payload.user?.real_name || null,
+    };
+    storeOpsUserCache.set(userId, result);
+    return result;
+  } catch (error) {
+    // If users:read is unavailable, no attachment is promoted to an in-office
+    // signal by guesswork; source sync remains otherwise functional.
+    console.warn(`[Loss Intake Sync] Could not resolve Slack poster ${userId}:`, error instanceof Error ? error.message : error);
+    const result = { isStoreOps: false, name: null };
+    storeOpsUserCache.set(userId, result);
+    return result;
+  }
+}
+
+async function enrichStoreOpsMessages(messages: SlackLossMessage[]) {
+  const uniqueUsers = Array.from(new Set(messages.map(message => message.userId).filter((value): value is string => Boolean(value))));
+  const identities = new Map<string, { isStoreOps: boolean; name: string | null }>();
+  for (const userId of uniqueUsers) {
+    identities.set(userId, await resolveStoreOpsPoster(userId));
+    await delay(60);
+  }
+  return messages.map(message => {
+    const identity = message.userId ? identities.get(message.userId) : null;
+    return { ...message, userName: message.userName ?? identity?.name ?? null, isStoreOpsPoster: identity?.isStoreOps ?? false };
+  });
 }
 
 function parseAssignments(value: unknown): IntakeAgentAssignment[] {
@@ -369,7 +420,7 @@ export async function resyncLossIntakeThread(input: {
 }): Promise<boolean> {
   try {
     requireSlackToken();
-    const thread = await fetchThread(input.channelId, input.threadTs);
+    const thread = await enrichStoreOpsMessages(await fetchThread(input.channelId, input.threadTs));
     const threadParent = thread[0];
     if (!threadParent) return false;
     const permalink = input.permalink ?? await fetchPermalink(input.channelId, input.threadTs);
@@ -418,7 +469,7 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
     let eventsProcessed = 0;
 
     for (const target of targets) {
-      const thread = await fetchThread(target.channelId, target.threadTs);
+      const thread = await enrichStoreOpsMessages(await fetchThread(target.channelId, target.threadTs));
       const threadParent = thread[0];
       if (!threadParent) continue;
       let permalink = target.permalink;
@@ -427,7 +478,7 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
         await delay(150);
       }
       const parent: SlackLossParent = {
-        ...(target.discoveredParent ?? threadParent),
+        ...threadParent,
         channelId: target.channelId,
         channelName: target.channelName,
         permalink,

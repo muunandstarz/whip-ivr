@@ -34,6 +34,7 @@ export interface SlackLossMessage {
   text: string;
   userId?: string | null;
   userName?: string | null;
+  isStoreOpsPoster?: boolean;
   files?: SlackFileRef[];
   eventId?: string | null;
 }
@@ -68,6 +69,7 @@ export interface ParsedLossParent {
   rideshareStatus: string | null;
   dateOfLoss: string | null;
   sourceKind: "structured" | "unstructured";
+  sourcePosterIsStoreOps: boolean;
 }
 
 export interface ParsedLossEvent {
@@ -129,6 +131,8 @@ export interface ThreadAnalysis {
   onSiteFlag: boolean;
   onSiteDetectedAt: Date | null;
   onSiteReason: string | null;
+  inspectionScheduledAt: Date | null;
+  inspectionScheduleSource: string | null;
   claimId: string | null;
   filingState: DispatchFilingState;
   filingEvidence: string;
@@ -335,6 +339,7 @@ export function parseFnolParent(parent: SlackLossParent): ParsedLossParent | nul
     rideshareStatus: getLabel(values, "Rideshare Status at the Time of Loss (if known):"),
     dateOfLoss: extractDateOfLoss(values, parent.text),
     sourceKind: "structured",
+    sourcePosterIsStoreOps: parent.isStoreOpsPoster === true,
   };
 }
 
@@ -385,6 +390,7 @@ export function parseLossNoticeParent(parent: SlackLossParent): ParsedLossParent
     rideshareStatus: null,
     dateOfLoss: extractDateOfLoss(new Map(), parent.text),
     sourceKind: "unstructured",
+    sourcePosterIsStoreOps: parent.isStoreOpsPoster === true,
   };
 }
 
@@ -678,12 +684,6 @@ export function analyzeFnolThread(input: {
   const atRiskMinutes = input.atRiskMinutes ?? 7;
 
   // Compute tiered SLA
-  const { slaType, slaDeadlineAt, effectiveSlaMinutes } = computeSlaDeadline(
-    input.parent.postedAt,
-    input.parent.hasPhotos,
-    standardSlaMinutes,
-  );
-  const slaMinutes = effectiveSlaMinutes;
   const replies = [...input.replies].sort(
     (left, right) => eventDate(left).getTime() - eventDate(right).getTime(),
   );
@@ -736,23 +736,29 @@ export function analyzeFnolThread(input: {
       : input.parent.channelName === "claims-processing"
         ? "claims-processing"
         : "claims";
+  const onSite = detectOnSiteSignal([
+    { text: "", files: input.parent.hasPhotos ? [{}] : [], occurredAt: input.parent.postedAt, isStoreOpsPoster: input.parent.sourcePosterIsStoreOps },
+    ...replies.map(reply => ({ text: reply.text, files: reply.files, occurredAt: eventDate(reply), isStoreOpsPoster: reply.isStoreOpsPoster })),
+  ]);
+  const { slaType, slaDeadlineAt, effectiveSlaMinutes } = computeSlaDeadline(
+    input.parent.postedAt,
+    onSite.onSite,
+    standardSlaMinutes,
+  );
+  const slaMinutes = effectiveSlaMinutes;
   const dispatchTiming = evaluateDispatchTiming({
     postedAt: input.parent.postedAt,
     firstResponseAt: firstContactAt,
     now,
     channel: dispatchChannel,
     market: input.parent.market,
+    onSite: onSite.onSite,
   });
   const claimId = [...replies]
     .reverse()
     .map(reply => extractClaimId(reply.text))
     .find((value): value is string => Boolean(value)) ?? null;
   const filingState = deriveFilingState({ templatePosted: Boolean(templatePostedAt), claimId });
-  const onSite = detectOnSiteSignal([
-    { text: "", files: input.parent.hasPhotos ? [{}] : [], occurredAt: input.parent.postedAt },
-    ...replies.map(reply => ({ text: reply.text, files: reply.files, occurredAt: eventDate(reply) })),
-  ]);
-
   // completedAt = template was posted AND at least 2 agent thread posts exist
   // OR agent made contact attempts + tagged store team (member unreachable but agent did their job)
   // OR legacy "g2g" signal (backward compat)
@@ -949,6 +955,8 @@ export function analyzeFnolThread(input: {
     onSiteFlag: onSite.onSite,
     onSiteDetectedAt: onSite.detectedAt,
     onSiteReason: onSite.reason,
+    inspectionScheduledAt: null,
+    inspectionScheduleSource: null,
     claimId,
     filingState,
     filingEvidence: claimId

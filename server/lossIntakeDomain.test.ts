@@ -142,8 +142,8 @@ Please check if we have Tesla footage.
     expect(analysis.missingElements).toEqual([]);
   });
 
-  it("marks an untouched claim at risk at seven minutes and breached after ten", () => {
-    const parent = parseFnolParent(makeParent());
+  it("marks a Store Operations-confirmed in-office claim at risk at seven minutes and breached after ten", () => {
+    const parent = parseFnolParent(makeParent({ isStoreOpsPoster: true }));
     expect(parent).not.toBeNull();
     if (!parent) return;
 

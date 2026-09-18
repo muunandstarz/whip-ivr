@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildDispatchMessages, dispatchMessageSignature, shouldPublishDispatchMessage, type DispatchWorkClaim } from "./lossIntakeDispatch";
+import { buildDispatchMessages, buildProcessorDigest, dispatchMessageSignature, shouldPublishDispatchMessage, type DispatchWorkClaim } from "./lossIntakeDispatch";
+import type { ProcessorQueueItem } from "./lossIntakeProcessorQueue";
 
 function claim(overrides: Partial<DispatchWorkClaim> = {}): DispatchWorkClaim {
   return {
@@ -68,5 +69,19 @@ describe("Loss Intake Dispatch outputs", () => {
       previousSignature: dispatchMessageSignature(message),
       nextMessage: message,
     })).toBe(true);
+  });
+
+  it("formats the processor post from the dedicated VIN-based queue and repeats the no-call instruction", () => {
+    const item: ProcessorQueueItem = {
+      id: 41, memberName: "Michael Smith", customerId: "10211", market: "Atlanta", vinLastSix: "650094", dateOfLoss: "2026-09-08",
+      postedAt: new Date("2026-09-08T16:35:16.000Z"), slackPermalink: "https://example.test/michael", sourceChannel: "claims", daysUnfiled: 3,
+      status: "filing", claimNumber: null, takenByName: "Daryl Ochate", takenAt: new Date(), statusUpdatedAt: new Date(), filedVisibleUntil: null,
+      details: { factsOfLoss: "Glass damage", thirdParty: null, policeReport: null, tow: null, rideshare: null, photosOrFootage: null, preliminaryLiability: null, missing: ["police report details"] },
+    };
+    const digest = buildProcessorDigest([item], new Date("2026-09-11T14:00:00.000Z"));
+    expect(digest).toContain("Michael Smith");
+    expect(digest).toContain("File with the information available. Do not call the member.");
+    expect(digest).toContain("Daryl Ochate");
+    expect(digest).toContain("police report details");
   });
 });

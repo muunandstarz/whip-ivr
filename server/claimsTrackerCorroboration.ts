@@ -1,102 +1,198 @@
 import mysql from "mysql2/promise";
+import { eq } from "drizzle-orm";
+import { lossIntakeClaims } from "../drizzle/schema";
+import { getDb } from "./db";
 import { refreshGmailToken } from "./mail/ingestGmail";
 import type { ThreadAnalysis } from "./lossIntakeDomain";
 
-export const CLAIMS_TRACKER_SPREADSHEET_ID = "1kh3QUnUBYolTmffRCnO1rGYEIEkSvm8ltLrn_Y0ua8A";
+/**
+ * Read-only operational workbook. The All Reported IncidentsStatus tab is the
+ * binary filed-claim record; a row on that tab means the claim exists in
+ * Snapsheet, regardless of whether the optional claim-file-link column is blank.
+ */
+export const CLAIMS_TRACKER_SPREADSHEET_ID = "14TDBHDDGhqq_1iylBginhFicpHU_Bnt1oG5nDa_cVls";
 const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const TRACKER_SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly";
+const FILED_TAB = "All Reported IncidentsStatus";
+const FILED_TAB_RANGE = `${FILED_TAB}!A:O`;
+const MARKET_TABS = ["RCK", "GB", "ATL", "CHI", "RVA", "ORL", "PHL", "MIA", "BOS", "DAL"] as const;
 
 type SheetRows = string[][];
+export type InspectionSchedule = {
+  vinLastSix: string;
+  market: string;
+  memberName: string | null;
+  scheduledFor: Date;
+  sourceTab: string;
+};
+
 export type TrackerIndex = {
   available: boolean;
+  /** A VIN appears here exactly when it has a row on All Reported IncidentsStatus. */
   filedVins: Set<string>;
+  /** Retained only for the existing status UI; the binary source has no unfiled subset. */
   unfiledVins: Set<string>;
   claimByVin: Map<string, string>;
+  inspectionByVin: Map<string, InspectionSchedule>;
   warning?: string;
 };
 
 let cache: { expiresAt: number; value: TrackerIndex } | null = null;
 
-function normalizeVin(value: string | null | undefined) {
-  const digits = (value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+export function normalizeVinFragment(value: string | null | undefined) {
+  const compact = (value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  // The workbook's claim field uses an eight-character VIN fragment (e.g. HC013679).
+  // Dropping the first two characters yields the six-digit source join key. When the
+  // field is malformed, taking the terminal six characters is the documented fallback.
+  const firstTwoPrefixThenSix = compact.match(/^[A-Z0-9]{2}(\d{6})$/);
+  if (firstTwoPrefixThenSix?.[1]) return firstTwoPrefixThenSix[1];
+  const digits = compact.replace(/\D/g, "");
   return digits.length >= 6 ? digits.slice(-6) : "";
 }
 
-function isFiledValue(value: string | null | undefined) {
-  const normalized = (value ?? "").trim().toLowerCase();
-  return Boolean(normalized) && normalized !== "false" && normalized !== "no" && normalized !== "not on snapsheet" && normalized !== "---";
+function parseSheetDate(value: string | null | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const easternMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})\s*(AM|PM)?)?$/i);
+  if (easternMatch) {
+    const month = Number(easternMatch[1]);
+    const day = Number(easternMatch[2]);
+    const rawYear = Number(easternMatch[3]);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    let hour = Number(easternMatch[4] ?? 9);
+    const minute = Number(easternMatch[5] ?? 0);
+    const meridiem = easternMatch[6]?.toUpperCase();
+    if (meridiem === "PM" && hour < 12) hour += 12;
+    if (meridiem === "AM" && hour === 12) hour = 0;
+    const intended = Date.UTC(year, month - 1, day, hour, minute);
+    const observedParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(new Date(intended)).reduce<Record<string, string>>((acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value;
+      return acc;
+    }, {});
+    const observedLocal = Date.UTC(Number(observedParts.year), Number(observedParts.month) - 1, Number(observedParts.day), Number(observedParts.hour), Number(observedParts.minute));
+    return new Date(intended + (intended - observedLocal));
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+  const serial = Number(raw);
+  if (Number.isFinite(serial) && serial > 30_000 && serial < 80_000) {
+    return new Date(Date.UTC(1899, 11, 30 + serial));
+  }
+  return null;
 }
 
-function formattedClaimId(value: string | null | undefined) {
-  const candidate = (value ?? "").trim();
-  return /(?:[A-Z]{2,4}|MD|GA|IL|MA)-\d+-\d{6}-\d+/i.test(candidate) ? candidate : null;
+function normalizedHeader(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function headerIndex(headers: string[], candidates: string[]) {
+  return headers.findIndex(header => candidates.includes(normalizedHeader(header)));
+}
+
+function filedVinFromStatusRow(row: string[], claimColumn: number) {
+  const claimCell = row[claimColumn >= 0 ? claimColumn : 2] ?? "";
+  const normalizedClaim = normalizeVinFragment(claimCell);
+  // Standard source format is two leading letters followed by the six-digit
+  // fragment. A bare six-digit fragment is also accepted from legacy rows.
+  if (/^(?:[A-Z0-9]{2})?\d{6}$/i.test(claimCell.trim())) return normalizedClaim;
+
+  // When column C is malformed, use the third slash-delimited segment in the
+  // Claim File link (column O). This is the documented workbook fallback.
+  const linkSegments = (row[14] ?? "").split(/[\/-]/).filter(Boolean);
+  return normalizeVinFragment(linkSegments[2] ?? "");
+}
+
+function buildInspectionIndex(rowsByTab: Partial<Record<(typeof MARKET_TABS)[number], SheetRows>>) {
+  const inspectionByVin = new Map<string, InspectionSchedule>();
+  for (const tab of MARKET_TABS) {
+    const rows = rowsByTab[tab] ?? [];
+    const headers = rows[0] ?? [];
+    const claimColumn = headerIndex(headers, ["claim # - last 8", "claim # (last 8 of vin)"]);
+    const memberColumn = headerIndex(headers, ["member name"]);
+    const marketColumn = headerIndex(headers, ["market"]);
+    const scheduleColumn = headerIndex(headers, ["inspection date", "scheduled return date", "scheduled inspection date"]);
+    if (claimColumn < 0 || scheduleColumn < 0) continue;
+    for (const row of rows.slice(1)) {
+      const vinLastSix = normalizeVinFragment(row[claimColumn]);
+      const scheduledFor = parseSheetDate(row[scheduleColumn]);
+      if (!vinLastSix || !scheduledFor) continue;
+      const candidate: InspectionSchedule = {
+        vinLastSix,
+        market: row[marketColumn] || tab,
+        memberName: row[memberColumn]?.trim() || null,
+        scheduledFor,
+        sourceTab: tab,
+      };
+      const existing = inspectionByVin.get(vinLastSix);
+      if (!existing || candidate.scheduledFor.getTime() < existing.scheduledFor.getTime()) {
+        inspectionByVin.set(vinLastSix, candidate);
+      }
+    }
+  }
+  return inspectionByVin;
 }
 
 export function buildClaimsTrackerIndex(input: {
-  rawData?: SheetRows;
-  liabilityReview?: SheetRows;
-  pendingIntakes?: SheetRows;
+  allReportedIncidentsStatus?: SheetRows;
+  marketSchedules?: Partial<Record<(typeof MARKET_TABS)[number], SheetRows>>;
 }): TrackerIndex {
   const filedVins = new Set<string>();
-  const unfiledVins = new Set<string>();
   const claimByVin = new Map<string, string>();
-  const addFiled = (vinSource: string | null | undefined, claimSource?: string | null) => {
-    const vin = normalizeVin(vinSource);
-    if (!vin) return;
+  const rows = input.allReportedIncidentsStatus ?? [];
+  const headers = rows[0] ?? [];
+  const claimColumn = headerIndex(headers, ["claim # (last 8 of vin)"]);
+  const memberColumn = headerIndex(headers, ["member name"]);
+
+  for (const row of rows.slice(1)) {
+    const vin = filedVinFromStatusRow(row, claimColumn);
+    if (!vin) continue;
+    // Presence on the status tab is the filed test. Never inspect or rely on column O.
     filedVins.add(vin);
-    const claim = formattedClaimId(claimSource);
+    const claim = (row[claimColumn >= 0 ? claimColumn : 2] ?? "").trim();
     if (claim) claimByVin.set(vin, claim);
+    void memberColumn;
+  }
+
+  return {
+    available: true,
+    filedVins,
+    unfiledVins: new Set(),
+    claimByVin,
+    inspectionByVin: buildInspectionIndex(input.marketSchedules ?? {}),
   };
-
-  // Raw Data from SS': Claim Number (A), LAST 6 (B). Any row confirms a filed claim.
-  for (const row of input.rawData?.slice(1) ?? []) addFiled(row[1], row[0]);
-
-  // Liability Review: B=SNAPSHEET CLAIM #, C=last-six/claim field. "Not on Snapsheet" is a lagging signal.
-  for (const row of input.liabilityReview?.slice(1) ?? []) {
-    const vin = normalizeVin(row[2]);
-    if (!vin) continue;
-    if (isFiledValue(row[1])) addFiled(vin, row[1]);
-    else unfiledVins.add(vin);
-  }
-
-  // Pending Intakes: D=VIN, Q=Added to Snapsheet.
-  for (const row of input.pendingIntakes?.slice(1) ?? []) {
-    const vin = normalizeVin(row[3]);
-    if (!vin) continue;
-    if (isFiledValue(row[16])) addFiled(vin);
-    else unfiledVins.add(vin);
-  }
-  return { available: true, filedVins, unfiledVins, claimByVin };
 }
 
 export function applyClaimsTrackerCorroboration(analysis: ThreadAnalysis, index: TrackerIndex): ThreadAnalysis {
   if (!index.available) {
     return {
       ...analysis,
-      filingEvidence: `${analysis.filingEvidence} Claims Tracker corroboration unavailable: ${index.warning ?? "authorization is not connected."}`,
-      dataWarnings: [...analysis.dataWarnings, "Claims Tracker corroboration unavailable; Slack thread evidence remains authoritative."],
+      filingEvidence: `${analysis.filingEvidence} Claims Tracker status unavailable: ${index.warning ?? "authorization is not connected."}`,
+      dataWarnings: [...analysis.dataWarnings, "Claims Tracker status is unavailable; filing queue cannot be verified until the read-only source is restored."],
     };
   }
-  const vin = normalizeVin(analysis.duplicateGroupKey?.split("|").at(-1));
+
+  const vin = normalizeVinFragment(analysis.duplicateGroupKey?.split("|").at(-1));
   if (!vin) return analysis;
   const trackerFiled = index.filedVins.has(vin);
-  const trackerUnfiled = index.unfiledVins.has(vin) && !trackerFiled;
   const trackerClaim = index.claimByVin.get(vin);
+  const inspection = index.inspectionByVin.get(vin) ?? null;
   const evidence = trackerFiled
-    ? ` Claims Tracker corroborates a filed claim${trackerClaim ? ` (${trackerClaim})` : ""} for VIN ${vin}.`
-    : trackerUnfiled
-      ? ` Claims Tracker’s hand-maintained sources indicate no filed claim for VIN ${vin}.`
-      : ` Claims Tracker has no current corroborating row for VIN ${vin}; absence is not proof of non-filing.`;
+    ? ` All Reported IncidentsStatus contains VIN ${vin}${trackerClaim ? ` (${trackerClaim})` : ""}; filed in Snapsheet.`
+    : ` All Reported IncidentsStatus has no row for VIN ${vin}; retain in the processor filing queue unless a processor has excluded it.`;
 
-  // Slack has precedence: preserve its state and flag any tracker disagreement for human review.
-  const disagreement = (analysis.filingState === "filed" && trackerUnfiled) || (analysis.filingState === "unfiled" && trackerFiled);
+  // The status tab owns the binary filed determination. A Slack template/URL is useful
+  // source context but never removes a notice from the processor queue by itself.
   return {
     ...analysis,
-    claimId: analysis.claimId ?? trackerClaim ?? null,
+    claimId: trackerFiled ? (trackerClaim ?? analysis.claimId ?? null) : analysis.claimId,
+    filingState: trackerFiled ? "filed" : "unfiled",
     filingEvidence: `${analysis.filingEvidence}${evidence}`,
-    dataWarnings: disagreement
-      ? [...analysis.dataWarnings, "Slack filing evidence and Claims Tracker disagree; Slack remains authoritative and a processor must confirm before filing action."]
-      : analysis.dataWarnings,
+    // Market tabs document a scheduled inspection only. Arrival is still
+    // determined exclusively from the Slack source-thread poster/evidence.
+    inspectionScheduledAt: inspection?.scheduledFor ?? null,
+    inspectionScheduleSource: inspection?.sourceTab ?? null,
   };
 }
 
@@ -125,19 +221,81 @@ export async function getClaimsTrackerIndex(): Promise<TrackerIndex> {
   if (cache && cache.expiresAt > Date.now()) return cache.value;
   try {
     const token = await getClaimsTrackerToken();
-    const [rawData, liabilityReview, pendingIntakes] = await Promise.all([
-      readRange(token, "Raw Data from SS'!A:B"),
-      readRange(token, "Liability Review!A:U"),
-      readRange(token, "Pending Intakes!A:Q"),
+    const [allReportedIncidentsStatus, ...scheduleRows] = await Promise.all([
+      readRange(token, FILED_TAB_RANGE),
+      ...MARKET_TABS.map(tab => readRange(token, `${tab}!A:M`)),
     ]);
-    const value = buildClaimsTrackerIndex({ rawData, liabilityReview, pendingIntakes });
-    cache = { value, expiresAt: Date.now() + 5 * 60_000 };
+    const marketSchedules = Object.fromEntries(MARKET_TABS.map((tab, index) => [tab, scheduleRows[index]])) as Partial<Record<(typeof MARKET_TABS)[number], SheetRows>>;
+    const value = buildClaimsTrackerIndex({ allReportedIncidentsStatus, marketSchedules });
+    // The Processor board polls; a short read-only cache lets a newly filed
+    // source row leave the queue on the next practical refresh without
+    // repeatedly reading Sheets for every viewer render.
+    cache = { value, expiresAt: Date.now() + 60_000 };
     return value;
   } catch (error) {
-    const value: TrackerIndex = { available: false, filedVins: new Set(), unfiledVins: new Set(), claimByVin: new Map(), warning: error instanceof Error ? error.message : String(error) };
+    const value: TrackerIndex = {
+      available: false,
+      filedVins: new Set(),
+      unfiledVins: new Set(),
+      claimByVin: new Map(),
+      inspectionByVin: new Map(),
+      warning: error instanceof Error ? error.message : String(error),
+    };
     cache = { value, expiresAt: Date.now() + 60_000 };
     return value;
   }
+}
+
+/** Explicit cache reset for source-sync and acceptance-test freshness. */
+export function clearClaimsTrackerCache() {
+  cache = null;
+}
+
+/**
+ * Reconciles persisted board rows to the binary filed source without reading
+ * Slack or publishing anything. This is useful when the source rule changes:
+ * every valid VIN is set from All Reported IncidentsStatus, never from column O.
+ */
+export async function reconcileStoredClaimsTrackerFiling(providedIndex?: TrackerIndex) {
+  const index = providedIndex ?? await getClaimsTrackerIndex();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!index.available) throw new Error(index.warning ?? "All Reported IncidentsStatus is unavailable");
+  const claims = await db.select({
+    id: lossIntakeClaims.id,
+    vinLastSix: lossIntakeClaims.vinLastSix,
+    filingState: lossIntakeClaims.filingState,
+    claimId: lossIntakeClaims.claimId,
+    filingEvidence: lossIntakeClaims.filingEvidence,
+    inspectionScheduledAt: lossIntakeClaims.inspectionScheduledAt,
+    inspectionScheduleSource: lossIntakeClaims.inspectionScheduleSource,
+  }).from(lossIntakeClaims);
+  let updated = 0;
+  for (const claim of claims) {
+    const vin = normalizeVinFragment(claim.vinLastSix);
+    if (!vin) continue;
+    const filed = index.filedVins.has(vin);
+    const trackerClaim = index.claimByVin.get(vin) ?? null;
+    const inspection = index.inspectionByVin.get(vin) ?? null;
+    const nextEvidence = filed
+      ? `All Reported IncidentsStatus contains VIN ${vin}${trackerClaim ? ` (${trackerClaim})` : ""}; filed in Snapsheet.`
+      : `All Reported IncidentsStatus has no row for VIN ${vin}; eligible for the Processor queue unless excluded.`;
+    const changed = claim.filingState !== (filed ? "filed" : "unfiled") ||
+      claim.claimId !== (filed ? (trackerClaim ?? claim.claimId) : claim.claimId) ||
+      claim.filingEvidence !== nextEvidence ||
+      (claim.inspectionScheduledAt?.getTime() ?? null) !== (inspection?.scheduledFor.getTime() ?? null) ||
+      claim.inspectionScheduleSource !== (inspection?.sourceTab ?? null);
+    if (!changed) continue;
+    await db.update(lossIntakeClaims).set({
+      filingState: filed ? "filed" : "unfiled",
+      claimId: filed ? (trackerClaim ?? claim.claimId) : claim.claimId,
+      filingEvidence: nextEvidence,
+      inspectionScheduledAt: inspection?.scheduledFor ?? null,
+      inspectionScheduleSource: inspection?.sourceTab ?? null,
+    }).where(eq(lossIntakeClaims.id, claim.id));
+    updated += 1;
+  }
+  return { scanned: claims.length, updated, filedVins: index.filedVins.size, scheduledVins: index.inspectionByVin.size };
 }
 
 export function buildClaimsTrackerOAuthUrl(redirectUri: string) {

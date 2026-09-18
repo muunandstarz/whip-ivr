@@ -24,8 +24,12 @@ import {
   type RepComparisonPeriod,
 } from "../lossIntakeDb";
 import { runLossIntakeSlackSync } from "../lossIntakeSlackSync";
-import { publishLossIntakeDispatch } from "../lossIntakeDispatch";
+import { publishLossIntakeDispatch, updateExistingProcessorDigest } from "../lossIntakeDispatch";
 import { getClaimsTrackerIndex } from "../claimsTrackerCorroboration";
+import {
+  listLossIntakeProcessorQueue,
+  updateLossIntakeProcessorStatus,
+} from "../lossIntakeProcessorQueue";
 
 const stageSchema = z.enum([
   "awaiting_outreach",
@@ -55,8 +59,17 @@ const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
 
 function requireLossIntakeAccess(user: { role: string; handlerProfileId?: number | null }) {
   if (user.role === "admin") return;
-  if (user.handlerProfileId && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId)) return;
+  if (user.handlerProfileId && (LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId) || user.handlerProfileId === 3 || user.handlerProfileId === 30002)) return;
   throw new TRPCError({ code: "FORBIDDEN", message: "Loss Intake access is restricted." });
+}
+
+function requireProcessorQueueAccess(user: { role: string; handlerProfileId?: number | null }) {
+  // Supervisors can oversee the queue. The two active processor profiles own
+  // live filing actions; this prevents unrelated handler accounts from taking
+  // work in the double-filing prevention queue.
+  if (user.role === "admin") return;
+  if (user.handlerProfileId === 3 || user.handlerProfileId === 30002) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: "Processor queue access is restricted to Claims Processors." });
 }
 
 function scopeHandlerId(
@@ -299,6 +312,40 @@ export const lossIntakeRouter = router({
       warning: index.warning ?? null,
       mode: "read_only" as const,
     };
+  }),
+
+  processors: router({
+    queue: protectedProcedure.query(async ({ ctx }) => {
+      requireProcessorQueueAccess(ctx.user);
+      return listLossIntakeProcessorQueue();
+    }),
+
+    setStatus: protectedProcedure
+      .input(z.object({
+        claimId: z.number().int().positive(),
+        status: z.enum(["not_started", "filing", "filed", "not_a_claim"]),
+        claimNumber: z.string().trim().max(128).nullable().optional(),
+        notAClaimReason: z.string().trim().max(500).nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        requireProcessorQueueAccess(ctx.user);
+        const result = await updateLossIntakeProcessorStatus({
+          claimId: input.claimId,
+          status: input.status,
+          claimNumber: input.claimNumber,
+          notAClaimReason: input.notAClaimReason,
+          actor: {
+            handlerId: ctx.user.handlerProfileId ?? null,
+            name: ctx.user.name ?? ctx.user.email ?? "Processor",
+          },
+        });
+        // A standing processor digest is only ever updated in place. This
+        // does not activate Dispatch publishing or create a new Slack post.
+        await updateExistingProcessorDigest().catch(error => {
+          console.warn("[Loss Intake] Processor digest update skipped:", error instanceof Error ? error.message : error);
+        });
+        return result;
+      }),
   }),
 
   sync: router({

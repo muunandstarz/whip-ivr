@@ -102,11 +102,13 @@ export function addBusinessMinutes(start: Date, minutesToAdd: number) {
   throw new Error("Unable to calculate business-minute deadline");
 }
 
-export function dispatchTargetBusinessMinutes(channel: DispatchSourceChannel, market: string | null | undefined) {
-  if (channel === "claims") return 10;
-  if (channel === "remote-markets") return 240;
-  const localMarket = /atlanta|glen burnie|rockville|chicago|\bATL\b|\bGB\b|\bRCK\b|\bCHI\b/i.test(market ?? "");
-  return localMarket ? 10 : 240;
+export function dispatchTargetBusinessMinutes(channel: DispatchSourceChannel, market: string | null | undefined, onSite = false) {
+  // Arrival is a Slack source-thread fact, not an inspection-sheet field or a
+  // market inference. Every confirmed in-office arrival has a 10-minute
+  // attempt target; all other claims run on the remote business-hours target.
+  void channel;
+  void market;
+  return onSite ? 10 : 240;
 }
 
 export function evaluateDispatchTiming(input: {
@@ -115,8 +117,9 @@ export function evaluateDispatchTiming(input: {
   now: Date;
   channel: DispatchSourceChannel;
   market?: string | null;
+  onSite?: boolean;
 }): DispatchTiming {
-  const targetBusinessMinutes = dispatchTargetBusinessMinutes(input.channel, input.market);
+  const targetBusinessMinutes = dispatchTargetBusinessMinutes(input.channel, input.market, input.onSite);
   const firstResponseBusinessMinutes = input.firstResponseAt
     ? businessMinutesBetween(input.postedAt, input.firstResponseAt)
     : null;
@@ -152,13 +155,15 @@ export function deriveFilingState(input: { templatePosted: boolean; claimId: str
   return "pending_statement";
 }
 
-export function detectOnSiteSignal(messages: Array<{ text: string; files?: Array<unknown> | undefined; occurredAt: Date }>) {
-  const phrase = /driver has arrived|member is onsite|member is on.?site|mbr is on (?:her|his|their) way to (?:the )?office|member will bring the vehicle in|inspection scheduled today/i;
-  const photo = messages.find(message => (message.files?.length ?? 0) > 0);
-  if (photo) return { onSite: true, detectedAt: photo.occurredAt, reason: "Vehicle photos uploaded to the intake workflow." };
-  const textMatch = messages.find(message => phrase.test(message.text));
+export function detectOnSiteSignal(messages: Array<{ text: string; files?: Array<unknown> | undefined; occurredAt: Date; isStoreOpsPoster?: boolean }>) {
+  const phrase = /driver has arrived|member is onsite|member is on.?site|member is at (?:the )?(?:store|office)|checked in at (?:the )?(?:store|office)|arrived at (?:the )?(?:store|office)/i;
+  // A file attachment anywhere in a thread is not an arrival signal. Only a
+  // counter/store-ops poster can establish that the member is physically in.
+  const photo = messages.find(message => message.isStoreOpsPoster && (message.files?.length ?? 0) > 0);
+  if (photo) return { onSite: true, detectedAt: photo.occurredAt, reason: "Store operations posted vehicle photos from the branch (this driver appears to be in office)." };
+  const textMatch = messages.find(message => message.isStoreOpsPoster && phrase.test(message.text));
   return textMatch
-    ? { onSite: true, detectedAt: textMatch.occurredAt, reason: "On-site signal documented in the intake thread." }
+    ? { onSite: true, detectedAt: textMatch.occurredAt, reason: "Store operations documented an in-office arrival (this driver appears to be in office)." }
     : { onSite: false, detectedAt: null, reason: null };
 }
 

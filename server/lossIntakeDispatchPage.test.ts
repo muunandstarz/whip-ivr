@@ -5,22 +5,23 @@ import { resolve } from "node:path";
 const page = readFileSync(resolve(process.cwd(), "client/src/pages/LossIntakeDispatch.tsx"), "utf8");
 
 describe("Loss Intake Dispatch page", () => {
-  it("replaces the legacy monitor with separate dispatch, filing-verification, and QA views", () => {
+  it("separates the Intake and dedicated Processors queues", () => {
     expect(page).toContain("Loss Intake Dispatch");
-    expect(page).toContain("Intake follow-up");
-    expect(page).toContain("Unfiled claims");
-    expect(page).toContain("SLA & data quality");
+    expect(page).toContain("Two independent queues");
+    expect(page).toContain("Processors");
+    expect(page).toContain("LossIntakeProcessorQueue");
   });
 
-  it("keeps the two approved claims channels and in-office response rule visible", () => {
-    expect(page).toContain("#claims-remotemarkets");
+  it("keeps Slack arrival evidence and scheduling-only market rules visible", () => {
+    expect(page).toContain("Store Operations Slack post");
+    expect(page).toContain("Market tabs are scheduling only");
     expect(page).toContain("10-minute attempt target");
-    expect(page).toContain("Remote-market reports are evaluated");
   });
 
-  it("shows the live read-only Claims Tracker state and never renders a blank SLA target", () => {
+  it("shows the binary read-only filed source and never renders a blank SLA target", () => {
     expect(page).toContain("claimsTrackerStatus");
-    expect(page).toContain("Connected read-only");
+    expect(page).toContain("All Reported IncidentsStatus");
+    expect(page).toContain("blank Claim File link does not change filed status");
     expect(page).toContain("dispatchTargetLabel(claim)");
   });
 });

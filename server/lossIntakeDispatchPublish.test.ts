@@ -5,8 +5,12 @@ const dbMocks = vi.hoisted(() => ({
   listLossIntakeClaims: vi.fn(),
   updateLossIntakeSettings: vi.fn(),
 }));
+const processorQueueMock = vi.hoisted(() => ({
+  listLossIntakeProcessorQueue: vi.fn(),
+}));
 
 vi.mock("./lossIntakeDb", () => dbMocks);
+vi.mock("./lossIntakeProcessorQueue", () => processorQueueMock);
 
 import { ENV } from "./_core/env";
 import { publishLossIntakeDispatch, type DispatchWorkClaim } from "./lossIntakeDispatch";
@@ -51,12 +55,14 @@ describe("publishLossIntakeDispatch quiet behavior", () => {
       claimsIntakeRepsChannelId: "C-INTAKE",
       processorsDigestMessageTs: null,
       processorsDigestSignature: null,
+      processorsDigestDateKey: null,
       intakeDigestMessageTs: null,
       intakeDigestSignature: null,
       intakeDigestDateKey: null,
     };
     dbMocks.getLossIntakeSettings.mockImplementation(async () => settings);
     dbMocks.listLossIntakeClaims.mockResolvedValue({ claims: [claim()], total: 1 });
+    processorQueueMock.listLossIntakeProcessorQueue.mockResolvedValue({ available: true, warning: null, items: [] });
     dbMocks.updateLossIntakeSettings.mockImplementation(async (patch: Record<string, string | null>) => {
       Object.assign(settings, patch);
       return settings;

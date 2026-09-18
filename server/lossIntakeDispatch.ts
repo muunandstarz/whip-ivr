@@ -5,6 +5,7 @@ import {
   listLossIntakeClaims,
   updateLossIntakeSettings,
 } from "./lossIntakeDb";
+import { listLossIntakeProcessorQueue, type ProcessorQueueItem } from "./lossIntakeProcessorQueue";
 
 const SLACK_API_BASE = "https://slack.com/api";
 
@@ -126,6 +127,27 @@ export function buildDispatchMessages(claims: DispatchWorkClaim[], now = new Dat
   return { dateKey, unfiled, intake, processorsMessage, intakeMessage };
 }
 
+/** Uses the exact Processor board membership rather than legacy template status. */
+export function buildProcessorDigest(items: ProcessorQueueItem[], now = new Date()) {
+  const dateKey = etDateKey(now);
+  const lines = items.length === 0
+    ? ["No unreported claims are currently identified."]
+    : items.map((item, index) => [
+      `*${index + 1}. ${item.memberName ?? "Unidentified member"}${item.customerId ? ` · Customer ${item.customerId}` : ""}*`,
+      `${item.market ?? "Market unknown"} · VIN ${item.vinLastSix ?? "not captured"} · Date of loss ${item.dateOfLoss ?? "not captured"} · ${item.daysUnfiled} day${item.daysUnfiled === 1 ? "" : "s"} unfiled`,
+      `Status: ${item.status.replace("_", " ")}${item.takenByName ? ` · ${item.takenByName}` : ""}`,
+      `Thread: ${item.slackPermalink ? `<${item.slackPermalink}|Open Slack thread>` : "Slack permalink unavailable"}`,
+      `Missing: ${item.details.missing.length ? item.details.missing.join(", ") : "No baseline fields missing"}`,
+    ].join("\n"));
+  return [
+    `*Unreported Claims — ${dateKey}* (${items.length})`,
+    "*File with the information available. Do not call the member.*",
+    "Member contact belongs to the Intake reps. Where a field is unavailable, file with what exists and note the gap.",
+    "",
+    ...lines,
+  ].join("\n");
+}
+
 async function slackPostOrUpdate(input: { channel: string; text: string; messageTs?: string | null }) {
   if (!ENV.slackBotToken) throw new Error("SLACK_BOT_TOKEN is not configured for Dispatch publishing.");
   const method = input.messageTs ? "chat.update" : "chat.postMessage";
@@ -148,8 +170,15 @@ async function slackPostOrUpdate(input: { channel: string; text: string; message
 export async function publishLossIntakeDispatch(input: { now?: Date; publishProcessors?: boolean; publishIntake?: boolean } = {}) {
   const now = input.now ?? new Date();
   const settings = await getLossIntakeSettings();
-  const { claims } = await listLossIntakeClaims({ limit: 200, offset: 0 });
-  const messages = buildDispatchMessages(claims as DispatchWorkClaim[], now);
+  const [{ claims }, processorQueue] = await Promise.all([
+    listLossIntakeClaims({ limit: 200, offset: 0 }),
+    input.publishProcessors ? listLossIntakeProcessorQueue(now) : Promise.resolve(null),
+  ]);
+  const baseMessages = buildDispatchMessages(claims as DispatchWorkClaim[], now);
+  const messages = {
+    ...baseMessages,
+    processorsMessage: processorQueue?.available ? buildProcessorDigest(processorQueue.items, now) : baseMessages.processorsMessage,
+  };
   const patch: Record<string, string | null> = {};
 
   if (input.publishProcessors && shouldPublishDispatchMessage({
@@ -157,11 +186,14 @@ export async function publishLossIntakeDispatch(input: { now?: Date; publishProc
     previousMessageTs: settings.processorsDigestMessageTs,
     nextMessage: messages.processorsMessage,
   })) {
+    const sameDay = settings.processorsDigestDateKey === messages.dateKey;
     patch.processorsDigestMessageTs = await slackPostOrUpdate({
       channel: settings.claimsProcessorsChannelId,
       text: messages.processorsMessage,
+      messageTs: sameDay ? settings.processorsDigestMessageTs : null,
     });
     patch.processorsDigestSignature = dispatchMessageSignature(messages.processorsMessage);
+    patch.processorsDigestDateKey = messages.dateKey;
   }
   if (input.publishIntake && shouldPublishDispatchMessage({
     previousSignature: settings.intakeDigestSignature,
@@ -181,4 +213,22 @@ export async function publishLossIntakeDispatch(input: { now?: Date; publishProc
     await updateLossIntakeSettings(patch, "Loss Intake Dispatch");
   }
   return { ...messages, published: patch };
+}
+
+/**
+ * Reflects a processor board action in the standing digest without creating a
+ * second Slack post. It intentionally does nothing until a digest already
+ * exists, preserving the protected disabled publisher behavior.
+ */
+export async function updateExistingProcessorDigest(now = new Date()) {
+  const settings = await getLossIntakeSettings();
+  const dateKey = etDateKey(now);
+  if (!settings.processorsDigestMessageTs || settings.processorsDigestDateKey !== dateKey) return { updated: false, reason: "no_current_digest" as const };
+  const queue = await listLossIntakeProcessorQueue(now);
+  if (!queue.available) return { updated: false, reason: "queue_unavailable" as const };
+  const message = buildProcessorDigest(queue.items, now);
+  if (settings.processorsDigestSignature === dispatchMessageSignature(message)) return { updated: false, reason: "unchanged" as const };
+  await slackPostOrUpdate({ channel: settings.claimsProcessorsChannelId, text: message, messageTs: settings.processorsDigestMessageTs });
+  await updateLossIntakeSettings({ processorsDigestSignature: dispatchMessageSignature(message) }, "Loss Intake Processor Queue");
+  return { updated: true, reason: "updated" as const };
 }

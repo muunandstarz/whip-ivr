@@ -332,6 +332,9 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   onSiteFlag: boolean("on_site_flag").default(false).notNull(),
   onSiteDetectedAt: timestamp("on_site_detected_at"),
   onSiteReason: text("on_site_reason"),
+  // Market tabs are scheduling sources only; Slack owns on-site arrival.
+  inspectionScheduledAt: timestamp("inspection_scheduled_at"),
+  inspectionScheduleSource: varchar("inspection_schedule_source", { length: 32 }),
   firstResponseBusinessMinutes: float("first_response_business_minutes"),
   templateBusinessMinutes: float("template_business_minutes"),
   slaTargetBusinessMinutes: int("sla_target_business_minutes"),
@@ -341,12 +344,40 @@ export const lossIntakeClaims = mysqlTable("loss_intake_claims", {
   duplicateGroupKey: varchar("duplicate_group_key", { length: 255 }),
   dataWarnings: text("data_warnings"),
 
+  // Processor queue. This is separate from the automated filing-state read of
+  // All Reported IncidentsStatus so processors can visibly coordinate work.
+  processorStatus: mysqlEnum("processor_status", ["not_started", "filing", "filed", "not_a_claim"]).default("not_started").notNull(),
+  processorClaimNumber: varchar("processor_claim_number", { length: 128 }),
+  processorTakenByHandlerId: int("processor_taken_by_handler_id"),
+  processorTakenByName: varchar("processor_taken_by_name", { length: 128 }),
+  processorTakenAt: timestamp("processor_taken_at"),
+  processorNotAClaimReason: varchar("processor_not_a_claim_reason", { length: 500 }),
+  processorStatusUpdatedAt: timestamp("processor_status_updated_at"),
+  processorStatusUpdatedBy: varchar("processor_status_updated_by", { length: 255 }),
+  // Filed records remain visible, greyed out, through the local business day
+  // so a working queue never silently reshuffles beneath a processor.
+  processorFiledVisibleUntil: timestamp("processor_filed_visible_until"),
+
   lastSyncedAt: timestamp("lastSyncedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type LossIntakeClaim = typeof lossIntakeClaims.$inferSelect;
 export type InsertLossIntakeClaim = typeof lossIntakeClaims.$inferInsert;
+
+// Processor-confirmed exclusions are VIN-scoped so a duplicate or erroneous
+// notice does not reappear in subsequent source sweeps. The reason remains
+// auditable rather than silently suppressing work.
+export const lossIntakeProcessorVinExclusions = mysqlTable("loss_intake_processor_vin_exclusions", {
+  id: int("id").autoincrement().primaryKey(),
+  vinLastSix: varchar("vin_last_six", { length: 16 }).notNull().unique(),
+  reason: varchar("reason", { length: 500 }).notNull(),
+  markedByHandlerId: int("marked_by_handler_id"),
+  markedByName: varchar("marked_by_name", { length: 128 }).notNull(),
+  markedAt: timestamp("marked_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type LossIntakeProcessorVinExclusion = typeof lossIntakeProcessorVinExclusions.$inferSelect;
 
 export const lossIntakeSourceLinks = mysqlTable("loss_intake_source_links", {
   id: int("id").autoincrement().primaryKey(),
@@ -434,6 +465,7 @@ export const lossIntakeSettings = mysqlTable("loss_intake_settings", {
   dispatchScheduleTaskUid: varchar("dispatch_schedule_task_uid", { length: 65 }),
   processorsDigestMessageTs: varchar("processors_digest_message_ts", { length: 32 }),
   processorsDigestSignature: varchar("processors_digest_signature", { length: 64 }),
+  processorsDigestDateKey: varchar("processors_digest_date_key", { length: 16 }),
   intakeDigestMessageTs: varchar("intake_digest_message_ts", { length: 32 }),
   intakeDigestSignature: varchar("intake_digest_signature", { length: 64 }),
   intakeDigestDateKey: varchar("intake_digest_date_key", { length: 16 }),

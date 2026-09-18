@@ -269,6 +269,9 @@ function rehydrateParent(
     rideshareStatus: claim.rideshareStatus,
     dateOfLoss: claim.dateOfLoss ?? null,
     sourceKind: claim.sourceKind,
+    // Event payloads do not carry an authenticated store-ops role. The next
+    // read-through source sync verifies the poster before raising on-site SLA.
+    sourcePosterIsStoreOps: false,
   };
 }
 

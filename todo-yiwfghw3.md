@@ -729,3 +729,10 @@
 - [x] Rebuild Call Tracking with a readable performance overview, period controls, and progress since tracking began
 - [x] Segment live Aircall performance for Processors (Daryl/MJ), Intake (Ana/Bennet/Carlito), First Party (Jovel/Annie/Natashia/Lorraine), and Liability (Giovanni/Jayla)
 - [x] Separate unnamed queue/ring-group calls from named-handler performance so missed-call coverage is not attributed incorrectly
+
+## September 2026 Loss Intake Filing and Processor Queue Corrections
+- [x] Replace the Claims Tracker filed test with All Reported IncidentsStatus VIN membership only; never treat a blank Claim File link as unfiled
+- [x] Add the separate Processor queue with concurrent Filing/Filed/Not-a-claim controls, a same-day visible Filed state, and processor-owned audit fields
+- [x] Use Slack Store Operations arrival evidence—not inspection schedules or arbitrary thread photos—to establish in-office priority and the 10-minute clock
+- [x] Add read-only market inspection scheduling to prioritize today’s plan after confirmed Slack arrivals without treating the schedule as attendance evidence
+- [x] Keep the existing Processor digest as a single same-day Slack post updated from the Board; leave Dispatch publishing disabled by default
