@@ -730,9 +730,10 @@
 - [x] Segment live Aircall performance for Processors (Daryl/MJ), Intake (Ana/Bennet/Carlito), First Party (Jovel/Annie/Natashia/Lorraine), and Liability (Giovanni/Jayla)
 - [x] Separate unnamed queue/ring-group calls from named-handler performance so missed-call coverage is not attributed incorrectly
 
-## September 2026 Loss Intake Filing and Processor Queue Corrections
-- [x] Replace the Claims Tracker filed test with All Reported IncidentsStatus VIN membership only; never treat a blank Claim File link as unfiled
-- [x] Add the separate Processor queue with concurrent Filing/Filed/Not-a-claim controls, a same-day visible Filed state, and processor-owned audit fields
+## September 2026 Loss Intake Same-Loss and Intake-Only Corrections
+- [x] Replace VIN-only filing correlation with same-loss matching: VIN fragment plus nearby date of loss and member where present; honor direct thread Claim IDs and thread-level VIN corrections
+- [x] Remove the Processor queue, view, component, routes, and dedicated digest from the Loss Intake board; processor work remains outside this application flow
 - [x] Use Slack Store Operations arrival evidence—not inspection schedules or arbitrary thread photos—to establish in-office priority and the 10-minute clock
 - [x] Add read-only market inspection scheduling to prioritize today’s plan after confirmed Slack arrivals without treating the schedule as attendance evidence
-- [x] Keep the existing Processor digest as a single same-day Slack post updated from the Board; leave Dispatch publishing disabled by default
+- [x] Build one claimable shared Intake queue for Ana, Bennet, and Carlito, with atomic ownership, 30-second shared refresh, daily productivity, and visible store/remote depths
+- [x] Schedule source refreshes at 8 AM, 11 AM, 2 PM, and 5 PM Eastern on business days using the existing Heartbeat gate; keep Slack digest destination-configured and disabled until a channel is supplied
