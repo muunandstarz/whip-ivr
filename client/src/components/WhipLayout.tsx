@@ -50,7 +50,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/handler-queue", label: "Handler Queue", icon: Users },
   { href: "/callback-log", label: "Callback Log", icon: ListChecks },
   { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
-  { href: "/qa", label: "Weekly QA", icon: Star },
+  { href: "/qa", label: "Claims QA", icon: Star },
   { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/mailroom", label: "Mailroom", icon: Inbox },

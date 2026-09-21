@@ -21,8 +21,10 @@ const ImpersonationContext = createContext<ImpersonationContextValue>({
 export function ImpersonationProvider({ children }: { children: ReactNode }) {
   const [impersonating, setImpersonating] = useState<ImpersonatedHandler | null>(null);
 
-  // Sync to sessionStorage so the tRPC fetch interceptor can read it
+  // The active preview is intentionally in-memory. Persisting it can leave the
+  // UI showing Admin View after a reload while API calls still read as a handler.
   const setImpersonatingWithStorage = (handler: ImpersonatedHandler | null) => {
+    (window as typeof window & { __whipActiveImpersonation?: string }).__whipActiveImpersonation = handler ? String(handler.id) : undefined;
     if (handler) {
       sessionStorage.setItem("impersonating_handler_id", String(handler.id));
     } else {

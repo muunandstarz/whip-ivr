@@ -34,8 +34,10 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
             url: "/api/trpc",
             transformer: superjson,
             fetch(input, init) {
-              // Read impersonation from sessionStorage (set by ImpersonationContext)
-              const impersonateId = sessionStorage.getItem("impersonating_handler_id");
+              // Read only the current in-memory preview. A persisted browser key
+              // could outlive the visible "Admin View" selection after reload and
+              // accidentally scope calls to the wrong handler.
+              const impersonateId = (window as typeof window & { __whipActiveImpersonation?: string }).__whipActiveImpersonation;
               const headers: Record<string, string> = {};
               if (impersonateId) {
                 headers["x-impersonate-handler-id"] = impersonateId;

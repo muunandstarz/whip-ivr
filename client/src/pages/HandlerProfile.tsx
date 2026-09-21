@@ -129,7 +129,7 @@ export default function HandlerProfile() {
           <span className="text-muted-foreground">/</span>
           <Link href="/qa">
             <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground">
-              Weekly QA
+              Claims QA
             </Button>
           </Link>
         </div>
@@ -235,7 +235,7 @@ export default function HandlerProfile() {
                 <Star className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">No scorecards pushed yet.</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Go to <Link href="/qa" className="text-[#ff6221] hover:underline">Weekly QA</Link> to review and push a scorecard.
+                  Go to <Link href="/qa" className="text-[#ff6221] hover:underline">Claims QA</Link> to create, review, and manually release an evaluation.
                 </p>
               </div>
             ) : (

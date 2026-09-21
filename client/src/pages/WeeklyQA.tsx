@@ -1,864 +1,320 @@
-import { useState, useEffect } from "react";
-import WhipLayout from "@/components/WhipLayout";
-import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Star,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  User,
-  Mic,
-  Phone,
-  Heart,
-  CheckCircle2,
-  MessageSquare,
-  Info,
-  Clock,
-  Lightbulb,
-  Award,
-  Send,
-  Edit3,
-  X,
-  ChevronDown,
-  Users,
-} from "lucide-react";
-import { format, startOfWeek } from "date-fns";
-import { toast } from "sonner";
+import { useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { AlertTriangle, ArrowRight, BookOpenCheck, Check, ChevronRight, CircleAlert, ClipboardCheck, FileText, Gavel, Info, MessageSquare, Plus, Scale, Send, ShieldCheck, Sparkles, UserCheck, Users } from 'lucide-react';
+import WhipLayout from '@/components/WhipLayout';
+import { trpc } from '@/lib/trpc';
+import { useAuth } from '@/_core/hooks/useAuth';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const ROLE_OPTIONS = ['First Party', 'Liability - PD', 'Liability - Injury', 'Intake'] as const;
+type ResultValue = 'pending' | 'met' | 'not_met' | 'not_applicable' | 'not_determinable';
 
-function getMondayOf(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().slice(0, 10);
-}
-
-const CALLER_TYPE_LABELS: Record<string, string> = {
-  carrier: "Carrier",
-  law_office: "Law Office",
-  medical_provider: "Medical",
-  member: "Member",
-  claimant: "Claimant",
-  police: "Police",
-  unknown: "Unknown",
+const resultCopy: Record<ResultValue, string> = {
+  pending: 'Pending',
+  met: 'Met',
+  not_met: 'Not met',
+  not_applicable: 'Not applicable',
+  not_determinable: 'Not determinable',
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+function displayDate(value?: string | Date | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : format(date, 'MMM d, yyyy');
+}
 
-function ScoreBadge({ score }: { score: number }) {
-  const color =
-    score >= 9 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30" :
-    score >= 8 ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30" :
-    score >= 7 ? "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30" :
-    score >= 6 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/30" :
-    "bg-red-500/15 text-red-700 dark:text-red-400 border-red-300 dark:border-red-500/30";
+function ratingLabel(value?: string | null) {
+  const labels: Record<string, string> = {
+    critical_miss: 'Critical miss',
+    small_sample: 'Small sample',
+    strong: 'Strong',
+    solid: 'Solid',
+    needs_work: 'Needs work',
+    legacy_call_qa: 'Legacy call quality',
+  };
+  return labels[value ?? ''] ?? 'Not rated';
+}
+
+function RatingBadge({ value }: { value?: string | null }) {
+  const className = value === 'critical_miss'
+    ? 'border-red-300 bg-red-50 text-red-700'
+    : value === 'strong'
+      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+      : value === 'solid'
+        ? 'border-blue-300 bg-blue-50 text-blue-700'
+        : value === 'needs_work'
+          ? 'border-amber-300 bg-amber-50 text-amber-700'
+          : 'border-border bg-muted text-muted-foreground';
+  return <Badge variant="outline" className={className}>{ratingLabel(value)}</Badge>;
+}
+
+function ResultBadge({ value }: { value?: string | null }) {
+  const className = value === 'met'
+    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+    : value === 'not_met'
+      ? 'border-red-300 bg-red-50 text-red-700'
+      : value === 'not_applicable'
+        ? 'border-slate-300 bg-slate-50 text-slate-700'
+        : value === 'not_determinable'
+          ? 'border-amber-300 bg-amber-50 text-amber-700'
+          : 'border-border bg-muted text-muted-foreground';
+  return <Badge variant="outline" className={className}>{resultCopy[(value ?? 'pending') as ResultValue] ?? 'Pending'}</Badge>;
+}
+
+function Definition({ label, body }: { label: string; body: string }) {
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded border ${color}`}>
-      <Star className="w-2.5 h-2.5" />
-      {score.toFixed(1)}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline decoration-dotted underline-offset-4">
+          {label}<Info className="h-3 w-3" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm text-xs leading-relaxed">{body}</TooltipContent>
+    </Tooltip>
   );
 }
 
-function ScoreInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Metric({ label, value, caption, tone = 'navy' }: { label: string; value: string | number; caption?: string; tone?: 'navy' | 'orange' | 'green' | 'red' }) {
+  const tones = {
+    navy: 'bg-primary/10 text-primary',
+    orange: 'bg-[#ff6221]/10 text-[#d94d13]',
+    green: 'bg-emerald-500/10 text-emerald-700',
+    red: 'bg-red-500/10 text-red-700',
+  };
   return (
-    <div className="flex flex-col gap-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        type="number"
-        min="1"
-        max="10"
-        step="0.1"
-        placeholder="1–10"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-sm"
-      />
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
+            {caption && <p className="mt-1 text-xs text-muted-foreground">{caption}</p>}
+          </div>
+          <div className={`rounded-lg p-2 ${tones[tone]}`}><ClipboardCheck className="h-4 w-4" /></div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function TrendIcon({ trend }: { trend: "up" | "down" | "stable" }) {
-  if (trend === "up") return <TrendingUp className="w-4 h-4 text-green-500" />;
-  if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-500" />;
-  return <Minus className="w-4 h-4 text-gray-400" />;
-}
-
-// ─── Scorecard shape from DB ──────────────────────────────────────────────────
-
-interface Scorecard {
-  id: number;
-  handlerId: number;
-  handlerName: string;
-  weekOf: string;
-  overallScore: number | null;
-  greetingScore: number | null;
-  holdManagementScore: number | null;
-  resolutionScore: number | null;
-  empathyScore: number | null;
-  callControlScore: number | null;
-  strengths: string | null;
-  improvements: string | null;
-  managerComments: string | null;
-  submittedBy: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// ─── PushScorecardPanel ───────────────────────────────────────────────────────
-
-interface PushFormState {
-  handlerId: string;
-  handlerName: string;
-  weekOf: string;
-  greetingScore: string;
-  holdManagementScore: string;
-  resolutionScore: string;
-  empathyScore: string;
-  callControlScore: string;
-  overallScore: string;
-  strengths: string;
-  improvements: string;
-  managerComments: string;
-}
-
-function PushScorecardPanel({
-  agentName,
-  weekOf,
-  prefill,
-  onClose,
-}: {
-  agentName: string;
-  weekOf: string;
-  prefill?: Scorecard | null;
-  onClose: () => void;
-}) {
+function CreateEvaluationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (value: boolean) => void }) {
   const { data: handlers } = trpc.handlers.list.useQuery();
-  const saveScorecard = trpc.qa.saveScorecard.useMutation();
+  const createDraft = trpc.claimsQa.createDraft.useMutation();
   const utils = trpc.useUtils();
+  const [handlerId, setHandlerId] = useState('');
+  const [role, setRole] = useState<(typeof ROLE_OPTIONS)[number]>('First Party');
+  const [claimNumber, setClaimNumber] = useState('');
+  const [exposureId, setExposureId] = useState('');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [summary, setSummary] = useState('');
+  const [improvements, setImprovements] = useState('');
 
-  const [form, setForm] = useState<PushFormState>({
-    handlerId: prefill ? String(prefill.handlerId) : "",
-    handlerName: agentName,
-    weekOf: prefill?.weekOf ?? weekOf,
-    greetingScore: prefill?.greetingScore != null ? String(prefill.greetingScore) : "",
-    holdManagementScore: prefill?.holdManagementScore != null ? String(prefill.holdManagementScore) : "",
-    resolutionScore: prefill?.resolutionScore != null ? String(prefill.resolutionScore) : "",
-    empathyScore: prefill?.empathyScore != null ? String(prefill.empathyScore) : "",
-    callControlScore: prefill?.callControlScore != null ? String(prefill.callControlScore) : "",
-    overallScore: prefill?.overallScore != null ? String(prefill.overallScore) : "",
-    strengths: prefill?.strengths ?? "",
-    improvements: prefill?.improvements ?? "",
-    managerComments: prefill?.managerComments ?? "",
-  });
-
-  // Auto-link handler by name when handlers load
-  useEffect(() => {
-    if (!form.handlerId && handlers && handlers.length > 0) {
-      const match = handlers.find((h: { id: number; name: string }) =>
-        h.name.toLowerCase() === agentName.toLowerCase()
-      );
-      if (match) {
-        setForm((f) => ({ ...f, handlerId: String(match.id), handlerName: match.name }));
-      }
-    }
-  }, [handlers, agentName, form.handlerId]);
-
-  const set = (key: keyof PushFormState) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
-
-  const handleSubmit = async () => {
-    if (!form.handlerId) {
-      toast.error("Please link this scorecard to a handler profile.");
-      return;
-    }
+  const submit = async () => {
+    const handler = handlers?.find((row: any) => String(row.id) === handlerId);
+    if (!handler) { toast.error('Select the handler being evaluated.'); return; }
     try {
-      await saveScorecard.mutateAsync({
-        handlerId: Number(form.handlerId),
-        handlerName: form.handlerName,
-        weekOf: form.weekOf,
-        greetingScore: form.greetingScore ? Number(form.greetingScore) : undefined,
-        holdManagementScore: form.holdManagementScore ? Number(form.holdManagementScore) : undefined,
-        resolutionScore: form.resolutionScore ? Number(form.resolutionScore) : undefined,
-        empathyScore: form.empathyScore ? Number(form.empathyScore) : undefined,
-        callControlScore: form.callControlScore ? Number(form.callControlScore) : undefined,
-        overallScore: form.overallScore ? Number(form.overallScore) : undefined,
-        strengths: form.strengths || undefined,
-        improvements: form.improvements || undefined,
-        managerComments: form.managerComments || undefined,
+      const result = await createDraft.mutateAsync({
+        handlerId: handler.id,
+        handlerName: handler.name,
+        role,
+        claimNumber: claimNumber || undefined,
+        exposureId: exposureId || undefined,
+        periodStart: periodStart || undefined,
+        periodEnd: periodEnd || undefined,
+        auditorSummary: summary || undefined,
+        areasForImprovement: improvements || undefined,
       });
-      await utils.qa.allScorecards.invalidate();
-      await utils.qa.scorecardsByWeek.invalidate();
-      toast.success(`${agentName}'s scorecard has been saved to their handler profile.`);
-      onClose();
-    } catch {
-      toast.error("Failed to save scorecard. Please try again.");
-    }
+      await utils.claimsQa.invalidate();
+      toast.success(`Draft created with ${result.resultCount} scorecard lines.`);
+      onOpenChange(false);
+    } catch (error: any) { toast.error(error.message ?? 'Unable to create the evaluation.'); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-background border-l shadow-2xl overflow-y-auto flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background z-10">
-          <div>
-            <h2 className="font-semibold text-base flex items-center gap-2">
-              <Send className="h-4 w-4 text-[#ff6221]" />
-              Push Scorecard to Handler Profile
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{agentName} — review and edit before pushing</p>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Plus className="h-4 w-4 text-[#ff6221]" /> New Claims QA evaluation</DialogTitle>
+          <DialogDescription>Creates an unreleased draft with the active rubric for the selected role. Score and confirm all lines before manual release.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5"><Label>Handler</Label><Select value={handlerId} onValueChange={setHandlerId}><SelectTrigger><SelectValue placeholder="Choose handler" /></SelectTrigger><SelectContent>{(handlers ?? []).map((handler: any) => <SelectItem key={handler.id} value={String(handler.id)}>{handler.name}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>Role scorecard</Label><Select value={role} onValueChange={(value) => setRole(value as (typeof ROLE_OPTIONS)[number])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((entry) => <SelectItem value={entry} key={entry}>{entry}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>Claim number</Label><Input value={claimNumber} onChange={(event) => setClaimNumber(event.target.value)} placeholder="Optional" /></div>
+          <div className="space-y-1.5"><Label>Exposure ID</Label><Input value={exposureId} onChange={(event) => setExposureId(event.target.value)} placeholder="Optional" /></div>
+          <div className="space-y-1.5"><Label>Period start</Label><Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Period end</Label><Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></div>
         </div>
+        <div className="space-y-1.5"><Label>Auditor summary</Label><Textarea rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="State the sample, the scored and N/A line counts, and file corrections required." /></div>
+        <div className="space-y-1.5"><Label>Areas for improvement</Label><Textarea rows={3} value={improvements} onChange={(event) => setImprovements(event.target.value)} placeholder="Coaching context for the complete evaluation." /></div>
+        <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button className="bg-[#ff6221] hover:bg-[#e5541a] text-white" disabled={createDraft.isPending} onClick={submit}>{createDraft.isPending ? 'Creating…' : 'Create unreleased draft'}</Button></div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-        <div className="p-4 space-y-5 flex-1">
-          {/* Handler link */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Link to Handler Profile <span className="text-red-500">*</span></Label>
-            <Select value={form.handlerId} onValueChange={(v) => {
-              const h = (handlers ?? []).find((h: { id: number; name: string }) => String(h.id) === v);
-              setForm((f) => ({ ...f, handlerId: v, handlerName: h?.name ?? agentName }));
-            }}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select handler…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(handlers ?? []).map((h: { id: number; name: string }) => (
-                  <SelectItem key={String(h.id)} value={String(h.id)}>{h.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+function ScoreLine({ line, evaluation, leadership }: { line: any; evaluation: any; leadership: boolean }) {
+  const utils = trpc.useUtils();
+  const saveLine = trpc.claimsQa.saveLine.useMutation();
+  const respond = trpc.claimsQa.respondToLine.useMutation();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<ResultValue>(line.result ?? 'pending');
+  const [evidence, setEvidence] = useState(line.evidence ?? '');
+  const [locator, setLocator] = useState(line.evidence_locator ?? '');
+  const [note, setNote] = useState(line.auditor_note ?? '');
+  const [confirmed, setConfirmed] = useState(Boolean(line.human_confirmed_at));
+  const [response, setResponse] = useState<'agree' | 'disagree' | ''>(line.handler_response ?? '');
+  const [responseComment, setResponseComment] = useState(line.handler_response_comment ?? '');
+  const isDraft = evaluation.status === 'not_released';
 
-          {/* Week of */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Week Of</Label>
-            <Input type="date" value={form.weekOf} onChange={(e) => set("weekOf")(e.target.value)} className="h-8 text-sm" />
-          </div>
+  const refresh = async () => { await utils.claimsQa.detail.invalidate({ evaluationId: evaluation.id }); await utils.claimsQa.invalidate(); };
+  const save = async () => {
+    try {
+      await saveLine.mutateAsync({ evaluationId: evaluation.id, resultId: line.id, result: value, evidence: evidence || undefined, evidenceLocator: locator || undefined, auditorNote: note || undefined, humanConfirmed: confirmed });
+      await refresh(); setEditing(false); toast.success(`${line.item_key} saved.`);
+    } catch (error: any) { toast.error(error.message ?? 'Unable to save the score.'); }
+  };
+  const saveResponse = async (next: 'agree' | 'disagree') => {
+    try {
+      await respond.mutateAsync({ evaluationId: evaluation.id, resultId: line.id, response: next, comment: responseComment || undefined });
+      setResponse(next); await refresh(); toast.success(next === 'agree' ? 'Agreement saved.' : 'Dispute saved for adjudication.');
+    } catch (error: any) { toast.error(error.message ?? 'Unable to save response.'); }
+  };
 
-          {/* Score grid */}
-          <div>
-            <Label className="text-xs font-medium mb-2 block">Scores (1–10)</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <ScoreInput label="Greeting" value={form.greetingScore} onChange={set("greetingScore")} />
-              <ScoreInput label="Hold Management" value={form.holdManagementScore} onChange={set("holdManagementScore")} />
-              <ScoreInput label="Resolution" value={form.resolutionScore} onChange={set("resolutionScore")} />
-              <ScoreInput label="Empathy" value={form.empathyScore} onChange={set("empathyScore")} />
-              <ScoreInput label="Call Control" value={form.callControlScore} onChange={set("callControlScore")} />
-              <ScoreInput label="Overall Score" value={form.overallScore} onChange={set("overallScore")} />
-            </div>
-          </div>
-
-          {/* Strengths */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium flex items-center gap-1">
-              <Award className="h-3 w-3 text-green-600" /> Strengths
-            </Label>
-            <Textarea
-              value={form.strengths}
-              onChange={(e) => set("strengths")(e.target.value)}
-              rows={4}
-              placeholder="What this agent does well…"
-              className="text-sm resize-none"
-            />
-          </div>
-
-          {/* Improvements */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium flex items-center gap-1">
-              <Lightbulb className="h-3 w-3 text-amber-600" /> Opportunities for Improvement
-            </Label>
-            <Textarea
-              value={form.improvements}
-              onChange={(e) => set("improvements")(e.target.value)}
-              rows={4}
-              placeholder="Areas to work on…"
-              className="text-sm resize-none"
-            />
-          </div>
-
-          {/* Manager comments */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium flex items-center gap-1">
-              <MessageSquare className="h-3 w-3 text-blue-600" /> Supervisor Coaching Note
-            </Label>
-            <Textarea
-              value={form.managerComments}
-              onChange={(e) => set("managerComments")(e.target.value)}
-              rows={3}
-              placeholder="Private coaching note for this handler…"
-              className="text-sm resize-none"
-            />
-          </div>
-        </div>
-
-        <div className="p-4 border-t sticky bottom-0 bg-background">
-          <Button
-            className="w-full bg-primary hover:bg-primary/90 text-white gap-2"
-            onClick={handleSubmit}
-            disabled={saveScorecard.isPending}
-          >
-            <Send className="h-4 w-4" />
-            {saveScorecard.isPending ? "Pushing…" : `Push Scorecard to ${form.handlerName || agentName}'s Profile`}
-          </Button>
-        </div>
+  return (
+    <div className="border rounded-xl p-4 space-y-3 bg-card">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{line.item_key}</span>{line.critical ? <Badge variant="outline" className="border-red-300 bg-red-50 text-red-700">Critical</Badge> : null}{line.requires_human_confirmation ? <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Human confirm required</Badge> : null}</div><p className="mt-1 text-sm font-semibold leading-relaxed">{line.check_text}</p></div>
+        <ResultBadge value={line.result} />
       </div>
+      <div className="grid gap-2 text-xs md:grid-cols-2"><div className="rounded-md bg-muted/50 p-2"><span className="font-medium text-muted-foreground">Passes when:</span><p className="mt-1 leading-relaxed">{line.passing_standard}</p></div><div className="rounded-md bg-muted/50 p-2"><span className="font-medium text-muted-foreground">Where to find it:</span><p className="mt-1 leading-relaxed">{line.where_to_find}</p><p className="mt-1 text-muted-foreground">Graded by {line.grading_method}</p></div></div>
+      {(line.evidence || line.evidence_locator || line.auditor_note) && <div className="rounded-md border border-primary/15 bg-primary/[0.03] p-3 text-sm"><p className="font-medium text-primary">Evidence</p>{line.evidence && <p className="mt-1 whitespace-pre-wrap leading-relaxed">{line.evidence}</p>}{line.evidence_locator && <p className="mt-2 text-xs text-muted-foreground">Source: {line.evidence_locator}</p>}{line.auditor_note && <p className="mt-2 text-xs italic text-muted-foreground">Auditor note: {line.auditor_note}</p>}</div>}
+      {line.adjudication_outcome && <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><p className="font-medium">Adjudication: {line.adjudication_outcome.replaceAll('_', ' ')}</p><p className="mt-1 whitespace-pre-wrap">{line.adjudication_note}</p></div>}
+      {leadership && isDraft && (
+        <div className="border-t pt-3"><Button size="sm" variant="outline" onClick={() => setEditing((current) => !current)}>{editing ? 'Close score editor' : 'Score or revise line'}</Button>
+          {editing && <div className="mt-3 grid gap-3 rounded-lg bg-muted/30 p-3"><div className="grid gap-3 md:grid-cols-2"><div className="space-y-1"><Label className="text-xs">Result</Label><Select value={value} onValueChange={(next) => setValue(next as ResultValue)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(resultCopy).map(([key, label]) => <SelectItem value={key} key={key}>{label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1"><Label className="text-xs">Evidence location</Label><Input value={locator} onChange={(event) => setLocator(event.target.value)} placeholder="Note number, date, author, or field path" /></div></div><div className="space-y-1"><Label className="text-xs">Evidence or N/A explanation</Label><Textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} rows={4} placeholder="Full evidence; nothing is truncated." /></div><div className="space-y-1"><Label className="text-xs">Auditor note</Label><Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} /></div>{line.requires_human_confirmation && <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5" />I completed the required human confirmation for this critical machine-judged line.</label>}<div><Button size="sm" className="bg-primary text-white" onClick={save} disabled={saveLine.isPending}>{saveLine.isPending ? 'Saving…' : 'Save score'}</Button></div></div>}
+        </div>
+      )}
+      {!leadership && !isDraft && <div className="border-t pt-3 space-y-2"><p className="text-xs font-medium text-muted-foreground">Your response</p>{response !== 'agree' && <Textarea rows={2} value={responseComment} onChange={(event) => setResponseComment(event.target.value)} placeholder="Comment is required if you disagree." />}<div className="flex flex-wrap gap-2"><Button size="sm" variant={response === 'agree' ? 'default' : 'outline'} onClick={() => saveResponse('agree')} disabled={respond.isPending}>Agree</Button><Button size="sm" variant={response === 'disagree' ? 'default' : 'outline'} className={response === 'disagree' ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''} onClick={() => saveResponse('disagree')} disabled={respond.isPending}>Disagree</Button>{response && <span className="text-xs self-center text-muted-foreground">Response saved</span>}</div></div>}
     </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+function MessageThread({ evaluation, messages, leadership }: { evaluation: any; messages: any[]; leadership: boolean }) {
+  const addMessage = trpc.claimsQa.addMessage.useMutation();
+  const utils = trpc.useUtils();
+  const [body, setBody] = useState('');
+  const [visibility, setVisibility] = useState<'handler' | 'leadership'>('handler');
+  const send = async () => {
+    try { await addMessage.mutateAsync({ evaluationId: evaluation.id, body, visibility }); setBody(''); await utils.claimsQa.detail.invalidate({ evaluationId: evaluation.id }); toast.success('Message added to the evaluation.'); }
+    catch (error: any) { toast.error(error.message ?? 'Unable to add message.'); }
+  };
+  return <Card><CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /> Coaching conversation</CardTitle><CardDescription>Messages remain attached to this evaluation rather than being moved to email.</CardDescription></CardHeader><CardContent className="space-y-3">{messages.length ? <div className="space-y-2">{messages.map((message) => <div key={message.id} className="rounded-lg border p-3"><div className="flex justify-between gap-3 text-xs text-muted-foreground"><span className="font-medium text-foreground">{message.author_name}</span><span>{displayDate(message.created_at)}</span></div><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.body}</p></div>)}</div> : <p className="text-sm text-muted-foreground">No coaching messages yet.</p>}<div className="border-t pt-3 space-y-2"><Textarea rows={3} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Add a message that remains with this evaluation…" />{leadership && <Select value={visibility} onValueChange={(value) => setVisibility(value as 'handler' | 'leadership')}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="handler">Visible to handler and leadership</SelectItem><SelectItem value="leadership">Leadership only</SelectItem></SelectContent></Select>}<Button size="sm" className="gap-1" onClick={send} disabled={!body.trim() || addMessage.isPending}><Send className="h-3 w-3" />{addMessage.isPending ? 'Sending…' : 'Add message'}</Button></div></CardContent></Card>;
+}
+
+function EvaluationDetail({ evaluationId, open, onOpenChange, leadership }: { evaluationId: number | null; open: boolean; onOpenChange: (value: boolean) => void; leadership: boolean }) {
+  const detailQuery = trpc.claimsQa.detail.useQuery({ evaluationId: evaluationId ?? 0 }, { enabled: Boolean(evaluationId && open) });
+  const utils = trpc.useUtils();
+  const release = trpc.claimsQa.release.useMutation();
+  const signOff = trpc.claimsQa.signOff.useMutation();
+  const createCalibration = trpc.claimsQa.createCalibration.useMutation();
+  const [signoffText, setSignoffText] = useState('');
+  if (!evaluationId) return null;
+  const detail = detailQuery.data as any;
+  const evaluation = detail?.evaluation;
+  const grouped = useMemo(() => {
+    const values = (detail?.results ?? []) as any[];
+    return values.reduce((groups: Record<string, any[]>, line) => { (groups[line.category] ??= []).push(line); return groups; }, {});
+  }, [detail?.results]);
+  const legacy = evaluation?.legacy_payload ? (() => { try { return JSON.parse(evaluation.legacy_payload); } catch { return null; } })() : null;
+  const handleRelease = async () => { try { await release.mutateAsync({ evaluationId }); await utils.claimsQa.invalidate(); toast.success('Evaluation released to the handler.'); } catch (error: any) { toast.error(error.message ?? 'Unable to release evaluation.'); } };
+  const handleSignOff = async () => { try { await signOff.mutateAsync({ evaluationId, overallResponse: signoffText }); await utils.claimsQa.invalidate(); toast.success('Evaluation sign-off recorded.'); } catch (error: any) { toast.error(error.message ?? 'Unable to sign off.'); } };
+  const openCalibration = async () => { try { const result = await createCalibration.mutateAsync({ evaluationId }); await utils.claimsQa.invalidate(); toast.success(result.existing ? 'Existing open calibration retained.' : 'Calibration opened for independent review.'); } catch (error: any) { toast.error(error.message ?? 'Unable to create calibration.'); } };
+
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-w-6xl h-[92vh] overflow-y-auto"><DialogHeader><div className="flex flex-wrap items-center justify-between gap-3 pr-8"><div><DialogTitle className="text-xl">{evaluation?.handler_name ?? 'Claims QA evaluation'}</DialogTitle><DialogDescription>{evaluation?.role} · Claim {evaluation?.claim_number || 'not supplied'} · Audited {displayDate(evaluation?.audit_date)}</DialogDescription></div>{evaluation && <div className="flex items-center gap-2"><RatingBadge value={evaluation.original_rating} /><Badge variant="outline">{evaluation.status.replaceAll('_', ' ')}</Badge></div>}</div></DialogHeader>{detailQuery.isLoading ? <p className="p-8 text-center text-muted-foreground">Loading full scorecard…</p> : !evaluation ? <p className="p-8 text-center text-muted-foreground">Evaluation unavailable.</p> : <div className="space-y-5 pb-4"><div className="grid gap-3 md:grid-cols-4"><Metric label="Rating" value={ratingLabel(evaluation.original_rating)} caption="Critical-first headline" tone={evaluation.original_rating === 'critical_miss' ? 'red' : 'navy'} /><Metric label="Score" value={evaluation.original_items_scored ? `${evaluation.original_items_met} / ${evaluation.original_items_scored}` : '—'} caption={evaluation.original_pass_rate == null ? 'Percentage suppressed for small sample' : `${evaluation.original_pass_rate}% pass rate`} tone="green" /><Metric label="Critical failures" value={evaluation.original_critical_failures} caption="Never averaged away" tone={evaluation.original_critical_failures ? 'red' : 'green'} /><Metric label="N/A lines" value={`${evaluation.original_not_applicable} + ${evaluation.original_not_determinable}`} caption="Not applicable + not determinable" tone="orange" /></div>
+      {(evaluation.auditor_summary || evaluation.areas_for_improvement) && <div className="grid gap-3 md:grid-cols-2"><Card><CardHeader className="pb-2"><CardTitle className="text-sm">Auditor summary</CardTitle></CardHeader><CardContent className="text-sm whitespace-pre-wrap leading-relaxed">{evaluation.auditor_summary || 'No summary supplied.'}</CardContent></Card><Card><CardHeader className="pb-2"><CardTitle className="text-sm">Areas for improvement</CardTitle></CardHeader><CardContent className="text-sm whitespace-pre-wrap leading-relaxed">{evaluation.areas_for_improvement || 'No areas supplied.'}</CardContent></Card></div>}
+      {legacy && <Card className="border-primary/20"><CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> Preserved legacy call-quality detail</CardTitle><CardDescription>This historical Weekly QA record remains visible as it was before migration. It is not a claim-level audit; new Claims QA evaluations require leader review and manual release.</CardDescription></CardHeader><CardContent className="space-y-3"><div className="grid grid-cols-2 gap-2 md:grid-cols-6">{Object.entries(legacy.dimensions ?? {}).map(([key, value]) => <div key={key} className="rounded-md bg-muted/50 p-2 text-center"><p className="text-lg font-semibold">{String(value ?? '—')}</p><p className="text-[10px] capitalize text-muted-foreground">{key.replace(/([A-Z])/g, ' $1')}</p></div>)}</div>{legacy.strengths && <p className="text-sm whitespace-pre-wrap"><strong>Strengths:</strong> {legacy.strengths}</p>}{legacy.improvements && <p className="text-sm whitespace-pre-wrap"><strong>Improvement opportunities:</strong> {legacy.improvements}</p>}{legacy.managerComments && <p className="text-sm whitespace-pre-wrap"><strong>Manager note:</strong> {legacy.managerComments}</p>}</CardContent></Card>}
+      {leadership && evaluation.status === 'not_released' && <div className="flex flex-wrap gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3"><CircleAlert className="mt-0.5 h-4 w-4 text-amber-700" /><div className="flex-1 text-sm text-amber-900"><p className="font-semibold">Manual release safeguard</p><p className="mt-1">Every line must be scored; critical machine-judged lines require human confirmation. Release is explicit and never scheduled.</p></div><Button size="sm" className="bg-[#ff6221] hover:bg-[#e5541a] text-white" onClick={handleRelease} disabled={release.isPending || !(detail.results ?? []).length}>{release.isPending ? 'Releasing…' : 'Release to handler'}</Button></div>}
+      {leadership && evaluation.status !== 'not_released' && <div className="flex justify-end"><Button size="sm" variant="outline" className="gap-1" onClick={openCalibration} disabled={createCalibration.isPending}><Scale className="h-3.5 w-3.5" />{createCalibration.isPending ? 'Opening…' : 'Open calibration'}</Button></div>}
+      {(detail.results ?? []).length > 0 && <section className="space-y-5">{Object.entries(grouped).map(([category, lines]) => <div key={category} className="space-y-3"><div className="flex items-center gap-2"><h3 className="font-semibold">{category}</h3><Badge variant="outline">{(lines as any[]).filter((line) => line.result === 'met').length} met / {(lines as any[]).filter((line) => ['met', 'not_met'].includes(line.result)).length} scored</Badge></div><div className="space-y-3">{(lines as any[]).map((line) => <ScoreLine key={line.id} line={line} evaluation={evaluation} leadership={leadership} />)}</div></div>)}</section>}
+      {!leadership && ['released', 'in_adjudication'].includes(evaluation.status) && <Card><CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><UserCheck className="h-4 w-4 text-primary" /> Handler sign-off</CardTitle><CardDescription>Respond to every scored line, then record an affirmative overall response.</CardDescription></CardHeader><CardContent className="space-y-3"><Textarea rows={3} value={signoffText} onChange={(event) => setSignoffText(event.target.value)} placeholder="Overall response and sign-off…" /><Button onClick={handleSignOff} disabled={signOff.isPending}>{signOff.isPending ? 'Signing off…' : 'Sign off evaluation'}</Button></CardContent></Card>}
+      <MessageThread evaluation={evaluation} messages={detail.messages ?? []} leadership={leadership} />
+    </div>}</DialogContent></Dialog>;
+}
+
+function EvaluationTable({ leadership, onOpen }: { leadership: boolean; onOpen: (id: number) => void }) {
+  const [role, setRole] = useState('all');
+  const [status, setStatus] = useState('all');
+  const { data: evaluations, isLoading } = trpc.claimsQa.list.useQuery({ role: role === 'all' ? undefined : role, status: status === 'all' ? undefined : status, limit: 300 });
+  return <Card><CardHeader className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="text-base">Evaluations</CardTitle><CardDescription>{leadership ? 'Full leadership queue, including unreleased drafts and preserved legacy call-quality data.' : 'Your released evaluations and open response actions.'}</CardDescription></div><div className="flex gap-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All roles</SelectItem>{ROLE_OPTIONS.map((entry) => <SelectItem key={entry} value={entry}>{entry}</SelectItem>)}<SelectItem value="Call Quality">Call Quality</SelectItem></SelectContent></Select><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{['not_released', 'released', 'responded', 'in_adjudication', 'closed'].map((entry) => <SelectItem key={entry} value={entry}>{entry.replaceAll('_', ' ')}</SelectItem>)}</SelectContent></Select></div></div></CardHeader><CardContent className="p-0">{isLoading ? <p className="p-6 text-sm text-muted-foreground">Loading evaluations…</p> : !(evaluations ?? []).length ? <p className="p-8 text-center text-sm text-muted-foreground">No evaluations match these filters.</p> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/30 text-left text-xs text-muted-foreground"><th className="px-4 py-3">Handler</th><th className="px-4 py-3">Role / period</th><th className="px-4 py-3">Rating</th><th className="px-4 py-3">Score</th><th className="px-4 py-3">Critical</th><th className="px-4 py-3">Status</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y">{(evaluations as any[]).map((evaluation) => <tr key={evaluation.id} className="hover:bg-muted/30"><td className="px-4 py-3"><p className="font-medium">{evaluation.handler_name}</p><p className="text-xs text-muted-foreground">Claim {evaluation.claim_number || '—'}</p></td><td className="px-4 py-3"><p>{evaluation.role}</p><p className="text-xs text-muted-foreground">{displayDate(evaluation.period_start || evaluation.audit_date)}</p></td><td className="px-4 py-3"><RatingBadge value={evaluation.original_rating} /></td><td className="px-4 py-3">{evaluation.original_items_scored ? <><span className="font-medium">{evaluation.original_items_met}/{evaluation.original_items_scored}</span><p className="text-xs text-muted-foreground">{evaluation.original_pass_rate == null ? 'Small sample' : `${evaluation.original_pass_rate}%`}</p></> : '—'}</td><td className="px-4 py-3">{evaluation.original_critical_failures || '—'}</td><td className="px-4 py-3"><Badge variant="outline" className="capitalize">{evaluation.status.replaceAll('_', ' ')}</Badge></td><td className="px-4 py-3 text-right"><Button size="sm" variant="outline" className="gap-1" onClick={() => onOpen(evaluation.id)}>Open <ChevronRight className="h-3 w-3" /></Button></td></tr>)}</tbody></table></div>}</CardContent></Card>;
+}
+
+function Scorecard({ leadership }: { leadership: boolean }) {
+  const [role, setRole] = useState<(typeof ROLE_OPTIONS)[number]>('First Party');
+  const { data, isLoading } = trpc.claimsQa.rubric.useQuery({ role });
+  const groups = useMemo(() => ((data?.items ?? []) as any[]).reduce((acc: Record<string, any[]>, item) => { (acc[item.category] ??= []).push(item); return acc; }, {}), [data?.items]);
+  return <Card><CardHeader className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><BookOpenCheck className="h-5 w-5 text-primary" /> Published role scorecard</CardTitle><CardDescription>Version {data?.version?.version ?? 'v9'} · The contract is visible before it is used. Deactivated items remain for historical context.</CardDescription></div><Select value={role} onValueChange={(value) => setRole(value as (typeof ROLE_OPTIONS)[number])}><SelectTrigger className="w-48"><SelectValue /></SelectTrigger><SelectContent>{ROLE_OPTIONS.map((entry) => <SelectItem key={entry} value={entry}>{entry}</SelectItem>)}</SelectContent></Select></div></CardHeader><CardContent className="space-y-5">{isLoading ? <p className="text-sm text-muted-foreground">Loading scorecard…</p> : Object.entries(groups).map(([category, items]) => <section key={category}><h3 className="mb-2 font-semibold">{category}</h3><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[720px] text-sm"><thead className="bg-muted/40 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-2">Item</th><th className="px-3 py-2">Check and pass standard</th><th className="px-3 py-2">Where to find it</th><th className="px-3 py-2">Method</th></tr></thead><tbody className="divide-y">{(items as any[]).map((item) => <tr key={item.id} className={!item.active ? 'opacity-55 bg-muted/20' : ''}><td className="px-3 py-3 align-top"><span className="font-mono text-xs font-semibold text-primary">{item.item_key}</span>{item.critical && <Badge variant="outline" className="ml-2 border-red-300 bg-red-50 text-red-700">Critical</Badge>}{!item.active && <Badge variant="outline" className="ml-2">Deactivated</Badge>}</td><td className="px-3 py-3 align-top"><p className="font-medium">{item.check_text}</p><p className="mt-1 text-xs text-muted-foreground">Passes when: {item.passing_standard}</p></td><td className="px-3 py-3 align-top text-xs">{item.where_to_find}</td><td className="px-3 py-3 align-top text-xs">{item.grading_method}</td></tr>)}</tbody></table></div></section>)}</CardContent></Card>;
+}
+
+function Disputes({ onOpen }: { onOpen: (id: number) => void }) {
+  const { data: disputes, isLoading } = trpc.claimsQa.disputes.useQuery();
+  const adjudicate = trpc.claimsQa.adjudicate.useMutation();
+  const utils = trpc.useUtils();
+  const [outcomes, setOutcomes] = useState<Record<number, string>>({});
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const rule = async (row: any) => { const outcome = outcomes[row.id]; if (!outcome) { toast.error('Select an adjudication outcome.'); return; } try { await adjudicate.mutateAsync({ evaluationId: row.evaluation_id, resultId: row.id, outcome: outcome as any, note: notes[row.id] ?? '' }); await utils.claimsQa.invalidate(); toast.success('Adjudication recorded.'); } catch (error: any) { toast.error(error.message ?? 'Unable to adjudicate.'); } };
+  return <Card><CardHeader><CardTitle className="flex items-center gap-2"><Gavel className="h-5 w-5 text-primary" /> Adjudication queue</CardTitle><CardDescription>Original scores are preserved. Handling-correct overturns score Met after review; rubric-defect overturns are excluded as Not determinable. More than two rubric-defect overturns flag a rewrite.</CardDescription></CardHeader><CardContent className="space-y-3">{isLoading ? <p className="text-sm text-muted-foreground">Loading disputes…</p> : !(disputes ?? []).length ? <p className="rounded-lg bg-muted/40 p-5 text-sm text-muted-foreground">No pending disputes.</p> : (disputes as any[]).map((row) => <div key={row.id} className="rounded-xl border p-4 space-y-3"><div className="flex flex-wrap justify-between gap-2"><div><p className="font-semibold">{row.handler_name} · {row.item_key}</p><p className="text-xs text-muted-foreground">{row.role} · Claim {row.claim_number || '—'}</p></div><Button size="sm" variant="outline" onClick={() => onOpen(row.evaluation_id)}>Open evaluation</Button></div><p className="text-sm font-medium">{row.check_text}</p><div className="grid gap-2 md:grid-cols-2"><div className="rounded-md bg-muted/40 p-3 text-sm"><p className="text-xs font-semibold text-muted-foreground">Original evidence</p><p className="mt-1 whitespace-pre-wrap">{row.evidence || 'No evidence provided.'}</p></div><div className="rounded-md bg-amber-50 p-3 text-sm"><p className="text-xs font-semibold text-amber-800">Handler argument</p><p className="mt-1 whitespace-pre-wrap">{row.handler_response_comment}</p></div></div><div className="grid gap-2 md:grid-cols-[240px_1fr_auto]"><Select value={outcomes[row.id] ?? ''} onValueChange={(value) => setOutcomes((current) => ({ ...current, [row.id]: value }))}><SelectTrigger><SelectValue placeholder="Ruling" /></SelectTrigger><SelectContent><SelectItem value="upheld">Upheld</SelectItem><SelectItem value="overturned_handling_correct">Overturned — handling correct</SelectItem><SelectItem value="overturned_rubric_defect">Overturned — rubric defect</SelectItem></SelectContent></Select><Input value={notes[row.id] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [row.id]: event.target.value }))} placeholder="Adjudication note required" /><Button onClick={() => rule(row)} disabled={adjudicate.isPending}>Rule</Button></div></div>)}</CardContent></Card>;
+}
+
+function Calibration({ onOpen }: { onOpen: (id: number) => void }) {
+  const { data: evaluations } = trpc.claimsQa.list.useQuery({ limit: 100 });
+  const create = trpc.claimsQa.createCalibration.useMutation();
+  const utils = trpc.useUtils();
+  const [selected, setSelected] = useState('');
+  const [calibrationId, setCalibrationId] = useState<number | null>(null);
+  const detail = trpc.claimsQa.calibrationDetail.useQuery({ calibrationId: calibrationId ?? 0 }, { enabled: Boolean(calibrationId) });
+  const submit = trpc.claimsQa.submitCalibration.useMutation();
+  const [values, setValues] = useState<Record<number, ResultValue>>({});
+  const [evidence, setEvidence] = useState<Record<number, string>>({});
+  const start = async () => { if (!selected) { toast.error('Choose an evaluation to calibrate.'); return; } try { const result = await create.mutateAsync({ evaluationId: Number(selected) }); setCalibrationId(result.id); toast.success(result.existing ? 'Existing calibration opened.' : 'Calibration created.'); } catch (error: any) { toast.error(error.message ?? 'Unable to create calibration.'); } };
+  const send = async () => { const rows = detail.data?.rows ?? []; const scores = rows.filter((row: any) => values[row.id] && values[row.id] !== 'pending').map((row: any) => ({ evaluationResultId: row.id, result: values[row.id] as Exclude<ResultValue, 'pending'>, evidence: evidence[row.id] || undefined })); if (!scores.length) { toast.error('Score at least one line independently.'); return; } try { const result = await submit.mutateAsync({ calibrationId: calibrationId!, scores }); await utils.claimsQa.invalidate(); toast.success(result.completed ? 'Second independent calibration complete.' : 'Calibration submitted; awaiting second reviewer.'); } catch (error: any) { toast.error(error.message ?? 'Unable to submit calibration.'); } };
+  return <Card><CardHeader><CardTitle className="flex items-center gap-2"><Scale className="h-5 w-5 text-primary" /> Calibration</CardTitle><CardDescription>Two leadership reviewers score the same released evaluation independently. Divergence is reported without changing the original evaluation.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="flex flex-wrap gap-2"><Select value={selected} onValueChange={setSelected}><SelectTrigger className="w-full md:w-[440px]"><SelectValue placeholder="Select a released evaluation" /></SelectTrigger><SelectContent>{(evaluations ?? []).filter((row: any) => row.status !== 'not_released' && row.role !== 'Call Quality').map((row: any) => <SelectItem key={row.id} value={String(row.id)}>{row.handler_name} · {row.role} · {row.claim_number || 'No claim #'} · {displayDate(row.audit_date)}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={start} disabled={create.isPending}>{create.isPending ? 'Opening…' : 'Open calibration'}</Button></div>{calibrationId && <div className="space-y-3 border-t pt-4">{detail.isLoading ? <p className="text-sm text-muted-foreground">Loading calibration…</p> : <><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm">Status: <Badge variant="outline">{detail.data?.calibration?.status}</Badge> · Divergent lines: <strong>{detail.data?.divergence ?? 0}</strong></p><Button size="sm" variant="outline" onClick={() => onOpen(detail.data?.calibration?.evaluation_id)}>Open original evaluation</Button></div><p className="text-xs text-muted-foreground">Your selections are stored independently. When two reviewers submit a line, differences are counted as calibration divergence.</p><div className="max-h-[460px] overflow-y-auto space-y-3 pr-1">{Object.values((detail.data?.rows ?? []).reduce((acc: Record<number, any>, row: any) => { acc[row.id] ??= row; return acc; }, {})).map((row: any) => <div key={row.id} className="rounded-lg border p-3"><p className="font-mono text-xs text-primary">{row.item_key}</p><p className="mt-1 text-sm font-medium">{row.check_text}</p><div className="mt-2 grid gap-2 md:grid-cols-[200px_1fr]"><Select value={values[row.id] ?? ''} onValueChange={(value) => setValues((current) => ({ ...current, [row.id]: value as ResultValue }))}><SelectTrigger><SelectValue placeholder="Independent result" /></SelectTrigger><SelectContent>{(['met', 'not_met', 'not_applicable', 'not_determinable'] as const).map((value) => <SelectItem key={value} value={value}>{resultCopy[value]}</SelectItem>)}</SelectContent></Select><Input value={evidence[row.id] ?? ''} onChange={(event) => setEvidence((current) => ({ ...current, [row.id]: event.target.value }))} placeholder="Evidence citation (optional in calibration)" /></div></div>)}</div><Button onClick={send} disabled={submit.isPending}>{submit.isPending ? 'Submitting…' : 'Submit independent calibration'}</Button></>}</div>}</CardContent></Card>;
+}
 
 export default function WeeklyQA() {
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [pushAgent, setPushAgent] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState(() => getMondayOf(new Date()));
-  const [hasAutoSelected, setHasAutoSelected] = useState(false);
+  const { user } = useAuth();
+  const { isImpersonating } = useImpersonation();
+  const leadership = user?.role === 'admin' && !isImpersonating;
+  const [tab, setTab] = useState('overview');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedEvaluation, setSelectedEvaluation] = useState<number | null>(null);
+  const overview = trpc.claimsQa.overview.useQuery();
+  const inventory = trpc.claimsQa.migrationInventory.useQuery(undefined, { enabled: leadership });
+  const data = overview.data as any;
+  const open = (id: number) => setSelectedEvaluation(id);
 
-  // Fetch available weeks that have scorecards
-  const { data: availableWeeks } = trpc.qa.qaWeeks.useQuery();
-
-  // Auto-select the most recent week that has scorecards when data loads
-  useEffect(() => {
-    if (!hasAutoSelected && availableWeeks && availableWeeks.length > 0) {
-      const weekWithScores = (availableWeeks as any[]).find((w: any) => w.hasScorecards);
-      if (weekWithScores) {
-        setWeekStart(weekWithScores.week);
-        setHasAutoSelected(true);
-      }
-    }
-  }, [availableWeeks, hasAutoSelected]);
-
-  // Fetch scorecards for the selected week
-  const { data: scorecards, isLoading: scorecardsLoading } = trpc.qa.scorecardsByWeek.useQuery({ weekOf: weekStart });
-
-  // Handler weekly stats
-  const { data: handlerStats, isLoading: statsLoading } = trpc.qa.handlerWeeklyStats.useQuery({ weekStart });
-
-  const generateReport = trpc.qa.generateReport.useMutation();
-  const bulkPushWeek = trpc.qa.bulkPushWeek.useMutation();
-  const utils = trpc.useUtils();
-
-  const batchGenerate = trpc.qa.batchGenerateAllWeeks.useMutation();
-
-  const handleBatchGenerate = async () => {
-    try {
-      const results = await batchGenerate.mutateAsync();
-      await utils.qa.scorecardsByWeek.invalidate();
-      await utils.qa.qaWeeks.invalidate();
-      const scored = results.filter((r: any) => r.count > 0).length;
-      toast.success(`Retroactive QA complete: scored ${scored} week${scored !== 1 ? 's' : ''}.`);
-    } catch {
-      toast.error('Batch QA generation failed. Please try again.');
-    }
-  };
-
-  const handleRegenerate = async () => {
-    try {
-      const result = await generateReport.mutateAsync({ weekStart });
-      await utils.qa.scorecardsByWeek.invalidate();
-      await utils.qa.qaWeeks.invalidate();
-      toast.success(`Generated QA reports for ${result.count} handler${result.count !== 1 ? "s" : ""}.`);
-    } catch {
-      toast.error("Failed to generate QA reports. Please try again.");
-    }
-  };
-
-  const handleBulkPush = async () => {
-    try {
-      const result = await bulkPushWeek.mutateAsync({ weekOf: weekStart });
-      await utils.qa.allScorecards.invalidate();
-      toast.success(`Pushed ${result.pushed} scorecard${result.pushed !== 1 ? "s" : ""} to handler profiles.`);
-    } catch {
-      toast.error("Failed to bulk push scorecards. Please try again.");
-    }
-  };
-
-  // Build display data from real scorecards
-  const displayData = (scorecards ?? []).map((sc: Scorecard) => ({
-    agentName: sc.handlerName,
-    avgOverall: Number(sc.overallScore ?? 0),
-    avgGreeting: Number(sc.greetingScore ?? 0),
-    avgHold: Number(sc.holdManagementScore ?? 0),
-    avgResolution: Number(sc.resolutionScore ?? 0),
-    avgEmpathy: Number(sc.empathyScore ?? 0),
-    avgCallControl: Number(sc.callControlScore ?? 0),
-    strengths: sc.strengths ?? "",
-    improvements: sc.improvements ?? "",
-    coachingNote: sc.managerComments ?? "",
-    submittedBy: sc.submittedBy ?? "",
-    trend: "stable" as const,
-    scorecard: sc,
-  }));
-
-  const selected = selectedAgent
-    ? displayData.find((d) => d.agentName === selectedAgent)
-    : null;
-
-  // Compute team averages from real data
-  const teamAvgScore = displayData.length > 0
-    ? (displayData.reduce((s, d) => s + d.avgOverall, 0) / displayData.length)
-    : 0;
-
-  const teamAnswerRate = handlerStats && handlerStats.length > 0
-    ? Math.round(handlerStats.reduce((s: number, h: { answerRate: number }) => s + h.answerRate, 0) / handlerStats.length)
-    : 0;
-
-  const teamAvgDuration = handlerStats && handlerStats.length > 0
-    ? Math.round(handlerStats.reduce((s: number, h: { avgCallDurationMin: number }) => s + h.avgCallDurationMin, 0) / handlerStats.length)
-    : 0;
-
-  const pushPrefill = pushAgent ? displayData.find((d) => d.agentName === pushAgent)?.scorecard ?? null : null;
-
-  return (
-    <WhipLayout>
-      {pushAgent && (
-        <PushScorecardPanel
-          agentName={pushAgent}
-          weekOf={weekStart}
-          prefill={pushPrefill}
-          onClose={() => setPushAgent(null)}
-        />
-      )}
-      <div className="p-6 space-y-5">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Weekly QA Scoring</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              AI-powered quality analysis
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Week selector — shows available weeks with data */}
-            <div className="flex items-center gap-1.5">
-              <label className="text-xs text-muted-foreground whitespace-nowrap">Week of</label>
-              <div className="relative">
-                <select
-                  value={weekStart}
-                  onChange={(e) => setWeekStart(e.target.value)}
-                  className="text-xs border rounded px-2 py-1.5 bg-background text-foreground pr-6 appearance-none cursor-pointer"
-                >
-                  {/* Always include current week */}
-                  {!availableWeeks?.some((w: any) => w.week === weekStart) && (
-                    <option value={weekStart}>{weekStart} (current week)</option>
-                  )}
-                  {(availableWeeks ?? []).map((w: any) => (
-                    <option key={w.week} value={w.week}>
-                      {w.week}{w.hasScorecards ? ' ✓' : ` — ${w.callCount} calls, no QA`}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-              </div>
-              {/* Manual date fallback */}
-              <input
-                type="date"
-                value={weekStart}
-                onChange={(e) => setWeekStart(getMondayOf(new Date(e.target.value + "T12:00:00")))}
-                className="text-xs border rounded px-2 py-1 bg-background text-foreground"
-                title="Pick any date — snaps to Monday"
-              />
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleBulkPush}
-              disabled={bulkPushWeek.isPending || displayData.length === 0}
-              className="text-xs gap-1.5"
-            >
-              {bulkPushWeek.isPending ? (
-                <><span className="animate-spin">⟳</span> Pushing…</>
-              ) : (
-                <><Users className="w-3 h-3" /> Bulk Push All</>
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleBatchGenerate}
-              disabled={batchGenerate.isPending || generateReport.isPending}
-              className="text-xs gap-1.5 border-amber-500 text-amber-600 hover:bg-amber-50"
-              title="Score all weeks since launch that don't have QA yet"
-            >
-              {batchGenerate.isPending ? (
-                <><span className="animate-spin">⟳</span> Scoring all weeks…</>
-              ) : (
-                <><Star className="w-3 h-3" /> Score All Weeks</>
-              )}
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={generateReport.isPending || batchGenerate.isPending}
-              className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs gap-1.5"
-            >
-              {generateReport.isPending ? (
-                <><span className="animate-spin">⟳</span> Generating…</>
-              ) : (
-                <><Star className="w-3 h-3" /> Regenerate QA</>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        {/* Per-handler weekly stats */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Phone className="w-4 h-4 text-[#ff6221]" />
-              Handler Stats — Week of {weekStart}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {statsLoading ? (
-              <div className="p-4 text-sm text-muted-foreground">Loading stats…</div>
-            ) : !handlerStats || handlerStats.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No call data for this week.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Handler</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Total Calls</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Answer Rate</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Avg Duration</th>
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs hidden lg:table-cell">Caller Types</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Overdues</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Callback Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {handlerStats.map((h: {
-                      handlerName: string;
-                      totalCalls: number;
-                      answerRate: number;
-                      avgCallDurationMin: number;
-                      callsByCallerType: Record<string, number>;
-                      overdueCallbacks: number;
-                      callbackRate: number;
-                    }, idx: number) => (
-                      <tr key={`${h.handlerName}-${idx}`} className="hover:bg-muted/20">
-                        <td className="px-4 py-3 font-medium text-foreground">{h.handlerName}</td>
-                        <td className="px-4 py-3 text-right text-foreground">{h.totalCalls}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            h.answerRate >= 90 ? "text-green-600" :
-                            h.answerRate >= 75 ? "text-yellow-600" : "text-red-600"
-                          }`}>{h.answerRate}%</span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-muted-foreground hidden md:table-cell">{h.avgCallDurationMin}m</td>
-                        <td className="px-4 py-3 hidden lg:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(h.callsByCallerType)
-                              .sort((a, b) => b[1] - a[1])
-                              .slice(0, 4)
-                              .map(([type, count]) => (
-                                <span key={type} className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                                  {CALLER_TYPE_LABELS[type] ?? type} {count}
-                                </span>
-                              ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={h.overdueCallbacks > 0 ? "text-red-600 font-medium" : "text-muted-foreground"}>
-                            {h.overdueCallbacks}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${
-                            h.callbackRate >= 90 ? "text-green-600" :
-                            h.callbackRate >= 70 ? "text-yellow-600" : "text-red-600"
-                          }`}>{h.callbackRate}%</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Team summary KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#ff6221]/10 flex items-center justify-center">
-                  <Star className="w-4 h-4 text-[#ff6221]" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">
-                    {teamAvgScore > 0 ? teamAvgScore.toFixed(1) : "—"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Team Avg Score</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
-                  <Phone className="w-4 h-4 text-green-600" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">
-                    {teamAnswerRate > 0 ? `${teamAnswerRate}%` : "—"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Answer Rate</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-blue-600" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">
-                    {teamAvgDuration > 0 ? `${teamAvgDuration}m` : "—"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Avg Handle Time</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <User className="w-4 h-4 text-purple-600" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-foreground">{displayData.length}</div>
-                  <div className="text-xs text-muted-foreground">Agents Scored</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Agent score table */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">
-              Agent Scores — Week of {weekStart}
-              {scorecardsLoading && <span className="text-muted-foreground font-normal ml-2 text-xs">Loading…</span>}
-              {!scorecardsLoading && displayData.length === 0 && (
-                <span className="text-muted-foreground font-normal ml-2 text-xs">
-                  No scorecards yet — click "Regenerate QA" to generate for this week
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          {displayData.length > 0 && (
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs">Agent</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Overall</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Greeting</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Hold Mgmt</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Resolution</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Empathy</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs hidden md:table-cell">Call Control</th>
-                      <th className="text-center px-4 py-2.5 font-medium text-muted-foreground text-xs">Trend</th>
-                      <th className="text-right px-4 py-2.5 font-medium text-muted-foreground text-xs">Push</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {displayData
-                      .sort((a, b) => b.avgOverall - a.avgOverall)
-                      .map((agent) => (
-                        <tr
-                          key={agent.agentName}
-                          className={`hover:bg-muted/20 transition-colors cursor-pointer ${
-                            selectedAgent === agent.agentName ? "bg-primary/5 border-l-2 border-l-[#ff6221]" : ""
-                          }`}
-                          onClick={() => setSelectedAgent(
-                            selectedAgent === agent.agentName ? null : agent.agentName
-                          )}
-                        >
-                          <td className="px-4 py-3 font-medium text-foreground">
-                            <div className="flex items-center gap-2">
-                              {agent.agentName}
-                              {agent.submittedBy && (
-                                <span className="text-xs text-muted-foreground bg-muted border rounded px-1.5 py-0.5">
-                                  {agent.submittedBy === "AI QA System" || agent.submittedBy === "Auto-QA" ? "AI" : "Manager"}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {agent.avgOverall > 0 ? <ScoreBadge score={agent.avgOverall} /> : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right hidden md:table-cell">
-                            {agent.avgGreeting > 0 ? <ScoreBadge score={agent.avgGreeting} /> : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right hidden md:table-cell">
-                            {agent.avgHold > 0 ? <ScoreBadge score={agent.avgHold} /> : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right hidden md:table-cell">
-                            {agent.avgResolution > 0 ? <ScoreBadge score={agent.avgResolution} /> : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right hidden md:table-cell">
-                            {agent.avgEmpathy > 0 ? <ScoreBadge score={agent.avgEmpathy} /> : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right hidden md:table-cell">
-                            {agent.avgCallControl > 0 ? <ScoreBadge score={agent.avgCallControl} /> : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-center"><TrendIcon trend={agent.trend} /></td>
-                          <td className="px-4 py-3 text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7 gap-1 border-primary/30 hover:bg-primary hover:text-white"
-                              onClick={(e) => { e.stopPropagation(); setPushAgent(agent.agentName); }}
-                            >
-                              <Send className="h-3 w-3" />
-                              Push
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-
-        {/* Agent detail panel */}
-        {selected && (
-          <Card className="border-[#ff6221]/30 shadow-sm">
-            <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-[#ff6221]" />
-                <span className="text-foreground">{selected.agentName}</span>
-                <span className="text-muted-foreground font-normal">— Detailed Feedback</span>
-                <Badge variant="outline" className="text-xs ml-auto">{weekStart}</Badge>
-                <Button
-                  size="sm"
-                  className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs h-7 gap-1"
-                  onClick={() => setPushAgent(selected.agentName)}
-                >
-                  <Edit3 className="h-3 w-3" /> Review &amp; Push to Profile
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5 pt-4">
-              {/* Score breakdown */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {[
-                  { label: "Greeting", score: selected.avgGreeting, icon: Mic },
-                  { label: "Hold Mgmt", score: selected.avgHold, icon: Phone },
-                  { label: "Resolution", score: selected.avgResolution, icon: CheckCircle2 },
-                  { label: "Empathy", score: selected.avgEmpathy, icon: Heart },
-                  { label: "Call Control", score: selected.avgCallControl, icon: MessageSquare },
-                ].map(({ label, score, icon: Icon }) => (
-                  <div key={label} className="bg-muted/30 rounded-lg p-3 text-center">
-                    <Icon className="w-4 h-4 text-muted-foreground mx-auto mb-1" />
-                    <div className="text-lg font-bold text-foreground">
-                      {score > 0 ? score.toFixed(1) : "—"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Strengths */}
-              {selected.strengths && (
-                <div className="bg-green-500/10 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Award className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-semibold text-green-800">What {selected.agentName.split(" ")[0]} Does Well</span>
-                  </div>
-                  <div className="text-sm text-green-700 whitespace-pre-wrap leading-relaxed">
-                    {selected.strengths}
-                  </div>
-                </div>
-              )}
-
-              {/* Improvements */}
-              {selected.improvements && (
-                <div className="bg-amber-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Lightbulb className="w-4 h-4 text-amber-600" />
-                    <span className="text-sm font-semibold text-amber-800">Opportunities for {selected.agentName.split(" ")[0]}</span>
-                  </div>
-                  <div className="text-sm text-amber-700 whitespace-pre-wrap leading-relaxed">
-                    {selected.improvements}
-                  </div>
-                </div>
-              )}
-
-              {/* Coaching note */}
-              {selected.coachingNote && (
-                <div className="bg-primary/5 rounded-lg p-4 border border-primary/10">
-                  <div className="flex items-center gap-2 mb-1">
-                    <TrendingUp className="w-4 h-4 text-foreground" />
-                    <span className="text-xs font-semibold text-foreground">Supervisor Coaching Note</span>
-                  </div>
-                  <p className="text-sm text-foreground/70 whitespace-pre-wrap">{selected.coachingNote}</p>
-                </div>
-              )}
-
-              {/* No feedback yet */}
-              {!selected.strengths && !selected.improvements && !selected.coachingNote && (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  No detailed feedback yet. Click "Review &amp; Push to Profile" to add coaching notes.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Empty state */}
-        {!scorecardsLoading && displayData.length === 0 && (
-          <Card className="border-dashed">
-            <CardContent className="p-8 text-center">
-              <Star className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground">No QA scorecards for {weekStart}</p>
-              <p className="text-xs text-muted-foreground mt-1 mb-4">
-                Click "Regenerate QA" to generate AI-powered scorecards for this week, or select a different week from the dropdown.
-              </p>
-              <Button
-                size="sm"
-                onClick={handleRegenerate}
-                disabled={generateReport.isPending}
-                className="bg-[#ff6221] hover:bg-[#ff6221]/90 text-white text-xs gap-1.5"
-              >
-                {generateReport.isPending ? (
-                  <><span className="animate-spin">⟳</span> Generating…</>
-                ) : (
-                  <><Star className="w-3 h-3" /> Generate QA for {weekStart}</>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </WhipLayout>
-  );
+  return <WhipLayout><div className="p-4 sm:p-6 space-y-5"><header className="flex flex-col gap-3 border-b pb-5 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#d94d13]"><ShieldCheck className="h-4 w-4" /> Claims quality programme</div><h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Claims QA</h1><p className="mt-1 max-w-3xl text-sm text-muted-foreground">Evidence-led scorecards, human-confirmed critical findings, handler response, adjudication, coaching, and calibration. Quality is kept separate from call productivity.</p></div>{leadership && <Button className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New evaluation</Button>}</header>
+    {leadership && inventory.data && <div className="rounded-xl border border-primary/15 bg-primary/[0.03] p-4 text-sm"><div className="flex items-start gap-2"><Info className="mt-0.5 h-4 w-4 text-primary" /><div><p className="font-semibold">Migration inventory</p><p className="mt-1">{inventory.data.migratedLegacyScorecards} of {inventory.data.legacyScorecards} historical Weekly QA scorecards are preserved as released Call Quality records. {inventory.data.claimAudits} claim-level evaluations were found; no baseline claim audits were fabricated.</p><p className="mt-1 text-xs text-muted-foreground">{inventory.data.rubricItems} authoritative rubric items imported. {inventory.data.unavailable.join(' ')}</p></div></div></div>}
+    <Tabs value={tab} onValueChange={setTab} className="gap-4"><TabsList className="h-auto w-full justify-start overflow-x-auto bg-muted p-1 sm:w-fit"><TabsTrigger value="overview" className="px-3"><ClipboardCheck /> Overview</TabsTrigger><TabsTrigger value="evaluations" className="px-3"><FileText /> Evaluations</TabsTrigger><TabsTrigger value="scorecard" className="px-3"><BookOpenCheck /> Scorecard</TabsTrigger>{leadership && <TabsTrigger value="disputes" className="px-3"><Gavel /> Disputes</TabsTrigger>}{leadership && <TabsTrigger value="calibration" className="px-3"><Scale /> Calibration</TabsTrigger>}</TabsList>
+      <TabsContent value="overview" className="space-y-5">{overview.isLoading ? <p className="py-10 text-center text-sm text-muted-foreground">Loading Claims QA…</p> : <><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Evaluations" value={data?.counts?.evaluations ?? 0} caption={`${data?.counts?.legacyCallQuality ?? 0} preserved call-quality records`} /><Metric label="Pass rate" value={data?.quality?.passRate == null ? '—' : `${data.quality.passRate}%`} caption={data?.quality?.scored ? `${data.quality.met} of ${data.quality.scored} met` : 'No scored claim lines yet'} tone="green" /><Metric label="Critical misses" value={data?.counts?.criticalFailures ?? 0} caption="Never averaged away" tone={data?.counts?.criticalFailures ? 'red' : 'green'} /><Metric label="Files clean" value={data?.counts?.filesClean ?? 0} caption="Strong with no critical miss" tone="orange" /></div><div className="grid gap-5 xl:grid-cols-[1.2fr_1fr]"><Card><CardHeader><CardTitle className="text-base">Quality by scorecard section</CardTitle><CardDescription>Worst actionable category first. <Definition label="Pass rate" body={data?.definitions?.passRate ?? ''} /></CardDescription></CardHeader><CardContent>{(data?.categories ?? []).length ? <div className="space-y-3">{data.categories.map((row: any) => <div key={row.category} className="rounded-lg border p-3"><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium">{row.category}</p><span className="text-sm font-semibold">{row.passRate == null ? 'Small sample' : `${row.passRate}%`}</span></div><p className="mt-1 text-xs text-muted-foreground">{row.met} of {row.scored} met · {row.criticalFailures} critical</p></div>)}</div> : <p className="rounded-lg bg-muted/40 p-5 text-sm text-muted-foreground">Category results will appear after claim evaluations are scored.</p>}</CardContent></Card><Card><CardHeader><CardTitle className="text-base">Most-missed items</CardTitle><CardDescription>Training and rubric signals, not a handler leaderboard.</CardDescription></CardHeader><CardContent>{(data?.mostMissed ?? []).length ? <div className="space-y-3">{data.mostMissed.map((row: any) => <div key={row.itemKey} className="rounded-lg bg-muted/40 p-3"><p className="font-mono text-xs text-primary">{row.itemKey}</p><p className="mt-1 text-sm">{row.checkText}</p><p className="mt-1 text-xs text-muted-foreground">{row.misses} misses</p></div>)}</div> : <p className="rounded-lg bg-muted/40 p-5 text-sm text-muted-foreground">No claim-level misses have been scored.</p>}</CardContent></Card></div><Card><CardHeader><CardTitle className="text-base">{leadership ? 'Handler quality view' : 'Your quality view'}</CardTitle><CardDescription>Quality only. Call performance and productivity remain in Call Tracking. <Definition label="Critical failures" body={data?.definitions?.criticalFailures ?? ''} /></CardDescription></CardHeader><CardContent className="p-0">{(data?.handlers ?? []).length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="border-y bg-muted/30 text-left text-xs text-muted-foreground"><tr><th className="px-4 py-3">Handler</th><th className="px-4 py-3">Evaluations</th><th className="px-4 py-3">Pass rate</th><th className="px-4 py-3">Critical</th><th className="px-4 py-3">Open actions</th></tr></thead><tbody className="divide-y">{data.handlers.map((row: any) => <tr key={row.handlerId}><td className="px-4 py-3 font-medium">{row.handlerName}</td><td className="px-4 py-3">{row.evaluations}</td><td className="px-4 py-3">{row.passRate == null ? 'Small sample' : `${row.passRate}%`} <span className="text-xs text-muted-foreground">({row.met}/{row.scored})</span></td><td className="px-4 py-3">{row.criticalFailures}</td><td className="px-4 py-3">{row.openActions}</td></tr>)}</tbody></table></div> : <p className="p-5 text-sm text-muted-foreground">No visible evaluation records.</p>}</CardContent></Card></>}</TabsContent>
+      <TabsContent value="evaluations"><EvaluationTable leadership={leadership} onOpen={open} /></TabsContent>
+      <TabsContent value="scorecard"><Scorecard leadership={leadership} /></TabsContent>
+      {leadership && <TabsContent value="disputes"><Disputes onOpen={open} /></TabsContent>}
+      {leadership && <TabsContent value="calibration"><Calibration onOpen={open} /></TabsContent>}
+    </Tabs>
+    {leadership && <CreateEvaluationDialog open={createOpen} onOpenChange={setCreateOpen} />}
+    <EvaluationDetail evaluationId={selectedEvaluation} open={selectedEvaluation !== null} onOpenChange={(next) => { if (!next) setSelectedEvaluation(null); }} leadership={leadership} />
+  </div></WhipLayout>;
 }

@@ -740,3 +740,11 @@
 - [x] Restore the prior leadership, Intake QA, metrics, filters, detail drawer, and source-health composition for the shared Intake workspace
 - [x] Allow #claims and #claims-remotemarkets to refresh independently when one configured Slack source cannot be read; persist the exact missing-source warning and suppress the digest on partial coverage
 - [ ] Restore production bot membership/read access for the configured #escalations source (`C03LK1Z8XFG`); live bot token receives `channel_not_found`, while #claims and #claims-remotemarkets read successfully
+- [x] Set the remote-markets source to `C092UPKR79D` and verify production bot history access without changing the protected Dispatch publishing state
+
+## September 2026 Claims QA Migration and Workflow
+- [x] Rename Weekly QA to Claims QA and preserve 165 historical AI call-quality scorecards in Call Tracking with full migrated detail and handler-scoped visibility
+- [x] Add the published v9 role rubric with 171 items, evidence and citation fields, N/A/not-determinable scoring, critical-first rating, and small-sample suppression
+- [x] Add manual draft, human-confirmed critical score, release, handler response/sign-off, coaching message, independent calibration, and adjudication workflows with leader/handler row-level access controls
+- [x] Add migrations, idempotent legacy-scorecard merge behavior, and rewrite flagging after repeated rubric-defect overturns; no 92-audit baseline was manufactured because no source set was present
+- [x] Pause and hard-disable the legacy Weekly QA auto-publisher; new Claims QA work cannot be published automatically

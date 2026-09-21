@@ -12,6 +12,7 @@ import { mailBotRouter } from "./routers/mailBot";
 import { kbRouter } from "./routers/kb";
 import { claimsWorkspaceRouter } from "./routers/claimsWorkspace";
 import { announcementsRouter } from "./routers/announcements";
+import { claimsQaRouter } from "./routers/claimsQa";
 import { getCallPerformanceDashboard } from "./callPerformance";
 import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
 import {
@@ -122,6 +123,7 @@ export const appRouter = router({
   mail: mailRouter,
   kb: kbRouter,
   claimsWorkspace: claimsWorkspaceRouter,
+  claimsQa: claimsQaRouter,
   announcements: announcementsRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),

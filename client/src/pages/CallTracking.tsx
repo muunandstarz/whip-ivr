@@ -5,6 +5,7 @@ import CallPerformanceBoard from "@/components/CallPerformanceBoard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,7 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  ClipboardCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -342,11 +344,44 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
   );
 }
 
+function CallQualityDetail({ evaluationId, onClose }: { evaluationId: number | null; onClose: () => void }) {
+  const { data, isLoading } = trpc.claimsQa.detail.useQuery(
+    { evaluationId: evaluationId ?? 0 },
+    { enabled: evaluationId !== null },
+  );
+  const evaluation = data?.evaluation as any;
+  const legacy = evaluation?.legacy_payload ? (() => {
+    try { return JSON.parse(evaluation.legacy_payload); } catch { return null; }
+  })() : null;
+  return (
+    <Dialog open={evaluationId !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Preserved AI Call Quality detail</DialogTitle>
+          <DialogDescription>
+            Migrated from Weekly QA without changing the source data. Call-quality records are not claim-level audits; new Claims QA evaluations are leader-reviewed and manually released.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading call-quality detail…</p> : !evaluation ? <p className="py-8 text-center text-sm text-muted-foreground">Record unavailable.</p> : <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {Object.entries(legacy?.dimensions ?? {}).map(([label, score]) => <div key={label} className="rounded-lg bg-muted/40 p-3 text-center"><p className="text-xl font-bold">{String(score ?? '—')}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{label.replace(/([A-Z])/g, ' $1')}</p></div>)}
+          </div>
+          {legacy?.strengths && <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><h3 className="font-semibold text-emerald-900">Strengths</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-emerald-900">{legacy.strengths}</p></section>}
+          {legacy?.improvements && <section className="rounded-lg border border-amber-200 bg-amber-50 p-4"><h3 className="font-semibold text-amber-900">Improvement opportunities</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-amber-900">{legacy.improvements}</p></section>}
+          {legacy?.managerComments && <section className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4"><h3 className="font-semibold text-primary">Supervisor coaching note</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{legacy.managerComments}</p></section>}
+          <div className="text-xs text-muted-foreground">Source: {legacy?.submittedBy ?? evaluation.auditor_name ?? 'Legacy Weekly QA'} · Week of {evaluation.period_start ? format(new Date(evaluation.period_start), 'MMM d, yyyy') : '—'}</div>
+        </div>}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function CallTracking() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [page, setPage] = useState(0);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [selectedCallQuality, setSelectedCallQuality] = useState<number | null>(null);
 
   const { data, isLoading } = trpc.calls.list.useQuery({
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -357,12 +392,14 @@ export default function CallTracking() {
   });
 
   const totalPages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
+  const { data: callQuality } = trpc.claimsQa.list.useQuery({ role: "Call Quality", limit: 300 });
 
   return (
     <WhipLayout>
       {selectedPhone && (
         <CallerHistoryDrawer phone={selectedPhone} onClose={() => setSelectedPhone(null)} />
       )}
+      <CallQualityDetail evaluationId={selectedCallQuality} onClose={() => setSelectedCallQuality(null)} />
       <div className="p-6 space-y-5">
         {/* Header */}
         <div>
@@ -373,6 +410,19 @@ export default function CallTracking() {
         </div>
 
         <CallPerformanceBoard />
+
+        <Card className="border-primary/15">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base"><ClipboardCheck className="h-4 w-4 text-primary" /> Preserved AI Call Quality</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Legacy Weekly QA is now part of Call Tracking. These are call-quality summaries, kept distinct from claim-file Claims QA.</p>
+            </div>
+            <a href="/qa" className="text-xs text-primary underline underline-offset-4 whitespace-nowrap">Open Claims QA</a>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!callQuality?.length ? <p className="p-5 text-sm text-muted-foreground">No visible call-quality records. Handler views show only released records.</p> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="border-y bg-muted/30 text-left text-xs text-muted-foreground"><tr><th className="px-4 py-3">Handler</th><th className="px-4 py-3">Week</th><th className="px-4 py-3">AI score</th><th className="px-4 py-3">Status</th><th className="px-4 py-3"></th></tr></thead><tbody className="divide-y">{(callQuality as any[]).map((record) => { let payload: any = null; try { payload = record.legacy_payload ? JSON.parse(record.legacy_payload) : null; } catch { payload = null; } return <tr key={record.id} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{record.handler_name}</td><td className="px-4 py-3 text-muted-foreground">{record.period_start ? format(new Date(record.period_start), 'MMM d, yyyy') : '—'}</td><td className="px-4 py-3">{payload?.dimensions?.overall ?? '—'}<span className="ml-1 text-xs text-muted-foreground">/ 10</span></td><td className="px-4 py-3"><Badge variant="outline">{record.status.replaceAll('_', ' ')}</Badge></td><td className="px-4 py-3 text-right"><Button size="sm" variant="outline" onClick={() => setSelectedCallQuality(record.id)}>View full detail</Button></td></tr>; })}</tbody></table></div>}
+          </CardContent>
+        </Card>
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3">

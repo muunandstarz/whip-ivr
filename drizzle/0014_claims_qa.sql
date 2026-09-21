@@ -1,0 +1,160 @@
+CREATE TABLE `claims_qa_rubric_versions` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `version` VARCHAR(32) NOT NULL,
+  `source` VARCHAR(255) NOT NULL,
+  `status` ENUM('draft','published','retired') NOT NULL DEFAULT 'published',
+  `notes` TEXT NULL,
+  `created_by` VARCHAR(255) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `published_at` TIMESTAMP NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `claims_qa_rubric_versions_version_unique` (`version`)
+);
+
+CREATE TABLE `claims_qa_rubric_items` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `rubric_version_id` INT NOT NULL,
+  `item_key` VARCHAR(32) NOT NULL,
+  `role` VARCHAR(64) NOT NULL,
+  `category` VARCHAR(128) NOT NULL,
+  `check_text` TEXT NOT NULL,
+  `passing_standard` TEXT NOT NULL,
+  `where_to_find` VARCHAR(512) NOT NULL,
+  `grading_method` VARCHAR(64) NOT NULL,
+  `critical` BOOLEAN NOT NULL DEFAULT FALSE,
+  `active` BOOLEAN NOT NULL DEFAULT TRUE,
+  `category_weight` FLOAT NULL,
+  `rewrite_flagged_at` TIMESTAMP NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `claims_qa_rubric_items_version_item_unique` (`rubric_version_id`, `item_key`)
+);
+
+CREATE TABLE `claims_qa_evaluations` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `evaluation_key` VARCHAR(96) NOT NULL,
+  `source_legacy_scorecard_id` INT NULL,
+  `source_call_history_id` INT NULL,
+  `claim_number` VARCHAR(128) NULL,
+  `exposure_id` VARCHAR(128) NULL,
+  `role` VARCHAR(64) NOT NULL,
+  `period_start` TIMESTAMP NULL,
+  `period_end` TIMESTAMP NULL,
+  `audit_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `handler_id` INT NOT NULL,
+  `handler_name` VARCHAR(128) NOT NULL,
+  `handler_email` VARCHAR(320) NULL,
+  `auditor_user_id` INT NULL,
+  `auditor_name` VARCHAR(255) NULL,
+  `status` ENUM('not_released','released','responded','in_adjudication','closed') NOT NULL DEFAULT 'not_released',
+  `original_items_scored` INT NOT NULL DEFAULT 0,
+  `original_items_met` INT NOT NULL DEFAULT 0,
+  `original_not_applicable` INT NOT NULL DEFAULT 0,
+  `original_not_determinable` INT NOT NULL DEFAULT 0,
+  `original_critical_failures` INT NOT NULL DEFAULT 0,
+  `original_pass_rate` FLOAT NULL,
+  `original_rating` VARCHAR(32) NOT NULL,
+  `review_items_scored` INT NULL,
+  `review_items_met` INT NULL,
+  `review_critical_failures` INT NULL,
+  `pass_rate_after_review` FLOAT NULL,
+  `rating_after_review` VARCHAR(32) NULL,
+  `auditor_summary` TEXT NULL,
+  `areas_for_improvement` TEXT NULL,
+  `legacy_payload` TEXT NULL,
+  `handler_overall_response` TEXT NULL,
+  `handler_signed_off_at` TIMESTAMP NULL,
+  `released_at` TIMESTAMP NULL,
+  `released_by_user_id` INT NULL,
+  `released_by_name` VARCHAR(255) NULL,
+  `closed_at` TIMESTAMP NULL,
+  `closed_by_user_id` INT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `claims_qa_evaluations_evaluation_key_unique` (`evaluation_key`),
+  UNIQUE KEY `claims_qa_evaluations_legacy_scorecard_unique` (`source_legacy_scorecard_id`)
+);
+
+CREATE TABLE `claims_qa_evaluation_results` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `evaluation_id` INT NOT NULL,
+  `rubric_item_id` INT NULL,
+  `item_key` VARCHAR(32) NOT NULL,
+  `category` VARCHAR(128) NOT NULL,
+  `check_text` TEXT NOT NULL,
+  `passing_standard` TEXT NOT NULL,
+  `where_to_find` VARCHAR(512) NOT NULL,
+  `grading_method` VARCHAR(64) NOT NULL,
+  `critical` BOOLEAN NOT NULL DEFAULT FALSE,
+  `result` ENUM('pending','met','not_met','not_applicable','not_determinable') NOT NULL DEFAULT 'pending',
+  `evidence` TEXT NULL,
+  `evidence_locator` TEXT NULL,
+  `auditor_note` TEXT NULL,
+  `requires_human_confirmation` BOOLEAN NOT NULL DEFAULT FALSE,
+  `human_confirmed_at` TIMESTAMP NULL,
+  `human_confirmed_by_user_id` INT NULL,
+  `human_confirmed_by_name` VARCHAR(255) NULL,
+  `handler_response` ENUM('agree','disagree') NULL,
+  `handler_response_comment` TEXT NULL,
+  `responded_at` TIMESTAMP NULL,
+  `adjudication_outcome` ENUM('upheld','overturned_handling_correct','overturned_rubric_defect') NULL,
+  `adjudication_note` TEXT NULL,
+  `adjudicated_at` TIMESTAMP NULL,
+  `adjudicated_by_user_id` INT NULL,
+  `adjudicated_by_name` VARCHAR(255) NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `claims_qa_evaluation_results_evaluation_item_unique` (`evaluation_id`, `item_key`)
+);
+
+CREATE TABLE `claims_qa_messages` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `evaluation_id` INT NOT NULL,
+  `author_user_id` INT NULL,
+  `author_handler_id` INT NULL,
+  `author_name` VARCHAR(255) NOT NULL,
+  `body` TEXT NOT NULL,
+  `visibility` ENUM('handler','leadership') NOT NULL DEFAULT 'handler',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+);
+
+CREATE TABLE `claims_qa_calibrations` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `evaluation_id` INT NOT NULL,
+  `status` ENUM('open','complete') NOT NULL DEFAULT 'open',
+  `created_by_user_id` INT NULL,
+  `created_by_name` VARCHAR(255) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed_at` TIMESTAMP NULL,
+  PRIMARY KEY (`id`)
+);
+
+CREATE TABLE `claims_qa_calibration_scores` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `calibration_id` INT NOT NULL,
+  `evaluation_result_id` INT NOT NULL,
+  `reviewer_user_id` INT NOT NULL,
+  `reviewer_name` VARCHAR(255) NOT NULL,
+  `result` ENUM('met','not_met','not_applicable','not_determinable') NOT NULL,
+  `evidence` TEXT NULL,
+  `submitted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `claims_qa_calibration_scores_calibration_reviewer_result_unique` (`calibration_id`, `reviewer_user_id`, `evaluation_result_id`)
+);
+
+CREATE TABLE `claims_qa_rubric_changes` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `rubric_item_id` INT NULL,
+  `rubric_version_id` INT NOT NULL,
+  `scope` VARCHAR(255) NOT NULL,
+  `change_summary` TEXT NOT NULL,
+  `reason` TEXT NOT NULL,
+  `changed_by_user_id` INT NULL,
+  `changed_by_name` VARCHAR(255) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+);

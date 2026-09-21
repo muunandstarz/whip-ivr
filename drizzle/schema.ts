@@ -210,6 +210,171 @@ export const qaScorecards = mysqlTable("qa_scorecards", {
 export type QaScorecard = typeof qaScorecards.$inferSelect;
 export type InsertQaScorecard = typeof qaScorecards.$inferInsert;
 
+// ─── Claims QA ──────────────────────────────────────────────────────────────
+// The Claims QA programme keeps the full, immutable scoring record separate from
+// the legacy Weekly QA scorecard summary. Rubric wording is copied to result rows
+// at evaluation time so historical audits retain their original standard.
+export const claimsQaRubricVersions = mysqlTable("claims_qa_rubric_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  version: varchar("version", { length: 32 }).notNull().unique(),
+  source: varchar("source", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["draft", "published", "retired"]).default("published").notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  publishedAt: timestamp("published_at"),
+});
+export type ClaimsQaRubricVersion = typeof claimsQaRubricVersions.$inferSelect;
+
+export const claimsQaRubricItems = mysqlTable("claims_qa_rubric_items", {
+  id: int("id").autoincrement().primaryKey(),
+  rubricVersionId: int("rubric_version_id").notNull(),
+  itemKey: varchar("item_key", { length: 32 }).notNull(),
+  role: varchar("role", { length: 64 }).notNull(),
+  category: varchar("category", { length: 128 }).notNull(),
+  checkText: text("check_text").notNull(),
+  passingStandard: text("passing_standard").notNull(),
+  whereToFind: varchar("where_to_find", { length: 512 }).notNull(),
+  gradingMethod: varchar("grading_method", { length: 64 }).notNull(),
+  critical: boolean("critical").default(false).notNull(),
+  active: boolean("active").default(true).notNull(),
+  categoryWeight: float("category_weight"),
+  rewriteFlaggedAt: timestamp("rewrite_flagged_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  versionItem: unique("claims_qa_rubric_items_version_item_unique").on(table.rubricVersionId, table.itemKey),
+}));
+export type ClaimsQaRubricItem = typeof claimsQaRubricItems.$inferSelect;
+
+export const claimsQaEvaluations = mysqlTable("claims_qa_evaluations", {
+  id: int("id").autoincrement().primaryKey(),
+  evaluationKey: varchar("evaluation_key", { length: 96 }).notNull().unique(),
+  sourceLegacyScorecardId: int("source_legacy_scorecard_id").unique(),
+  sourceCallHistoryId: int("source_call_history_id"),
+  claimNumber: varchar("claim_number", { length: 128 }),
+  exposureId: varchar("exposure_id", { length: 128 }),
+  role: varchar("role", { length: 64 }).notNull(),
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  auditDate: timestamp("audit_date").defaultNow().notNull(),
+  handlerId: int("handler_id").notNull(),
+  handlerName: varchar("handler_name", { length: 128 }).notNull(),
+  handlerEmail: varchar("handler_email", { length: 320 }),
+  auditorUserId: int("auditor_user_id"),
+  auditorName: varchar("auditor_name", { length: 255 }),
+  status: mysqlEnum("status", ["not_released", "released", "responded", "in_adjudication", "closed"]).default("not_released").notNull(),
+  originalItemsScored: int("original_items_scored").default(0).notNull(),
+  originalItemsMet: int("original_items_met").default(0).notNull(),
+  originalNotApplicable: int("original_not_applicable").default(0).notNull(),
+  originalNotDeterminable: int("original_not_determinable").default(0).notNull(),
+  originalCriticalFailures: int("original_critical_failures").default(0).notNull(),
+  originalPassRate: float("original_pass_rate"),
+  originalRating: varchar("original_rating", { length: 32 }).notNull(),
+  reviewItemsScored: int("review_items_scored"),
+  reviewItemsMet: int("review_items_met"),
+  reviewCriticalFailures: int("review_critical_failures"),
+  passRateAfterReview: float("pass_rate_after_review"),
+  ratingAfterReview: varchar("rating_after_review", { length: 32 }),
+  auditorSummary: text("auditor_summary"),
+  areasForImprovement: text("areas_for_improvement"),
+  legacyPayload: text("legacy_payload"),
+  handlerOverallResponse: text("handler_overall_response"),
+  handlerSignedOffAt: timestamp("handler_signed_off_at"),
+  releasedAt: timestamp("released_at"),
+  releasedByUserId: int("released_by_user_id"),
+  releasedByName: varchar("released_by_name", { length: 255 }),
+  closedAt: timestamp("closed_at"),
+  closedByUserId: int("closed_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ClaimsQaEvaluation = typeof claimsQaEvaluations.$inferSelect;
+
+export const claimsQaEvaluationResults = mysqlTable("claims_qa_evaluation_results", {
+  id: int("id").autoincrement().primaryKey(),
+  evaluationId: int("evaluation_id").notNull(),
+  rubricItemId: int("rubric_item_id"),
+  itemKey: varchar("item_key", { length: 32 }).notNull(),
+  category: varchar("category", { length: 128 }).notNull(),
+  checkText: text("check_text").notNull(),
+  passingStandard: text("passing_standard").notNull(),
+  whereToFind: varchar("where_to_find", { length: 512 }).notNull(),
+  gradingMethod: varchar("grading_method", { length: 64 }).notNull(),
+  critical: boolean("critical").default(false).notNull(),
+  result: mysqlEnum("result", ["pending", "met", "not_met", "not_applicable", "not_determinable"]).default("pending").notNull(),
+  evidence: text("evidence"),
+  evidenceLocator: text("evidence_locator"),
+  auditorNote: text("auditor_note"),
+  requiresHumanConfirmation: boolean("requires_human_confirmation").default(false).notNull(),
+  humanConfirmedAt: timestamp("human_confirmed_at"),
+  humanConfirmedByUserId: int("human_confirmed_by_user_id"),
+  humanConfirmedByName: varchar("human_confirmed_by_name", { length: 255 }),
+  handlerResponse: mysqlEnum("handler_response", ["agree", "disagree"]),
+  handlerResponseComment: text("handler_response_comment"),
+  respondedAt: timestamp("responded_at"),
+  adjudicationOutcome: mysqlEnum("adjudication_outcome", ["upheld", "overturned_handling_correct", "overturned_rubric_defect"]),
+  adjudicationNote: text("adjudication_note"),
+  adjudicatedAt: timestamp("adjudicated_at"),
+  adjudicatedByUserId: int("adjudicated_by_user_id"),
+  adjudicatedByName: varchar("adjudicated_by_name", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  evaluationItem: unique("claims_qa_evaluation_results_evaluation_item_unique").on(table.evaluationId, table.itemKey),
+}));
+export type ClaimsQaEvaluationResult = typeof claimsQaEvaluationResults.$inferSelect;
+
+export const claimsQaMessages = mysqlTable("claims_qa_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  evaluationId: int("evaluation_id").notNull(),
+  authorUserId: int("author_user_id"),
+  authorHandlerId: int("author_handler_id"),
+  authorName: varchar("author_name", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  visibility: mysqlEnum("visibility", ["handler", "leadership"]).default("handler").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ClaimsQaMessage = typeof claimsQaMessages.$inferSelect;
+
+export const claimsQaCalibrations = mysqlTable("claims_qa_calibrations", {
+  id: int("id").autoincrement().primaryKey(),
+  evaluationId: int("evaluation_id").notNull(),
+  status: mysqlEnum("status", ["open", "complete"]).default("open").notNull(),
+  createdByUserId: int("created_by_user_id"),
+  createdByName: varchar("created_by_name", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+export type ClaimsQaCalibration = typeof claimsQaCalibrations.$inferSelect;
+
+export const claimsQaCalibrationScores = mysqlTable("claims_qa_calibration_scores", {
+  id: int("id").autoincrement().primaryKey(),
+  calibrationId: int("calibration_id").notNull(),
+  evaluationResultId: int("evaluation_result_id").notNull(),
+  reviewerUserId: int("reviewer_user_id").notNull(),
+  reviewerName: varchar("reviewer_name", { length: 255 }).notNull(),
+  result: mysqlEnum("result", ["met", "not_met", "not_applicable", "not_determinable"]).notNull(),
+  evidence: text("evidence"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+}, table => ({
+  calibrationReview: unique("claims_qa_calibration_scores_calibration_reviewer_result_unique").on(table.calibrationId, table.reviewerUserId, table.evaluationResultId),
+}));
+export type ClaimsQaCalibrationScore = typeof claimsQaCalibrationScores.$inferSelect;
+
+export const claimsQaRubricChanges = mysqlTable("claims_qa_rubric_changes", {
+  id: int("id").autoincrement().primaryKey(),
+  rubricItemId: int("rubric_item_id"),
+  rubricVersionId: int("rubric_version_id").notNull(),
+  scope: varchar("scope", { length: 255 }).notNull(),
+  changeSummary: text("change_summary").notNull(),
+  reason: text("reason").notNull(),
+  changedByUserId: int("changed_by_user_id"),
+  changedByName: varchar("changed_by_name", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ClaimsQaRubricChange = typeof claimsQaRubricChanges.$inferSelect;
+
 // ─── Callback Logs ────────────────────────────────────────────────────────────
 export const callbackLogs = mysqlTable("callback_logs", {
   id: int("id").autoincrement().primaryKey(),
