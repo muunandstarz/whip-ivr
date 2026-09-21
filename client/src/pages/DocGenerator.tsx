@@ -6539,7 +6539,6 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     vehicleModel: "",
     vin: "",
     plateNumber: "",
-    effectiveDate: "",
     expirationDate: "",
     dateOfLoss: "",
     subscriptionStartDate: "",
@@ -6596,6 +6595,10 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   // Carrier of record is determined by Subscription Start Date: Klutch from July 1, 2026 forward; Metrocars before that date.
   const insurer: "klutch" | "metrocars" = form.subscriptionStartDate >= KLUTCH_SUBSCRIPTION_START_CUTOFF ? "klutch" : "metrocars";
   const isKlutch = insurer === "klutch";
+  // COIs use one Date Issued / Subscription Start Date. Keep every rendered
+  // coverage-period field tied to that single source rather than the legacy,
+  // unpopulated effectiveDate form property.
+  const coverageStartDate = form.subscriptionStartDate;
 
   // Auto-generate cert number on mount and when insurer/state changes
   // Klutch: KIS + 4 random digits (e.g. KIS3847)
@@ -6820,8 +6823,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
     doc.text("COVERAGE PERIOD", rx, y + 3.5);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-    const periodStr = (form.effectiveDate && form.expirationDate)
-      ? `${fmtDateLong(form.effectiveDate)} — ${fmtDateLong(form.expirationDate)}`
+    const periodStr = (coverageStartDate && form.expirationDate)
+      ? `${fmtDateLong(coverageStartDate)} — ${fmtDateLong(form.expirationDate)}`
       : "—";
     doc.text(periodStr, rx, y + 8);
     doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
@@ -6876,7 +6879,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
     // Coverage rows
     const policyNo = form.certNumber || "—";
-    const effDate = fmtDate(form.effectiveDate);
+    const effDate = fmtDate(coverageStartDate);
     const expDate = fmtDate(form.expirationDate);
 
     const coverageRows = [
@@ -7202,7 +7205,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             `Named Operator: ${form.namedOperator || "—"}`,
             `Vehicle: ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—"}`,
             `VIN: ${form.vin || "—"}`,
-            `Coverage Period: ${form.effectiveDate && form.expirationDate ? `${new Date(form.effectiveDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ${new Date(form.expirationDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : "—"}`,
+            `Coverage Period: ${coverageStartDate && form.expirationDate ? `${new Date(coverageStartDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ${new Date(form.expirationDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : "—"}`,
             `State of Loss: ${state}`,
             ``,
             `COVERAGES:`,
