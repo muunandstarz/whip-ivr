@@ -748,3 +748,11 @@
 - [x] Add manual draft, human-confirmed critical score, release, handler response/sign-off, coaching message, independent calibration, and adjudication workflows with leader/handler row-level access controls
 - [x] Add migrations, idempotent legacy-scorecard merge behavior, and rewrite flagging after repeated rubric-defect overturns; no 92-audit baseline was manufactured because no source set was present
 - [x] Pause and hard-disable the legacy Weekly QA auto-publisher; new Claims QA work cannot be published automatically
+
+## Dashboard tickets and Claims QA experience — September 22, 2026
+
+- [x] Add a secured Tickets workspace for handlers to submit bugs, issues, suggestions, and other dashboard feedback; include personal history, administrator Team Triage, status/priority workflow, and a dashboard shortcut.
+- [x] Configure the authenticated `daily-ticket-digest` Heartbeat (task `BNWh4gxdsCRCZmomrjyUEa`) to check hourly and send one idempotent weekday digest at 5:30 PM America/New_York; preserve ticket ownership and digest audit state in the database.
+- [x] Add Claims QA handler filtering, month-over-month quality progress, and repeated-miss signals with the existing scored/critical/N-A rules unchanged.
+- [x] Make Claims QA evaluations row-clickable for the evidence overlay; make the explicit Open Audit control use a dedicated audit URL, and correct the detail overlay’s responsive full-height layout to avoid narrow-card overlap.
+- [x] Preserve strict separation between Claims QA and the 165 historical AI Call Quality records: Claims QA cannot list or detail those rows; Call Tracking retrieves them through its dedicated legacy-detail procedure.
