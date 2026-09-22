@@ -21,4 +21,11 @@ describe('Unified COI coverage period', () => {
     expect(coiSource).toContain('doc.text(effDate, effX + cols.eff / 2');
     expect(coiSource).toContain('Coverage Period: ${coverageStartDate && form.expirationDate');
   });
+
+  it('does not erase an entered expiration when the still-in-rental toggle is off', () => {
+    expect(coiSource).toContain('const previouslyStillInRentalCOI = React.useRef(false);');
+    expect(coiSource).toContain('const toggledFromProjectedPeriod = previouslyStillInRentalCOI.current;');
+    expect(coiSource).toContain('toggledFromProjectedPeriod || !p.expirationDate');
+    expect(coiSource).not.toContain('if (!stillInRentalCOI) {\n      setForm(p => ({ ...p, expirationDate: "" }));');
+  });
 });

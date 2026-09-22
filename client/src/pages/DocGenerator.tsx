@@ -6531,6 +6531,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   const [umRejected, setUmRejected] = React.useState(false);
   const [pipWaived, setPipWaived] = React.useState(false);
   const [stillInRentalCOI, setStillInRentalCOI] = React.useState(false);
+  const previouslyStillInRentalCOI = React.useRef(false);
   const [form, setForm] = React.useState({
     namedOperator: "",
     insuredAddress: "14670 Southlawn Lane, Rockville, MD 20850",
@@ -6568,10 +6569,16 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     if (stillInRentalCOI && coiCoverage.throughDate && !coiCoverage.warning) {
       setForm(p => ({ ...p, expirationDate: formatDateISO(coiCoverage.throughDate!) }));
     }
-    // When toggled off, clear the auto-filled date so handler can enter manually
-    if (!stillInRentalCOI) {
-      setForm(p => ({ ...p, expirationDate: "" }));
+    const toggledFromProjectedPeriod = previouslyStillInRentalCOI.current;
+    if (!stillInRentalCOI && form.dateOfLoss) {
+      // A concluded rental uses the editable last-rental date.  Start the
+      // handler with Date of Loss, but retain a subsequent manual override.
+      setForm(p => (toggledFromProjectedPeriod || !p.expirationDate)
+        ? { ...p, expirationDate: p.dateOfLoss }
+        : p,
+      );
     }
+    previouslyStillInRentalCOI.current = stillInRentalCOI;
   }, [stillInRentalCOI, coiCoverage.throughDate, coiCoverage.warning]);
   const [vinDecoding, setVinDecoding] = React.useState(false);
   const decodeVinCOI = async () => {
@@ -7076,7 +7083,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
           </div>
         </div>
         <div className={`mt-2 text-xs rounded px-2 py-1 ${isKlutch ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"}`}>
-          {!form.dateOfLoss
+          {!form.subscriptionStartDate
             ? "Enter the Subscription Start Date to determine the issuing carrier. Metrocars applies until a qualifying July 1, 2026 or later subscription start date is entered."
             : isKlutch
               ? "Klutch Insurance Company — Issuing carrier for Subscription Start Dates on or after July 1, 2026."
