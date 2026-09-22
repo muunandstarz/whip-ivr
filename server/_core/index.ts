@@ -20,6 +20,7 @@ import {
 import { dailyDigestHandler } from "../scheduled/dailyDigest";
 import { weeklyQAPostHandler } from "../scheduled/weeklyQAPost";
 import { dailyAnnouncementsHandler } from "../scheduled/dailyAnnouncements";
+import { ticketDigestHandler } from "../scheduled/ticketDigest";
 import {
   REMOTE_OPS_SLACK_PATH,
   remoteOpsSlackEventsHandler,
@@ -183,6 +184,7 @@ async function startServer() {
   app.post("/api/scheduled/dailyDigest", dailyDigestHandler);
   app.post("/api/scheduled/weeklyQAPost", weeklyQAPostHandler);
   app.post("/api/scheduled/dailyAnnouncements", dailyAnnouncementsHandler);
+  app.post("/api/scheduled/ticketDigest", ticketDigestHandler);
   // ─── Claims Mail Triage jobs ─────────────────────────────────────────────────
   // Keep the autoscaling service warm before the source-recovery callbacks. This
   // route intentionally avoids database and third-party work so a cold start is

@@ -39,6 +39,7 @@ import Glossary from "./pages/kb/Glossary";
 import ResourcesLinks from "./pages/kb/ResourcesLinks";
 import VehicleAnatomy from "./pages/kb/VehicleAnatomy";
 import ClaimsWorkspace from "./pages/ClaimsWorkspace";
+import Tickets from "./pages/Tickets";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 import MailFeaturePaused from "./components/MailFeaturePaused";
 import { trpc } from "@/lib/trpc";
@@ -66,13 +67,16 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/handler-queue" component={HandlerQueue} />
       <Route path="/call-tracking" component={CallTracking} />
+      <Route path="/claims-qa/audit/:id" component={WeeklyQA} />
       <Route path="/claims-qa" component={WeeklyQA} />
+      <Route path="/qa/audit/:id" component={WeeklyQA} />
       <Route path="/qa" component={WeeklyQA} />
       <Route path="/handlers/:id" component={HandlerProfile} />
       <Route path="/softphone" component={Softphone} />
       <Route path="/ivr-setup" component={IVRSetup} />
       <Route path="/my-dashboard" component={HandlerDashboard} />
       <Route path="/claims-workspace" component={ClaimsWorkspace} />
+      <Route path="/tickets" component={Tickets} />
       <Route path="/users" component={UserManagement} />
       <Route path="/settings" component={Settings} />
       <Route path="/callback-log" component={CallbackLog} />

@@ -345,7 +345,7 @@ function CallerHistoryDrawer({ phone, onClose }: { phone: string; onClose: () =>
 }
 
 function CallQualityDetail({ evaluationId, onClose }: { evaluationId: number | null; onClose: () => void }) {
-  const { data, isLoading } = trpc.claimsQa.detail.useQuery(
+  const { data, isLoading } = trpc.claimsQa.callQualityDetail.useQuery(
     { evaluationId: evaluationId ?? 0 },
     { enabled: evaluationId !== null },
   );

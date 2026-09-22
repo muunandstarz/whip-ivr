@@ -363,8 +363,11 @@ export async function listClaimsQaEvaluations(viewer: ClaimsQaViewer, filters?: 
   return rows as any[];
 }
 
-export async function getClaimsQaEvaluationDetail(viewer: ClaimsQaViewer, evaluationId: number) {
+export async function getClaimsQaEvaluationDetail(viewer: ClaimsQaViewer, evaluationId: number, options?: { allowLegacyCallQuality?: boolean }) {
   const evaluation = await assertEvaluationAccess(viewer, evaluationId);
+  if (evaluation.role === 'Call Quality' && !options?.allowLegacyCallQuality) {
+    throw new Error('Call Quality records are available only in Call Tracking.');
+  }
   const client = await dbClient();
   const [results] = await client.query('SELECT * FROM claims_qa_evaluation_results WHERE evaluation_id = ? ORDER BY category ASC, item_key ASC', [evaluationId]);
   const messageWhere = viewer.isLeadership ? '' : " AND visibility = 'handler'";
@@ -503,8 +506,11 @@ export async function submitClaimsQaCalibration(input: { viewer: ClaimsQaViewer;
   return { completed };
 }
 
-export async function getClaimsQaOverview(viewer: ClaimsQaViewer) {
-  const evaluations = await listClaimsQaEvaluations(viewer, { limit: 500 });
+export async function getClaimsQaOverview(viewer: ClaimsQaViewer, filters?: { handlerId?: number | null }) {
+  // Leadership may select one handler; every handler (including an
+  // impersonated administrator) remains hard-scoped to their own released QA.
+  const requestedHandlerId = viewer.isLeadership ? (filters?.handlerId ?? undefined) : (viewer.handlerId ?? undefined);
+  const evaluations = await listClaimsQaEvaluations(viewer, { handlerId: requestedHandlerId, limit: 500 });
   const client = await dbClient();
   const ids = evaluations.map((evaluation) => evaluation.id);
   const resultRows: any[] = ids.length
@@ -550,6 +556,47 @@ export async function getClaimsQaOverview(viewer: ClaimsQaViewer) {
     ...row,
     missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null,
   })).filter((row: any) => row.misses > 0).sort((a: any, b: any) => b.missRate - a.missRate || b.misses - a.misses).slice(0, 10);
+  const evaluationById = new Map(evaluations.map((evaluation) => [evaluation.id, evaluation]));
+  const progressMap = new Map<string, { month: string; handlerId: number; handlerName: string; evaluations: number; scored: number; met: number; criticalFailures: number }>();
+  for (const evaluation of rated) {
+    const sourceDate = new Date(evaluation.period_start || evaluation.audit_date);
+    if (Number.isNaN(sourceDate.getTime())) continue;
+    const month = sourceDate.toISOString().slice(0, 7);
+    const key = `${evaluation.handler_id}:${month}`;
+    const row = progressMap.get(key) ?? { month, handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, evaluations: 0, scored: 0, met: 0, criticalFailures: 0 };
+    row.evaluations++;
+    row.scored += Number(evaluation.original_items_scored ?? 0);
+    row.met += Number(evaluation.original_items_met ?? 0);
+    row.criticalFailures += Number(evaluation.original_critical_failures ?? 0);
+    progressMap.set(key, row);
+  }
+  const progress = Array.from(progressMap.values())
+    .map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null }))
+    .sort((left, right) => left.month.localeCompare(right.month) || left.handlerName.localeCompare(right.handlerName));
+
+  const repeatMap = new Map<string, { handlerId: number; handlerName: string; itemKey: string; checkText: string; misses: number; scored: number; criticalFailures: number; firstObserved: Date; lastObserved: Date }>();
+  for (const result of resultRows) {
+    const evaluation = evaluationById.get(result.evaluation_id);
+    const value = effectiveResult(result);
+    if (!evaluation || (value !== 'met' && value !== 'not_met')) continue;
+    const sourceDate = new Date(evaluation.period_start || evaluation.audit_date);
+    if (Number.isNaN(sourceDate.getTime())) continue;
+    const key = `${evaluation.handler_id}:${result.item_key}`;
+    const row = repeatMap.get(key) ?? { handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, itemKey: result.item_key, checkText: result.check_text, misses: 0, scored: 0, criticalFailures: 0, firstObserved: sourceDate, lastObserved: sourceDate };
+    row.scored++;
+    if (value === 'not_met') {
+      row.misses++;
+      if (result.critical) row.criticalFailures++;
+    }
+    if (sourceDate < row.firstObserved) row.firstObserved = sourceDate;
+    if (sourceDate > row.lastObserved) row.lastObserved = sourceDate;
+    repeatMap.set(key, row);
+  }
+  const repeatedMisses = Array.from(repeatMap.values())
+    .filter((row) => row.misses >= 2)
+    .map((row) => ({ ...row, firstObserved: row.firstObserved.toISOString(), lastObserved: row.lastObserved.toISOString(), missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null }))
+    .sort((left, right) => right.misses - left.misses || (right.missRate ?? 0) - (left.missRate ?? 0) || right.lastObserved.localeCompare(left.lastObserved))
+    .slice(0, 20);
   return {
     counts: {
       evaluations: evaluations.length,
@@ -560,6 +607,9 @@ export async function getClaimsQaOverview(viewer: ClaimsQaViewer) {
     quality: { scored: totalScored, met: totalMet, passRate: totalScored >= 15 ? Math.round((totalMet / totalScored) * 100) : null, criticalFailures: totalCritical },
     categories: Array.from(byCategory.values()).map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
     handlers: Array.from(handlerMap.values()).map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
+    availableHandlers: Array.from(handlerMap.values()).map((row) => ({ handlerId: row.handlerId, handlerName: row.handlerName })).sort((a, b) => a.handlerName.localeCompare(b.handlerName)),
+    progress,
+    repeatedMisses,
     mostMissed,
     definitions: {
       passRate: 'Items met divided by items scored. Not applicable and not determinable lines are excluded; fewer than 15 scored items suppresses the percentage.',

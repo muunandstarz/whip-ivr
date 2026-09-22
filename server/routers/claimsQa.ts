@@ -51,8 +51,8 @@ function rethrow(error: unknown): never {
 }
 
 export const claimsQaRouter = router({
-  overview: protectedProcedure.query(async ({ ctx }) => {
-    try { return await getClaimsQaOverview(viewerFromContext(ctx)); }
+  overview: protectedProcedure.input(z.object({ handlerId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => {
+    try { return await getClaimsQaOverview(viewerFromContext(ctx), input); }
     catch (error) { return rethrow(error); }
   }),
 
@@ -75,6 +75,17 @@ export const claimsQaRouter = router({
     .query(async ({ ctx, input }) => {
       try { return await getClaimsQaEvaluationDetail(viewerFromContext(ctx), input.evaluationId); }
       catch (error) { return rethrow(error); }
+    }),
+
+  /** Legacy AI call reviews stay visible in Call Tracking only. */
+  callQualityDetail: protectedProcedure
+    .input(z.object({ evaluationId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      try {
+        const detail = await getClaimsQaEvaluationDetail(viewerFromContext(ctx), input.evaluationId, { allowLegacyCallQuality: true });
+        if (detail.evaluation.role !== 'Call Quality') throw new Error('This is a Claims QA record, not a preserved call-quality review.');
+        return detail;
+      } catch (error) { return rethrow(error); }
     }),
 
   respondToLine: protectedProcedure

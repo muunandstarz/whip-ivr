@@ -34,7 +34,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { FileText } from "lucide-react";
-import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen } from "lucide-react";
+import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen, Ticket } from "lucide-react";
 import { Database, Library, Link2 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -55,6 +55,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/mailroom", label: "Mailroom", icon: Inbox },
   { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
+  { href: "/tickets", label: "Tickets", icon: Ticket },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
 ];
 
@@ -81,6 +82,7 @@ const HANDLER_NAV_ITEMS_BASE = [
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/claims-qa", label: "Claims QA", icon: Star },
   { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
+  { href: "/tickets", label: "My Tickets", icon: Ticket },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-mailroom", label: "myMailroom", icon: Inbox },

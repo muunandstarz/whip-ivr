@@ -77,7 +77,10 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     expect(callTracking).toContain('Preserved AI Call Quality');
     expect(callTracking).toContain('View full detail');
     expect(callTracking).toContain('role: "Call Quality"');
+    expect(callTracking).toContain('claimsQa.callQualityDetail');
     expect(claimsQaService).toContain("where.push(\"role <> 'Call Quality'\")");
+    expect(claimsQaService).toContain("Call Quality records are available only in Call Tracking.");
+    expect(claimsQaService).toContain('allowLegacyCallQuality');
     expect(claimsQaPage).not.toContain('Call Quality');
     expect(claimsQaPage).not.toContain('Weekly QA');
     expect(app).toContain('<Route path="/claims-qa" component={WeeklyQA} />');
@@ -100,5 +103,24 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     const nullGuardOffset = page.indexOf('if (!evaluationId) return null;', useMemoOffset);
     expect(useMemoOffset).toBeGreaterThan(-1);
     expect(nullGuardOffset).toBeGreaterThan(useMemoOffset);
+  });
+
+  it('keeps handler trends, recurring misses, and audit-detail routes inside Claims QA only', () => {
+    const service = source('server/claimsQa.ts');
+    const router = source('server/routers/claimsQa.ts');
+    const page = source('client/src/pages/WeeklyQA.tsx');
+    const app = source('client/src/App.tsx');
+    expect(service).toContain('const progressMap = new Map');
+    expect(service).toContain('const repeatMap = new Map');
+    expect(service).toContain('row.misses >= 2');
+    expect(service).toContain('filters?: { handlerId?: number | null }');
+    expect(router).toContain('overview: protectedProcedure.input');
+    expect(page).toContain('Month-over-month progress');
+    expect(page).toContain('Repeated misses');
+    expect(page).toContain('All handlers');
+    expect(page).toContain('onOpenPage');
+    expect(page).toContain('grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))]');
+    expect(app).toContain('<Route path="/claims-qa/audit/:id" component={WeeklyQA} />');
+    expect(app).toContain('<Route path="/qa/audit/:id" component={WeeklyQA} />');
   });
 });

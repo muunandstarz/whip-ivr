@@ -716,6 +716,45 @@ export const lossIntakeSyncRuns = mysqlTable("loss_intake_sync_runs", {
 export type LossIntakeSyncRun = typeof lossIntakeSyncRuns.$inferSelect;
 export type InsertLossIntakeSyncRun = typeof lossIntakeSyncRuns.$inferInsert;
 
+// ─── Internal tickets: handler-reported bugs, issues, and suggestions ─────────
+// Reporter identity is a server-side snapshot from the authenticated account;
+// it is never trusted from a browser-submitted value.
+export const internalTickets = mysqlTable("internal_tickets", {
+  id: int("id").autoincrement().primaryKey(),
+  ticketType: mysqlEnum("ticket_type", ["bug", "issue", "suggestion", "other"]).notNull(),
+  title: varchar("title", { length: 180 }).notNull(),
+  body: text("body").notNull(),
+  status: mysqlEnum("status", ["new", "triaged", "in_progress", "resolved", "closed"]).default("new").notNull(),
+  priority: mysqlEnum("priority", ["low", "normal", "high", "urgent"]).default("normal").notNull(),
+  reporterUserId: int("reporter_user_id").notNull(),
+  reporterName: varchar("reporter_name", { length: 255 }),
+  reporterEmail: varchar("reporter_email", { length: 320 }),
+  reporterHandlerId: int("reporter_handler_id"),
+  triageNote: text("triage_note"),
+  triagedByUserId: int("triaged_by_user_id"),
+  triagedByName: varchar("triaged_by_name", { length: 255 }),
+  triagedAt: timestamp("triaged_at"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type InternalTicket = typeof internalTickets.$inferSelect;
+export type InsertInternalTicket = typeof internalTickets.$inferInsert;
+
+// One durable row binds the daily digest Heartbeat to this feature and makes
+// repeat callbacks idempotent for the Eastern business date.
+export const ticketDigestAutomation = mysqlTable("ticket_digest_automation", {
+  id: int("id").autoincrement().primaryKey(),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  scheduleCronTaskUid: varchar("schedule_cron_task_uid", { length: 65 }).unique(),
+  lastDigestForDate: varchar("last_digest_for_date", { length: 16 }),
+  lastRunAt: timestamp("last_run_at"),
+  lastRunError: text("last_run_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type TicketDigestAutomation = typeof ticketDigestAutomation.$inferSelect;
+
 // Remote Ops @claims-intake handoff records
 // Created when a Remote Ops rep tags @claims-intake in their Slack channel
 export const remoteOpsIntakes = mysqlTable("remote_ops_intakes", {
