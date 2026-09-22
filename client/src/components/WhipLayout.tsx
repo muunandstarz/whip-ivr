@@ -50,7 +50,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/handler-queue", label: "Handler Queue", icon: Users },
   { href: "/callback-log", label: "Callback Log", icon: ListChecks },
   { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
-  { href: "/qa", label: "Claims QA", icon: Star },
+  { href: "/claims-qa", label: "Claims QA", icon: Star },
   { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/mailroom", label: "Mailroom", icon: Inbox },
@@ -75,9 +75,11 @@ const KB_NAV_EXTRA = [
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
-// Order: My Dashboard → Intake Records → Loss Intake (if authorized) → Softphone
+// Claims QA is first-class for handlers: each signed-in handler sees only their
+// own released evaluations through the server-side row-level rule.
 const HANDLER_NAV_ITEMS_BASE = [
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
+  { href: "/claims-qa", label: "Claims QA", icon: Star },
   { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
@@ -165,9 +167,9 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const showLossIntake =
     isAdmin ||
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
-  // Order: My Dashboard (0) → Claims Workspace (1) → Intake Records (2) → Loss Intake (if authorized) → Softphone (3)
+  // Insert Loss Intake after Intake Records when the handler is authorized.
   const handlerNavItems = showLossIntake
-    ? [HANDLER_NAV_ITEMS_BASE[0], HANDLER_NAV_ITEMS_BASE[1], HANDLER_NAV_ITEMS_BASE[2], LOSS_INTAKE_NAV, HANDLER_NAV_ITEMS_BASE[3], HANDLER_NAV_ITEMS_BASE[4]]
+    ? [...HANDLER_NAV_ITEMS_BASE.slice(0, 4), LOSS_INTAKE_NAV, ...HANDLER_NAV_ITEMS_BASE.slice(4)]
     : HANDLER_NAV_ITEMS_BASE;
   const navItems: { href: string; label: string; icon: React.ElementType }[] =
     (isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems).filter((item) => {

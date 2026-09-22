@@ -71,11 +71,34 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
   it('surfaces preserved call-quality detail inside Call Tracking', () => {
     const callTracking = source('client/src/pages/CallTracking.tsx');
     const claimsQaPage = source('client/src/pages/WeeklyQA.tsx');
+    const claimsQaService = source('server/claimsQa.ts');
+    const app = source('client/src/App.tsx');
+    const layout = source('client/src/components/WhipLayout.tsx');
     expect(callTracking).toContain('Preserved AI Call Quality');
     expect(callTracking).toContain('View full detail');
+    expect(callTracking).toContain('role: "Call Quality"');
+    expect(claimsQaService).toContain("where.push(\"role <> 'Call Quality'\")");
+    expect(claimsQaPage).not.toContain('Call Quality');
+    expect(claimsQaPage).not.toContain('Weekly QA');
+    expect(app).toContain('<Route path="/claims-qa" component={WeeklyQA} />');
+    expect(layout).toContain('{ href: "/claims-qa", label: "Claims QA"');
     expect(claimsQaPage).toContain('Manual release safeguard');
     expect(claimsQaPage).toContain('Handler sign-off');
     expect(claimsQaPage).toContain('Adjudication queue');
     expect(claimsQaPage).toContain('Calibration');
+  });
+
+  it('shows leadership the quality aggregates of unreleased imported claim audits', () => {
+    const service = source('server/claimsQa.ts');
+    expect(service).toContain("const rated = evaluations.filter((evaluation) => evaluation.original_rating !== 'legacy_call_qa');");
+    expect(service).toContain('release status only');
+  });
+
+  it('keeps the audit-detail hook order stable when opening or closing an audit', () => {
+    const page = source('client/src/pages/WeeklyQA.tsx');
+    const useMemoOffset = page.indexOf('const grouped = useMemo');
+    const nullGuardOffset = page.indexOf('if (!evaluationId) return null;', useMemoOffset);
+    expect(useMemoOffset).toBeGreaterThan(-1);
+    expect(nullGuardOffset).toBeGreaterThan(useMemoOffset);
   });
 });

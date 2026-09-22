@@ -335,6 +335,18 @@ export async function listClaimsQaEvaluations(viewer: ClaimsQaViewer, filters?: 
   const client = await dbClient();
   const where: string[] = [];
   const params: unknown[] = [];
+  const requestedRole = filters?.role;
+  if (requestedRole === 'Call Quality') {
+    // Call Tracking is the only consumer that explicitly requests the preserved
+    // legacy call-quality records. Every normal Claims QA query is claim-only.
+    where.push("role = 'Call Quality'");
+  } else {
+    where.push("role <> 'Call Quality'");
+    if (requestedRole && requestedRole !== 'all') {
+      where.push('role = ?');
+      params.push(requestedRole);
+    }
+  }
   if (!viewer.isLeadership) {
     if (!viewer.handlerId) return [];
     where.push('handler_id = ?', `status <> 'not_released'`);
@@ -342,7 +354,6 @@ export async function listClaimsQaEvaluations(viewer: ClaimsQaViewer, filters?: 
   } else if (filters?.handlerId) {
     where.push('handler_id = ?'); params.push(filters.handlerId);
   }
-  if (filters?.role && filters.role !== 'all') { where.push('role = ?'); params.push(filters.role); }
   if (filters?.status && filters.status !== 'all') { where.push('status = ?'); params.push(filters.status); }
   const [rows] = await client.query(
     `SELECT * FROM claims_qa_evaluations ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
@@ -499,8 +510,12 @@ export async function getClaimsQaOverview(viewer: ClaimsQaViewer) {
   const resultRows: any[] = ids.length
     ? (await client.query(`SELECT * FROM claims_qa_evaluation_results WHERE evaluation_id IN (${ids.map(() => '?').join(',')})`, ids))[0] as any[]
     : [];
+  // Leadership sees imported audits before a manual release. Their quality
+  // dashboard must reflect those evidence-backed scores; release status only
+  // controls what a handler can access. Call Quality is already excluded by
+  // listClaimsQaEvaluations unless Call Tracking explicitly requests it.
   const completed = evaluations.filter((evaluation) => evaluation.status !== 'not_released');
-  const rated = completed.filter((evaluation) => evaluation.original_rating !== 'legacy_call_qa');
+  const rated = evaluations.filter((evaluation) => evaluation.original_rating !== 'legacy_call_qa');
   const handlerMap = new Map<string, any>();
   for (const evaluation of evaluations) {
     const key = `${evaluation.handler_id}:${evaluation.handler_name}`;
@@ -523,11 +538,21 @@ export async function getClaimsQaOverview(viewer: ClaimsQaViewer) {
   const totalScored = rated.reduce((sum, evaluation) => sum + Number(evaluation.original_items_scored ?? 0), 0);
   const totalMet = rated.reduce((sum, evaluation) => sum + Number(evaluation.original_items_met ?? 0), 0);
   const totalCritical = rated.reduce((sum, evaluation) => sum + Number(evaluation.original_critical_failures ?? 0), 0);
+  const mostMissed = Object.values(resultRows.reduce((acc: Record<string, any>, result) => {
+    const value = effectiveResult(result);
+    if (value !== 'met' && value !== 'not_met') return acc;
+    const row = acc[result.item_key] ?? { itemKey: result.item_key, checkText: result.check_text, misses: 0, scored: 0 };
+    row.scored++;
+    if (value === 'not_met') row.misses++;
+    acc[result.item_key] = row;
+    return acc;
+  }, {})).map((row: any) => ({
+    ...row,
+    missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null,
+  })).filter((row: any) => row.misses > 0).sort((a: any, b: any) => b.missRate - a.missRate || b.misses - a.misses).slice(0, 10);
   return {
     counts: {
       evaluations: evaluations.length,
-      claimEvaluations: evaluations.filter((evaluation) => evaluation.role !== 'Call Quality').length,
-      legacyCallQuality: evaluations.filter((evaluation) => evaluation.role === 'Call Quality').length,
       released: completed.length,
       criticalFailures: totalCritical,
       filesClean: rated.filter((evaluation) => Number(evaluation.original_critical_failures ?? 0) === 0 && evaluation.original_rating === 'strong').length,
@@ -535,13 +560,7 @@ export async function getClaimsQaOverview(viewer: ClaimsQaViewer) {
     quality: { scored: totalScored, met: totalMet, passRate: totalScored >= 15 ? Math.round((totalMet / totalScored) * 100) : null, criticalFailures: totalCritical },
     categories: Array.from(byCategory.values()).map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
     handlers: Array.from(handlerMap.values()).map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
-    mostMissed: Object.values(resultRows.reduce((acc: Record<string, any>, result) => {
-      if (effectiveResult(result) !== 'not_met') return acc;
-      const row = acc[result.item_key] ?? { itemKey: result.item_key, checkText: result.check_text, misses: 0, scored: 0 };
-      row.misses++;
-      acc[result.item_key] = row;
-      return acc;
-    }, {})).sort((a: any, b: any) => b.misses - a.misses).slice(0, 10),
+    mostMissed,
     definitions: {
       passRate: 'Items met divided by items scored. Not applicable and not determinable lines are excluded; fewer than 15 scored items suppresses the percentage.',
       criticalFailures: 'Critical lines scored Not met. A critical miss overrides percentage-based rating.',

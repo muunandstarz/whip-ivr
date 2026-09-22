@@ -66,6 +66,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/handler-queue" component={HandlerQueue} />
       <Route path="/call-tracking" component={CallTracking} />
+      <Route path="/claims-qa" component={WeeklyQA} />
       <Route path="/qa" component={WeeklyQA} />
       <Route path="/handlers/:id" component={HandlerProfile} />
       <Route path="/softphone" component={Softphone} />
