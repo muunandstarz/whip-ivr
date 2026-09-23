@@ -692,7 +692,7 @@
 - [ ] Audit the September 10 Gravity Forms exclusion, Eddie Jones duplicate pair, Chasten Baker and John Montague SLA clocks, unfiled evidence, Chicago routing, in-office detection, Contina Smith status, processor wording, and quiet-hours behavior without creating live Slack posts
 - [x] Repair the discovered historical duplicate-collapse gap for the Eddie Jones / member 12850 / VIN 672938 pair without overwriting source links or operational evidence
 - [x] Prevent unchanged Loss Intake Dispatch processor and intake worklist runs from posting or updating Slack messages
-- [ ] Restore authorized Slack source-history access for the configured Loss Intake channels so excluded Gravity Forms posts and absent source notices can be counted and audited
+- [x] Restore authorized Slack source-history access for #claims, #claims-remotemarkets, and #escalations so excluded Gravity Forms posts and absent source notices can be counted and audited
 
 ## September 2026 Approved Klutch Declarations Consolidation
 - [x] Remove the obsolete interactive Klutch Dec Page sidebar entry and retain the approved Klutch Policy Declarations entry
@@ -739,7 +739,7 @@
 - [x] Schedule source refreshes at 8 AM, 11 AM, 2 PM, and 5 PM Eastern on business days using the existing Heartbeat gate; keep Slack digest destination-configured and disabled until a channel is supplied
 - [x] Restore the prior leadership, Intake QA, metrics, filters, detail drawer, and source-health composition for the shared Intake workspace
 - [x] Allow #claims and #claims-remotemarkets to refresh independently when one configured Slack source cannot be read; persist the exact missing-source warning and suppress the digest on partial coverage
-- [ ] Restore production bot membership/read access for the configured #escalations source (`C03LK1Z8XFG`); live bot token receives `channel_not_found`, while #claims and #claims-remotemarkets read successfully
+- [x] Restore production bot history-read access for #escalations (`C03LK1Z8XFG`); the Intake bot now reads #claims, #claims-remotemarkets, and #escalations successfully (channel metadata lookup remains unnecessary and lacks its optional scope)
 - [x] Set the remote-markets source to `C092UPKR79D` and verify production bot history access without changing the protected Dispatch publishing state
 
 ## September 2026 Claims QA Migration and Workflow
@@ -762,3 +762,9 @@
 - [x] Implement role-specific right-side review workspaces while preserving manual release, response, adjudication, messaging, calibration, access controls, and audit logs
 - [x] Keep all 92 imported claim audits unreleased and separate from the 165 preserved AI Call Quality records, which remain available only in Call Tracking
 - [x] Validate the redesign with 12 focused Claims QA tests, the full 274-passing regression suite, TypeScript checks, production build, desktop admin and handler browser views, and mobile responsive capture
+
+## September 2026 Claims QA Accessibility and Intake Backfill
+- [x] Make every desktop Claims QA audit-table row keyboard-accessible and clickable, while keeping the Open review button independently actionable without duplicate propagation
+- [x] Replace handler-facing leadership copy with released-results language and the Review my evaluations action; verified under Jovel Villa preview with unreleased audits withheld
+- [x] Add bounded, explicit historical Slack replay support without altering the scheduled cursor behavior; reran September 7–11 non-publishing reconciliation across all configured source channels
+- [x] Re-materialize 34 September 7–11 records from accessible Slack sources (75 bounded threads processed, 587 thread events); no Slack digest was published and the protected Intake publishing toggle remains off

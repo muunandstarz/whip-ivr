@@ -331,6 +331,7 @@ async function collectThreadTargets(input: {
   remoteMarketsChannelId: string;
   escalationsChannelId: string;
   oldest: string;
+  maxThreads?: number;
 }) {
   const targets = new Map<string, ThreadTarget>();
   const channelErrors: string[] = [];
@@ -404,7 +405,7 @@ async function collectThreadTargets(input: {
   return {
     targets: Array.from(targets.values())
       .sort((left, right) => Number(left.threadTs) - Number(right.threadTs))
-      .slice(0, MAX_THREADS_PER_RUN),
+      .slice(0, Math.max(1, Math.min(input.maxThreads ?? MAX_THREADS_PER_RUN, MAX_THREADS_PER_RUN))),
     channelErrors,
   };
 }
@@ -415,6 +416,17 @@ export interface LossIntakeSyncResult {
   eventsProcessed: number;
   targetsProcessed: number;
   channelErrors: string[];
+}
+
+/**
+ * Optional bounded historical replay support. The ordinary scheduled path keeps
+ * using the stored cursor; an explicit `oldest` is reserved for a deliberate,
+ * non-publishing reconciliation pass and is always capped to the normal
+ * per-run thread limit.
+ */
+export interface LossIntakeSlackSyncOptions {
+  oldest?: string;
+  maxThreads?: number;
 }
 
 /**
@@ -466,7 +478,7 @@ export async function resyncLossIntakeThread(input: {
   }
 }
 
-export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
+export async function runLossIntakeSlackSync(options: LossIntakeSlackSyncOptions = {}): Promise<LossIntakeSyncResult> {
   const runId = await startLossIntakeSyncRun();
   try {
     requireSlackToken();
@@ -476,7 +488,8 @@ export async function runLossIntakeSlackSync(): Promise<LossIntakeSyncResult> {
       claimsChannelId: settings.claimsChannelId,
       remoteMarketsChannelId: settings.remoteMarketsChannelId,
       escalationsChannelId: settings.escalationsChannelId,
-      oldest: incrementalOldest(settings.lastSuccessfulSyncAt),
+      oldest: options.oldest ?? incrementalOldest(settings.lastSuccessfulSyncAt),
+      maxThreads: options.maxThreads,
     });
     const targets = targetResult.targets;
     const claimsTrackerIndex = await getClaimsTrackerIndex();

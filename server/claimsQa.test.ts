@@ -132,5 +132,7 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     expect(page).toContain('Priority audit items');
     expect(page).toContain('Release to handler');
     expect(page).toContain('Submit sign-off');
+    expect(page).toContain('<tr key={evaluation.id} role="button" tabIndex={0} onClick={() => onOpen(evaluation.id)}');
+    expect(page).toContain("leadership ? 'Review evaluation queue' : 'Review my evaluations'");
   });
 });

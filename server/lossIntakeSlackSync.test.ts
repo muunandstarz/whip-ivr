@@ -125,6 +125,43 @@ describe("runLossIntakeSlackSync", () => {
     });
   });
 
+  it("accepts an explicit bounded oldest value for a deliberate historical replay", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const method = url.pathname.split("/").pop();
+      if (method === "conversations.history") {
+        expect(url.searchParams.get("oldest")).toBe("1750000000.000000");
+        const channel = url.searchParams.get("channel");
+        return slackResponse({
+          ok: true,
+          messages: channel === "C-CLAIMS"
+            ? [
+                { type: "message", ts: "1750000000.000100", text: fnolText(), files: [] },
+                { type: "message", ts: "1750000001.000100", text: fnolText(), files: [] },
+              ]
+            : [],
+          response_metadata: { next_cursor: "" },
+        });
+      }
+      if (method === "conversations.replies") {
+        return slackResponse({
+          ok: true,
+          messages: [{ type: "message", ts: "1750000000.000100", text: fnolText(), files: [] }],
+          response_metadata: { next_cursor: "" },
+        });
+      }
+      if (method === "chat.getPermalink") return slackResponse({ ok: true, permalink: "https://workspace.slack.com/archives/C-CLAIMS/p1750000000000100" });
+      throw new Error(`Unexpected Slack method: ${method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runLossIntakeSlackSync({ oldest: "1750000000.000000", maxThreads: 1 });
+
+    expect(result.targetsProcessed).toBe(1);
+    expect(result.claimsUpdated).toBe(1);
+    expect(dbMocks.upsertLossIntakeClaimBundle).toHaveBeenCalledTimes(1);
+  });
+
   it("records a failed sync when the server Slack token is missing", async () => {
     ENV.slackBotToken = "";
 
