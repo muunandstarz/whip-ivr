@@ -768,3 +768,8 @@
 - [x] Replace handler-facing leadership copy with released-results language and the Review my evaluations action; verified under Jovel Villa preview with unreleased audits withheld
 - [x] Add bounded, explicit historical Slack replay support without altering the scheduled cursor behavior; reran September 7–11 non-publishing reconciliation across all configured source channels
 - [x] Re-materialize 34 September 7–11 records from accessible Slack sources (75 bounded threads processed, 587 thread events); no Slack digest was published and the protected Intake publishing toggle remains off
+
+## September 2026 Loss Intake Acceptance Reconciliation
+- [x] Repair historical source replay to support an explicit bounded time window without adding ordinary open-work backlog targets
+- [x] Ingest workflow-bot FNOL parent posts as valid source notices and verify the change against the Chasten Baker source thread
+- [x] Reconcile the September 7–11 cohort across all three readable source channels and document named-case, Gravity Forms, filing, arrival, SLA, duplicate, and quiet-publish findings in `loss_intake_september_2026_audit.md`

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const dbMocks = vi.hoisted(() => ({
   finishLossIntakeSyncRun: vi.fn(),
@@ -75,7 +77,7 @@ describe("runLossIntakeSlackSync", () => {
         return slackResponse({
           ok: true,
           messages: channel === "C-CLAIMS"
-            ? [{ type: "message", ts: "1750000000.000100", text: fnolText(), files: [] }]
+            ? [{ type: "message", subtype: "bot_message", ts: "1750000000.000100", text: fnolText(), files: [] }]
             : [],
           response_metadata: { next_cursor: "" },
         });
@@ -125,12 +127,18 @@ describe("runLossIntakeSlackSync", () => {
     });
   });
 
-  it("accepts an explicit bounded oldest value for a deliberate historical replay", async () => {
+  it("accepts an explicit bounded time window for a deliberate historical replay", async () => {
+    const replyTargets: string[] = [];
+    dbMocks.listLossIntakeClaims.mockResolvedValue({
+      claims: [{ channelId: "C-CLAIMS", channelName: "claims", slackMessageTs: "1740000000.000100", slackPermalink: null }],
+      total: 1,
+    });
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));
       const method = url.pathname.split("/").pop();
       if (method === "conversations.history") {
         expect(url.searchParams.get("oldest")).toBe("1750000000.000000");
+        expect(url.searchParams.get("latest")).toBe("1750000100.000000");
         const channel = url.searchParams.get("channel");
         return slackResponse({
           ok: true,
@@ -144,6 +152,7 @@ describe("runLossIntakeSlackSync", () => {
         });
       }
       if (method === "conversations.replies") {
+        replyTargets.push(url.searchParams.get("ts") ?? "");
         return slackResponse({
           ok: true,
           messages: [{ type: "message", ts: "1750000000.000100", text: fnolText(), files: [] }],
@@ -155,11 +164,19 @@ describe("runLossIntakeSlackSync", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await runLossIntakeSlackSync({ oldest: "1750000000.000000", maxThreads: 1 });
+    const result = await runLossIntakeSlackSync({ oldest: "1750000000.000000", latest: "1750000100.000000", maxThreads: 1 });
 
     expect(result.targetsProcessed).toBe(1);
     expect(result.claimsUpdated).toBe(1);
     expect(dbMocks.upsertLossIntakeClaimBundle).toHaveBeenCalledTimes(1);
+    expect(replyTargets).toEqual(["1750000000.000100"]);
+  });
+
+  it("keeps scheduled replay capacity narrow while allowing a deliberately bounded historical pass", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "lossIntakeSlackSync.ts"), "utf8");
+    expect(source).toContain("const MAX_SCHEDULED_THREADS_PER_RUN = 75");
+    expect(source).toContain("const MAX_HISTORICAL_REPLAY_THREADS = 300");
+    expect(source).toContain("input.oldest ? MAX_HISTORICAL_REPLAY_THREADS : MAX_SCHEDULED_THREADS_PER_RUN");
   });
 
   it("records a failed sync when the server Slack token is missing", async () => {

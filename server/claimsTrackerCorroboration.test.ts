@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildClaimsTrackerIndex, buildClaimsTrackerOAuthUrl, matchTrackerFiling, normalizeVinFragment, parseOperationalDate } from "./claimsTrackerCorroboration";
+import { applyClaimsTrackerCorroboration, buildClaimsTrackerIndex, buildClaimsTrackerOAuthUrl, matchTrackerFiling, normalizeVinFragment, parseOperationalDate } from "./claimsTrackerCorroboration";
 
 const headers = ["A", "B", "Claim # (Last 8 of VIN)", "Member Name", "Date of Loss", "F", "G", "H", "I", "J", "K", "L", "M", "N", "Snapsheet Link (Claim File)"];
 const row = (vin: string, member: string, lossDate: string, link = "") => ["", "", vin, member, lossDate, "", "", "", "", "", "", "", "", "", link];
@@ -39,6 +39,18 @@ describe("Claims Tracker same-loss filing test", () => {
     for (const [vin, member, date] of [["111111", "Filed One", "09/07/2026"], ["222222", "Filed Two", "09/08/2026"], ["333333", "Filed Three", "09/09/2026"], ["444444", "Filed Four", "09/10/2026"], ["555555", "Filed Five", "09/11/2026"]]) {
       expect(matchTrackerFiling({ index: index(), vinLastSix: vin, memberName: member, dateOfLoss: date })).not.toBeNull();
     }
+  });
+
+  it("leaves a notice without a usable six-digit VIN unverified instead of falsely unfiled", () => {
+    const result = applyClaimsTrackerCorroboration({
+      claimId: null,
+      correctedVinLastSix: null,
+      duplicateGroupKey: null,
+      filingEvidence: "",
+      dataWarnings: [],
+    } as any, index(), { memberName: "Unidentified notice", dateOfLoss: "09/10/2026", vinLastSix: null });
+    expect(result.filingState).toBe("unverified");
+    expect(result.filingEvidence).toContain("No usable VIN fragment");
   });
 
   it("uses calendar dates rather than timezone-dependent timestamps", () => {

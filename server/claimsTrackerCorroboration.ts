@@ -232,10 +232,14 @@ export function applyClaimsTrackerCorroboration(
       : vin
         ? "No same-loss All Reported IncidentsStatus row matched this notice."
         : "No usable VIN fragment was extracted for Claims Tracker corroboration.";
+  // The unfiled worklist is a binary same-loss VIN check. A source post that
+  // lacks the six-digit key cannot qualify for either outcome and must remain
+  // unverified rather than becoming a false unfiled item.
+  const filingState = filed ? "filed" : vin ? "unfiled" : "unverified";
   return {
     ...analysis,
     claimId: directThreadClaim ?? trackerMatch?.claimNumber ?? null,
-    filingState: filed ? "filed" : "unfiled",
+    filingState,
     filingEvidence: evidence,
     inspectionScheduledAt: inspection?.scheduledFor ?? null,
     inspectionScheduleSource: inspection?.sourceTab ?? null,
@@ -312,9 +316,10 @@ export async function reconcileStoredClaimsTrackerFiling(providedIndex?: Tracker
         ? `All Reported IncidentsStatus matched VIN ${vin}, date of loss within ${FILED_DATE_TOLERANCE_DAYS} days, and member ${trackerMatch.memberName ?? "(not supplied)"}; filed in Snapsheet.`
         : vin ? "No same-loss All Reported IncidentsStatus row matched this notice." : "No usable VIN fragment was extracted for Claims Tracker corroboration.";
     const nextClaimId = directThreadClaim ?? trackerMatch?.claimNumber ?? null;
-    if (claim.filingState === (filed ? "filed" : "unfiled") && claim.claimId === nextClaimId && claim.filingEvidence === nextEvidence && (claim.inspectionScheduledAt?.getTime() ?? null) === (inspection?.scheduledFor.getTime() ?? null) && claim.inspectionScheduleSource === (inspection?.sourceTab ?? null)) continue;
+    const nextFilingState = filed ? "filed" : vin ? "unfiled" : "unverified";
+    if (claim.filingState === nextFilingState && claim.claimId === nextClaimId && claim.filingEvidence === nextEvidence && (claim.inspectionScheduledAt?.getTime() ?? null) === (inspection?.scheduledFor.getTime() ?? null) && claim.inspectionScheduleSource === (inspection?.sourceTab ?? null)) continue;
     await db.update(lossIntakeClaims).set({
-      filingState: filed ? "filed" : "unfiled",
+      filingState: nextFilingState,
       claimId: nextClaimId,
       filingEvidence: nextEvidence,
       inspectionScheduledAt: inspection?.scheduledFor ?? null,

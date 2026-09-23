@@ -26,7 +26,12 @@ const INITIAL_BACKFILL_DAYS = 30;
 const SYNC_OVERLAP_MINUTES = 10;
 const MAX_HISTORY_PAGES = 10;
 const MAX_THREAD_PAGES = 10;
-const MAX_THREADS_PER_RUN = 75;
+// Normal scheduled refreshes must remain quick and bounded. An administrator may
+// intentionally request a historical, non-publishing reconciliation with an
+// explicit oldest timestamp; that path needs enough capacity to cover a short
+// audit window without weakening the routine scheduler guard.
+const MAX_SCHEDULED_THREADS_PER_RUN = 75;
+const MAX_HISTORICAL_REPLAY_THREADS = 300;
 
 interface SlackApiEnvelope {
   ok: boolean;
@@ -243,6 +248,7 @@ async function fetchChannelParents(input: {
   channelId: string;
   channelName: string;
   oldest: string;
+  latest?: string;
 }): Promise<SlackLossParent[]> {
   const parents: SlackLossParent[] = [];
   let cursor: string | undefined;
@@ -251,13 +257,17 @@ async function fetchChannelParents(input: {
     const payload: SlackHistoryResponse = await slackGet("conversations.history", {
       channel: input.channelId,
       oldest: input.oldest,
+      latest: input.latest,
       inclusive: true,
       limit: 200,
       cursor,
     });
     for (const message of payload.messages ?? []) {
       if (message.type && message.type !== "message") continue;
-      if (message.subtype && message.subtype !== "file_share") continue;
+      // Claims intake notices are commonly posted by a Slack workflow bot.
+      // Treat those parent posts as first-class FNOL sources alongside native
+      // messages and file shares; replies remain excluded below.
+      if (message.subtype && !["file_share", "bot_message"].includes(message.subtype)) continue;
       if (message.thread_ts && message.thread_ts !== message.ts) continue;
       const domain = toDomainMessage(message);
       if (!domain) continue;
@@ -331,6 +341,7 @@ async function collectThreadTargets(input: {
   remoteMarketsChannelId: string;
   escalationsChannelId: string;
   oldest: string;
+  latest?: string;
   maxThreads?: number;
 }) {
   const targets = new Map<string, ThreadTarget>();
@@ -344,7 +355,7 @@ async function collectThreadTargets(input: {
   for (const channel of channels) {
     let parents: SlackLossParent[];
     try {
-      parents = await fetchChannelParents({ ...channel, oldest: input.oldest });
+      parents = await fetchChannelParents({ ...channel, oldest: input.oldest, latest: input.latest });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       // One private or renamed channel must not freeze #claims and remote-market
@@ -374,38 +385,48 @@ async function collectThreadTargets(input: {
     await delay(250);
   }
 
-  for (const stage of ["awaiting_outreach", "outreach_started", "contact_attempts"] as const) {
-    const { claims } = await listLossIntakeClaims({ stage, limit: 200, offset: 0 });
-    for (const claim of claims) {
-      addTarget(targets, {
-        channelId: claim.channelId,
-        channelName: claim.channelName,
-        threadTs: claim.slackMessageTs,
-        permalink: claim.slackPermalink,
-      });
+  // Routine incremental syncs revisit active and breached work so late thread
+  // replies are captured. A deliberately bounded historical replay must not
+  // mix that operational backlog into its source-time window.
+  if (!input.latest) {
+    for (const stage of ["awaiting_outreach", "outreach_started", "contact_attempts"] as const) {
+      const { claims } = await listLossIntakeClaims({ stage, limit: 200, offset: 0 });
+      for (const claim of claims) {
+        addTarget(targets, {
+          channelId: claim.channelId,
+          channelName: claim.channelName,
+          threadTs: claim.slackMessageTs,
+          permalink: claim.slackPermalink,
+        });
+      }
     }
-  }
 
-  // Also include breached claims — they may have completion/contact data in the
-  // original Slack thread that hasn't been picked up yet (e.g. Ana completing
-  // a thread that Bennet forwarded, or late replies after the SLA window).
-  for (const slaState of ["breached"] as const) {
-    const { claims } = await listLossIntakeClaims({ slaState, limit: 200, offset: 0 });
-    for (const claim of claims) {
-      // Only add if not already in targets (non-complete breached claims)
-      addTarget(targets, {
-        channelId: claim.channelId,
-        channelName: claim.channelName,
-        threadTs: claim.slackMessageTs,
-        permalink: claim.slackPermalink,
-      });
+    // Also include breached claims — they may have completion/contact data in the
+    // original Slack thread that hasn't been picked up yet (e.g. Ana completing
+    // a thread that Bennet forwarded, or late replies after the SLA window).
+    for (const slaState of ["breached"] as const) {
+      const { claims } = await listLossIntakeClaims({ slaState, limit: 200, offset: 0 });
+      for (const claim of claims) {
+        addTarget(targets, {
+          channelId: claim.channelId,
+          channelName: claim.channelName,
+          threadTs: claim.slackMessageTs,
+          permalink: claim.slackPermalink,
+        });
+      }
     }
   }
 
   return {
     targets: Array.from(targets.values())
       .sort((left, right) => Number(left.threadTs) - Number(right.threadTs))
-      .slice(0, Math.max(1, Math.min(input.maxThreads ?? MAX_THREADS_PER_RUN, MAX_THREADS_PER_RUN))),
+      .slice(0, Math.max(
+        1,
+        Math.min(
+          input.maxThreads ?? MAX_SCHEDULED_THREADS_PER_RUN,
+          input.oldest ? MAX_HISTORICAL_REPLAY_THREADS : MAX_SCHEDULED_THREADS_PER_RUN,
+        ),
+      )),
     channelErrors,
   };
 }
@@ -421,11 +442,13 @@ export interface LossIntakeSyncResult {
 /**
  * Optional bounded historical replay support. The ordinary scheduled path keeps
  * using the stored cursor; an explicit `oldest` is reserved for a deliberate,
- * non-publishing reconciliation pass and is always capped to the normal
- * per-run thread limit.
+ * non-publishing reconciliation pass and is always capped to 300 source
+ * threads; ordinary scheduled refreshes remain capped at 75.
  */
 export interface LossIntakeSlackSyncOptions {
   oldest?: string;
+  /** Optional exclusive Slack timestamp ending an explicit historical replay. */
+  latest?: string;
   maxThreads?: number;
 }
 
@@ -489,6 +512,7 @@ export async function runLossIntakeSlackSync(options: LossIntakeSlackSyncOptions
       remoteMarketsChannelId: settings.remoteMarketsChannelId,
       escalationsChannelId: settings.escalationsChannelId,
       oldest: options.oldest ?? incrementalOldest(settings.lastSuccessfulSyncAt),
+      latest: options.latest,
       maxThreads: options.maxThreads,
     });
     const targets = targetResult.targets;
