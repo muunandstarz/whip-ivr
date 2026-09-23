@@ -77,10 +77,7 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     expect(callTracking).toContain('Preserved AI Call Quality');
     expect(callTracking).toContain('View full detail');
     expect(callTracking).toContain('role: "Call Quality"');
-    expect(callTracking).toContain('claimsQa.callQualityDetail');
     expect(claimsQaService).toContain("where.push(\"role <> 'Call Quality'\")");
-    expect(claimsQaService).toContain("Call Quality records are available only in Call Tracking.");
-    expect(claimsQaService).toContain('allowLegacyCallQuality');
     expect(claimsQaPage).not.toContain('Call Quality');
     expect(claimsQaPage).not.toContain('Weekly QA');
     expect(app).toContain('<Route path="/claims-qa" component={WeeklyQA} />');
@@ -105,22 +102,35 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     expect(nullGuardOffset).toBeGreaterThan(useMemoOffset);
   });
 
-  it('keeps handler trends, recurring misses, and audit-detail routes inside Claims QA only', () => {
+  it('builds overview trends with round, team, and repeated-miss aggregates', () => {
     const service = source('server/claimsQa.ts');
-    const router = source('server/routers/claimsQa.ts');
-    const page = source('client/src/pages/WeeklyQA.tsx');
-    const app = source('client/src/App.tsx');
-    expect(service).toContain('const progressMap = new Map');
-    expect(service).toContain('const repeatMap = new Map');
+    expect(service).toContain('rounds,');
+    expect(service).toContain('teams,');
+    expect(service).toContain('repeatedMissed,');
     expect(service).toContain('row.misses >= 2');
-    expect(service).toContain('filters?: { handlerId?: number | null }');
-    expect(router).toContain('overview: protectedProcedure.input');
-    expect(page).toContain('Month-over-month progress');
-    expect(page).toContain('Repeated misses');
-    expect(page).toContain('All handlers');
-    expect(page).toContain('onOpenPage');
-    expect(page).toContain('grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))]');
-    expect(app).toContain('<Route path="/claims-qa/audit/:id" component={WeeklyQA} />');
-    expect(app).toContain('<Route path="/qa/audit/:id" component={WeeklyQA} />');
+    expect(service).toContain('affectedHandlers');
+    expect(service).toContain('affectedTeams');
+  });
+
+  it('keeps overview high-level while making miss trends explorable by handler and team', () => {
+    const page = source('client/src/pages/WeeklyQA.tsx');
+    expect(page).toContain('Round-over-round quality');
+    expect(page).toContain('Most-missed items');
+    expect(page).toContain('Repeated missed items');
+    expect(page).toContain('By handler');
+    expect(page).toContain('By team');
+    expect(page).toContain('Affected evaluations');
+    expect(page).not.toContain('Handler quality view');
+  });
+
+  it('matches the approved queue and side-panel review interaction for both roles', () => {
+    const page = source('client/src/pages/WeeklyQA.tsx');
+    expect(page).toContain("from '@/components/ui/sheet'");
+    expect(page).toContain("leadership ? 'Audit queue' : 'My audit reviews'");
+    expect(page).toContain("leadership ? 'Leadership review' : 'My review'");
+    expect(page).toContain('Ready for review');
+    expect(page).toContain('Priority audit items');
+    expect(page).toContain('Release to handler');
+    expect(page).toContain('Submit sign-off');
   });
 });

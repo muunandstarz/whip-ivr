@@ -506,11 +506,27 @@ export async function submitClaimsQaCalibration(input: { viewer: ClaimsQaViewer;
   return { completed };
 }
 
-export async function getClaimsQaOverview(viewer: ClaimsQaViewer, filters?: { handlerId?: number | null }) {
-  // Leadership may select one handler; every handler (including an
-  // impersonated administrator) remains hard-scoped to their own released QA.
-  const requestedHandlerId = viewer.isLeadership ? (filters?.handlerId ?? undefined) : (viewer.handlerId ?? undefined);
-  const evaluations = await listClaimsQaEvaluations(viewer, { handlerId: requestedHandlerId, limit: 500 });
+function claimsQaPeriod(evaluation: any) {
+  const raw = evaluation.period_start ?? evaluation.audit_date;
+  const date = raw ? new Date(raw) : null;
+  if (!date || Number.isNaN(date.getTime())) return { key: 'unscheduled', label: 'Unscheduled' };
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  return {
+    key: `${year}-${String(month + 1).padStart(2, '0')}`,
+    label: new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date),
+  };
+}
+
+function percentage(met: number, scored: number) {
+  return scored >= 15 ? Math.round((met / scored) * 100) : null;
+}
+
+export async function getClaimsQaOverview(viewer: ClaimsQaViewer, filters?: { handlerId?: number }) {
+  const evaluations = await listClaimsQaEvaluations(viewer, {
+    limit: 500,
+    handlerId: viewer.isLeadership ? filters?.handlerId : undefined,
+  });
   const client = await dbClient();
   const ids = evaluations.map((evaluation) => evaluation.id);
   const resultRows: any[] = ids.length
@@ -522,98 +538,158 @@ export async function getClaimsQaOverview(viewer: ClaimsQaViewer, filters?: { ha
   // listClaimsQaEvaluations unless Call Tracking explicitly requests it.
   const completed = evaluations.filter((evaluation) => evaluation.status !== 'not_released');
   const rated = evaluations.filter((evaluation) => evaluation.original_rating !== 'legacy_call_qa');
+  const evaluationById = new Map(evaluations.map((evaluation) => [Number(evaluation.id), evaluation]));
   const handlerMap = new Map<string, any>();
-  for (const evaluation of evaluations) {
-    const key = `${evaluation.handler_id}:${evaluation.handler_name}`;
-    const row = handlerMap.get(key) ?? { handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, evaluations: 0, scored: 0, met: 0, criticalFailures: 0, openActions: 0 };
-    row.evaluations++;
-    row.scored += Number(evaluation.original_items_scored ?? 0);
-    row.met += Number(evaluation.original_items_met ?? 0);
-    row.criticalFailures += Number(evaluation.original_critical_failures ?? 0);
-    if (['released', 'in_adjudication'].includes(evaluation.status)) row.openActions++;
-    handlerMap.set(key, row);
+  const roleMap = new Map<string, any>();
+  const roundMap = new Map<string, any>();
+
+  for (const evaluation of rated) {
+    const scored = Number(evaluation.original_items_scored ?? 0);
+    const met = Number(evaluation.original_items_met ?? 0);
+    const criticalFailures = Number(evaluation.original_critical_failures ?? 0);
+    const handlerKey = `${evaluation.handler_id}:${evaluation.handler_name}`;
+    const handler = handlerMap.get(handlerKey) ?? { handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, role: evaluation.role, evaluations: 0, scored: 0, met: 0, criticalFailures: 0, openActions: 0 };
+    handler.evaluations++;
+    handler.scored += scored;
+    handler.met += met;
+    handler.criticalFailures += criticalFailures;
+    if (['released', 'in_adjudication'].includes(evaluation.status)) handler.openActions++;
+    handlerMap.set(handlerKey, handler);
+
+    const role = roleMap.get(evaluation.role) ?? { role: evaluation.role, evaluations: 0, scored: 0, met: 0, criticalFailures: 0, filesClean: 0, handlers: new Set<number>() };
+    role.evaluations++;
+    role.scored += scored;
+    role.met += met;
+    role.criticalFailures += criticalFailures;
+    if (!criticalFailures && evaluation.original_rating === 'strong') role.filesClean++;
+    if (evaluation.handler_id) role.handlers.add(Number(evaluation.handler_id));
+    roleMap.set(evaluation.role, role);
+
+    const period = claimsQaPeriod(evaluation);
+    const round = roundMap.get(period.key) ?? { periodKey: period.key, periodLabel: period.label, evaluations: 0, scored: 0, met: 0, criticalFailures: 0, filesClean: 0 };
+    round.evaluations++;
+    round.scored += scored;
+    round.met += met;
+    round.criticalFailures += criticalFailures;
+    if (!criticalFailures && evaluation.original_rating === 'strong') round.filesClean++;
+    roundMap.set(period.key, round);
   }
+
   const byCategory = new Map<string, { category: string; scored: number; met: number; criticalFailures: number }>();
+  const itemMap = new Map<string, any>();
   for (const result of resultRows) {
     const value = effectiveResult(result);
+    if (value !== 'met' && value !== 'not_met') continue;
+    const evaluation = evaluationById.get(Number(result.evaluation_id));
+    if (!evaluation) continue;
+
     const category = byCategory.get(result.category) ?? { category: result.category, scored: 0, met: 0, criticalFailures: 0 };
-    if (value === 'met' || value === 'not_met') { category.scored++; if (value === 'met') category.met++; }
+    category.scored++;
+    if (value === 'met') category.met++;
     if (result.critical && value === 'not_met') category.criticalFailures++;
     byCategory.set(result.category, category);
+
+    const item = itemMap.get(result.item_key) ?? {
+      itemKey: result.item_key,
+      checkText: result.check_text,
+      category: result.category,
+      critical: Boolean(result.critical),
+      scored: 0,
+      misses: 0,
+      handlers: new Map<string, any>(),
+      teams: new Map<string, any>(),
+      audits: new Map<number, any>(),
+    };
+    item.scored++;
+    const handlerKey = `${evaluation.handler_id}:${evaluation.handler_name}`;
+    const handler = item.handlers.get(handlerKey) ?? { handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, role: evaluation.role, scored: 0, misses: 0, evaluationIds: new Set<number>() };
+    handler.scored++;
+    const team = item.teams.get(evaluation.role) ?? { role: evaluation.role, scored: 0, misses: 0, evaluationIds: new Set<number>() };
+    team.scored++;
+    if (value === 'not_met') {
+      item.misses++;
+      handler.misses++;
+      team.misses++;
+      handler.evaluationIds.add(Number(evaluation.id));
+      team.evaluationIds.add(Number(evaluation.id));
+      item.audits.set(Number(evaluation.id), {
+        evaluationId: Number(evaluation.id),
+        evaluationKey: evaluation.evaluation_key,
+        claimNumber: evaluation.claim_number,
+        handlerId: evaluation.handler_id,
+        handlerName: evaluation.handler_name,
+        role: evaluation.role,
+        auditDate: evaluation.audit_date,
+        status: evaluation.status,
+      });
+    }
+    item.handlers.set(handlerKey, handler);
+    item.teams.set(evaluation.role, team);
+    itemMap.set(result.item_key, item);
   }
+
+  const itemTrends = Array.from(itemMap.values()).map((item: any) => {
+    const handlers = Array.from(item.handlers.values()).map((row: any) => ({
+      ...row,
+      evaluationIds: Array.from(row.evaluationIds),
+      missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null,
+    })).sort((a: any, b: any) => b.misses - a.misses || (b.missRate ?? -1) - (a.missRate ?? -1));
+    const teams = Array.from(item.teams.values()).map((row: any) => ({
+      ...row,
+      evaluationIds: Array.from(row.evaluationIds),
+      missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null,
+    })).sort((a: any, b: any) => b.misses - a.misses || (b.missRate ?? -1) - (a.missRate ?? -1));
+    const repeatedHandlers = handlers.filter((row: any) => row.misses >= 2);
+    return {
+      itemKey: item.itemKey,
+      checkText: item.checkText,
+      category: item.category,
+      critical: item.critical,
+      scored: item.scored,
+      misses: item.misses,
+      missRate: item.scored ? Math.round((item.misses / item.scored) * 100) : null,
+      affectedHandlers: handlers.filter((row: any) => row.misses > 0).length,
+      affectedTeams: teams.filter((row: any) => row.misses > 0).length,
+      repeatedHandlers: repeatedHandlers.length,
+      repeatedMisses: repeatedHandlers.reduce((sum: number, row: any) => sum + row.misses, 0),
+      handlers,
+      teams,
+      audits: Array.from(item.audits.values()).sort((a: any, b: any) => String(b.auditDate ?? '').localeCompare(String(a.auditDate ?? ''))),
+    };
+  }).filter((row: any) => row.misses > 0);
+
+  const mostMissed = [...itemTrends]
+    .sort((a: any, b: any) => b.missRate - a.missRate || b.misses - a.misses)
+    .slice(0, 10);
+  const repeatedMissed = [...itemTrends]
+    .filter((row: any) => row.repeatedHandlers > 0)
+    .sort((a: any, b: any) => b.repeatedHandlers - a.repeatedHandlers || b.repeatedMisses - a.repeatedMisses || b.missRate - a.missRate)
+    .slice(0, 10);
   const totalScored = rated.reduce((sum, evaluation) => sum + Number(evaluation.original_items_scored ?? 0), 0);
   const totalMet = rated.reduce((sum, evaluation) => sum + Number(evaluation.original_items_met ?? 0), 0);
   const totalCritical = rated.reduce((sum, evaluation) => sum + Number(evaluation.original_critical_failures ?? 0), 0);
-  const mostMissed = Object.values(resultRows.reduce((acc: Record<string, any>, result) => {
-    const value = effectiveResult(result);
-    if (value !== 'met' && value !== 'not_met') return acc;
-    const row = acc[result.item_key] ?? { itemKey: result.item_key, checkText: result.check_text, misses: 0, scored: 0 };
-    row.scored++;
-    if (value === 'not_met') row.misses++;
-    acc[result.item_key] = row;
-    return acc;
-  }, {})).map((row: any) => ({
-    ...row,
-    missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null,
-  })).filter((row: any) => row.misses > 0).sort((a: any, b: any) => b.missRate - a.missRate || b.misses - a.misses).slice(0, 10);
-  const evaluationById = new Map(evaluations.map((evaluation) => [evaluation.id, evaluation]));
-  const progressMap = new Map<string, { month: string; handlerId: number; handlerName: string; evaluations: number; scored: number; met: number; criticalFailures: number }>();
-  for (const evaluation of rated) {
-    const sourceDate = new Date(evaluation.period_start || evaluation.audit_date);
-    if (Number.isNaN(sourceDate.getTime())) continue;
-    const month = sourceDate.toISOString().slice(0, 7);
-    const key = `${evaluation.handler_id}:${month}`;
-    const row = progressMap.get(key) ?? { month, handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, evaluations: 0, scored: 0, met: 0, criticalFailures: 0 };
-    row.evaluations++;
-    row.scored += Number(evaluation.original_items_scored ?? 0);
-    row.met += Number(evaluation.original_items_met ?? 0);
-    row.criticalFailures += Number(evaluation.original_critical_failures ?? 0);
-    progressMap.set(key, row);
-  }
-  const progress = Array.from(progressMap.values())
-    .map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null }))
-    .sort((left, right) => left.month.localeCompare(right.month) || left.handlerName.localeCompare(right.handlerName));
-
-  const repeatMap = new Map<string, { handlerId: number; handlerName: string; itemKey: string; checkText: string; misses: number; scored: number; criticalFailures: number; firstObserved: Date; lastObserved: Date }>();
-  for (const result of resultRows) {
-    const evaluation = evaluationById.get(result.evaluation_id);
-    const value = effectiveResult(result);
-    if (!evaluation || (value !== 'met' && value !== 'not_met')) continue;
-    const sourceDate = new Date(evaluation.period_start || evaluation.audit_date);
-    if (Number.isNaN(sourceDate.getTime())) continue;
-    const key = `${evaluation.handler_id}:${result.item_key}`;
-    const row = repeatMap.get(key) ?? { handlerId: evaluation.handler_id, handlerName: evaluation.handler_name, itemKey: result.item_key, checkText: result.check_text, misses: 0, scored: 0, criticalFailures: 0, firstObserved: sourceDate, lastObserved: sourceDate };
-    row.scored++;
-    if (value === 'not_met') {
-      row.misses++;
-      if (result.critical) row.criticalFailures++;
-    }
-    if (sourceDate < row.firstObserved) row.firstObserved = sourceDate;
-    if (sourceDate > row.lastObserved) row.lastObserved = sourceDate;
-    repeatMap.set(key, row);
-  }
-  const repeatedMisses = Array.from(repeatMap.values())
-    .filter((row) => row.misses >= 2)
-    .map((row) => ({ ...row, firstObserved: row.firstObserved.toISOString(), lastObserved: row.lastObserved.toISOString(), missRate: row.scored ? Math.round((row.misses / row.scored) * 100) : null }))
-    .sort((left, right) => right.misses - left.misses || (right.missRate ?? 0) - (left.missRate ?? 0) || right.lastObserved.localeCompare(left.lastObserved))
-    .slice(0, 20);
+  const categories = Array.from(byCategory.values()).map((row) => ({ ...row, passRate: percentage(row.met, row.scored) })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1));
+  const teams = Array.from(roleMap.values()).map((row: any) => ({ ...row, handlers: row.handlers.size, passRate: percentage(row.met, row.scored) })).sort((a: any, b: any) => (a.passRate ?? -1) - (b.passRate ?? -1));
+  const rounds = Array.from(roundMap.values()).map((row: any) => ({ ...row, passRate: percentage(row.met, row.scored) })).sort((a: any, b: any) => a.periodKey.localeCompare(b.periodKey));
   return {
     counts: {
       evaluations: evaluations.length,
       released: completed.length,
       criticalFailures: totalCritical,
       filesClean: rated.filter((evaluation) => Number(evaluation.original_critical_failures ?? 0) === 0 && evaluation.original_rating === 'strong').length,
+      openActions: Array.from(handlerMap.values()).reduce((sum: number, row: any) => sum + row.openActions, 0),
     },
-    quality: { scored: totalScored, met: totalMet, passRate: totalScored >= 15 ? Math.round((totalMet / totalScored) * 100) : null, criticalFailures: totalCritical },
-    categories: Array.from(byCategory.values()).map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
-    handlers: Array.from(handlerMap.values()).map((row) => ({ ...row, passRate: row.scored >= 15 ? Math.round((row.met / row.scored) * 100) : null })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
-    availableHandlers: Array.from(handlerMap.values()).map((row) => ({ handlerId: row.handlerId, handlerName: row.handlerName })).sort((a, b) => a.handlerName.localeCompare(b.handlerName)),
-    progress,
-    repeatedMisses,
+    quality: { scored: totalScored, met: totalMet, passRate: percentage(totalMet, totalScored), criticalFailures: totalCritical },
+    categories,
+    teams,
+    rounds,
+    handlers: Array.from(handlerMap.values()).map((row) => ({ ...row, passRate: percentage(row.met, row.scored) })).sort((a, b) => (a.passRate ?? -1) - (b.passRate ?? -1)),
     mostMissed,
+    repeatedMissed,
     definitions: {
       passRate: 'Items met divided by items scored. Not applicable and not determinable lines are excluded; fewer than 15 scored items suppresses the percentage.',
       criticalFailures: 'Critical lines scored Not met. A critical miss overrides percentage-based rating.',
+      repeatedMiss: 'The same rubric item scored Not met for the same handler on two or more evaluated files in the selected data.',
       productivity: 'Call-volume and handling productivity remain in Call Tracking and are not combined with quality scores.',
     },
   };

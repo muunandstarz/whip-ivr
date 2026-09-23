@@ -756,3 +756,9 @@
 - [x] Add Claims QA handler filtering, month-over-month quality progress, and repeated-miss signals with the existing scored/critical/N-A rules unchanged.
 - [x] Make Claims QA evaluations row-clickable for the evidence overlay; make the explicit Open Audit control use a dedicated audit URL, and correct the detail overlay’s responsive full-height layout to avoid narrow-card overlap.
 - [x] Preserve strict separation between Claims QA and the 165 historical AI Call Quality records: Claims QA cannot list or detail those rows; Call Tracking retrieves them through its dedicated legacy-detail procedure.
+
+## September 2026 Claims QA Trend and Review Workspace Redesign
+- [x] Apply the visual contract for a trend-led leadership overview, scorecard risk, team pulse, most-missed and repeated-missed drilldowns, and a filterable audit queue
+- [x] Implement role-specific right-side review workspaces while preserving manual release, response, adjudication, messaging, calibration, access controls, and audit logs
+- [x] Keep all 92 imported claim audits unreleased and separate from the 165 preserved AI Call Quality records, which remain available only in Call Tracking
+- [x] Validate the redesign with 12 focused Claims QA tests, the full 274-passing regression suite, TypeScript checks, production build, desktop admin and handler browser views, and mobile responsive capture
