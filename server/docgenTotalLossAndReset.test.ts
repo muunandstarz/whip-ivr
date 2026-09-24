@@ -12,17 +12,24 @@ describe('Total Loss settlement and form reset repairs', () => {
     expect(source).toContain('storage: "",');
     expect(source).toContain('adminFee: "",');
     expect(source).toContain('salesTax: "",');
+    expect(source).toContain('titleRegFees: "",');
+    expect(source).toContain('tearDown: "",');
     expect(source).toContain('salvageDeducted: "",');
     expect(source).toContain('Vehicle Valuation (ACV) ($)');
     expect(source).toContain('Admin Fee ($)');
     expect(source).toContain('Sales Tax ($)');
+    expect(source).toContain('Title & Reg Fees ($) — MD only');
+    expect(source).toContain('Tear Down ($)');
+    expect(source).toContain('Auto-calc 6%');
     expect(source).toContain('Salvage (Deducted) ($)');
-    expect(source).toContain('acv + storage + adminFee + salesTax - salvage');
+    expect(source).toContain('acv + storage + adminFee + salesTax + titleRegFees + tearDown - salvage');
   });
 
   it('renders the requested damage-itemization treatment and a clean RE line', () => {
     expect(source).toContain('ITEMIZATION OF DAMAGES');
     expect(source).toContain('Vehicle Valuation (ACV)');
+    expect(source).toContain('Title & Registration Fees');
+    expect(source).toContain('Tear Down');
     expect(source).toContain('Salvage (deducted)');
     expect(source).toContain('doc.setLineDashPattern([0.7, 1.3], 0);');
     expect(source).toContain('"RE: Total Loss Settlement Offer"');

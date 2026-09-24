@@ -551,6 +551,8 @@ export const docgenRouter = router({
       storage: z.string().optional(),
       adminFee: z.string().optional(),
       salesTax: z.string().optional(),
+      titleRegFees: z.string().optional(),
+      tearDown: z.string().optional(),
       salvageDeducted: z.string().optional(),
       otherDeductions: z.array(z.object({ label: z.string(), amount: z.string() })).optional(),
       netAmount: z.string(),
@@ -559,7 +561,7 @@ export const docgenRouter = router({
       additionalNotes: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { claimantName, claimNumber, dateOfLoss, vehicle, vin, market, acv, priorPayment, lienHolder, lienPayoff, storageDeducted, storage, adminFee, salesTax, salvageDeducted, otherDeductions, netAmount, adjusterName, rentalCutoffDate, additionalNotes } = input;
+      const { claimantName, claimNumber, dateOfLoss, vehicle, vin, market, acv, priorPayment, lienHolder, lienPayoff, storageDeducted, storage, adminFee, salesTax, titleRegFees, tearDown, salvageDeducted, otherDeductions, netAmount, adjusterName, rentalCutoffDate, additionalNotes } = input;
       const firstName = claimantName.split(/[\s,]+/)[0] || claimantName;
       const deductions = [];
       if (priorPayment && parseFloat(priorPayment) > 0) deductions.push(`Less: Prior Payment to Claimant: ($${parseFloat(priorPayment).toFixed(2)})`);
@@ -569,6 +571,8 @@ export const docgenRouter = router({
       if (storage && parseFloat(storage) > 0) itemizedDamages.push(`Storage: $${parseFloat(storage).toFixed(2)}`);
       if (adminFee && parseFloat(adminFee) > 0) itemizedDamages.push(`Admin Fee: $${parseFloat(adminFee).toFixed(2)}`);
       if (salesTax && parseFloat(salesTax) > 0) itemizedDamages.push(`Sales Tax: $${parseFloat(salesTax).toFixed(2)}`);
+      if (titleRegFees && parseFloat(titleRegFees) > 0) itemizedDamages.push(`Title & Registration Fees: $${parseFloat(titleRegFees).toFixed(2)}`);
+      if (tearDown && parseFloat(tearDown) > 0) itemizedDamages.push(`Tear Down: $${parseFloat(tearDown).toFixed(2)}`);
       if (salvageDeducted && parseFloat(salvageDeducted) > 0) itemizedDamages.push(`Salvage (deducted): ($${parseFloat(salvageDeducted).toFixed(2)})`);
       if (otherDeductions) for (const d of otherDeductions) if (d.label && d.amount && parseFloat(d.amount) > 0) deductions.push(`Less: ${d.label}: ($${parseFloat(d.amount).toFixed(2)})`);
       const prompt = `You are a claims adjuster at Whip Claims Management / Metro Cars Leasing Corp writing a total loss settlement offer letter.\n\nCLAIM DETAILS:\n- Claimant: ${claimantName}\n- Claim #: ${claimNumber}\n- Date of Loss: ${dateOfLoss}\n- Vehicle: ${vehicle}${vin ? ` | VIN: ${vin}` : ""}${market ? `\n- Market: ${market}` : ""}\n- Vehicle Valuation (ACV): $${parseFloat(acv).toFixed(2)}\n${itemizedDamages.join("\n")}\n${deductions.join("\n")}\n- Total: $${parseFloat(netAmount).toFixed(2)}\n${lienHolder && lienPayoff ? `- Lienholder: ${lienHolder}, Payoff: $${parseFloat(lienPayoff).toFixed(2)}\n` : ""}${rentalCutoffDate ? `- Rental review cutoff: ${rentalCutoffDate}\n` : ""}${additionalNotes ? `- Notes: ${additionalNotes}\n` : ""}- Adjuster: ${adjusterName}\n\nWrite the letter body ONLY (no letterhead, no footer). Start with "Dear ${firstName}," and include: (1) opening paragraph about total loss determination, (2) text-formatted itemization of damages, (3) payment issuance instructions, (4) storage deduction explanation if applicable, (5) rental review note if cutoff provided, (6) acceptance instructions, (7) closing with adjuster name/title "Claims Adjuster | Metro Cars Leasing Corp. — Claims Management" and email "claims@drivewhip.com". Output only the letter body.`;

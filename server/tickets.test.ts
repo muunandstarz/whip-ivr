@@ -49,4 +49,26 @@ describe('internal ticket workflow', () => {
     expect(layout).toContain('mailroomEnabled');
     expect(layout).toContain('mailBotEnabled');
   });
+
+  it('notifies leadership immediately and records a separate production-approval decision', () => {
+    const schema = source('drizzle/schema.ts');
+    const service = source('server/tickets.ts');
+    const router = source('server/routers/tickets.ts');
+    const page = source('client/src/pages/Tickets.tsx');
+    expect(schema).toContain('ownerNotifiedAt: timestamp("owner_notified_at")');
+    expect(schema).toContain('productionReadyAt: timestamp("production_ready_at")');
+    expect(schema).toContain('productionApprovedAt: timestamp("production_approved_at")');
+    expect(schema).toContain('"ready_for_approval"');
+    expect(schema).toContain('"approved_for_production"');
+    expect(service).toContain('recordOwnerNotice');
+    expect(service).toContain("kind: 'new'");
+    expect(service).toContain("kind: 'ready'");
+    expect(service).toContain("kind: 'approved'");
+    expect(service).toContain('approveInternalTicketForProduction');
+    expect(service).toContain('Only tickets marked ready for approval can be approved for production.');
+    expect(router).toContain('approveForProduction: adminProcedure');
+    expect(page).toContain('Approve for production');
+    expect(page).toContain('Request approval');
+    expect(page).toContain('Leadership is notified immediately');
+  });
 });

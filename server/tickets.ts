@@ -2,7 +2,7 @@ import { getDb } from './db';
 import { notifyOwner } from './_core/notification';
 
 export type TicketType = 'bug' | 'issue' | 'suggestion' | 'other';
-export type TicketStatus = 'new' | 'triaged' | 'in_progress' | 'resolved' | 'closed';
+export type TicketStatus = 'new' | 'triaged' | 'in_progress' | 'ready_for_approval' | 'approved_for_production' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export type TicketViewer = {
@@ -26,6 +26,28 @@ async function dbClient(): Promise<SqlClient> {
 function compactText(value: string, maxLength: number) {
   const normalized = value.replace(/\s+/g, ' ').trim();
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+async function recordOwnerNotice(input: { ticketId: number; kind: 'new' | 'ready' | 'approved'; title: string; content: string }) {
+  const client = await dbClient();
+  const fields = input.kind === 'new'
+    ? { delivered: 'owner_notified_at', error: 'owner_notification_error' }
+    : input.kind === 'ready'
+      ? { delivered: 'production_ready_notified_at', error: 'production_ready_notification_error' }
+      : { delivered: 'production_approved_notified_at', error: 'production_approved_notification_error' };
+  try {
+    const delivered = await notifyOwner({ title: input.title, content: input.content });
+    if (!delivered) {
+      await client.query(`UPDATE internal_tickets SET ${fields.error}=?, updated_at=NOW() WHERE id=?`, ['Notification service did not accept the request.', input.ticketId]);
+      return false;
+    }
+    await client.query(`UPDATE internal_tickets SET ${fields.delivered}=NOW(), ${fields.error}=NULL, updated_at=NOW() WHERE id=?`, [input.ticketId]);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await client.query(`UPDATE internal_tickets SET ${fields.error}=?, updated_at=NOW() WHERE id=?`, [compactText(message, 4_000), input.ticketId]);
+    return false;
+  }
 }
 
 function easternParts(value = new Date()) {
@@ -90,7 +112,19 @@ export async function submitInternalTicket(input: {
       input.viewer.handlerId ?? null,
     ],
   );
-  return { id: (insert as any).insertId as number };
+  const id = (insert as any).insertId as number;
+  const delivered = await recordOwnerNotice({
+    ticketId: id,
+    kind: 'new',
+    title: `New dashboard ticket #${id}: ${compactText(input.title, 100)}`,
+    content: [
+      `${input.ticketType.toUpperCase()} submitted by ${input.viewer.name}.`,
+      compactText(input.body, 1_000),
+      '',
+      `Open Tickets in the Whip IVR Dashboard to triage ticket #${id}.`,
+    ].join('\n'),
+  });
+  return { id, ownerNotified: delivered };
 }
 
 export async function listMyInternalTickets(viewer: TicketViewer, filters?: { status?: TicketStatus; ticketType?: TicketType; limit?: number; offset?: number }) {
@@ -150,16 +184,63 @@ export async function triageInternalTicket(input: {
 }) {
   if (!input.viewer.isAdmin) throw new Error('Administrator access is required.');
   const ticket = await getInternalTicket(input.viewer, input.id);
+  if (input.status === 'approved_for_production') {
+    throw new Error('Use the dedicated production approval action after a ticket is ready for approval.');
+  }
+  if (input.status === 'ready_for_approval' && !input.triageNote?.trim()) {
+    throw new Error('Add a concise implementation summary before requesting production approval.');
+  }
   const client = await dbClient();
   const isClosed = input.status === 'resolved' || input.status === 'closed';
+  const newlyReady = input.status === 'ready_for_approval' && ticket.status !== 'ready_for_approval';
   await client.query(
     `UPDATE internal_tickets
         SET status=?, priority=?, triage_note=?, triaged_by_user_id=?, triaged_by_name=?, triaged_at=NOW(),
+            production_ready_at=CASE WHEN ? THEN NOW() ELSE production_ready_at END,
+            production_ready_by_user_id=CASE WHEN ? THEN ? ELSE production_ready_by_user_id END,
+            production_ready_by_name=CASE WHEN ? THEN ? ELSE production_ready_by_name END,
             resolved_at=CASE WHEN ? THEN COALESCE(resolved_at, NOW()) ELSE NULL END,
             updated_at=NOW()
       WHERE id=?`,
-    [input.status, input.priority, input.triageNote?.trim() || null, input.viewer.userId, input.viewer.name, isClosed, ticket.id],
+    [input.status, input.priority, input.triageNote?.trim() || null, input.viewer.userId, input.viewer.name,
+      newlyReady, newlyReady, input.viewer.userId, newlyReady, input.viewer.name, isClosed, ticket.id],
   );
+  if (newlyReady) {
+    await recordOwnerNotice({
+      ticketId: ticket.id,
+      kind: 'ready',
+      title: `Production approval requested: ticket #${ticket.id}`,
+      content: [
+        compactText(ticket.title, 160),
+        input.triageNote!.trim(),
+        '',
+        'Review the ticket in the Whip IVR Dashboard and use Approve for production when it is ready to proceed.',
+      ].join('\n'),
+    });
+  }
+  return getInternalTicket(input.viewer, input.id);
+}
+
+export async function approveInternalTicketForProduction(input: { viewer: TicketViewer; id: number }) {
+  if (!input.viewer.isAdmin) throw new Error('Administrator access is required.');
+  const ticket = await getInternalTicket(input.viewer, input.id);
+  if (ticket.status !== 'ready_for_approval') throw new Error('Only tickets marked ready for approval can be approved for production.');
+  const client = await dbClient();
+  await client.query(
+    `UPDATE internal_tickets
+        SET status='approved_for_production', production_approved_at=NOW(), production_approved_by_user_id=?, production_approved_by_name=?, updated_at=NOW()
+      WHERE id=? AND status='ready_for_approval'`,
+    [input.viewer.userId, input.viewer.name, ticket.id],
+  );
+  await recordOwnerNotice({
+    ticketId: ticket.id,
+    kind: 'approved',
+    title: `Production approved: ticket #${ticket.id}`,
+    content: [
+      compactText(ticket.title, 160),
+      'The production decision is recorded. The ticket remains visible until implementation is completed and resolved.',
+    ].join('\n'),
+  });
   return getInternalTicket(input.viewer, input.id);
 }
 

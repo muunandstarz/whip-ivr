@@ -3014,6 +3014,8 @@ function TLSettlementTab() {
     storage: "",
     adminFee: "",
     salesTax: "",
+    titleRegFees: "",
+    tearDown: "",
     salvageDeducted: "",
     priorPayment: "",
     lienHolder: "",
@@ -3037,12 +3039,14 @@ function TLSettlementTab() {
     const storage = parseFloat(form.storage) || 0;
     const adminFee = parseFloat(form.adminFee) || 0;
     const salesTax = parseFloat(form.salesTax) || 0;
+    const titleRegFees = parseFloat(form.titleRegFees) || 0;
+    const tearDown = parseFloat(form.tearDown) || 0;
     const salvage = parseFloat(form.salvageDeducted) || 0;
     const prior = parseFloat(form.priorPayment) || 0;
     const lien = parseFloat(form.lienPayoff) || 0;
     const storageDeducted = parseFloat(form.storageDeducted) || 0;
     const other = otherDeductions.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
-    const net = acv + storage + adminFee + salesTax - salvage - prior - lien - storageDeducted - other;
+    const net = acv + storage + adminFee + salesTax + titleRegFees + tearDown - salvage - prior - lien - storageDeducted - other;
     return net > 0 ? net.toFixed(2) : "0.00";
   })();
 
@@ -3058,9 +3062,11 @@ function TLSettlementTab() {
 
   const damageRows = [
     { label: "Vehicle Valuation (ACV)", amount: parseFloat(form.acv) || 0, required: true },
-    { label: "Storage", amount: parseFloat(form.storage) || 0 },
-    { label: "Admin Fee", amount: parseFloat(form.adminFee) || 0 },
     { label: "Sales Tax", amount: parseFloat(form.salesTax) || 0 },
+    { label: "Title & Registration Fees", amount: parseFloat(form.titleRegFees) || 0 },
+    { label: "Admin Fee", amount: parseFloat(form.adminFee) || 0 },
+    { label: "Tear Down", amount: parseFloat(form.tearDown) || 0 },
+    { label: "Storage", amount: parseFloat(form.storage) || 0 },
     { label: "Salvage (deducted)", amount: parseFloat(form.salvageDeducted) || 0, deducted: true },
   ];
   const visibleDamageRows = damageRows.filter((row) => row.required || row.amount > 0);
@@ -3115,6 +3121,8 @@ function TLSettlementTab() {
         storage: form.storage,
         adminFee: form.adminFee,
         salesTax: form.salesTax,
+        titleRegFees: form.titleRegFees,
+        tearDown: form.tearDown,
         salvageDeducted: form.salvageDeducted,
         otherDeductions: otherDeductions.filter(d => d.label && d.amount),
         netAmount,
@@ -3178,9 +3186,11 @@ function TLSettlementTab() {
         y += 6.5;
       };
       writeDamageRow("Vehicle Valuation (ACV)", parseFloat(form.acv) || 0);
-      if (form.storage && parseFloat(form.storage) > 0) writeDamageRow("Storage", parseFloat(form.storage));
-      if (form.adminFee && parseFloat(form.adminFee) > 0) writeDamageRow("Admin Fee", parseFloat(form.adminFee));
       if (form.salesTax && parseFloat(form.salesTax) > 0) writeDamageRow("Sales Tax", parseFloat(form.salesTax));
+      if (form.titleRegFees && parseFloat(form.titleRegFees) > 0) writeDamageRow("Title & Registration Fees", parseFloat(form.titleRegFees));
+      if (form.adminFee && parseFloat(form.adminFee) > 0) writeDamageRow("Admin Fee", parseFloat(form.adminFee));
+      if (form.tearDown && parseFloat(form.tearDown) > 0) writeDamageRow("Tear Down", parseFloat(form.tearDown));
+      if (form.storage && parseFloat(form.storage) > 0) writeDamageRow("Storage", parseFloat(form.storage));
       if (form.salvageDeducted && parseFloat(form.salvageDeducted) > 0) writeDamageRow("Salvage (deducted)", parseFloat(form.salvageDeducted), true);
       if (form.priorPayment && parseFloat(form.priorPayment) > 0) writeDamageRow("Prior Payment to Claimant (deducted)", parseFloat(form.priorPayment), true);
       if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) writeDamageRow(`Loan Payoff — ${form.lienHolder} (deducted)`, parseFloat(form.lienPayoff), true);
@@ -3243,12 +3253,36 @@ function TLSettlementTab() {
         </Panel>
         <Panel title="Settlement Breakdown">
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Enter the components that apply. The total adds ACV, storage, admin fee, and sales tax, then deducts salvage and any additional deductions.</p>
+            <p className="text-xs text-muted-foreground">Enter the components that apply. The total adds ACV, sales tax, title and registration fees, admin fee, tear down, and storage, then deducts salvage and any additional deductions.</p>
             <Grid2 children={<>
               <Field label="Vehicle Valuation (ACV) ($)" id="tls-acv" value={form.acv} onChange={set("acv")} placeholder="e.g. 23496.00" />
-              <Field label="Storage ($)" id="tls-storage-charge" value={form.storage} onChange={set("storage")} placeholder="e.g. 1260.00" />
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="tls-sales-tax" className="text-xs font-semibold text-foreground/80">Sales Tax ($)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] font-semibold"
+                    onClick={() => {
+                      const acv = parseFloat(form.acv);
+                      if (!Number.isFinite(acv) || acv <= 0) {
+                        toast.error("Enter a vehicle valuation before calculating sales tax");
+                        return;
+                      }
+                      set("salesTax")((acv * 0.06).toFixed(2));
+                    }}
+                  >
+                    Auto-calc 6%
+                  </Button>
+                </div>
+                <Input id="tls-sales-tax" inputMode="decimal" value={form.salesTax} onChange={(e) => set("salesTax")(e.target.value)} placeholder="e.g. 1527.24" className="text-sm h-8" />
+                <p className="text-[10px] text-muted-foreground">Total loss only; calculated from ACV when applicable.</p>
+              </div>
+              <Field label="Title & Reg Fees ($) — MD only" id="tls-title-reg" value={form.titleRegFees} onChange={set("titleRegFees")} placeholder="e.g. 185.00" />
               <Field label="Admin Fee ($)" id="tls-admin-fee" value={form.adminFee} onChange={set("adminFee")} placeholder="e.g. 295.00" />
-              <Field label="Sales Tax ($)" id="tls-sales-tax" value={form.salesTax} onChange={set("salesTax")} placeholder="e.g. 1527.24" />
+              <Field label="Tear Down ($)" id="tls-tear-down" value={form.tearDown} onChange={set("tearDown")} placeholder="e.g. 450.00" />
+              <Field label="Storage ($)" id="tls-storage-charge" value={form.storage} onChange={set("storage")} placeholder="e.g. 1260.00" />
               <Field label="Salvage (Deducted) ($)" id="tls-salvage" value={form.salvageDeducted} onChange={set("salvageDeducted")} placeholder="e.g. 6720.00" />
               <Field label="Less: Prior Payment to Claimant ($)" id="tls-prior" value={form.priorPayment} onChange={set("priorPayment")} placeholder="e.g. 0.00" />
             </>} />

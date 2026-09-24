@@ -1,0 +1,15 @@
+ALTER TABLE `internal_tickets`
+  MODIFY COLUMN `status` ENUM('new','triaged','in_progress','ready_for_approval','approved_for_production','resolved','closed') NOT NULL DEFAULT 'new',
+  ADD COLUMN `owner_notified_at` TIMESTAMP NULL,
+  ADD COLUMN `owner_notification_error` TEXT NULL,
+  ADD COLUMN `production_ready_at` TIMESTAMP NULL,
+  ADD COLUMN `production_ready_by_user_id` INT NULL,
+  ADD COLUMN `production_ready_by_name` VARCHAR(255) NULL,
+  ADD COLUMN `production_ready_notified_at` TIMESTAMP NULL,
+  ADD COLUMN `production_ready_notification_error` TEXT NULL,
+  ADD COLUMN `production_approved_at` TIMESTAMP NULL,
+  ADD COLUMN `production_approved_by_user_id` INT NULL,
+  ADD COLUMN `production_approved_by_name` VARCHAR(255) NULL,
+  ADD COLUMN `production_approved_notified_at` TIMESTAMP NULL,
+  ADD COLUMN `production_approved_notification_error` TEXT NULL,
+  ADD KEY `internal_tickets_status_production_idx` (`status`, `production_approved_at`);

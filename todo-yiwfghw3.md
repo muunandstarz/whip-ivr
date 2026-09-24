@@ -773,3 +773,16 @@
 - [x] Repair historical source replay to support an explicit bounded time window without adding ordinary open-work backlog targets
 - [x] Ingest workflow-bot FNOL parent posts as valid source notices and verify the change against the Chasten Baker source thread
 - [x] Reconcile the September 7–11 cohort across all three readable source channels and document named-case, Gravity Forms, filing, arrival, SLA, duplicate, and quiet-publish findings in `loss_intake_september_2026_audit.md`
+
+## September 2026 Total Loss Settlement Breakdown
+- [x] Add sales tax with a 6% ACV calculator, Maryland title and registration fees, administration fee, tear-down, storage, and salvage deduction to the Total Loss settlement form
+- [x] Include each applicable component in the continuously calculated itemization, formatted preview, generated PDF, and AI Total Loss letter contract
+- [x] Verify browser calculation with ACV $10,000, 6% sales tax, $185 title/registration, $295 admin, $450 tear-down, $1,260 storage, and $1,000 salvage for a net $11,790; preview rendered each itemization line
+
+## September 2026 Claims QA Visual Replacement and Ticket Approval
+- [x] Replace the Claims QA presentation with the approved evaluations-first queue: four KPI cards, compact status/search/role controls, exactly ten audits per page, pagination, and mobile audit cards.
+- [x] Keep the queue visible behind a 44vw/max-760px right-side review workspace with a clear Overview hierarchy, leadership safeguard/actions, explicit reviewed-evidence cards, misses-first ordering, and all-items access.
+- [x] Preserve handler privacy and workflow: impersonated Jovel Villa sees only released personal reviews, no leadership controls, and the handler filter resets correctly when switching from leadership view.
+- [x] Validate the visual replacement through authenticated desktop admin, right-side review workspace, desktop handler, and mobile handler captures; run 12 focused Claims QA tests plus 278 application tests (1 skipped), TypeScript, production build, and diff validation.
+- [x] Notify the owner immediately on ticket submission, record the delivery outcome, require a visible implementation summary before Ready for approval, and record a separate approved-for-production decision without automatic deployment.
+- [x] Apply and verify the narrow ticket-approval schema migration: ready_for_approval/approved_for_production statuses plus owner_notified_at, production_ready_at, and production_approved_at.

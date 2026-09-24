@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { adminProcedure, protectedProcedure, router } from '../_core/trpc';
 import {
+  approveInternalTicketForProduction,
   getInternalTicket,
   getTicketDigestStatus,
   listInternalTickets,
@@ -12,7 +13,7 @@ import {
 } from '../tickets';
 
 const ticketType = z.enum(['bug', 'issue', 'suggestion', 'other']);
-const ticketStatus = z.enum(['new', 'triaged', 'in_progress', 'resolved', 'closed']);
+const ticketStatus = z.enum(['new', 'triaged', 'in_progress', 'ready_for_approval', 'approved_for_production', 'resolved', 'closed']);
 const ticketPriority = z.enum(['low', 'normal', 'high', 'urgent']);
 
 function viewerFromContext(ctx: { user: { id: number; name: string | null; email: string | null; role: 'admin' | 'user'; handlerProfileId: number | null }; req: { headers: Record<string, string | string[] | undefined> } }): TicketViewer {
@@ -70,6 +71,13 @@ export const ticketsRouter = router({
     .input(z.object({ id: z.number().int().positive(), status: ticketStatus, priority: ticketPriority, triageNote: z.string().trim().max(5_000).optional() }))
     .mutation(async ({ ctx, input }) => {
       try { return await triageInternalTicket({ viewer: viewerFromContext(ctx), ...input }); }
+      catch (error) { return rethrow(error); }
+    }),
+
+  approveForProduction: adminProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      try { return await approveInternalTicketForProduction({ viewer: viewerFromContext(ctx), id: input.id }); }
       catch (error) { return rethrow(error); }
     }),
 

@@ -127,9 +127,15 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     const page = source('client/src/pages/WeeklyQA.tsx');
     expect(page).toContain("from '@/components/ui/sheet'");
     expect(page).toContain("leadership ? 'Audit queue' : 'My audit reviews'");
-    expect(page).toContain("leadership ? 'Leadership review' : 'My review'");
+    expect(page).toContain("{ key: 'review', label: 'Overview' }");
     expect(page).toContain('Ready for review');
-    expect(page).toContain('Priority audit items');
+    expect(page).toContain('Reviewed examples');
+    expect(page).toContain('What was reviewed');
+    expect(page).toContain('Why this result');
+    expect(page).toContain('Pass standard:');
+    expect(page).toContain('Showing {safePage * 10 + 1}');
+    expect(page).toContain('visibleEvaluations.slice(safePage * 10, safePage * 10 + 10)');
+    expect(page).toContain("useState('evaluations')");
     expect(page).toContain('Release to handler');
     expect(page).toContain('Submit sign-off');
     expect(page).toContain('<tr key={evaluation.id} role="button" tabIndex={0} onClick={() => onOpen(evaluation.id)}');
