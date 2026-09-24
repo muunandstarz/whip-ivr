@@ -141,4 +141,11 @@ describe('Claims QA row-level access and manual-release safeguards', () => {
     expect(page).toContain('<tr key={evaluation.id} role="button" tabIndex={0} onClick={() => onOpen(evaluation.id)}');
     expect(page).toContain("leadership ? 'Review evaluation queue' : 'Review my evaluations'");
   });
+
+  it('refreshes Claims QA data when entering or leaving handler preview', () => {
+    const page = source('client/src/pages/WeeklyQA.tsx');
+    expect(page).toContain('void utils.claimsQa.invalidate()');
+    expect(page).toContain('}, [isImpersonating]);');
+    expect(page).toContain('setSelectedEvaluation(null)');
+  });
 });

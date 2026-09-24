@@ -538,6 +538,7 @@ function ClaimsQaOverview({ data, leadership, onOpenEvaluation, onReviewAll }: {
 export default function WeeklyQA() {
   const { user } = useAuth();
   const { isImpersonating } = useImpersonation();
+  const utils = trpc.useUtils();
   const leadership = user?.role === 'admin' && !isImpersonating;
   const [tab, setTab] = useState('evaluations');
   const [createOpen, setCreateOpen] = useState(false);
@@ -545,6 +546,10 @@ export default function WeeklyQA() {
   const overview = trpc.claimsQa.overview.useQuery();
   const data = overview.data as any;
   const open = (id: number) => setSelectedEvaluation(id);
+  useEffect(() => {
+    setSelectedEvaluation(null);
+    void utils.claimsQa.invalidate();
+  }, [isImpersonating]);
 
   return <WhipLayout><div className="p-4 sm:p-6 space-y-5"><header className="flex flex-col gap-3 border-b pb-5 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Claims QA</h1><Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700"><Users className="mr-1 h-3.5 w-3.5" />{leadership ? 'Leadership review' : 'Handler review'}</Badge></div><p className="mt-1 max-w-3xl text-sm text-muted-foreground">{leadership ? 'Executive review and adjudication of claim audits. Ensure quality, compliance, and coaching outcomes before release.' : 'Review your released claim audits, inspect the evidence, respond to findings, and complete sign-off.'}</p></div>{leadership && <Button className="bg-[#ff6221] hover:bg-[#e5541a] text-white gap-2" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New evaluation</Button>}</header>
     <Tabs value={tab} onValueChange={setTab} className="gap-4"><TabsList className="h-auto w-full justify-start overflow-x-auto bg-muted p-1 sm:w-fit"><TabsTrigger value="overview" className="px-3"><ClipboardCheck /> Overview</TabsTrigger><TabsTrigger value="evaluations" className="px-3"><FileText /> Evaluations</TabsTrigger><TabsTrigger value="scorecard" className="px-3"><BookOpenCheck /> Scorecard</TabsTrigger>{leadership && <TabsTrigger value="disputes" className="px-3"><Gavel /> Disputes</TabsTrigger>}{leadership && <TabsTrigger value="calibration" className="px-3"><Scale /> Calibration</TabsTrigger>}</TabsList>
