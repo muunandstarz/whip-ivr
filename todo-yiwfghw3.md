@@ -801,3 +801,13 @@
 - [x] Reduce lateral padding and expand the responsive content shell on Market and Policy Directory / Total Recon Repairs without compromising mobile gutters.
 - [x] Normalize Aircall `missed_call_reason` in both API sync and webhooks so `abandoned_in_classic`, `abandoned_in_ivr`, and `short_abandoned` are stored as **abandoned**, rather than incorrectly grouped with no-agent misses; preserve answered, voicemail, and legacy statuses.
 - [x] Validate responsive Total Recon layout and outcome mapping: 19 focused tests; full suite 293 passed / 1 skipped; TypeScript, production build, and diff check passed.
+
+
+## September 2026 — Repair, Medical, and Call-Safety Completion
+- [x] Add a fillable Maryland accepted-liability Total Recon claimant email. It ranks Laurel/Rockville from a searchable address, inserts the recommended shop and distance, describes Total Recon benefits, and conditions a loaner on verified active comprehensive and collision coverage.
+- [x] Complete Total Loss settlement itemization with ACV, sales tax, title/registration fees, administration fee, tear-down charge, storage, and salvage deduction in the form, live itemization, AI-letter input, and PDF. Render a full VIN on its own line below vehicle details.
+- [x] Repair Medical Bill Review uploads and structured analysis; preserve seven named intake slots, support PIP/BI/UMBI analysis, add a response-letter preview/download, and link the PIP review to the state-appropriate exhaustion notice.
+- [x] Use signed, model-readable document URLs for both Medical Bill Review and PIP document parsing, with successful non-production PDF smoke tests for analysis and PIP parsing.
+- [x] Add a formatted Pro-Rata explanation-letter preview/download and apply the restrained printer-neutral treatment to the document workspace while retaining the colored Whip mark.
+- [x] Normalize Aircall outcomes (answered, missed, voicemail, abandoned) and create callback tasks for missed/abandoned Claims Line calls as a durable application-side safety net.
+- [ ] Finish Aircall dashboard routing coverage: live inspection found the Claims Line group has six users but only Natashia and MJ marked available. The API has no safe documented write route for number call-flow membership; update requires a signed-in Aircall administrator session.

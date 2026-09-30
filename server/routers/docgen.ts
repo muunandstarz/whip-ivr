@@ -818,7 +818,9 @@ Format your response as structured JSON matching this schema:
 
       const raw = extractText(result);
       try {
-        const parsed = JSON.parse(raw ?? "{}");
+        // Providers sometimes return a fenced JSON object even when an output
+        // schema is requested. Normalize it before handing it to the UI.
+        const parsed = parseJsonObject(raw ?? "{}");
         return { success: true, analysis: parsed };
       } catch {
         return { success: true, analysis: null, raw };
@@ -921,7 +923,7 @@ Format as JSON: { payments: [{date, provider, amount, serviceType}], totalPaid: 
 
       const raw = extractText(result);
       try {
-        const parsed = JSON.parse(raw ?? "{}");
+        const parsed = parseJsonObject(raw ?? "{}");
         return { success: true, parsed };
       } catch {
         return { success: true, parsed: null, raw };

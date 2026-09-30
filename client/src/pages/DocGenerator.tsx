@@ -173,7 +173,9 @@ function addWhipLetterhead(doc: jsPDF, _title?: string, _subtitle?: string) {
   // Company info — right side (bold name, normal address/contact)
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(23, 27, 49);
+  // Keep generated correspondence neutral and print-friendly. The logo is the
+  // only brand-colored element; all letterhead text prints in black/gray.
+  doc.setTextColor(20, 20, 20);
   doc.text("Whip Claims Management", W - 14, 12, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -3160,7 +3162,10 @@ function TLSettlementTab() {
       y = wrapText(doc, `Claimant: ${form.claimantName || "[Claimant Name]"}`, 14, y, W - 28, 6.5);
       y = wrapText(doc, `Claim No.: ${form.claimNumber || "[Claim Number]"}`, 14, y, W - 28, 6.5);
       y = wrapText(doc, `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`, 14, y, W - 28, 6.5);
-      if (form.vehicle) y = wrapText(doc, `Vehicle: ${form.vehicle}${form.vin ? ` | VIN: ${form.vin}` : ""}`, 14, y, W - 28, 6.5);
+      if (form.vehicle) y = wrapText(doc, `Vehicle: ${form.vehicle}`, 14, y, W - 28, 6.5);
+      // A full VIN can overrun the available page width beside a long vehicle
+      // description. Keep it on its own line in every rendered settlement PDF.
+      if (form.vin) y = wrapText(doc, `VIN: ${form.vin}`, 14, y, W - 28, 6.5);
       if (form.market) y = wrapText(doc, `Market: ${form.market}`, 14, y, W - 28, 6.5);
       y += 4;
       const firstName = form.claimantName.split(/[\s,]+/)[0] || form.claimantName || "[Claimant]";
@@ -3391,8 +3396,11 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
     demandType: "repair",
     repair: "",
     tow: "",
-    storage: "",
-    dv: "",
+	    storage: "",
+	    adminFee: "",
+	    salesTax: "",
+	    salvageDeducted: "",
+	    dv: "",
     lou: "",
     valuation: "",
     openingParagraph: "",
@@ -3502,15 +3510,18 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
     }
   };
 
-  const total = (() => {
-    const r = parseFloat(form.repair) || 0;
-    const t = parseFloat(form.tow) || 0;
-    const s = parseFloat(form.storage) || 0;
-    const d = parseFloat(form.dv) || 0;
-    const l = parseFloat(form.lou) || 0;
-    if (form.demandType === "total-loss") {
-      const v = parseFloat(form.valuation) || 0;
-      return (v + t + s + d + l).toFixed(2);
+	  const total = (() => {
+	    const r = parseFloat(form.repair) || 0;
+	    const t = parseFloat(form.tow) || 0;
+	    const s = parseFloat(form.storage) || 0;
+	    const admin = parseFloat(form.adminFee) || 0;
+	    const tax = parseFloat(form.salesTax) || 0;
+	    const salvage = parseFloat(form.salvageDeducted) || 0;
+	    const d = parseFloat(form.dv) || 0;
+	    const l = parseFloat(form.lou) || 0;
+	    if (form.demandType === "total-loss") {
+	      const v = parseFloat(form.valuation) || 0;
+	      return (v + t + s + admin + tax + d + l - salvage).toFixed(2);
     }
     return (r + t + s + d + l).toFixed(2);
   })();
@@ -3546,8 +3557,12 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
 ITEMIZATION OF DAMAGES
 ─────────────────────────────────────────
 ${form.demandType === "total-loss" ? `Vehicle Valuation (ACV)          $${form.valuation || "0.00"}` : `Estimate                         $${form.repair || "0.00"}`}
-${form.tow ? `Towing / Transport               $${form.tow}` : ""}
-${form.dv ? `Diminished Value                 $${form.dv}` : ""}
+	${form.tow ? `Towing / Transport               $${form.tow}` : ""}
+	${form.demandType === "total-loss" && form.salesTax ? `Sales Tax                          $${form.salesTax}` : ""}
+	${form.demandType === "total-loss" && form.adminFee ? `Admin Fee                          $${form.adminFee}` : ""}
+	${form.storage ? `Storage                            $${form.storage}` : ""}
+	${form.demandType === "total-loss" && form.salvageDeducted ? `Salvage (deducted)               ($${form.salvageDeducted})` : ""}
+	${form.dv ? `Diminished Value                 $${form.dv}` : ""}
 ${form.lou ? `Rental Reimbursement             $${form.lou}` : ""}
 ─────────────────────────────────────────
 Total Subrogation Demand         $${total}
@@ -3630,7 +3645,15 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     }
     if (form.tow) rows.push(["Towing / Transport", `$${parseFloat(form.tow).toFixed(2)}`]);
     const storageAmt = parseFloat(form.storage || "0");
-    if (storageAmt > 0) rows.push(["Storage", `$${storageAmt.toFixed(2)}`]);
+	    if (storageAmt > 0) rows.push(["Storage", `$${storageAmt.toFixed(2)}`]);
+	    if (form.demandType === "total-loss") {
+	      const salesTax = parseFloat(form.salesTax || "0");
+	      const adminFee = parseFloat(form.adminFee || "0");
+	      const salvage = parseFloat(form.salvageDeducted || "0");
+	      if (salesTax > 0) rows.push(["Sales Tax", `$${salesTax.toFixed(2)}`]);
+	      if (adminFee > 0) rows.push(["Admin Fee", `$${adminFee.toFixed(2)}`]);
+	      if (salvage > 0) rows.push(["Salvage (deducted)", `($${salvage.toFixed(2)})`]);
+	    }
     if (form.dv) rows.push(["Diminished Value", `$${parseFloat(form.dv).toFixed(2)}`]);
     if (form.lou) rows.push(["Rental Reimbursement (LOU)", `$${parseFloat(form.lou).toFixed(2)}`]);
 
@@ -3752,7 +3775,7 @@ This demand is made without waiver of any rights or remedies available to Metroc
             <Field label="Driver / Claimant Name" id="sd-driver" value={form.driver} onChange={set("driver")} placeholder="First Last" />
           </>} />
           <Grid3 children={<>
-            <Field label="Vehicle (Year/Make/Model)" id="sd-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Tesla Model 3" />
+	            <Field label="Vehicle (Year/Make/Model)" id="sd-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Tesla Model 3" />
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-foreground/80">VIN</Label>
               <div className="flex gap-1.5">
@@ -3842,9 +3865,16 @@ This demand is made without waiver of any rights or remedies available to Metroc
             <Field label="Diminished Value ($)" id="sd-dv" value={form.dv} onChange={set("dv")} placeholder="0.00" />
             <Field label="Loss of Use / Rental ($)" id="sd-lou" value={form.lou} onChange={set("lou")} placeholder="0.00" />
           </>} />
-          <div className="mt-3">
-            <Field label="Storage ($)" id="sd-storage" value={form.storage} onChange={set("storage")} placeholder="0.00" />
-          </div>
+	          <div className="mt-3">
+	            <Field label="Storage ($)" id="sd-storage" value={form.storage} onChange={set("storage")} placeholder="0.00" />
+	          </div>
+	          {form.demandType === "total-loss" && (
+	            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+	              <Field label="Sales Tax ($)" id="sd-sales-tax" value={form.salesTax} onChange={set("salesTax")} placeholder="0.00" />
+	              <Field label="Admin Fee ($)" id="sd-admin-fee" value={form.adminFee} onChange={set("adminFee")} placeholder="0.00" />
+	              <Field label="Salvage (Deducted) ($)" id="sd-salvage" value={form.salvageDeducted} onChange={set("salvageDeducted")} placeholder="0.00" />
+	            </div>
+	          )}
           <div className="mt-3 p-2 bg-[#ff6221]/10 rounded border border-[#ff6221]/20">
             <div className="text-xs font-mono font-bold text-[#ff6221]">TOTAL DEMAND: ${total}</div>
           </div>
@@ -4891,7 +4921,10 @@ Whip Claims Management`;
 
 // ─── PIP Exhaustion Tab ───────────────────────────────────────────────────────
 function PIPExhaustionTab() {
-  const [state, setState] = useState<"fl" | "pa" | "va" | "ma">("fl");
+	  const pipSearch = useSearch();
+	  const requestedPipState = new URLSearchParams(pipSearch).get("memberState")?.toLowerCase();
+	  const initialPipState = (["fl", "pa", "va", "ma"].includes(requestedPipState || "") ? requestedPipState : "fl") as "fl" | "pa" | "va" | "ma";
+	  const [state, setState] = useState<"fl" | "pa" | "va" | "ma">(initialPipState);
   const [form, setForm] = useState({
     recipient: "",
     claimNo: "",
@@ -4917,14 +4950,20 @@ function PIPExhaustionTab() {
     if (!pipDoc) { toast.error("Upload a PIP document first"); return; }
     setDocUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", pipDoc);
-      const res = await fetch("/api/upload/document", { method: "POST", body: fd });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json() as { url: string };
-      setDocUploading(false);
-      toast.info("Parsing document — this may take 20–30 seconds...");
-      const result = await parseMutation.mutateAsync({ fileUrl: url, state });
+	      const fd = new FormData();
+	      fd.append("file", pipDoc);
+	      const res = await fetch("/api/upload/document", { method: "POST", body: fd });
+	      if (!res.ok) throw new Error("Upload failed");
+	      const payload = await res.json() as { url?: string; signedUrl?: string };
+	      // The model needs a directly readable object URL.  Prefer the signed
+	      // object URL instead of the browser-relative storage URL.
+	      const fileUrl = payload.signedUrl || payload.url;
+	      if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) {
+	        throw new Error("Upload did not return a readable PIP document URL");
+	      }
+	      setDocUploading(false);
+	      toast.info("Parsing document — this may take 20–30 seconds...");
+	      const result = await parseMutation.mutateAsync({ fileUrl, state });
       if (result.parsed) {
         const p = result.parsed as Partial<typeof form>;
         setForm(prev => ({
@@ -6019,9 +6058,10 @@ function MedicalBillReviewTab() {
     liabilityPercent: "100",
   });
   const [uploads, setUploads] = React.useState<Record<string, { file: File; url: string; uploading: boolean } | null>>({});
-  const [analysisResult, setAnalysisResult] = React.useState<MBRAnalysis | null>(null);
-  const [rawResult, setRawResult] = React.useState<string | null>(null);
-  const [analyzing, setAnalyzing] = React.useState(false);
+	  const [analysisResult, setAnalysisResult] = React.useState<MBRAnalysis | null>(null);
+	  const [rawResult, setRawResult] = React.useState<string | null>(null);
+	  const [responsePdfUrl, setResponsePdfUrl] = React.useState<string | null>(null);
+	  const [analyzing, setAnalyzing] = React.useState(false);
   const [activeResultTab, setActiveResultTab] = React.useState<"bills" | "diagnoses" | "timeline" | "pip" | "bi" | "expert" | "letter">("expert");
   const [copiedLetter, setCopiedLetter] = React.useState(false);
 
@@ -6030,16 +6070,21 @@ function MedicalBillReviewTab() {
 
   const setField = (k: keyof typeof form) => (v: string) => setForm(p => ({ ...p, [k]: v }));
 
-  const handleUpload = async (slotKey: string, file: File, isImage: boolean) => {
+  const handleUpload = async (slotKey: string, file: File, _isImage: boolean) => {
     setUploads(prev => ({ ...prev, [slotKey]: { file, url: "", uploading: true } }));
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json() as { url: string };
-      setUploads(prev => ({ ...prev, [slotKey]: { file, url: data.url, uploading: false } }));
-    } catch {
-      toast.error(`Failed to upload ${file.name}`);
+      // Use the document endpoint: it stores the file and returns a short-lived,
+      // model-readable signed URL. /api/upload does not exist in this project.
+      const res = await fetch("/api/upload/document", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({})) as { url?: string; signedUrl?: string; error?: string };
+      if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+      const fileUrl = data.signedUrl || data.url;
+      if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
+      setUploads(prev => ({ ...prev, [slotKey]: { file, url: fileUrl, uploading: false } }));
+    } catch (error: unknown) {
+      toast.error((error as Error).message || `Failed to upload ${file.name}`);
       setUploads(prev => ({ ...prev, [slotKey]: null }));
     }
   };
@@ -6092,7 +6137,39 @@ function MedicalBillReviewTab() {
 
   const uploadedCount = Object.values(uploads).filter(u => u?.url).length;
   const totalBilled = analysisResult?.bills.reduce((s, b) => s + (b.amount || 0), 0) ?? 0;
-  const totalAllowed = analysisResult?.bills.reduce((s, b) => s + (b.allowedAmount || 0), 0) ?? 0;
+	  const totalAllowed = analysisResult?.bills.reduce((s, b) => s + (b.allowedAmount || 0), 0) ?? 0;
+
+	  const buildResponseLetterPdf = (shouldDownload: boolean) => {
+	    if (!analysisResult?.responseLetter) {
+	      toast.error("Run the medical review before creating the response letter");
+	      return null;
+	    }
+	    const doc = new jsPDF();
+	    const W = doc.internal.pageSize.getWidth();
+	    const H = doc.internal.pageSize.getHeight();
+	    let y = addWhipLetterhead(doc);
+	    doc.setFont("helvetica", "normal");
+	    doc.setFontSize(9.5);
+	    doc.setTextColor(30, 30, 30);
+	    for (const paragraph of analysisResult.responseLetter.split(/\n\s*\n/)) {
+	      const lines = doc.splitTextToSize(paragraph.trim() || " ", W - 28) as string[];
+	      const needed = Math.max(6, lines.length * 5.5 + 4);
+	      if (y + needed > H - 23) {
+	        doc.addPage();
+	        y = addWhipLetterhead(doc);
+	        doc.setFont("helvetica", "normal");
+	        doc.setFontSize(9.5);
+	        doc.setTextColor(30, 30, 30);
+	      }
+	      if (paragraph.trim()) doc.text(lines, 14, y);
+	      y += needed;
+	    }
+	    addLetterFooter(doc);
+	    const url = getPDFDataUrl(doc);
+	    setResponsePdfUrl(url);
+	    if (shouldDownload) downloadPDF(doc, `Whip_MedicalResponse_${form.claimNumber || "Draft"}.pdf`);
+	    return url;
+	  };
 
   return (
     <div className="space-y-6">
@@ -6429,33 +6506,44 @@ function MedicalBillReviewTab() {
                       ))}
                     </div>
                   )}
-                  {activeResultTab === "pip" && pipRules.hasPIP && (
-                    <div className="space-y-3">
-                      <div className="rounded-md bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-3">
-                        <div className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">{state} PIP Rules</div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div><span className="text-muted-foreground">Limit:</span> <span className="font-semibold">{fmt(pipRules.limit)}</span></div>
-                          <div><span className="text-muted-foreground">Rate:</span> <span className="font-semibold">{pipRules.pct}%</span></div>
-                          <div className="col-span-2"><span className="text-muted-foreground">Fee Schedule:</span> <span className="font-semibold">{pipRules.feeSchedule}</span></div>
-                          <div className="col-span-2"><span className="text-muted-foreground">Statute:</span> <span className="font-semibold">{pipRules.statute}</span></div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="rounded-md border border-border p-2 text-center">
-                          <div className="text-[10px] text-muted-foreground">Total Billed</div>
-                          <div className="text-sm font-bold">{fmt(totalBilled)}</div>
-                        </div>
-                        <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20 p-2 text-center">
-                          <div className="text-[10px] text-blue-600 dark:text-blue-400">PIP Payable</div>
-                          <div className="text-sm font-bold text-blue-700 dark:text-blue-300">{fmt(analysisResult.pipAllowed)}</div>
-                        </div>
-                        <div className="rounded-md border border-border p-2 text-center">
-                          <div className="text-[10px] text-muted-foreground">Remaining Limit</div>
-                          <div className="text-sm font-bold">{fmt(analysisResult.pipRemaining)}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+	                  {activeResultTab === "pip" && pipRules.hasPIP && (
+	                    <div className="space-y-3">
+	                      <div className="rounded-md bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-3">
+	                        <div className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">{state} PIP Rules</div>
+	                        <div className="grid grid-cols-2 gap-2 text-xs">
+	                          <div><span className="text-muted-foreground">Limit:</span> <span className="font-semibold">{fmt(pipRules.limit)}</span></div>
+	                          <div><span className="text-muted-foreground">Rate:</span> <span className="font-semibold">{pipRules.pct}%</span></div>
+	                          <div className="col-span-2"><span className="text-muted-foreground">Fee Schedule:</span> <span className="font-semibold">{pipRules.feeSchedule}</span></div>
+	                          <div className="col-span-2"><span className="text-muted-foreground">Statute:</span> <span className="font-semibold">{pipRules.statute}</span></div>
+	                        </div>
+	                      </div>
+	                      <div className="grid grid-cols-3 gap-2">
+	                        <div className="rounded-md border border-border p-2 text-center">
+	                          <div className="text-[10px] text-muted-foreground">Total Billed</div>
+	                          <div className="text-sm font-bold">{fmt(totalBilled)}</div>
+	                        </div>
+	                        <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/20 p-2 text-center">
+	                          <div className="text-[10px] text-blue-600 dark:text-blue-400">PIP Payable</div>
+	                          <div className="text-sm font-bold text-blue-700 dark:text-blue-300">{fmt(analysisResult.pipAllowed)}</div>
+	                        </div>
+	                        <div className="rounded-md border border-border p-2 text-center">
+	                          <div className="text-[10px] text-muted-foreground">Remaining Limit</div>
+	                          <div className="text-sm font-bold">{fmt(analysisResult.pipRemaining)}</div>
+	                        </div>
+	                      </div>
+	                      <div className="rounded-md border border-border bg-muted/25 p-3">
+	                        <div className="text-xs font-semibold text-foreground">PIP bill review & exhaustion workflow</div>
+	                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">This review calculates bill-level PIP applicability and payable amounts. Use the state-specific exhaustion notice after confirming the ledger, benefit limit, and paid total.</p>
+	                        {(["FL", "PA", "VA", "MA"].includes(state)) ? (
+	                          <Button asChild variant="outline" size="sm" className="mt-2 h-8 text-xs">
+	                            <a href={`/doc-generator?tab=pip-exhaustion&memberState=${state}`}>Create {state} PIP exhaustion notice</a>
+	                          </Button>
+	                        ) : (
+	                          <p className="mt-2 text-[11px] text-muted-foreground">The full PIP bill review remains available here. A dedicated exhaustion template is currently provided for FL, PA, VA, and MA.</p>
+	                        )}
+	                      </div>
+	                    </div>
+	                  )}
                   {activeResultTab === "bi" && (
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-2">
@@ -6488,19 +6576,24 @@ function MedicalBillReviewTab() {
                       )}
                     </div>
                   )}
-                  {activeResultTab === "letter" && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-foreground">Response Letter Draft</span>
-                        <Button variant="outline" size="sm" className="h-6 gap-1 text-xs"
-                          onClick={() => { navigator.clipboard.writeText(analysisResult.responseLetter); setCopiedLetter(true); setTimeout(() => setCopiedLetter(false), 2000); toast.success("Copied"); }}>
-                          {copiedLetter ? <CheckCircle className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                          {copiedLetter ? "Copied" : "Copy"}
-                        </Button>
-                      </div>
-                      <pre className="text-xs font-mono whitespace-pre-wrap text-foreground/80 leading-relaxed">{analysisResult.responseLetter}</pre>
-                    </div>
-                  )}
+	                  {activeResultTab === "letter" && (
+	                    <div>
+	                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+	                        <span className="text-xs font-semibold text-foreground">Response Letter Draft</span>
+	                        <div className="flex flex-wrap gap-1.5">
+	                          <Button variant="outline" size="sm" className="h-6 gap-1 text-xs" onClick={() => { const url = buildResponseLetterPdf(false); if (url) window.open(url, "_blank", "noopener,noreferrer"); }}><Eye className="w-3 h-3" />Preview PDF</Button>
+	                          <Button variant="outline" size="sm" className="h-6 gap-1 text-xs" onClick={() => { buildResponseLetterPdf(true); }}><Download className="w-3 h-3" />Download PDF</Button>
+	                          <Button variant="outline" size="sm" className="h-6 gap-1 text-xs"
+	                            onClick={() => { navigator.clipboard.writeText(analysisResult.responseLetter); setCopiedLetter(true); setTimeout(() => setCopiedLetter(false), 2000); toast.success("Copied"); }}>
+	                            {copiedLetter ? <CheckCircle className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+	                            {copiedLetter ? "Copied" : "Copy"}
+	                          </Button>
+	                        </div>
+	                      </div>
+	                      <pre className="text-xs font-mono whitespace-pre-wrap text-foreground/80 leading-relaxed">{analysisResult.responseLetter}</pre>
+	                      {responsePdfUrl && <a href={responsePdfUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-medium underline underline-offset-2">Open the current formatted PDF</a>}
+	                    </div>
+	                  )}
                 </div>
               </div>
             </div>
@@ -8158,7 +8251,7 @@ export default function DocGenerator() {
 
   return (
     <WhipLayout>
-      <div className="flex h-full min-h-0">
+      <div className="document-neutral flex h-full min-h-0">
         {/* Sidebar Nav */}
         <aside className="w-56 shrink-0 border-r border-border bg-muted/20 overflow-y-auto flex flex-col">
           <div className="p-3 border-b border-border">

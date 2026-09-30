@@ -20,6 +20,13 @@ describe("Total Recon repair workspace", () => {
     expect(source).toContain('Scheduling & claim-file safeguards');
   });
 
+  it("includes a fillable Maryland claimant email with nearest-shop and POI safeguards", () => {
+    expect(source).toContain('Maryland accepted-liability email');
+    expect(source).toContain('closest location is ${nearestShop.name}');
+    expect(source).toContain('active personal auto insurance with both comprehensive and collision coverage');
+    expect(source).toContain('POI verified: active comprehensive + collision');
+  });
+
   it("uses the expanded responsive content width rather than the former narrow padded shell", () => {
     expect(source).toContain('max-w-[1440px]');
     expect(source).toContain('px-3 py-5 sm:px-4 sm:py-6 lg:px-5 xl:px-6');

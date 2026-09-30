@@ -7,7 +7,7 @@ import { transcribeAudio } from "./_core/voiceTranscription";
 import { notifyOwner } from "./_core/notification";
 import { matchClaimNumber, resolveClaimFromSnapsheet, reformatRunOnClaimNumber, matchRunOnClaimNumber } from "./claimMatch";
 import { getHandlerByAircallUserId } from "./aircallSync";
-import { normalizeAircallOutcome } from "./aircallStatus";
+import { normalizeAircallOutcome, shouldCreateMissedCallCallback } from "./aircallStatus";
 
 export const aircallRouter = express.Router();
 
@@ -644,6 +644,70 @@ function getCallSource(call: any): 'ring_group' | 'extension' | 'outbound' {
   return 'extension';
 }
 
+/**
+ * No-agent and meaningful-abandon outcomes previously stayed only in call
+ * history, where they were easy to miss.  Create one idempotent, high-priority
+ * callback intake so the existing Handler Queue/Callback Log carries the work
+ * forward.  Voicemail has its own richer path and is deliberately excluded.
+ */
+async function createMissedCallCallback(call: any, status: ReturnType<typeof normalizeAircallOutcome>) {
+  if (!call?.id || !isClaimsTeamCall(call)) return false;
+  if (!shouldCreateMissedCallCallback({
+    direction: call.direction,
+    status: call.status,
+    missedCallReason: call.missed_call_reason,
+    voicemail: call.voicemail,
+    durationSeconds: Number(call.duration ?? 0),
+  })) return false;
+
+  const db = await getDb();
+  if (!db) return false;
+
+  const aircallCallId = String(call.id);
+  const existing = await db
+    .select({ id: intakeRecords.id })
+    .from(intakeRecords)
+    .where(eq(intakeRecords.aircallCallId, aircallCallId))
+    .limit(1);
+  if (existing.length > 0) return false;
+
+  // A no-agent call has no reliable subject-matter transcript.  Sending it to
+  // the existing monitored triage rotation is safer than assigning it back to
+  // an unavailable individual.
+  const handler = nextTriageHandler();
+  const reason = call.missed_call_reason?.trim() || status;
+  const callbackPhone = call.raw_digits ?? call.contact?.phone_number ?? null;
+  const createdAt = call.ended_at ? new Date(call.ended_at * 1000) : new Date();
+
+  try {
+    const result = await db.insert(intakeRecords).values({
+      aircallCallId,
+      callerPhone: callbackPhone,
+      callerName: call.contact?.name ?? undefined,
+      callbackPhone,
+      callerType: "unknown",
+      message: `Missed Claims Line call — ${reason.replace(/_/g, " ")}. No voicemail was left; return the call using the caller ID when available.`,
+      handlerId: handler.id,
+      handlerName: handler.name,
+      status: "open",
+      priority: "high",
+      source: "live_call",
+      routingMethod: "ivr",
+      callbackDueBy: addBusinessHours(createdAt, 1),
+      labels: JSON.stringify(["missed_call", "callback_required", reason]),
+    });
+    const intakeId = (result[0] as any).insertId;
+    await db.update(callHistory)
+      .set({ hasIntakeRecord: true, intakeRecordId: intakeId })
+      .where(eq(callHistory.aircallCallId, aircallCallId));
+    console.log(`[Aircall] Created callback intake ${intakeId} for missed call ${aircallCallId}, assigned to ${handler.name}`);
+    return true;
+  } catch (error) {
+    if (isDuplicateAircallIntakeError(error)) return false;
+    throw error;
+  }
+}
+
 // Aircall webhook endpoint
 aircallRouter.post("/webhook", express.json(), async (req, res) => {
   const { event, data } = req.body ?? {};
@@ -702,6 +766,8 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
           callSource: getCallSource(call),
         })
         .where(eq(callHistory.aircallCallId, String(call.id)));
+
+      await createMissedCallCallback(call, status);
     }
 
     if (event === "call.voicemail_left") {

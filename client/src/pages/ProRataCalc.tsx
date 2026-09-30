@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, Ban, Info, Plus, Trash2, Copy, Check, Calculator } from "lucide-react";
+import { AlertTriangle, Ban, Info, Plus, Trash2, Copy, Check, Calculator, Download } from "lucide-react";
 import { toast } from "sonner";
+import { jsPDF } from "jspdf";
 
 // ─── State Data (exact from HTML spec) ────────────────────────────────────────
 const STATES: Record<string, {
@@ -228,9 +229,10 @@ export default function ProRataCalc() {
   const [claimNum, setClaimNum] = useState("");
   const [claimants, setClaimants] = useState<Claimant[]>([newClaimant()]);
   const [result, setResult] = useState<CalcResult | null>(null);
-  const [activeLetterIdx, setActiveLetterIdx] = useState(0);
-  const [copiedSnap, setCopiedSnap] = useState(false);
-  const [copiedLetter, setCopiedLetter] = useState(false);
+	  const [activeLetterIdx, setActiveLetterIdx] = useState(0);
+	  const [copiedSnap, setCopiedSnap] = useState(false);
+	  const [copiedLetter, setCopiedLetter] = useState(false);
+	  const [letterPdfUrl, setLetterPdfUrl] = useState<string | null>(null);
 
 
   const handleStateChange = useCallback((code: string) => {
@@ -249,17 +251,63 @@ export default function ProRataCalc() {
     setActiveLetterIdx(0);
   }, [stateCode, memberFault, pdLimit, biLimitPP, biLimitOcc, calcType, claimNum, claimants]);
 
-  const handleReset = useCallback(() => {
+	  const handleReset = useCallback(() => {
     setResult(null); setClaimants([newClaimant()]); setStateCode("MD"); setMemberFault(100);
     const s = STATES["MD"]; setPdLimit(s.pd); setBiLimitPP(s.biPP); setBiLimitOcc(s.biOcc);
     setCalcType("both"); setClaimNum("");
-  }, []);
+	  }, []);
+
+	  const buildLetterPdf = useCallback((shouldDownload: boolean) => {
+	    if (!result) { toast.error("Calculate the allocation before creating a letter"); return null; }
+	    const doc = new jsPDF();
+	    const W = doc.internal.pageSize.getWidth();
+	    const H = doc.internal.pageSize.getHeight();
+	    const addLetterhead = () => {
+	      // Preserve a restrained colored Whip mark while all correspondence text,
+	      // rules, and panels remain black/gray for clean printing.
+	      doc.setTextColor(255, 98, 33);
+	      doc.setFont("helvetica", "bolditalic");
+	      doc.setFontSize(17);
+	      doc.text("whip", 14, 18);
+	      doc.setTextColor(20, 20, 20);
+	      doc.setFont("helvetica", "bold");
+	      doc.setFontSize(10);
+	      doc.text("Whip Claims Management", 46, 13);
+	      doc.setFont("helvetica", "normal");
+	      doc.setFontSize(8);
+	      doc.setTextColor(85, 85, 85);
+	      doc.text("P.O. Box 10622 · Rockville, MD 20849 · (855) 906-5949", 46, 18);
+	      doc.setDrawColor(180, 180, 180);
+	      doc.line(14, 26, W - 14, 26);
+	      doc.setTextColor(30, 30, 30);
+	      return 35;
+	    };
+	    let y = addLetterhead();
+	    doc.setFont("helvetica", "normal");
+	    doc.setFontSize(9.5);
+	    for (const paragraph of genLetter(result, activeLetterIdx).split(/\n\s*\n/)) {
+	      const lines = doc.splitTextToSize(paragraph.trim() || " ", W - 28) as string[];
+	      const needed = Math.max(6, lines.length * 5.5 + 4);
+	      if (y + needed > H - 23) { doc.addPage(); y = addLetterhead(); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); }
+	      if (paragraph.trim()) doc.text(lines, 14, y);
+	      y += needed;
+	    }
+	    doc.setDrawColor(180, 180, 180);
+	    doc.line(14, H - 12, W - 14, H - 12);
+	    doc.setTextColor(100, 100, 100);
+	    doc.setFontSize(7);
+	    doc.text("Whip Claims Management · Internal claims handling document", W / 2, H - 7, { align: "center" });
+	    const url = URL.createObjectURL(doc.output("blob"));
+	    setLetterPdfUrl(url);
+	    if (shouldDownload) doc.save(`Whip_ProRata_${result.claimNum || "Draft"}.pdf`);
+	    return url;
+	  }, [activeLetterIdx, result]);
 
   const s = STATES[stateCode];
 
   return (
     <WhipLayout>
-      <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
+      <div className="document-neutral max-w-5xl mx-auto py-6 px-4 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -368,15 +416,20 @@ export default function ProRataCalc() {
             </Card>
             {/* Letters */}
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Explanation Letter</CardTitle></CardHeader>
+	              <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Explanation Letter</CardTitle></CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {claimants.map((cl, i) => <Button key={i} size="sm" variant={activeLetterIdx === i ? "default" : "outline"} onClick={() => setActiveLetterIdx(i)} className={activeLetterIdx === i ? "bg-[#ff6221] hover:bg-[#e5571d]" : ""}>{cl.name || `Claimant ${i + 1}`}</Button>)}
                 </div>
                 <pre className="text-xs font-mono bg-muted/50 rounded-lg p-3 whitespace-pre-wrap overflow-x-auto min-h-[200px]">{genLetter(result, activeLetterIdx)}</pre>
-                <Button size="sm" variant="outline" className="mt-3" onClick={() => { navigator.clipboard.writeText(genLetter(result, activeLetterIdx)).then(() => { setCopiedLetter(true); setTimeout(() => setCopiedLetter(false), 2000); }); }}>
-                  {copiedLetter ? <><Check className="h-3.5 w-3.5 mr-1.5 text-green-600" />Copied</> : <><Copy className="h-3.5 w-3.5 mr-1.5" />Copy Letter</>}
-                </Button>
+	                <div className="mt-3 flex flex-wrap gap-2">
+	                  <Button size="sm" variant="outline" onClick={() => { const url = buildLetterPdf(false); if (url) window.open(url, "_blank", "noopener,noreferrer"); }}><Info className="h-3.5 w-3.5 mr-1.5" />Preview PDF</Button>
+	                  <Button size="sm" variant="outline" onClick={() => { buildLetterPdf(true); }}><Download className="h-3.5 w-3.5 mr-1.5" />Download PDF</Button>
+	                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(genLetter(result, activeLetterIdx)).then(() => { setCopiedLetter(true); setTimeout(() => setCopiedLetter(false), 2000); }); }}>
+	                    {copiedLetter ? <><Check className="h-3.5 w-3.5 mr-1.5 text-green-600" />Copied</> : <><Copy className="h-3.5 w-3.5 mr-1.5" />Copy Letter</>}
+	                  </Button>
+	                </div>
+	                {letterPdfUrl && <a href={letterPdfUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-medium underline underline-offset-2">Open the current formatted PDF</a>}
               </CardContent>
             </Card>
             <p className="text-xs text-muted-foreground text-center">This calculation is for internal claims handling purposes and does not constitute legal advice. Handler should consult with defense counsel for any dispute involving contributory negligence, comparative fault bars, or contested liability.</p>

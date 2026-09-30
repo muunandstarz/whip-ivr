@@ -22,3 +22,25 @@ export function normalizeAircallOutcome(
   if (status === "done" && !reason) return "answered";
   return "missed";
 }
+
+/**
+ * A caller who did not reach a person needs a visible, assigned callback task.
+ * Do not create a competing placeholder when Aircall has already recorded a
+ * voicemail; that event becomes the richer AI-extracted intake instead.
+ */
+export function shouldCreateMissedCallCallback(input: {
+  direction?: string | null;
+  status?: string | null;
+  missedCallReason?: string | null;
+  voicemail?: string | null;
+  durationSeconds?: number | null;
+}): boolean {
+  if (input.direction === "outbound" || input.voicemail) return false;
+
+  const outcome = normalizeAircallOutcome(input.status, input.missedCallReason);
+  if (outcome === "missed") return true;
+
+  // Ignore instantaneous misdials, but preserve a caller who waited in the
+  // call flow long enough to reasonably expect an answer.
+  return outcome === "abandoned" && Number(input.durationSeconds ?? 0) >= 15;
+}
