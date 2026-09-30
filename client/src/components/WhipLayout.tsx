@@ -34,7 +34,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { FileText } from "lucide-react";
-import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen, Ticket } from "lucide-react";
+import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen, Ticket, Wrench } from "lucide-react";
 import { Database, Library, Link2 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -66,6 +66,7 @@ const KB_NAV_ITEMS = [
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
+  { href: "/kb/total-recon", label: "Total Recon Repairs", icon: Wrench },
 ];
 
 const KB_NAV_EXTRA = [
@@ -94,6 +95,7 @@ const HANDLER_KB_NAV_ITEMS = [
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
+  { href: "/kb/total-recon", label: "Total Recon Repairs", icon: Wrench },
 ];
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);

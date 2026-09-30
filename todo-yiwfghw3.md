@@ -786,3 +786,12 @@
 - [x] Validate the visual replacement through authenticated desktop admin, right-side review workspace, desktop handler, and mobile handler captures; run 12 focused Claims QA tests plus 278 application tests (1 skipped), TypeScript, production build, and diff validation.
 - [x] Notify the owner immediately on ticket submission, record the delivery outcome, require a visible implementation summary before Ready for approval, and record a separate approved-for-production decision without automatic deployment.
 - [x] Apply and verify the narrow ticket-approval schema migration: ready_for_approval/approved_for_production statuses plus owner_notified_at, production_ready_at, and production_approved_at.
+
+
+## September 2026 — Total Recon Repair Workspace
+- [x] Add direct **Total Recon Repairs** sidebar workspace for admins and handlers (`/kb/total-recon`).
+- [x] Preserve the legacy CKB claimant pitch verbatim, including approved no-charge-loaner eligibility: active personal insurance plus comprehensive and collision, verified before scheduling.
+- [x] Add nearest-shop lookup for Total Recon Laurel (3521 Whiskey Bottom Rd, Laurel, MD 20724) and Rockville (14670 Southlawn Ln, Rockville, MD 20850), with Google Maps geocoding, local MD/DC/NoVA ZIP/city fallback, distance ranking, copy-address, and directions actions.
+- [x] Add repair scheduling and claim-file safeguards: full VIN/photo, lot/drop-off notation, Slack coordination, final-invoice use for subro, and Tesla-capable labor-rate guidance.
+- [x] Add map loading/offline fallback so shop location guidance is never blank.
+- [x] Validate: 7 focused Total Recon tests; full suite 286 passed / 1 skipped; TypeScript, production build, diff check, desktop/mobile visual capture.

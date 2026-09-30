@@ -1,8 +1,12 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink, MapPin, Phone, Truck, Shield, BookOpen, Copy, Check, Wrench, Building2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { ChevronDown, ChevronRight, ExternalLink, MapPin, Phone, Truck, Shield, BookOpen, Copy, Check, Wrench, Building2, ClipboardCheck, LocateFixed, Map, Navigation, Search, ShieldCheck, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import WhipLayout from "@/components/WhipLayout";
+import { MapView } from "@/components/Map";
+import { directionsUrl, findTotalReconFallback, rankTotalReconShops, TOTAL_RECON_PITCH, TOTAL_RECON_SHOPS, type GeoPoint, type RankedTotalReconShop } from "@/lib/totalRecon";
 import { toast } from "sonner";
 
 // ── Data ─────────────────────────────────────────────────────────────────────
@@ -182,6 +186,153 @@ function MarketCard({ m }: { m: typeof MARKET_DIRECTORY[0] }) {
   );
 }
 
+function TotalReconRepairGuide() {
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const [claimantAddress, setClaimantAddress] = useState("");
+  const [origin, setOrigin] = useState<GeoPoint | null>(null);
+  const [rankedShops, setRankedShops] = useState<RankedTotalReconShop[] | null>(null);
+  const [status, setStatus] = useState("Enter a complete address, ZIP code, or a local city to find the closest Total Recon facility.");
+  const [isSearching, setIsSearching] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+
+  const clearMarkers = () => {
+    markersRef.current.forEach((marker) => { marker.map = null; });
+    markersRef.current = [];
+  };
+
+  const updateMap = (nextOrigin: GeoPoint | null) => {
+    const map = mapRef.current;
+    const maps = window.google?.maps;
+    const AdvancedMarker = (maps as any)?.marker?.AdvancedMarkerElement;
+    if (!map || !maps || !AdvancedMarker) return;
+
+    clearMarkers();
+    const bounds = new maps.LatLngBounds();
+    TOTAL_RECON_SHOPS.forEach((shop) => {
+      markersRef.current.push(new AdvancedMarker({ map, position: { lat: shop.lat, lng: shop.lng }, title: shop.name }));
+      bounds.extend({ lat: shop.lat, lng: shop.lng });
+    });
+    if (nextOrigin) {
+      markersRef.current.push(new AdvancedMarker({ map, position: { lat: nextOrigin.lat, lng: nextOrigin.lng }, title: `Claimant — ${nextOrigin.label}` }));
+      bounds.extend({ lat: nextOrigin.lat, lng: nextOrigin.lng });
+    }
+    map.fitBounds(bounds, 56);
+  };
+
+  const showRecommendation = (nextOrigin: GeoPoint, source: "Google Maps" | "local coverage lookup") => {
+    setOrigin(nextOrigin);
+    setRankedShops(rankTotalReconShops(nextOrigin));
+    setStatus(`${source} found ${nextOrigin.label}. Distances are straight-line estimates; open Directions for the driving route.`);
+    updateMap(nextOrigin);
+  };
+
+  const findNearestShop = () => {
+    const query = claimantAddress.trim();
+    if (!query) {
+      setStatus("Enter the claimant address, ZIP code, or local city before searching.");
+      return;
+    }
+    setIsSearching(true);
+    const fallback = () => {
+      const location = findTotalReconFallback(query);
+      if (location) showRecommendation(location, "local coverage lookup");
+      else setStatus("We could not match that location locally. Try a complete Maryland/DC/NoVA address or ZIP after the map finishes loading.");
+      setIsSearching(false);
+    };
+
+    const maps = window.google?.maps;
+    if (!maps?.Geocoder) {
+      fallback();
+      return;
+    }
+
+    new maps.Geocoder().geocode({ address: query }, (results, responseStatus) => {
+      if (responseStatus === "OK" && results?.[0]) {
+        const location = results[0].geometry.location;
+        showRecommendation({ lat: location.lat(), lng: location.lng(), label: results[0].formatted_address }, "Google Maps");
+        setIsSearching(false);
+        return;
+      }
+      fallback();
+    });
+  };
+
+  const clearFinder = () => {
+    setClaimantAddress("");
+    setOrigin(null);
+    setRankedShops(null);
+    setStatus("Enter a complete address, ZIP code, or a local city to find the closest Total Recon facility.");
+    updateMap(null);
+  };
+
+  return <div className="space-y-5">
+    <div className="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><Wrench className="h-5 w-5 text-[#ff6221]" /><h2 className="text-lg font-bold">Using Our Shops — Claimant Pitch</h2></div>
+        <Badge className="border-0 bg-[#ff6221] text-white">Use this script</Badge>
+      </div>
+      <div className="mt-4 rounded-lg border-l-4 border-[#ff6221] bg-white/90 p-4 text-sm leading-6 text-foreground shadow-sm whitespace-pre-line">“{TOTAL_RECON_PITCH}”</div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800"><ShieldCheck className="h-4 w-4" />Benefits to lead with</div>
+          <ul className="mt-2 space-y-1 text-sm leading-5 text-emerald-900"><li>• Certified partner familiar with Whip’s process</li><li>• Easy drop-off with no back-and-forth coordination</li><li>• Faster repair turnaround</li><li>• Loaner available when eligible</li></ul>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-900"><ClipboardCheck className="h-4 w-4" />Loaner eligibility — verify first</div>
+          <ul className="mt-2 space-y-1 text-sm leading-5 text-amber-950"><li>• Active personal auto insurance is required</li><li>• Policy must include comprehensive <strong>and</strong> collision</li><li>• Confirm coverage with the adjuster before scheduling</li><li>• Do not promise a loaner until eligibility is verified</li></ul>
+        </div>
+      </div>
+    </div>
+
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,.9fr)]">
+      <div className="rounded-xl border bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><Search className="h-5 w-5" /></div><div><h2 className="font-bold">Find nearest Total Recon shop</h2><p className="mt-1 text-sm text-muted-foreground">Search the claimant address to compare the Laurel and Rockville facilities.</p></div></div>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Input aria-label="Claimant address" value={claimantAddress} onChange={(event) => setClaimantAddress(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") findNearestShop(); }} placeholder="e.g. 123 Main St, Rockville, MD 20850" className="h-10" />
+          <Button onClick={findNearestShop} disabled={isSearching} className="h-10 shrink-0 bg-[#ff6221] hover:bg-[#e5541a]">{isSearching ? "Looking up…" : "Find nearest"}<LocateFixed className="ml-2 h-4 w-4" /></Button>
+          {(claimantAddress || rankedShops) && <Button variant="outline" onClick={clearFinder} className="h-10 shrink-0"><X className="mr-1.5 h-4 w-4" />Clear</Button>}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">{status}</p>
+
+        <div className="mt-5 space-y-3">
+          {(rankedShops ?? TOTAL_RECON_SHOPS).map((shop, index) => {
+            const recommended = rankedShops ? index === 0 : false;
+            const distanceMiles = rankedShops ? rankedShops[index]?.distanceMiles ?? null : null;
+            const travelUrl = origin ? directionsUrl(origin, shop) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shop.address)}`;
+            return <div key={shop.id} className={`rounded-xl border p-4 transition-colors ${recommended ? "border-[#ff6221] bg-orange-50/70 ring-1 ring-[#ff6221]/20" : "border-border bg-background"}`}>
+              <div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{shop.name}</p>{recommended && <Badge className="border-0 bg-[#ff6221] text-white">Recommended</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{shop.address}</p></div>{distanceMiles !== null && <p className="rounded-md bg-white px-2 py-1 text-sm font-semibold text-primary shadow-sm">{distanceMiles.toFixed(1)} mi</p>}</div>
+              <div className="mt-3 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2"><span>{shop.hours}</span><span>{shop.contact}</span></div>
+              <div className="mt-3 flex flex-wrap gap-2"><Button asChild size="sm" variant={recommended ? "default" : "outline"} className={recommended ? "bg-[#ff6221] hover:bg-[#e5541a]" : ""}><a href={travelUrl} target="_blank" rel="noreferrer"><Navigation className="mr-1.5 h-3.5 w-3.5" />Directions</a></Button><Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(shop.address).then(() => toast.success("Shop address copied"))}><Copy className="mr-1.5 h-3.5 w-3.5" />Copy address</Button></div>
+            </div>;
+          })}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex items-center justify-between border-b px-4 py-3"><div className="flex items-center gap-2"><Map className="h-4 w-4 text-primary" /><h2 className="text-sm font-semibold">Maryland repair map</h2></div><span className="text-xs text-muted-foreground">Laurel · Rockville</span></div>
+        <div className="relative h-[340px] overflow-hidden bg-slate-100">
+          <MapView className="h-[340px]" initialCenter={{ lat: 39.087, lng: -77.015 }} initialZoom={9} onMapReady={(map) => { mapRef.current = map; setMapReady(true); updateMap(origin); }} />
+          {!mapReady && <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-sky-50 via-slate-50 to-emerald-50 p-5">
+            <div className="absolute left-[9%] top-0 h-full w-14 -rotate-12 border-x-4 border-dashed border-white/80 bg-slate-400/35" />
+            <div className="absolute left-0 top-[58%] h-12 w-full rotate-6 border-y-4 border-dashed border-white/80 bg-slate-400/35" />
+            <div className="relative flex h-full flex-col justify-between">
+              <div className="self-end rounded-full bg-white/85 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">Interactive map loading</div>
+              <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-[#ff6221]/30 bg-white/95 p-3 shadow-sm"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff6221] text-xs font-bold text-white">1</span><p className="text-sm font-semibold">Laurel</p></div><p className="mt-1 text-xs text-slate-600">3521 Whiskey Bottom Rd</p></div><div className="rounded-xl border border-blue-300 bg-white/95 p-3 shadow-sm"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">2</span><p className="text-sm font-semibold">Rockville</p></div><p className="mt-1 text-xs text-slate-600">14670 Southlawn Ln</p></div></div>
+              <p className="rounded-lg bg-white/85 px-3 py-2 text-xs text-slate-600 shadow-sm">The address finder above remains available with local ZIP/city coverage while the interactive map initializes.</p>
+            </div>
+          </div>}
+        </div>
+      </div>
+    </div>
+
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+      <p className="text-sm font-semibold text-slate-900">Scheduling & claim-file safeguards</p>
+      <div className="mt-2 grid gap-3 text-sm text-slate-700 md:grid-cols-2"><ul className="space-y-1.5"><li>• Add the full VIN and damage photo before requesting an appointment.</li><li>• Note whether the vehicle is on a lot or the driver needs a drop-off appointment.</li><li>• Tag the glass team in Slack for glass repairs; coordinate with Sebastian/Rafael before scheduling.</li></ul><ul className="space-y-1.5"><li>• Document Total Recon as the repair facility on Maryland claims in Snapsheet.</li><li>• Use the Total Recon <strong>final invoice</strong>, not the estimate, for subrogation demands.</li><li>• Total Recon is Tesla-capable; reference that when responding to labor-rate disputes.</li></ul></div>
+    </div>
+  </div>;
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -196,7 +347,8 @@ function CopyButton({ text }: { text: string }) {
 type Tab = "directory" | "repair" | "tow" | "coverage" | "tos" | "glossary";
 
 export default function MarketsAndPolicy() {
-  const [activeTab, setActiveTab] = useState<Tab>("directory");
+  const [location] = useLocation();
+  const [activeTab, setActiveTab] = useState<Tab>(() => location === "/kb/total-recon" ? "repair" : "directory");
   const [search, setSearch] = useState("");
   const [glossarySearch, setGlossarySearch] = useState("");
   const [tosSearch, setTosSearch] = useState("");
@@ -211,9 +363,13 @@ export default function MarketsAndPolicy() {
     !tosSearch || s.title.toLowerCase().includes(tosSearch.toLowerCase()) || s.body.toLowerCase().includes(tosSearch.toLowerCase())
   );
 
+  useEffect(() => {
+    if (location === "/kb/total-recon") setActiveTab("repair");
+  }, [location]);
+
   const TABS: { id: Tab; label: string }[] = [
     { id: "directory", label: "Market Directory" },
-    { id: "repair", label: "Repair Shops" },
+    { id: "repair", label: "Repair Shops & Total Recon" },
     { id: "tow", label: "Tow Partners" },
     { id: "coverage", label: "Coverage by Market" },
     { id: "tos", label: "Terms of Service" },
@@ -270,26 +426,32 @@ export default function MarketsAndPolicy() {
 
         {/* Repair Shops */}
         {activeTab === "repair" && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Preferred repair network partners by market. Always verify current availability before dispatching.</p>
-            {REPAIR_SHOPS.map(s => (
-              <div key={s.name} className="border border-border rounded-xl p-4 flex items-start justify-between gap-4">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-sm">{s.name}</p>
-                    {s.preferred && <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0">Preferred</Badge>}
+          <div className="space-y-6">
+            <TotalReconRepairGuide />
+            <div className="border-t pt-6">
+              <h2 className="text-base font-semibold">Other listed repair partners</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Preferred repair network partners by market. Always verify current availability before dispatching.</p>
+              <div className="mt-3 space-y-3">
+                {REPAIR_SHOPS.map(s => (
+                  <div key={s.name} className="border border-border rounded-xl p-4 flex items-start justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm">{s.name}</p>
+                        {s.preferred && <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0">Preferred</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{s.market}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{s.address}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a href={`tel:${s.phone.replace(/\D/g, '')}`} className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
+                        <Phone className="h-3.5 w-3.5" />{s.phone}
+                      </a>
+                      <CopyButton text={s.phone} />
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">{s.market}</p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{s.address}</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <a href={`tel:${s.phone.replace(/\D/g, '')}`} className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
-                    <Phone className="h-3.5 w-3.5" />{s.phone}
-                  </a>
-                  <CopyButton text={s.phone} />
-                </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         )}
 

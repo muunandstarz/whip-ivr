@@ -91,6 +91,7 @@ function Router() {
       <Route path="/kb/liability-guide" component={LiabilityGuide} />
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />
       <Route path="/kb/markets" component={MarketsAndPolicy} />
+      <Route path="/kb/total-recon" component={MarketsAndPolicy} />
       <Route path="/kb/reference-hub" component={ReferenceHub} />
       <Route path="/kb/glossary" component={Glossary} />
       <Route path="/kb/resources" component={ResourcesLinks} />
