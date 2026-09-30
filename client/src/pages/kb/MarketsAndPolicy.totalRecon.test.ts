@@ -19,4 +19,10 @@ describe("Total Recon repair workspace", () => {
     expect(source).toContain('Find nearest Total Recon shop');
     expect(source).toContain('Scheduling & claim-file safeguards');
   });
+
+  it("uses the expanded responsive content width rather than the former narrow padded shell", () => {
+    expect(source).toContain('max-w-[1440px]');
+    expect(source).toContain('px-3 py-5 sm:px-4 sm:py-6 lg:px-5 xl:px-6');
+    expect(source).not.toContain('max-w-5xl mx-auto p-6 space-y-6');
+  });
 });

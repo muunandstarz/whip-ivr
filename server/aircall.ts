@@ -7,6 +7,7 @@ import { transcribeAudio } from "./_core/voiceTranscription";
 import { notifyOwner } from "./_core/notification";
 import { matchClaimNumber, resolveClaimFromSnapsheet, reformatRunOnClaimNumber, matchRunOnClaimNumber } from "./claimMatch";
 import { getHandlerByAircallUserId } from "./aircallSync";
+import { normalizeAircallOutcome } from "./aircallStatus";
 
 export const aircallRouter = express.Router();
 
@@ -684,14 +685,7 @@ aircallRouter.post("/webhook", express.json(), async (req, res) => {
       const call = data;
       if (!call?.id) return;
 
-      const status =
-        call.status === "done"
-          ? "answered"
-          : call.status === "missed"
-          ? "missed"
-          : call.status === "voicemail"
-          ? "voicemail"
-          : "missed";
+      const status = normalizeAircallOutcome(call.status, call.missed_call_reason);
 
       await db
         .update(callHistory)

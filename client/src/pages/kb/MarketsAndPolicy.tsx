@@ -378,7 +378,7 @@ export default function MarketsAndPolicy() {
 
   return (
     <WhipLayout>
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="mx-auto w-full max-w-[1440px] space-y-5 px-3 py-5 sm:px-4 sm:py-6 lg:px-5 xl:px-6">
 
         {/* Header */}
         <div>

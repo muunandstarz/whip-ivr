@@ -795,3 +795,9 @@
 - [x] Add repair scheduling and claim-file safeguards: full VIN/photo, lot/drop-off notation, Slack coordination, final-invoice use for subro, and Tesla-capable labor-rate guidance.
 - [x] Add map loading/offline fallback so shop location guidance is never blank.
 - [x] Validate: 7 focused Total Recon tests; full suite 286 passed / 1 skipped; TypeScript, production build, diff check, desktop/mobile visual capture.
+
+
+## September 2026 — Repair Layout and Call Outcome Accuracy
+- [x] Reduce lateral padding and expand the responsive content shell on Market and Policy Directory / Total Recon Repairs without compromising mobile gutters.
+- [x] Normalize Aircall `missed_call_reason` in both API sync and webhooks so `abandoned_in_classic`, `abandoned_in_ivr`, and `short_abandoned` are stored as **abandoned**, rather than incorrectly grouped with no-agent misses; preserve answered, voicemail, and legacy statuses.
+- [x] Validate responsive Total Recon layout and outcome mapping: 19 focused tests; full suite 293 passed / 1 skipped; TypeScript, production build, and diff check passed.

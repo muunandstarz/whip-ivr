@@ -16,6 +16,7 @@ import { getDb, upsertCallHistory } from "./db";
 import { classifyCallBatch } from "./classifyCalls";
 import { callHistory } from "../drizzle/schema";
 import { and, desc, eq, gte, isNotNull } from "drizzle-orm";
+import { normalizeAircallOutcome } from "./aircallStatus";
 
 const AIRCALL_API_BASE = "https://api.aircall.io/v1";
 
@@ -267,7 +268,7 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
       await upsertCallHistory({
         aircallCallId: String(call.id),
         callerPhone: call.raw_digits ?? call.number?.digits ?? null,
-        status: mapStatus(call.status, call.missed_call_reason),
+        status: normalizeAircallOutcome(call.status, call.missed_call_reason),
         agentId: agentUser ? Number(agentUser.id) : null,
         agentName: agentName || null,
         durationSeconds: call.duration ?? 0,
@@ -293,32 +294,6 @@ export async function syncRecentCalls(lookbackMinutes = 20): Promise<number> {
   return synced;
 }
 
-function mapStatus(
-  status: string,
-  missedReason?: string
-): "answered" | "missed" | "voicemail" | "abandoned" {
-  // Aircall uses status='done' for ALL completed calls.
-  // The missed_call_reason field distinguishes answered from missed:
-  //   null                  → answered
-  //   'voicemail'           → voicemail
-  //   'short_abandoned'     → missed (caller hung up quickly)
-  //   'out_of_opening_hours'→ missed (called outside business hours)
-  //   'agents_did_not_answer'→ missed (rang, no pickup)
-  //   any other reason      → missed
-  if (status === "done") {
-    if (!missedReason) return "answered";
-    if (missedReason === "voicemail") return "voicemail";
-    return "missed";
-  }
-  // Legacy status values (older API responses)
-  if (status === "answered") return "answered";
-  if (status === "voicemail") return "voicemail";
-  if (status === "missed" || status === "abandoned") {
-    if (missedReason === "voicemail") return "voicemail";
-    return "missed";
-  }
-  return "missed";
-}
 
 /**
  * Pull unread voicemails from each handler's personal Aircall mailbox into intake records.
