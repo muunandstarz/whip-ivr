@@ -16,12 +16,14 @@ describe('COI and declarations state-specific coverage rules', () => {
     expect(source).toContain('FL: { biPP: "$10,000", biPO: "$20,000"');
     expect(source).toContain('const isFloridaPipMandatory = state === "FL";');
     expect(source).toContain('Florida PIP is mandatory at $10,000 and cannot be waived');
-    expect(source).toContain('const isAutomaticUmRejection = state === "FL" || state === "GA";');
+    expect(source).toContain('const isAutomaticUmRejection = state === "FL";');
   });
 
-  it('automatically rejects UM for Georgia in the COI and retained declarations renderer', () => {
+  it('permits a named-insured UM/UIM rejection for Georgia without forcing it', () => {
     expect(source).toContain('setUmRejected(isAutomaticUmRejection);');
     expect(source).toContain('GA: { biPP: "$25,000", biPO: "$50,000"');
+    expect(source).toContain('UM / UIM Rejected by Named Insured');
+    expect(source).toContain('limits: umRejected && rules.uimPP');
     expect(source).toContain('FL: { biPP: "$10,000", biPO: "$20,000", pdLimit: "$10,000", umPP: "$10,000", umPO: "$20,000", uimPP: "", uimPO: "", pip: true, pipLimit: "$10,000", umRejectable: true');
   });
 });

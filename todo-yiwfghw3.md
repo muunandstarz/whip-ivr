@@ -811,3 +811,10 @@
 - [x] Add a formatted Pro-Rata explanation-letter preview/download and apply the restrained printer-neutral treatment to the document workspace while retaining the colored Whip mark.
 - [x] Normalize Aircall outcomes (answered, missed, voicemail, abandoned) and create callback tasks for missed/abandoned Claims Line calls as a durable application-side safety net.
 - [ ] Finish Aircall dashboard routing coverage: live inspection found the Claims Line group has six users but only Natashia and MJ marked available. The API has no safe documented write route for number call-flow membership; update requires a signed-in Aircall administrator session.
+
+
+## October 2026 — Georgia UM/UIM COI Correction
+- [x] Make Georgia UM/UIM rejection a **named-insured choice**, not an automatic coverage election, in both Certificate of Insurance and the retained declarations renderer.
+- [x] Apply the same rejection state to both applicable COI rows: UM and UIM now each display **REJECTED BY NAMED INSURED** and omit limits when selected.
+- [x] Validate a Georgia COI PDF with the named-insured rejection enabled (Laroy Riley / Tesla sample): both UM and UIM rows render `REJECTED BY NAMED INSURED` with no limits.
+- [x] Validate: 306 passing tests / 1 skipped, TypeScript, production build, and diff check.

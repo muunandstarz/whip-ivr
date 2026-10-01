@@ -6679,7 +6679,9 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     ...p,
     subscriptionStartDate: value,
   }));
-  const isAutomaticUmRejection = state === "FL" || state === "GA";
+  // Florida does not carry a separate UIM limit in this form. Georgia permits
+  // a named-insured election, so it must remain a handler-controlled choice.
+  const isAutomaticUmRejection = state === "FL";
   const isFloridaPipMandatory = state === "FL";
   React.useEffect(() => {
     setUmRejected(isAutomaticUmRejection);
@@ -7039,9 +7041,11 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
       },
       {
         insr: "UIM", type: "UNDERINSURED MOTORIST (UIM)",
-        limits: isKlutch
-          ? "PER PERSON —\nPER OCCURRENCE —"
-          : (rules.uimPP ? `PER PERSON  ${rules.uimPP}\nPER OCCURRENCE  ${rules.uimPO}` : "NOT APPLICABLE"),
+        limits: umRejected && rules.uimPP
+          ? "REJECTED BY NAMED INSURED"
+          : isKlutch
+            ? "PER PERSON —\nPER OCCURRENCE —"
+            : (rules.uimPP ? `PER PERSON  ${rules.uimPP}\nPER OCCURRENCE  ${rules.uimPO}` : "NOT APPLICABLE"),
       },
       {
         insr: "PIP", type: "PERSONAL INJURY PROTECTION (PIP)",
@@ -7303,8 +7307,8 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
                 <label className={`flex items-center gap-3 p-2.5 rounded-md border border-border/50 ${isAutomaticUmRejection ? "bg-muted/30" : "cursor-pointer hover:bg-muted/30"}`}>
                   <Checkbox checked={umRejected} disabled={isAutomaticUmRejection} onCheckedChange={(v) => setUmRejected(!!v)} />
                   <div>
-                    <div className="text-xs font-semibold">UM Rejected by Named Insured</div>
-                    <div className="text-xs text-muted-foreground">{isAutomaticUmRejection ? "Automatically applied for this state" : 'Shows "REJECTED BY NAMED INSURED" in UM row'}</div>
+                    <div className="text-xs font-semibold">UM / UIM Rejected by Named Insured</div>
+                    <div className="text-xs text-muted-foreground">{isAutomaticUmRejection ? "Automatically applied for this state" : 'Shows "REJECTED BY NAMED INSURED" in both applicable UM and UIM rows'}</div>
                   </div>
                 </label>
               )}
@@ -7346,7 +7350,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
             `BI: ${isKlutch ? "Per policy" : `${rules.biPP} / ${rules.biPO}`}`,
             `PD: ${isKlutch ? "Per policy" : rules.pdLimit}`,
             `UM: ${umRejected ? "REJECTED" : (isKlutch ? "Per policy" : `${rules.umPP} / ${rules.umPO}`)}`,
-            `UIM: ${isKlutch ? "Per policy" : (rules.uimPP || "N/A")}`,
+            `UIM: ${umRejected && rules.uimPP ? "REJECTED" : (isKlutch ? "Per policy" : (rules.uimPP || "N/A"))}`,
             `PIP: ${!rules.pip ? "N/A" : (pipWaived && !isFloridaPipMandatory) ? "WAIVED" : (isKlutch ? "Statutory Min" : rules.pipLimit)}`,
             `COL: Subject to Member Agreement`,
             `COMP: Subject to Member Agreement`,
@@ -7385,7 +7389,9 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const [state, setState] = React.useState(initialState || "MD");
   const [pipWaived, setPipWaived] = React.useState(false);
   const [umRejected, setUmRejected] = React.useState(false);
-  const isAutomaticUmRejection = state === "FL" || state === "GA";
+  // Georgia allows the named operator to elect a UM/UIM rejection; do not
+  // silently force that election when the state changes.
+  const isAutomaticUmRejection = state === "FL";
   const isFloridaPipMandatory = state === "FL";
   React.useEffect(() => {
     setUmRejected(isAutomaticUmRejection);
