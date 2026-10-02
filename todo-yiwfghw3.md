@@ -827,3 +827,8 @@
 - [x] Confirm Medical Bill Review accepts a signed document URL and produces structured bill/diagnosis/PIP/BI analysis, expert summary, and response-letter draft; confirm PIP bill parser supports the same signed document route and PIP exhaustion PDF handoff.
 - [x] Confirm the Pro-Rata Calculator is in the sidebar, matches the dashboard shell, calculates PD/BI allocations, and previews/downloads a formatted neutral letter with a colored Whip mark.
 - [x] Validate: live Medical Review returned 1 bill, 1 diagnosis, $125 PIP allowed, expert summary, and response letter; live PIP parser returned structured output; 307 tests passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+
+## October 2026 — Direct Tool Access
+- [x] Keep **Pro-Rata Calculator** as a top-level Knowledge Base sidebar item at `/pro-rata` for both leadership and handlers, with formatted letter preview/download after calculation.
+- [x] Add **Medical Bill & PIP Review** as a direct sidebar item for both leadership and handlers, with stable direct routes `/medical-bill-review` and `/pip-bill-review` that open the Medical Bill Review instead of the general Document Generator landing tab.

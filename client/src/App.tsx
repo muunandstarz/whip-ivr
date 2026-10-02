@@ -82,7 +82,9 @@ function Router() {
       <Route path="/callback-log" component={CallbackLog} />
       <Route path="/reports" component={Reports} />
       <Route path="/loss-intake" component={LossIntake} />
-      <Route path="/doc-generator" component={DocGenerator} />
+      <Route path="/doc-generator" component={() => <DocGenerator />} />
+      <Route path="/medical-bill-review" component={() => <DocGenerator initialTab="pip-bill-review" />} />
+      <Route path="/pip-bill-review" component={() => <DocGenerator initialTab="pip-bill-review" />} />
       <Route path="/mail-bot" component={() => <MailFeatureGate feature="mailBot" component={MailBot} />} />
       <Route path="/mailroom/:id" component={() => <MailFeatureGate feature="mailroom" component={MailroomItem} />} />
       <Route path="/mailroom" component={() => <MailFeatureGate feature="mailroom" component={Mailroom} />} />

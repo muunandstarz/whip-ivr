@@ -63,6 +63,7 @@ const ADMIN_NAV_ITEMS = [
 const KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
+  { href: "/medical-bill-review", label: "Medical Bill & PIP Review", icon: FileText },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },
@@ -92,6 +93,7 @@ const HANDLER_NAV_ITEMS_BASE = [
 const HANDLER_KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
+  { href: "/medical-bill-review", label: "Medical Bill & PIP Review", icon: FileText },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
   { href: "/kb/denied-escalation", label: "Denied Claim Escalation", icon: AlertTriangle },
   { href: "/kb/markets", label: "Market and Policy Directory", icon: MapPin },

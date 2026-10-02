@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 const root = resolve(process.cwd());
 const clientSource = readFileSync(resolve(root, "client/src/pages/DocGenerator.tsx"), "utf8");
 const routerSource = readFileSync(resolve(root, "server/routers/docgen.ts"), "utf8");
+const appSource = readFileSync(resolve(root, "client/src/App.tsx"), "utf8");
+const layoutSource = readFileSync(resolve(root, "client/src/components/WhipLayout.tsx"), "utf8");
 
 describe("Medical Bill Review and total-loss subrogation demand", () => {
   it("uploads medical documents through the supported signed document endpoint", () => {
@@ -25,6 +27,13 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain("Preview PDF");
     expect(clientSource).toContain("Download PDF");
     expect(clientSource).toContain("PIP bill review & exhaustion workflow");
+  });
+
+  it("exposes Medical Bill and PIP Review as a direct sidebar destination", () => {
+    expect(appSource).toContain('path="/medical-bill-review"');
+    expect(appSource).toContain('path="/pip-bill-review"');
+    expect(appSource).toContain('initialTab="pip-bill-review"');
+    expect(layoutSource).toContain('href: "/medical-bill-review", label: "Medical Bill & PIP Review"');
   });
 
   it("includes ACV, storage, admin fee, sales tax, and salvage in total-loss subrogation demands", () => {

@@ -8134,9 +8134,10 @@ function DVCalculatorTab() {
   );
 }
 
-export default function DocGenerator() {
+export default function DocGenerator({ initialTab: directInitialTab }: { initialTab?: DocGenTab }) {
   const search = useSearch();
   const initialTab = (() => {
+    if (directInitialTab) return directInitialTab;
     const params = new URLSearchParams(search);
     const t = params.get("tab");
     if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;
