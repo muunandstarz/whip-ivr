@@ -40,4 +40,9 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
   it("keeps a full VIN on its own Total Loss settlement PDF line", () => {
     expect(clientSource).toContain('if (form.vin) y = wrapText(doc, `VIN: ${form.vin}`, 14, y, W - 28, 6.5);');
   });
+
+  it("keeps updated correspondence printer-neutral outside the colored logo", () => {
+    expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.5);');
+    expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);');
+  });
 });

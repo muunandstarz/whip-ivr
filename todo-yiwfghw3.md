@@ -818,3 +818,12 @@
 - [x] Apply the same rejection state to both applicable COI rows: UM and UIM now each display **REJECTED BY NAMED INSURED** and omit limits when selected.
 - [x] Validate a Georgia COI PDF with the named-insured rejection enabled (Laroy Riley / Tesla sample): both UM and UIM rows render `REJECTED BY NAMED INSURED` with no limits.
 - [x] Validate: 306 passing tests / 1 skipped, TypeScript, production build, and diff check.
+
+
+## October 2026 — Document Workflow Verification
+- [x] Confirm Total Loss Settlement form and rendered letter carry ACV, sales tax, title/registration, administration, tear-down, storage, and salvage deductions. Rendered proof keeps the full 17-character VIN on its own line.
+- [x] Confirm Total Loss Subrogation Demand switches to total-loss itemization and includes ACV, storage, sales tax, admin fee, and salvage deduction in both the form and the two-page PDF.
+- [x] Make Subrogation Demand section rules grayscale; all revised correspondence is printer-neutral outside the colored Whip mark/logo.
+- [x] Confirm Medical Bill Review accepts a signed document URL and produces structured bill/diagnosis/PIP/BI analysis, expert summary, and response-letter draft; confirm PIP bill parser supports the same signed document route and PIP exhaustion PDF handoff.
+- [x] Confirm the Pro-Rata Calculator is in the sidebar, matches the dashboard shell, calculates PD/BI allocations, and previews/downloads a formatted neutral letter with a colored Whip mark.
+- [x] Validate: live Medical Review returned 1 bill, 1 diagnosis, $125 PIP allowed, expert summary, and response letter; live PIP parser returned structured output; 307 tests passed / 1 skipped, TypeScript, production build, and diff check passed.

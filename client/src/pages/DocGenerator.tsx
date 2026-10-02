@@ -3633,7 +3633,9 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     checkPage(60);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("ITEMIZATION OF DAMAGES", lm, y); nl(2);
-    doc.setDrawColor(23, 27, 49); doc.setLineWidth(0.5);
+    // Correspondence stays printer-neutral: keep the Whip logo in color but
+    // use only grayscale rules and text throughout the body.
+    doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.5);
     doc.line(lm, y, rm, y); nl(6);
 
     // Table rows
@@ -3666,7 +3668,7 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
       nl(6);
     });
     // Divider + total
-    doc.setDrawColor(23, 27, 49); doc.line(lm, y, rm, y); nl(5);
+    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(5);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("Total Subrogation Demand", lm + 4, y);
     doc.text(`$${total}`, col2x, y, { align: "right" });
@@ -3676,7 +3678,7 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     checkPage(40);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("ENCLOSURES", lm, y); nl(2);
-    doc.setDrawColor(23, 27, 49); doc.line(lm, y, rm, y); nl(6);
+    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     const encList = attachmentsText ? attachmentsText.split(", ") : ["Estimate", "Image Report", "Police Report"];
     encList.forEach(enc => {
@@ -3689,7 +3691,7 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     checkPage(40);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("DEMAND FOR PAYMENT", lm, y); nl(2);
-    doc.setDrawColor(23, 27, 49); doc.line(lm, y, rm, y); nl(6);
+    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     const demandText = `Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
 
@@ -3706,7 +3708,7 @@ This demand is made without waiver of any rights or remedies available to Metroc
     checkPage(payLines.length * 5 + 48);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("PAYMENT INSTRUCTIONS", lm, y); nl(2);
-    doc.setDrawColor(23, 27, 49); doc.line(lm, y, rm, y); nl(6);
+    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text(payLines, lm, y);
     y += payLines.length * 5 + 12;
