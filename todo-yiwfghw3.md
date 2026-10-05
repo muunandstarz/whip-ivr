@@ -887,3 +887,11 @@
 - [x] Put VIN decode before Year/Make/Model, and reorder the mini LOU calculator so market/location and vehicle class come first; default editable repair facility to Total Recon; prefill repair dates and RO number from the estimate when available.
 - [x] Browser-validate the desktop split workspace at 1440px: readable two-column claim fields, third-party carrier/adjuster clarification, VIN-before-vehicle, market/class-first LOU controls, and Total Recon facility default.
 - [x] Validate: 314 passed / 1 skipped tests, TypeScript, production build, and diff check.
+
+
+## October 2026 — Verified Carrier Address Presets
+- [x] Add automatic editable address fill for Allstate: `Allstate Insurance Company, PO Box 660636, Dallas, TX 75266`, using Allstate’s official property-and-casualty claims mailing instruction.
+- [x] Add automatic editable address fill for The General: `The General Claims Department, PO Box 8001, Stevens Point, WI 54481-9820`, using The General’s official claims-documentation instruction.
+- [x] Research all other bundled national carriers against their own published sources. Their sites require state-, adjuster-, online-portal-, or claim-specific routing and do not publish a safe generic inbound auto-subrogation postal address, so no potentially incorrect address was fabricated. An address printed on the uploaded estimate continues to prefill the editable address field.
+- [x] Browser-validate selecting Allstate: carrier set to Allstate and its three-line mailing address populated immediately.
+- [x] Validate: 19 focused parser/form tests, TypeScript, production build, and diff check passed.

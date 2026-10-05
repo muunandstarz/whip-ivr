@@ -102,7 +102,10 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
   it("uses third-party carrier details and an estimate-first LOU repair context", () => {
     const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"));
     expect(clientSource).toContain('const THIRD_PARTY_CARRIERS = [');
-    expect(subroSource).toContain('<ThirdPartyCarrierSelect value={form.carrier} onChange={set("carrier")} />');
+    expect(clientSource).toContain('const THIRD_PARTY_CARRIER_ADDRESSES');
+    expect(clientSource).toContain('Allstate Insurance Company\\nPO Box 660636\\nDallas, TX 75266');
+    expect(clientSource).toContain('The General Claims Department\\nPO Box 8001\\nStevens Point, WI 54481-9820');
+    expect(subroSource).toContain('<ThirdPartyCarrierSelect value={form.carrier} onChange={set("carrier")} onAddressChange={set("carrierAddress")} />');
     expect(subroSource).toContain('Their Adjuster Name');
     expect(subroSource).toContain('Whip Snapsheet Claim #');
     expect(subroSource).toContain('XXX-1234-123456-123456');

@@ -943,12 +943,22 @@ const THIRD_PARTY_CARRIERS = [
   "Chubb",
 ] as const;
 
+// Only carrier-published general claims addresses belong here.  Other national
+// carriers require state- or claim-specific routing, so an estimate/claim notice
+// should supply their address rather than a potentially incorrect generic one.
+const THIRD_PARTY_CARRIER_ADDRESSES: Partial<Record<typeof THIRD_PARTY_CARRIERS[number], string>> = {
+  "Allstate": "Allstate Insurance Company\nPO Box 660636\nDallas, TX 75266",
+  "The General": "The General Claims Department\nPO Box 8001\nStevens Point, WI 54481-9820",
+};
+
 function ThirdPartyCarrierSelect({
   value,
   onChange,
+  onAddressChange,
 }: {
   value: string;
   onChange: (v: string) => void;
+  onAddressChange?: (v: string) => void;
 }) {
   const isListed = THIRD_PARTY_CARRIERS.includes(value as typeof THIRD_PARTY_CARRIERS[number]);
   const [isCustom, setIsCustom] = React.useState(() => Boolean(value && !isListed));
@@ -962,7 +972,11 @@ function ThirdPartyCarrierSelect({
       <Select value={selectedValue} onValueChange={(next) => {
         const nextIsCustom = next === "other";
         setIsCustom(nextIsCustom);
-        if (!nextIsCustom) onChange(next);
+        if (!nextIsCustom) {
+          onChange(next);
+          const address = THIRD_PARTY_CARRIER_ADDRESSES[next as keyof typeof THIRD_PARTY_CARRIER_ADDRESSES];
+          if (address) onAddressChange?.(address);
+        }
       }}>
         <SelectTrigger id="sd-carrier" className="h-8 text-sm"><SelectValue placeholder="Select their insurance carrier…" /></SelectTrigger>
         <SelectContent>
@@ -4229,13 +4243,13 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
         <Panel title="Claim Information" tag="REQUIRED">
           <p className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">Recipient information below is for <strong>their third-party carrier and handling adjuster</strong>. Keep Whip’s full Snapsheet file number in the Whip claim field.</p>
           <Grid2>
-            <ThirdPartyCarrierSelect value={form.carrier} onChange={set("carrier")} />
+            <ThirdPartyCarrierSelect value={form.carrier} onChange={set("carrier")} onAddressChange={set("carrierAddress")} />
             <Field label="Their Adjuster Name" id="sd-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="Their handling adjuster, e.g. John Smith" />
           </Grid2>
           <div className="mt-3"><Field label="Their Claim #" id="sd-advclaim" value={form.advClaim} onChange={set("advClaim")} placeholder="e.g. 2091T657S" /></div>
           <div className="mt-3">
             <TextareaField label="Their Claims / Subrogation Mailing Address" id="sd-carrier-address" value={form.carrierAddress} onChange={set("carrierAddress")} placeholder={'Carrier name\nClaims or subrogation mailing address\nCity, State ZIP'} rows={3} />
-            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">A mailing address printed on the estimate pre-fills here. Verify claim-specific routing before sending—many national carriers use state or claim-specific addresses.</p>
+            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">A verified carrier preset or a mailing address printed on the estimate pre-fills here. Verify claim-specific routing before sending—many national carriers use state or claim-specific addresses.</p>
           </div>
           <Grid2 children={<>
             <div className="space-y-1">
