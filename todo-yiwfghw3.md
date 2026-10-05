@@ -832,3 +832,10 @@
 ## October 2026 — Direct Tool Access
 - [x] Keep **Pro-Rata Calculator** as a top-level Knowledge Base sidebar item at `/pro-rata` for both leadership and handlers, with formatted letter preview/download after calculation.
 - [x] Add **Medical Bill & PIP Review** as a direct sidebar item for both leadership and handlers, with stable direct routes `/medical-bill-review` and `/pip-bill-review` that open the Medical Bill Review instead of the general Document Generator landing tab.
+
+
+## October 2026 — Document Generator Form Stability
+- [x] Fix Blank Letterhead and direct Medical/PIP document routes losing field focus during unrelated app-level state updates. Route components are now stable module-level components instead of recreated inline functions.
+- [x] Add a route-stability regression test guarding against inline Document Generator route functions.
+- [x] Browser-validate sustained Blank Letterhead entry: entered `John Smith`, waited through live-preview regeneration, retained input focus, and confirmed the updated recipient and greeting in the formatted preview.
+- [x] Validate: 309 passed / 1 skipped tests, TypeScript, production build, and diff check.

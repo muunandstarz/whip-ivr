@@ -57,6 +57,39 @@ function MailFeatureGate({
   return <Component />;
 }
 
+// These route components must be declared once at module scope. Inline component
+// functions are recreated whenever an app-level provider updates, which makes
+// Wouter remount the matching page. That was resetting Document Generator forms
+// mid-keystroke while background softphone state updated.
+function DocumentGeneratorRoute() {
+  return <DocGenerator />;
+}
+
+function MedicalBillReviewRoute() {
+  return <DocGenerator initialTab="pip-bill-review" />;
+}
+
+function MailBotRoute() {
+  return <MailFeatureGate feature="mailBot" component={MailBot} />;
+}
+
+function MailroomRoute() {
+  return <MailFeatureGate feature="mailroom" component={Mailroom} />;
+}
+
+function MyMailroomRoute() {
+  return <MailFeatureGate feature="mailroom" component={MyMailroom} />;
+}
+
+function MailroomItemRoute() {
+  return <MailFeatureGate feature="mailroom" component={MailroomItem} />;
+}
+
+function LouCalculatorRedirect() {
+  window.location.replace("/doc-generator?tab=lou-calculator");
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
@@ -82,13 +115,13 @@ function Router() {
       <Route path="/callback-log" component={CallbackLog} />
       <Route path="/reports" component={Reports} />
       <Route path="/loss-intake" component={LossIntake} />
-      <Route path="/doc-generator" component={() => <DocGenerator />} />
-      <Route path="/medical-bill-review" component={() => <DocGenerator initialTab="pip-bill-review" />} />
-      <Route path="/pip-bill-review" component={() => <DocGenerator initialTab="pip-bill-review" />} />
-      <Route path="/mail-bot" component={() => <MailFeatureGate feature="mailBot" component={MailBot} />} />
-      <Route path="/mailroom/:id" component={() => <MailFeatureGate feature="mailroom" component={MailroomItem} />} />
-      <Route path="/mailroom" component={() => <MailFeatureGate feature="mailroom" component={Mailroom} />} />
-      <Route path="/my-mailroom" component={() => <MailFeatureGate feature="mailroom" component={MyMailroom} />} />
+      <Route path="/doc-generator" component={DocumentGeneratorRoute} />
+      <Route path="/medical-bill-review" component={MedicalBillReviewRoute} />
+      <Route path="/pip-bill-review" component={MedicalBillReviewRoute} />
+      <Route path="/mail-bot" component={MailBotRoute} />
+      <Route path="/mailroom/:id" component={MailroomItemRoute} />
+      <Route path="/mailroom" component={MailroomRoute} />
+      <Route path="/my-mailroom" component={MyMailroomRoute} />
       <Route path="/pro-rata" component={ProRataCalc} />
       <Route path="/kb/liability-guide" component={LiabilityGuide} />
       <Route path="/kb/denied-escalation" component={DeniedClaimEscalation} />
@@ -98,7 +131,7 @@ function Router() {
       <Route path="/kb/glossary" component={Glossary} />
       <Route path="/kb/resources" component={ResourcesLinks} />
       <Route path="/kb/vehicle-anatomy" component={VehicleAnatomy} />
-      <Route path="/lou-calculator" component={() => { window.location.replace("/doc-generator?tab=lou-calculator"); return null; }} />
+      <Route path="/lou-calculator" component={LouCalculatorRedirect} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
