@@ -923,6 +923,67 @@ function InsuranceCompanySelect({
   );
 }
 
+const THIRD_PARTY_CARRIERS = [
+  "State Farm",
+  "Progressive",
+  "GEICO",
+  "Allstate",
+  "Liberty Mutual",
+  "Safeco",
+  "Nationwide",
+  "Travelers",
+  "USAA",
+  "Farmers Insurance",
+  "American Family",
+  "Erie Insurance",
+  "The Hartford",
+  "Kemper",
+  "The General",
+  "Auto-Owners Insurance",
+  "Chubb",
+] as const;
+
+function ThirdPartyCarrierSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const isListed = THIRD_PARTY_CARRIERS.includes(value as typeof THIRD_PARTY_CARRIERS[number]);
+  const [isCustom, setIsCustom] = React.useState(() => Boolean(value && !isListed));
+  React.useEffect(() => {
+    if (value && !isListed) setIsCustom(true);
+  }, [isListed, value]);
+  const selectedValue = isCustom ? "other" : (isListed ? value : undefined);
+  return (
+    <div className="space-y-1">
+      <Label htmlFor="sd-carrier" className="text-xs font-semibold text-foreground/80">Third-party carrier</Label>
+      <Select value={selectedValue} onValueChange={(next) => {
+        const nextIsCustom = next === "other";
+        setIsCustom(nextIsCustom);
+        if (!nextIsCustom) onChange(next);
+      }}>
+        <SelectTrigger id="sd-carrier" className="h-8 text-sm"><SelectValue placeholder="Select their insurance carrier…" /></SelectTrigger>
+        <SelectContent>
+          {THIRD_PARTY_CARRIERS.map((carrier) => <SelectItem key={carrier} value={carrier}>{carrier}</SelectItem>)}
+          <SelectItem value="other">Other third-party carrier / enter manually</SelectItem>
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Enter the third-party carrier"
+          className="h-8 text-sm"
+          aria-label="Third-party carrier manual entry"
+        />
+      )}
+      <p className="text-[10px] leading-4 text-muted-foreground">Use the adverse/third-party carrier—not Whip, Metrocars, or the member’s carrier.</p>
+    </div>
+  );
+}
+
 function HandlerSelect({
   value,
   onChange,
@@ -3696,7 +3757,7 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   const [louDailyRate, setLouDailyRate] = useState("");
   const [louMarketCode, setLouMarketCode] = useState("DC");
   const [louVehicleClass, setLouVehicleClass] = useState("");
-  const [louRepairFacility, setLouRepairFacility] = useState("");
+  const [louRepairFacility, setLouRepairFacility] = useState("Total Recon");
   const [louRoNumber, setLouRoNumber] = useState("");
   const [louRegisteredOwner, setLouRegisteredOwner] = useState("Metrocars Leasing Corp.");
   const [louSupportEnabled, setLouSupportEnabled] = useState(true);
@@ -3832,7 +3893,7 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
       setLouDailyRate(handoff.dailyRate);
       setLouMarketCode(handoff.marketCode || "DC");
       setLouVehicleClass(handoff.vehicleClass);
-      setLouRepairFacility(handoff.repairFacility);
+      setLouRepairFacility("Total Recon");
       setLouRoNumber(handoff.roNumber);
       setLouRegisteredOwner(handoff.registeredOwner || "Metrocars Leasing Corp.");
       setLouSupportEnabled(true);
@@ -3872,9 +3933,14 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
         ourClaim: parsed.claimNumberRole !== "adverse" ? (parsed.claimNumber || p.ourClaim) : p.ourClaim,
         dol: parsed.dateOfLoss || p.dol,
         carrier: parsed.insurerName || p.carrier,
+        carrierAddress: parsed.carrierAddress || p.carrierAddress,
         driver: parsed.claimantName || p.driver,
         adjusterName: parsed.adjusterName || p.adjusterName,
       }));
+      setLouRepairStart((current) => parsed.repairStart || current);
+      setLouRepairEnd((current) => parsed.repairEnd || current);
+      setLouRoNumber((current) => parsed.roNumber || current);
+      setLouRepairFacility((current) => current || "Total Recon");
       setSelectedAttachments(prev => prev.includes("Estimate") ? prev : ["Estimate", ...prev]);
       toast.success(parsed.repairTotal ? `Estimate read — $${parsed.repairTotal} added to the demand` : "Estimate read — review the pre-filled fields");
     } catch (error: unknown) {
@@ -4161,23 +4227,27 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div>
         <Panel title="Claim Information" tag="REQUIRED">
-          <Grid3>
-            <InsuranceCompanySelect label="Insurance Company" id="sd-carrier" value={form.carrier} onChange={set("carrier")} />
-            <Field label="Adjuster Name" id="sd-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="e.g. John Smith" />
-            <Field label="Their Claim #" id="sd-advclaim" value={form.advClaim} onChange={set("advClaim")} placeholder="e.g. 2091T657S" />
-          </Grid3>
+          <p className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">Recipient information below is for <strong>their third-party carrier and handling adjuster</strong>. Keep Whip’s full Snapsheet file number in the Whip claim field.</p>
+          <Grid2>
+            <ThirdPartyCarrierSelect value={form.carrier} onChange={set("carrier")} />
+            <Field label="Their Adjuster Name" id="sd-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="Their handling adjuster, e.g. John Smith" />
+          </Grid2>
+          <div className="mt-3"><Field label="Their Claim #" id="sd-advclaim" value={form.advClaim} onChange={set("advClaim")} placeholder="e.g. 2091T657S" /></div>
           <div className="mt-3">
-            <TextareaField label="Carrier Mailing Address" id="sd-carrier-address" value={form.carrierAddress} onChange={set("carrierAddress")} placeholder={'Carrier name\nMailing address line 1\nCity, State ZIP'} rows={3} />
+            <TextareaField label="Their Claims / Subrogation Mailing Address" id="sd-carrier-address" value={form.carrierAddress} onChange={set("carrierAddress")} placeholder={'Carrier name\nClaims or subrogation mailing address\nCity, State ZIP'} rows={3} />
+            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">A mailing address printed on the estimate pre-fills here. Verify claim-specific routing before sending—many national carriers use state or claim-specific addresses.</p>
           </div>
-          <Grid3 children={<>
-            <Field label="Our Claim # (Whip)" id="sd-claim" value={form.ourClaim} onChange={set("ourClaim")} placeholder="e.g. PF438367" />
-            <Field label="Date of Loss" id="sd-dol" value={form.dol} onChange={set("dol")} type="date" />
-            <Field label="Driver / Claimant Name" id="sd-driver" value={form.driver} onChange={set("driver")} placeholder="First Last" />
-          </>} />
-          <Grid3 children={<>
-	            <Field label="Vehicle (Year/Make/Model)" id="sd-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Tesla Model 3" />
+          <Grid2 children={<>
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-foreground/80">VIN</Label>
+              <Field label="Whip Snapsheet Claim #" id="sd-claim" value={form.ourClaim} onChange={set("ourClaim")} placeholder="XXX-1234-123456-123456" />
+              <p className="text-[10px] leading-3 text-muted-foreground">Always enter the complete Snapsheet claim number.</p>
+            </div>
+            <Field label="Date of Loss" id="sd-dol" value={form.dol} onChange={set("dol")} type="date" />
+          </>} />
+          <div className="mt-3"><Field label="Driver / Claimant Name" id="sd-driver" value={form.driver} onChange={set("driver")} placeholder="First Last" /></div>
+          <Grid2 children={<>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-foreground/80">VIN — decode first</Label>
               <div className="flex gap-1.5">
                 <Input
                   id="sd-vin"
@@ -4200,16 +4270,17 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
                 </Button>
               </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold">Response Deadline</Label>
-              <Select value={form.deadline} onValueChange={set("deadline")}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["10","14","15","20"].map(v => <SelectItem key={v} value={v}>{v} days</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            <Field label="Vehicle (Year / Make / Model / Trim)" id="sd-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="Decoded from VIN or enter manually" />
           </>} />
+          <div className="mt-3 space-y-1">
+            <Label className="text-xs font-semibold">Response Deadline</Label>
+            <Select value={form.deadline} onValueChange={set("deadline")}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {["10","14","15","20"].map(v => <SelectItem key={v} value={v}>{v} days</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </Panel>
         <Panel title="Opening Paragraph" tag="EDITABLE">
           <div className="space-y-1">
@@ -4241,19 +4312,7 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
               </div>
               {form.lou && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800">Demand LOU: ${parseFloat(form.lou || "0").toFixed(2)}</span>}
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-              <Field label="Repair Start" id="sd-lou-start" value={louRepairStart} onChange={setLouRepairStart} type="date" />
-              <Field label="Repair End" id="sd-lou-end" value={louRepairEnd} onChange={setLouRepairEnd} type="date" />
-              <Field label="Daily Rental Rate ($)" id="sd-lou-rate" value={louDailyRate} onChange={setLouDailyRate} placeholder="0.00" type="number" />
-              <div className="flex items-end gap-2">
-                <div className="min-w-[86px] rounded-md border bg-background px-2 py-1.5 text-right">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{louRepairDays} days</p>
-                  <output className="block text-sm font-bold text-foreground">${louCalculatedTotal.toFixed(2)}</output>
-                </div>
-                <Button type="button" size="sm" className="h-8 whitespace-nowrap bg-[#171b31] text-xs text-white hover:bg-[#1e2340]" onClick={applyLouCalculation}>Add to demand</Button>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="sd-lou-market" className="text-xs font-semibold text-foreground/80">Market / Location</Label>
                 <select id="sd-lou-market" value={louMarketCode} onChange={(event) => { setLouMarketCode(event.target.value); setLouVehicleClass(""); setLouDailyRate(""); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
@@ -4267,12 +4326,24 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
                   {louVehicleOptions.map((vehicle) => <option key={vehicle.model} value={vehicle.model}>{vehicle.model} — ${vehicle.dailyRate.toFixed(2)}/day</option>)}
                 </select>
               </div>
+            </div>
+            <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Repair Facility" id="sd-lou-facility" value={louRepairFacility} onChange={setLouRepairFacility} placeholder="e.g. Total Recon — Laurel" />
-              <Field label="RO Number" id="sd-lou-ro" value={louRoNumber} onChange={setLouRoNumber} placeholder="e.g. 1739" />
-              <Field label="Registered Owner" id="sd-lou-owner" value={louRegisteredOwner} onChange={setLouRegisteredOwner} placeholder="e.g. Metrocars Leasing Corp." />
+              <Field label="RO Number (from estimate)" id="sd-lou-ro" value={louRoNumber} onChange={setLouRoNumber} placeholder="Pre-fills from estimate when available" />
               <div className="rounded-md border border-dashed border-slate-300 bg-white px-2 py-1.5 text-[11px] text-muted-foreground">
                 <p className="font-semibold text-foreground/80">Utilization support</p>
-                <p>{louUtilizationLoading ? "Loading market utilization…" : louUtilizationRows.length ? `${louUtilizationRows.length} daily record${louUtilizationRows.length === 1 ? "" : "s"} · ${louUtilizationRows.find((row) => row.utilization !== "—")?.utilization || "rate unavailable"}` : "Enter a valid date range to retrieve utilization."}</p>
+                <p>{louUtilizationLoading ? "Loading market utilization…" : louUtilizationRows.length ? `${louUtilizationRows.length} daily record${louUtilizationRows.length === 1 ? "" : "s"} · ${louUtilizationRows.find((row) => row.utilization !== "—")?.utilization || "rate unavailable"}` : "Enter a valid repair range to retrieve utilization."}</p>
+              </div>
+              <Field label="Repair Start" id="sd-lou-start" value={louRepairStart} onChange={setLouRepairStart} type="date" />
+              <Field label="Repair End" id="sd-lou-end" value={louRepairEnd} onChange={setLouRepairEnd} type="date" />
+              <Field label="Daily Rental Rate ($)" id="sd-lou-rate" value={louDailyRate} onChange={setLouDailyRate} placeholder="0.00" type="number" />
+              <Field label="Registered Owner" id="sd-lou-owner" value={louRegisteredOwner} onChange={setLouRegisteredOwner} placeholder="e.g. Metrocars Leasing Corp." />
+              <div className="flex items-end gap-2">
+                <div className="min-w-[86px] rounded-md border bg-background px-2 py-1.5 text-right">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{louRepairDays} days</p>
+                  <output className="block text-sm font-bold text-foreground">${louCalculatedTotal.toFixed(2)}</output>
+                </div>
+                <Button type="button" size="sm" className="h-8 whitespace-nowrap bg-[#171b31] text-xs text-white hover:bg-[#1e2340]" onClick={applyLouCalculation}>Add to demand</Button>
               </div>
             </div>
             <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-foreground/80">

@@ -98,4 +98,21 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('1. Start with the repair estimate');
     expect(clientSource).toContain('Read & pre-fill');
   });
+
+  it("uses third-party carrier details and an estimate-first LOU repair context", () => {
+    const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"));
+    expect(clientSource).toContain('const THIRD_PARTY_CARRIERS = [');
+    expect(subroSource).toContain('<ThirdPartyCarrierSelect value={form.carrier} onChange={set("carrier")} />');
+    expect(subroSource).toContain('Their Adjuster Name');
+    expect(subroSource).toContain('Whip Snapsheet Claim #');
+    expect(subroSource).toContain('XXX-1234-123456-123456');
+    expect(subroSource.indexOf('VIN — decode first')).toBeLessThan(subroSource.indexOf('Vehicle (Year / Make / Model / Trim)'));
+    expect(subroSource).toContain('carrierAddress: parsed.carrierAddress || p.carrierAddress');
+    expect(subroSource).toContain('setLouRepairStart((current) => parsed.repairStart || current);');
+    expect(subroSource).toContain('setLouRepairEnd((current) => parsed.repairEnd || current);');
+    expect(subroSource).toContain('setLouRoNumber((current) => parsed.roNumber || current);');
+    expect(subroSource).toContain('const [louRepairFacility, setLouRepairFacility] = useState("Total Recon");');
+    expect(subroSource.indexOf('Market / Location')).toBeLessThan(subroSource.indexOf('Repair Start'));
+    expect(subroSource.indexOf('Vehicle Class / Rate Basis')).toBeLessThan(subroSource.indexOf('Repair Start'));
+  });
 });

@@ -878,3 +878,12 @@
 - [x] Consolidate remittance language into Demand for Payment and add deliberate separation after Total Subrogation Demand before that section.
 - [x] Render and inspect a full claim proof: one page, no enclosure list, no continuation page, no orphaned payment heading, and clear whitespace between itemization total and Demand for Payment.
 - [x] Validate: 313 passed / 1 skipped tests, production build, and diff check.
+
+
+## October 2026 — Subro Demand Carrier and Estimate Prefill
+- [x] Replace the internal insurance-company selector on Subro Demand with a third-party/adverse-carrier selector: State Farm, Progressive, GEICO, Allstate, Liberty Mutual, Safeco, Nationwide, Travelers, USAA, Farmers, American Family, Erie, The Hartford, Kemper, The General, Auto-Owners, Chubb, plus manual entry.
+- [x] Clarify recipient ownership throughout the form: **Their Adjuster Name**, **Their Claim #**, and **Their Claims / Subrogation Mailing Address**; preserve Whip’s full `XXX-1234-123456-123456` Snapsheet file number in its own field.
+- [x] Extend repair-estimate extraction to return a printed carrier address, repair start/end, and repair-order number; prefill those only when explicitly present in the document. Carrier mailing addresses remain editable and require claim-specific verification because national carriers commonly route subrogation by state or claim.
+- [x] Put VIN decode before Year/Make/Model, and reorder the mini LOU calculator so market/location and vehicle class come first; default editable repair facility to Total Recon; prefill repair dates and RO number from the estimate when available.
+- [x] Browser-validate the desktop split workspace at 1440px: readable two-column claim fields, third-party carrier/adjuster clarification, VIN-before-vehicle, market/class-first LOU controls, and Total Recon facility default.
+- [x] Validate: 314 passed / 1 skipped tests, TypeScript, production build, and diff check.

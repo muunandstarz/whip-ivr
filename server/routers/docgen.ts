@@ -70,8 +70,12 @@ const ESTIMATE_OUTPUT_SCHEMA = {
     dateOfLoss: { type: "string" },
     shopName: { type: "string" },
     insurerName: { type: "string" },
+    carrierAddress: { type: "string" },
     claimantName: { type: "string" },
     adjusterName: { type: "string" },
+    repairStart: { type: "string" },
+    repairEnd: { type: "string" },
+    roNumber: { type: "string" },
     lineItems: {
       type: "array",
       items: {
@@ -85,7 +89,7 @@ const ESTIMATE_OUTPUT_SCHEMA = {
       },
     },
   },
-  required: ["repairTotal", "vehicle", "vin", "claimNumber", "claimNumberRole", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName", "lineItems"],
+  required: ["repairTotal", "vehicle", "vin", "claimNumber", "claimNumberRole", "dateOfLoss", "shopName", "insurerName", "carrierAddress", "claimantName", "adjusterName", "repairStart", "repairEnd", "roNumber", "lineItems"],
   additionalProperties: false,
 } as const;
 
@@ -116,7 +120,7 @@ const CARRIER_RESPONSE_OUTPUT_SCHEMA = {
 } as const;
 
 function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
-  const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "claimantName", "adjusterName"];
+  const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "carrierAddress", "claimantName", "adjusterName", "repairStart", "repairEnd", "roNumber"];
   return scalarFields.some((field) => String(parsed[field] ?? "").trim().length > 0)
     || (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0);
 }
@@ -124,7 +128,7 @@ function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
 const execFileAsync = promisify(execFile);
 
 const estimatePrompt = (fileName?: string) =>
-  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","claimNumberRole":"our when explicitly labeled as Whip, Metrocars, member, repair-facility, or insured claim/file; adverse when explicitly labeled as the other carrier's claim; unknown when the label or ownership is not visible","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","insurerName":"insurance carrier name or empty string","claimantName":"individual claimant or driver name when clearly identified; do not use an organization or vehicle-owner company for this field","adjusterName":"carrier adjuster or estimator contact name when clearly identified or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document. Never classify an adverse carrier claim number as our claim number.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
+  `You are extracting only objective information from an automobile repair estimate for a subrogation claim. Read the attached estimate and respond with one JSON object only. Use this exact shape: {"repairTotal":"number without currency punctuation or empty string","vehicle":"year make model trim or empty string","vin":"17-character VIN or empty string","claimNumber":"claim or file number or empty string","claimNumberRole":"our when explicitly labeled as Whip, Metrocars, member, repair-facility, or insured claim/file; adverse when explicitly labeled as the other carrier's claim; unknown when the label or ownership is not visible","dateOfLoss":"YYYY-MM-DD or empty string","shopName":"repair facility or empty string","insurerName":"insurance carrier name or empty string","carrierAddress":"the other carrier's full claims/subrogation mailing address only when explicitly printed, otherwise empty string","claimantName":"individual claimant or driver name when clearly identified; do not use an organization or vehicle-owner company for this field","adjusterName":"carrier adjuster or estimator contact name when clearly identified or empty string","repairStart":"repair start, drop-off, or in-date as YYYY-MM-DD or empty string","repairEnd":"repair complete, pick-up, or out-date as YYYY-MM-DD or empty string","roNumber":"repair order / RO number or empty string","lineItems":[{"description":"short repair operation","amount":"number without currency punctuation"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document. Never classify an adverse carrier claim number as our claim number.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
 
 const carrierResponsePrompt = (fileName?: string) =>
   `You are extracting only objective information from an adverse carrier's response, denial, valuation, or rebuttal for an automobile subrogation claim. Read the attached carrier document and respond with one JSON object only. Use this exact shape: {"carrierName":"carrier company name or empty string","carrierClaimNumber":"carrier claim or reference number or empty string","adjusterName":"handling adjuster or sender name or empty string","offerTotal":"total offer, approved amount, or payment amount without currency punctuation or empty string","denialReasons":"short factual explanation of why the carrier reduced or denied payment, or empty string","lineItems":[{"description":"item, operation, or charge name","offer":"carrier allowed, offered, or denied amount without currency punctuation or empty string","reason":"carrier explanation for that line item or empty string"}]}. Include up to 12 material line items. Do not infer facts that are not visible in the document.${fileName ? ` The uploaded filename is ${fileName}.` : ""}`;
@@ -342,8 +346,12 @@ export const docgenRouter = router({
         dateOfLoss: isoDate(parsed.dateOfLoss),
         shopName: String(parsed.shopName ?? "").trim().slice(0, 160),
         insurerName: String(parsed.insurerName ?? "").trim().slice(0, 160),
+        carrierAddress: String(parsed.carrierAddress ?? "").trim().slice(0, 500),
         claimantName: String(parsed.claimantName ?? "").trim().slice(0, 160),
         adjusterName: String(parsed.adjusterName ?? "").trim().slice(0, 160),
+        repairStart: isoDate(parsed.repairStart),
+        repairEnd: isoDate(parsed.repairEnd),
+        roNumber: String(parsed.roNumber ?? "").trim().slice(0, 100),
         lineItems,
       };
     }),

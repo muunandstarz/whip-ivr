@@ -50,7 +50,7 @@ describe('docgen.parseEstimate structured upload parsing', () => {
     mocks.invokeLLM.mockResolvedValue({
       choices: [{
         message: {
-          content: '{"repairTotal":"$1,234.50","vehicle":"2024 Toyota Camry SE","vin":"1HGCM82633A004352","claimNumber":"PF438367","dateOfLoss":"September 1, 2026","shopName":"Example Collision","insurerName":"Klutch Insurance","claimantName":"Taylor Morgan","adjusterName":"Jordan Smith","lineItems":[{"description":"Replace bumper cover","amount":"800.00"}]}',
+          content: '{"repairTotal":"$1,234.50","vehicle":"2024 Toyota Camry SE","vin":"1HGCM82633A004352","claimNumber":"WHP-1234-123456-123456","dateOfLoss":"September 1, 2026","shopName":"Example Collision","insurerName":"State Farm","carrierAddress":"P.O. Box 10622\\nRockville, MD 20850","claimantName":"Taylor Morgan","adjusterName":"Jordan Smith","repairStart":"September 3, 2026","repairEnd":"September 10, 2026","roNumber":"RO-7821","lineItems":[{"description":"Replace bumper cover","amount":"800.00"}]}',
         },
       }],
     });
@@ -65,11 +65,15 @@ describe('docgen.parseEstimate structured upload parsing', () => {
       repairTotal: '1234.50',
       vehicle: '2024 Toyota Camry SE',
       vin: '1HGCM82633A004352',
-      claimNumber: 'PF438367',
+      claimNumber: 'WHP-1234-123456-123456',
       dateOfLoss: '2026-09-01',
-      insurerName: 'Klutch Insurance',
+      insurerName: 'State Farm',
+      carrierAddress: 'P.O. Box 10622\nRockville, MD 20850',
       claimantName: 'Taylor Morgan',
       adjusterName: 'Jordan Smith',
+      repairStart: '2026-09-03',
+      repairEnd: '2026-09-10',
+      roNumber: 'RO-7821',
       lineItems: [{ description: 'Replace bumper cover', amount: '800.00' }],
     });
     expect(mocks.invokeLLM).toHaveBeenCalledWith(expect.objectContaining({
