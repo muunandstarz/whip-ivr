@@ -855,3 +855,10 @@
 - [x] Preserve the standalone Full LOU Packet for independent export; its full handoff now carries market, vehicle-class, repair, owner, and repair-date details into the demand mini calculator.
 - [x] Validate live: Washington DC / Tesla Model 3 / Oct 1–6 returned 5 daily utilization rows at 98.0%; 5 days × $57.00 added $285.00 and generated a four-page Subro Demand PDF with the LOU schedule listed as an enclosure and appended in pages 3–4.
 - [x] Validate: 311 passed / 1 skipped tests, TypeScript, production build, and diff check.
+
+
+## October 2026 — Estimate-First Subro Demand
+- [x] Move the repair-estimate upload ahead of every Subro Demand field, immediately beneath Quick Links.
+- [x] Retain drag-and-drop auto-reading and the explicit **Read & pre-fill** control; its instructions now state the fields it populates below: claim, carrier, vehicle, VIN, claimant, loss date, and repair amount.
+- [x] Add a layout regression assertion confirming the sole upload control appears before Claim Information.
+- [x] Browser-verify the top-of-page sequence and validate: 312 passed / 1 skipped tests, production build, and diff check.

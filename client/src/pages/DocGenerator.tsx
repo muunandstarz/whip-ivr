@@ -4137,6 +4137,29 @@ This demand is made without waiver of any rights or remedies available to Metroc
         </div>
         <span className="text-xs text-muted-foreground ml-auto hidden sm:block">Enter calculated amounts in the fields below</span>
       </div>
+      <section
+        aria-label="Repair estimate upload and prefill"
+        className="rounded-lg border-2 border-dashed border-[#ff6221]/35 bg-[#ff6221]/[0.035] px-4 py-4 transition-colors hover:border-[#ff6221]/65"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void parseEstimateFile(file); }}
+      >
+        <input id="sd-estimate-upload" type="file" accept="application/pdf,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) setEstimateFile(file); }} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#171b31] dark:text-[#ff9c73]">1. Start with the repair estimate</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Drop a PDF or image here, then read it to pre-fill the claim, carrier, vehicle, VIN, claimant, loss date, and repair amount below.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <label htmlFor="sd-estimate-upload" className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-[#ff6221]/50 px-3 text-xs font-medium text-[#d84f18] hover:bg-[#ff6221]/10">
+              <Upload className="h-3.5 w-3.5" /> {estimateFile ? "Replace" : "Choose file"}
+            </label>
+            <Button type="button" size="sm" className="h-9 bg-[#ff6221] text-xs text-white hover:bg-[#e5541a]" disabled={!estimateFile || estimateParsing} onClick={() => void parseEstimateFile()}>
+              {estimateParsing ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {estimateParsing ? "Reading…" : "Read & pre-fill"}
+            </Button>
+          </div>
+        </div>
+        {estimateFile && <p className="mt-2 truncate text-[11px] font-medium text-foreground/75">Selected: {estimateFile.name}</p>}
+      </section>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div>
         <Panel title="Claim Information" tag="REQUIRED">
@@ -4259,28 +4282,6 @@ This demand is made without waiver of any rights or remedies available to Metroc
               <span><strong>Include full LOU support schedule in this settlement packet.</strong> The PDF will append repair-period details, daily utilization log, rate basis, calculation, and support narrative.</span>
             </label>
           </section>
-          <div
-            className="mb-3 rounded-lg border-2 border-dashed border-[#ff6221]/35 bg-[#ff6221]/[0.035] px-4 py-3 transition-colors hover:border-[#ff6221]/65"
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void parseEstimateFile(file); }}
-          >
-            <input id="sd-estimate-upload" type="file" accept="application/pdf,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) setEstimateFile(file); }} />
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[#171b31] dark:text-[#ff9c73]">Drop a repair estimate here</p>
-                <p className="text-[11px] text-muted-foreground">PDF or image · reads the total, vehicle, VIN, claim number, and loss date into this demand.</p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <label htmlFor="sd-estimate-upload" className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[#ff6221]/50 px-3 text-xs font-medium text-[#d84f18] hover:bg-[#ff6221]/10">
-                  <Upload className="h-3.5 w-3.5" /> {estimateFile ? "Replace" : "Choose file"}
-                </label>
-                <Button type="button" size="sm" className="h-8 bg-[#ff6221] text-xs text-white hover:bg-[#e5541a]" disabled={!estimateFile || estimateParsing} onClick={() => void parseEstimateFile()}>
-                  {estimateParsing ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {estimateParsing ? "Reading…" : "Read estimate"}
-                </Button>
-              </div>
-            </div>
-            {estimateFile && <p className="mt-2 truncate text-[11px] font-medium text-foreground/75">Selected: {estimateFile.name}</p>}
-          </div>
           <Grid2 children={<>
             {form.demandType === "repair" ? (
               <Field label="Repair Estimate ($)" id="sd-repair" value={form.repair} onChange={set("repair")} placeholder="0.00" />

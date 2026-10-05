@@ -74,4 +74,13 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('Loss of Use Supporting Schedule');
     expect(clientSource).toContain('Include full LOU support schedule in this settlement packet.');
   });
+
+  it("puts repair-estimate reading before all Subro Demand form fields", () => {
+    const uploadMarker = 'aria-label="Repair estimate upload and prefill"';
+    const claimInfoMarker = '<Panel title="Claim Information" tag="REQUIRED">';
+    expect(clientSource.match(new RegExp(uploadMarker, "g"))).toHaveLength(1);
+    expect(clientSource.indexOf(uploadMarker)).toBeLessThan(clientSource.indexOf(claimInfoMarker));
+    expect(clientSource).toContain('1. Start with the repair estimate');
+    expect(clientSource).toContain('Read & pre-fill');
+  });
 });
