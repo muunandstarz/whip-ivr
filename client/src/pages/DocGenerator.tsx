@@ -100,6 +100,46 @@ type LouDemandHandoff = {
   vin: string;
   days: number;
   dailyRate: string;
+  marketCode: string;
+  vehicleClass: string;
+  repairFacility: string;
+  roNumber: string;
+  registeredOwner: string;
+  vehicleStatus: string;
+  repairStart: string;
+  repairEnd: string;
+};
+
+type LouUtilizationRow = {
+  date: string;
+  fleetCount: number;
+  rentCount: number;
+  utilization: string;
+};
+
+type LouSupportingSchedule = {
+  claimNumber: string;
+  adverseClaimNumber: string;
+  dateOfLoss: string;
+  adverseCarrier: string;
+  adjuster: string;
+  vehicle: string;
+  vin: string;
+  memberDriver: string;
+  registeredOwner: string;
+  vehicleStatus: string;
+  vehicleClass: string;
+  marketName: string;
+  repairFacility: string;
+  roNumber: string;
+  repairStart: string;
+  repairEnd: string;
+  days: number;
+  dailyRate: number;
+  total: number;
+  handlerName: string;
+  handlerTitle: string;
+  utilizationRows: LouUtilizationRow[];
 };
 
 const LOU_DEMAND_HANDOFF_KEY = "lou_demand_handoff";
@@ -122,6 +162,14 @@ function readLouDemandHandoff(): LouDemandHandoff | null {
           vin: parsed.vin ?? "",
           days: parsed.days ?? 0,
           dailyRate: parsed.dailyRate ?? "",
+          marketCode: parsed.marketCode ?? "DC",
+          vehicleClass: parsed.vehicleClass ?? "",
+          repairFacility: parsed.repairFacility ?? "",
+          roNumber: parsed.roNumber ?? "",
+          registeredOwner: parsed.registeredOwner ?? "Metrocars Leasing Corp.",
+          vehicleStatus: parsed.vehicleStatus ?? "Actively leased / Revenue-generating",
+          repairStart: parsed.repairStart ?? "",
+          repairEnd: parsed.repairEnd ?? "",
         };
       }
     }
@@ -141,6 +189,14 @@ function readLouDemandHandoff(): LouDemandHandoff | null {
       vin: "",
       days: Number(sessionStorage.getItem("lou_days") ?? 0),
       dailyRate: sessionStorage.getItem("lou_rate") ?? "",
+      marketCode: "DC",
+      vehicleClass: "",
+      repairFacility: "",
+      roNumber: "",
+      registeredOwner: "Metrocars Leasing Corp.",
+      vehicleStatus: "Actively leased / Revenue-generating",
+      repairStart: "",
+      repairEnd: "",
     };
   } catch {
     return null;
@@ -438,6 +494,174 @@ function getPDFDataUrl(doc: jsPDF): string {
   // Use an object URL rather than a data URI. Browser security policies can
   // block data: URLs inside preview iframes, leaving the formatted preview blank.
   return URL.createObjectURL(doc.output("blob"));
+}
+
+/**
+ * Adds the same evidentiary utilization and loss-of-use narrative used by the
+ * standalone LOU packet. It is deliberately appended to a demand as a support
+ * schedule, so the demand letter remains first and the calculation travels in
+ * the same PDF packet.
+ */
+function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule) {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const lm = 14;
+  const rm = W - 14;
+  const tw = W - 28;
+  const addSchedulePage = (continued = false) => {
+    doc.addPage();
+    let start = addWhipLetterhead(doc, "LOSS OF USE SUPPORTING SCHEDULE", `Claim #${schedule.claimNumber || "[Claim Number]"}`);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(30, 30, 30);
+    doc.text(continued ? "Loss of Use / Rental Reimbursement Schedule (continued)" : "Loss of Use / Rental Reimbursement Supporting Schedule", lm, start);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(90, 90, 90);
+    doc.text("Fleet utilization log, calculation, and supporting claim documentation", lm, start + 5);
+    return start + 12;
+  };
+  let y = addSchedulePage();
+  const ensure = (needed: number) => {
+    if (y + needed > H - 20) y = addSchedulePage(true);
+  };
+  const section = (title: string) => {
+    ensure(12);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(25, 25, 25);
+    doc.text(title, lm, y);
+    y += 2;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.4);
+    doc.line(lm, y, rm, y);
+    doc.setLineWidth(0.2);
+    y += 4;
+  };
+  const infoRows = (rows: Array<[string, string]>) => {
+    const labelWidth = 50;
+    for (const [label, value] of rows) {
+      ensure(7);
+      doc.setFillColor(248, 248, 248);
+      doc.rect(lm, y, tw, 6.5, "F");
+      doc.setDrawColor(220, 220, 220);
+      doc.rect(lm, y, tw, 6.5, "S");
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(label, lm + 2, y + 4.4);
+      doc.setFont("helvetica", "normal");
+      const lines = doc.splitTextToSize(value || "—", tw - labelWidth - 4) as string[];
+      doc.text(lines[0] || "—", lm + labelWidth, y + 4.4);
+      y += 6.5;
+    }
+    y += 4;
+  };
+  const longDate = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
+
+  section("CLAIM & VEHICLE INFORMATION");
+  infoRows([
+    ["Whip Claim No.", schedule.claimNumber],
+    ["Adverse Claim No.", schedule.adverseClaimNumber],
+    ["Date of Loss", longDate(schedule.dateOfLoss)],
+    ["Adverse Carrier", schedule.adverseCarrier],
+    ["Vehicle", schedule.vehicle],
+    ["VIN", schedule.vin],
+    ["Member / Driver", schedule.memberDriver],
+    ["Registered Owner", schedule.registeredOwner],
+    ["Vehicle Status", schedule.vehicleStatus],
+    ["Vehicle Class", schedule.vehicleClass],
+  ]);
+
+  section("REPAIR PERIOD");
+  infoRows([
+    ["Repair Facility", schedule.repairFacility],
+    ["RO Number", schedule.roNumber],
+    ["Drop-Off Date", longDate(schedule.repairStart)],
+    ["Pick-Up Date", longDate(schedule.repairEnd)],
+    ["Total Days in Repair", String(schedule.days)],
+    ["Days Claimed", String(schedule.days)],
+  ]);
+
+  section("FLEET UTILIZATION LOG");
+  const methodNote = `The table below reflects the fleet utilization rate for ${schedule.vehicleClass || "the applicable"} class vehicles at the ${schedule.marketName} market/location for each day the vehicle was out of service. Utilization is the ratio of rented vehicles to the total available fleet, excluding vehicles in repair, awaiting reconditioning, or pending auction.`;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(60, 60, 60);
+  const methodLines = doc.splitTextToSize(methodNote, tw) as string[];
+  ensure(methodLines.length * 4 + 12);
+  doc.text(methodLines, lm, y);
+  y += methodLines.length * 4 + 4;
+
+  const cols = [lm, 45, 90, 130, 155, 175];
+  const headers = ["Date", "Renting Location", "Vehicle Class", "Fleet Count", "Rent Count", "Utilization"];
+  ensure(10);
+  doc.setFillColor(45, 45, 45);
+  doc.rect(lm, y, tw, 7, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  headers.forEach((header, index) => doc.text(header, cols[index] + 1, y + 4.5));
+  y += 7;
+  const utilizationRows = schedule.utilizationRows.length > 0
+    ? schedule.utilizationRows
+    : Array.from({ length: schedule.days }, (_, index) => ({
+      date: new Date(new Date(`${schedule.repairStart}T00:00:00`).getTime() + index * 86_400_000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      fleetCount: 0,
+      rentCount: 0,
+      utilization: "—",
+    }));
+  utilizationRows.slice(0, 20).forEach((row, index) => {
+    ensure(7);
+    if (index % 2 === 0) { doc.setFillColor(248, 248, 248); doc.rect(lm, y, tw, 6, "F"); }
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(7);
+    doc.text(row.date, cols[0] + 1, y + 4);
+    doc.text(schedule.marketName, cols[1] + 1, y + 4);
+    doc.text(schedule.vehicleClass || "Vehicle", cols[2] + 1, y + 4);
+    doc.text(String(row.fleetCount), cols[3] + 1, y + 4);
+    doc.text(String(row.rentCount), cols[4] + 1, y + 4);
+    doc.setFont("helvetica", "bold");
+    doc.text(row.utilization, cols[5] + 1, y + 4);
+    y += 6;
+  });
+  y += 5;
+
+  section("LOSS OF USE / RENTAL CALCULATION");
+  const averageUtilization = utilizationRows.find((row) => row.utilization !== "—")?.utilization || "—";
+  const rateBasis = `Days Out of Service: ${schedule.days} × Daily Rate: $${schedule.dailyRate.toFixed(2)}. Rate basis: ${schedule.vehicle || "Vehicle"}, ${schedule.marketName} market.`;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(40, 40, 40);
+  doc.text(doc.splitTextToSize(rateBasis, tw), lm, y);
+  y += 10;
+  ensure(18);
+  doc.setFillColor(35, 35, 35);
+  doc.rect(lm, y, tw, 10, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", lm + 2, y + 6.5);
+  doc.text(`$${schedule.total.toFixed(2)}`, rm - 2, y + 6.5, { align: "right" });
+  y += 16;
+
+  section("LEGAL BASIS & UTILIZATION METHODOLOGY");
+  const legalText = `Under the common law of negligence and applicable state tort statutes, a tortfeasor is liable for economic losses proximately caused by a negligent act, including loss of use of a damaged vehicle. Loss-of-use damages are recoverable for each day a revenue-generating vehicle is out of service due to the collision, regardless of whether a substitute vehicle was rented. See Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).
+
+The subject vehicle is registered to ${schedule.registeredOwner || "the registered owner"} and is actively leased as a revenue-generating fleet asset. It was unavailable for service during the repair period, resulting in direct economic loss equal to the applicable daily rate multiplied by the days out of service. The utilization records above${averageUtilization === "—" ? "" : ` (showing ${averageUtilization} utilization)`} support that a replacement vehicle would have been rented but for this loss.`;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  const legalLines = doc.splitTextToSize(legalText, tw) as string[];
+  ensure(legalLines.length * 4 + 20);
+  doc.text(legalLines, lm, y);
+  y += legalLines.length * 4 + 8;
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(100, 100, 100);
+  doc.text("This supporting schedule is enclosed with the Subrogation Demand and is part of the same settlement packet.", lm, y);
+  addLetterFooter(doc);
 }
 
 // ─── Denial Templates ─────────────────────────────────────────────────────────
@@ -3470,9 +3694,24 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   const [louRepairStart, setLouRepairStart] = useState("");
   const [louRepairEnd, setLouRepairEnd] = useState("");
   const [louDailyRate, setLouDailyRate] = useState("");
+  const [louMarketCode, setLouMarketCode] = useState("DC");
+  const [louVehicleClass, setLouVehicleClass] = useState("");
+  const [louRepairFacility, setLouRepairFacility] = useState("");
+  const [louRoNumber, setLouRoNumber] = useState("");
+  const [louRegisteredOwner, setLouRegisteredOwner] = useState("Metrocars Leasing Corp.");
+  const [louSupportEnabled, setLouSupportEnabled] = useState(true);
   const [estimateFile, setEstimateFile] = useState<File | null>(null);
   const [estimateParsing, setEstimateParsing] = useState(false);
   const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
+  const { data: louMarketsData } = trpc.lou.getMarketPricing.useQuery(undefined, { staleTime: 300_000 });
+  const louMarkets = Array.isArray(louMarketsData) ? louMarketsData : [];
+  const louMarket = louMarkets.find((market) => market.code === louMarketCode) || louMarkets[0];
+  const louMarketName = louMarket?.name || louMarketCode;
+  const louVehicleOptions = louMarket?.vehicles || [];
+  const { data: louUtilRowsData, isFetching: louUtilizationLoading } = trpc.lou.getUtilRows.useQuery(
+    { marketCode: louMarketCode, dropOff: louRepairStart, pickUp: louRepairEnd },
+    { enabled: Boolean(louRepairStart && louRepairEnd && louRepairStart < louRepairEnd), staleTime: 300_000 },
+  );
   // Attachment checkboxes
   const ATTACHMENT_OPTIONS = [
     "Estimate",
@@ -3495,12 +3734,51 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
     ? Math.max(0, Math.round((new Date(`${louRepairEnd}T00:00:00`).getTime() - new Date(`${louRepairStart}T00:00:00`).getTime()) / 86_400_000))
     : 0;
   const louCalculatedTotal = louRepairDays * (parseFloat(louDailyRate) || 0);
+  const louUtilizationRows: LouUtilizationRow[] = (louUtilRowsData || []).map((row) => ({
+    date: new Date(`${row.date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    fleetCount: row.fleet || 0,
+    rentCount: row.rented || 0,
+    // The LOU service supplies the canonical market utilization value. Do not
+    // recalculate it from aggregate fields: those represent different source
+    // populations in historical snapshots and can create impossible rates.
+    utilization: row.utilization > 0
+      ? `${Math.min(100, row.utilization <= 1 ? row.utilization * 100 : row.utilization).toFixed(1)}%`
+      : "—",
+  }));
+  const buildLouSupportingSchedule = (): LouSupportingSchedule | null => {
+    if (!louSupportEnabled || louRepairDays <= 0 || louCalculatedTotal <= 0) return null;
+    return {
+      claimNumber: form.ourClaim,
+      adverseClaimNumber: form.advClaim,
+      dateOfLoss: form.dol,
+      adverseCarrier: form.carrier,
+      adjuster: form.adjusterName,
+      vehicle: form.vehicle,
+      vin: form.vin,
+      memberDriver: form.driver,
+      registeredOwner: louRegisteredOwner,
+      vehicleStatus: "Actively leased / Revenue-generating",
+      vehicleClass: louVehicleClass || form.vehicle || "Vehicle",
+      marketName: louMarketName,
+      repairFacility: louRepairFacility,
+      roNumber: louRoNumber,
+      repairStart: louRepairStart,
+      repairEnd: louRepairEnd,
+      days: louRepairDays,
+      dailyRate: parseFloat(louDailyRate) || 0,
+      total: louCalculatedTotal,
+      handlerName,
+      handlerTitle: "Claims Resolution Specialist",
+      utilizationRows: louUtilizationRows,
+    };
+  };
   const applyLouCalculation = () => {
     if (louRepairDays <= 0 || louCalculatedTotal <= 0) {
       toast.error("Enter a valid repair period and daily rental rate to calculate LOU.");
       return;
     }
     setForm((current) => ({ ...current, lou: louCalculatedTotal.toFixed(2) }));
+    setLouSupportEnabled(true);
     toast.success(`LOU of $${louCalculatedTotal.toFixed(2)} added to this demand.`);
   };
   const decodeVin = async () => {
@@ -3549,6 +3827,15 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
         ...(handoff.vehicle ? { vehicle: handoff.vehicle } : {}),
         ...(handoff.vin ? { vin: handoff.vin } : {}),
       }));
+      setLouRepairStart(handoff.repairStart);
+      setLouRepairEnd(handoff.repairEnd);
+      setLouDailyRate(handoff.dailyRate);
+      setLouMarketCode(handoff.marketCode || "DC");
+      setLouVehicleClass(handoff.vehicleClass);
+      setLouRepairFacility(handoff.repairFacility);
+      setLouRoNumber(handoff.roNumber);
+      setLouRegisteredOwner(handoff.registeredOwner || "Metrocars Leasing Corp.");
+      setLouSupportEnabled(true);
       sessionStorage.removeItem(LOU_DEMAND_HANDOFF_KEY);
       sessionStorage.removeItem("lou_total");
       sessionStorage.removeItem("lou_claim");
@@ -3669,6 +3956,7 @@ Whip Claims Management
   const buildSubroDoc = () => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
+    const louSupportingSchedule = buildLouSupportingSchedule();
     let y = addWhipLetterhead(doc);
     const lm = 14, rm = W - 14, tw = W - 28;
     const nl = (n = 5) => { y += n; };
@@ -3768,6 +4056,7 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     const encList = attachmentsText ? attachmentsText.split(", ") : ["Estimate", "Image Report", "Police Report"];
+    if (louSupportingSchedule && !encList.includes("Loss of Use Supporting Schedule")) encList.push("Loss of Use Supporting Schedule");
     encList.forEach(enc => {
       checkPage(7);
       doc.text(`•  ${enc}`, lm + 4, y); nl(5);
@@ -3810,6 +4099,7 @@ This demand is made without waiver of any rights or remedies available to Metroc
 
     addSOLNotice(doc);
     addLetterFooter(doc);
+    if (louSupportingSchedule) appendLouSupportingSchedule(doc, louSupportingSchedule);
     return doc;
   };
   const handlePreview = () => {
@@ -3926,7 +4216,7 @@ This demand is made without waiver of any rights or remedies available to Metroc
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Calculator className="h-3.5 w-3.5" /> Loss of Use calculator</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Calculate and add the rental amount directly to this demand. Use the Full LOU Packet only when separate supporting documentation is needed.</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Uses the same market pricing and utilization data as the Full LOU Packet. When enabled, the complete LOU support schedule is appended to this demand PDF.</p>
               </div>
               {form.lou && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800">Demand LOU: ${parseFloat(form.lou || "0").toFixed(2)}</span>}
             </div>
@@ -3942,6 +4232,32 @@ This demand is made without waiver of any rights or remedies available to Metroc
                 <Button type="button" size="sm" className="h-8 whitespace-nowrap bg-[#171b31] text-xs text-white hover:bg-[#1e2340]" onClick={applyLouCalculation}>Add to demand</Button>
               </div>
             </div>
+            <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1">
+                <Label htmlFor="sd-lou-market" className="text-xs font-semibold text-foreground/80">Market / Location</Label>
+                <select id="sd-lou-market" value={louMarketCode} onChange={(event) => { setLouMarketCode(event.target.value); setLouVehicleClass(""); setLouDailyRate(""); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                  {louMarkets.map((market) => <option key={market.code} value={market.code}>{market.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="sd-lou-vehicle-class" className="text-xs font-semibold text-foreground/80">Vehicle Class / Rate Basis</Label>
+                <select id="sd-lou-vehicle-class" value={louVehicleClass} onChange={(event) => { const selected = louVehicleOptions.find((vehicle) => vehicle.model === event.target.value); setLouVehicleClass(event.target.value); if (selected) setLouDailyRate(selected.dailyRate.toFixed(2)); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                  <option value="">Select vehicle class…</option>
+                  {louVehicleOptions.map((vehicle) => <option key={vehicle.model} value={vehicle.model}>{vehicle.model} — ${vehicle.dailyRate.toFixed(2)}/day</option>)}
+                </select>
+              </div>
+              <Field label="Repair Facility" id="sd-lou-facility" value={louRepairFacility} onChange={setLouRepairFacility} placeholder="e.g. Total Recon — Laurel" />
+              <Field label="RO Number" id="sd-lou-ro" value={louRoNumber} onChange={setLouRoNumber} placeholder="e.g. 1739" />
+              <Field label="Registered Owner" id="sd-lou-owner" value={louRegisteredOwner} onChange={setLouRegisteredOwner} placeholder="e.g. Metrocars Leasing Corp." />
+              <div className="rounded-md border border-dashed border-slate-300 bg-white px-2 py-1.5 text-[11px] text-muted-foreground">
+                <p className="font-semibold text-foreground/80">Utilization support</p>
+                <p>{louUtilizationLoading ? "Loading market utilization…" : louUtilizationRows.length ? `${louUtilizationRows.length} daily record${louUtilizationRows.length === 1 ? "" : "s"} · ${louUtilizationRows.find((row) => row.utilization !== "—")?.utilization || "rate unavailable"}` : "Enter a valid date range to retrieve utilization."}</p>
+              </div>
+            </div>
+            <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-foreground/80">
+              <Checkbox checked={louSupportEnabled} onCheckedChange={(checked) => setLouSupportEnabled(checked === true)} className="mt-0.5 h-3.5 w-3.5" />
+              <span><strong>Include full LOU support schedule in this settlement packet.</strong> The PDF will append repair-period details, daily utilization log, rate basis, calculation, and support narrative.</span>
+            </label>
           </section>
           <div
             className="mb-3 rounded-lg border-2 border-dashed border-[#ff6221]/35 bg-[#ff6221]/[0.035] px-4 py-3 transition-colors hover:border-[#ff6221]/65"
@@ -5658,6 +5974,14 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
       vin,
       days,
       dailyRate: effectiveRate.toFixed(2),
+      marketCode,
+      vehicleClass,
+      repairFacility,
+      roNumber,
+      registeredOwner,
+      vehicleStatus,
+      repairStart: dropOffDate,
+      repairEnd: pickUpDate,
     };
     sessionStorage.setItem(LOU_DEMAND_HANDOFF_KEY, JSON.stringify(handoff));
     // Preserve the old values only as a recovery path for sessions that are

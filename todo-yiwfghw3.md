@@ -846,3 +846,12 @@
 - [x] Add a compact **Loss of Use calculator** directly in Subro Demand: repair start/end, daily rental rate, automatic day/total calculation, and **Add to demand** action. The standalone **Full LOU Packet** remains available for a separate calculation/documentation PDF.
 - [x] Browser-validate full handoff: 5 days × $42.50 transferred $212.50 plus claim/carrier/vehicle fields; mini demand calculator: 3 days × $55.00 set demand LOU to $165.00 and updated the demand total.
 - [x] Validate: 310 passed / 1 skipped tests, TypeScript, production build, and diff check.
+
+
+## October 2026 — Utilization-Backed LOU Packet
+- [x] Upgrade the embedded Subro Demand LOU calculator to use the same `lou.getMarketPricing` market-rate source and `lou.getUtilRows` daily utilization source as the standalone Full LOU Packet.
+- [x] Add support inputs to the mini calculator: market/location, vehicle class/rate basis, repair facility, RO number, registered owner, and a live utilization-data indicator.
+- [x] Append a complete Loss of Use Supporting Schedule to the same Subro Demand PDF when selected: claim/vehicle table, repair period, daily utilization log, rate basis, total LOU calculation, legal basis, methodology, and packet-enclosure notation.
+- [x] Preserve the standalone Full LOU Packet for independent export; its full handoff now carries market, vehicle-class, repair, owner, and repair-date details into the demand mini calculator.
+- [x] Validate live: Washington DC / Tesla Model 3 / Oct 1–6 returned 5 daily utilization rows at 98.0%; 5 days × $57.00 added $285.00 and generated a four-page Subro Demand PDF with the LOU schedule listed as an enclosure and appended in pages 3–4.
+- [x] Validate: 311 passed / 1 skipped tests, TypeScript, production build, and diff check.

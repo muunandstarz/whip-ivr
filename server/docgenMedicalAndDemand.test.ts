@@ -64,4 +64,14 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('const applyLouCalculation = () => {');
     expect(clientSource).toContain('lou: louCalculatedTotal.toFixed(2)');
   });
+
+  it("uses the market utilization service and appends the full LOU support schedule to Subro packets", () => {
+    expect(clientSource).toContain('trpc.lou.getMarketPricing.useQuery');
+    expect(clientSource).toContain('trpc.lou.getUtilRows.useQuery');
+    expect(clientSource).toContain('const louUtilizationRows: LouUtilizationRow[]');
+    expect(clientSource).toContain('function appendLouSupportingSchedule');
+    expect(clientSource).toContain('if (louSupportingSchedule) appendLouSupportingSchedule(doc, louSupportingSchedule);');
+    expect(clientSource).toContain('Loss of Use Supporting Schedule');
+    expect(clientSource).toContain('Include full LOU support schedule in this settlement packet.');
+  });
 });
