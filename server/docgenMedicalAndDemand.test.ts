@@ -75,6 +75,15 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('Include full LOU support schedule in this settlement packet.');
   });
 
+  it("uses a deliberate continuation instead of orphaning the payment heading", () => {
+    expect(clientSource).toContain('const startContinuationPage = () => {');
+    expect(clientSource).toContain('Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} (continued)');
+    expect(clientSource).toContain('const enclosureHeight = 8 + encList.length * 5 + 3;');
+    expect(clientSource).toContain('const paymentAndSignatureHeight = 8 + demandLines.length * 5');
+    expect(clientSource).toContain('if (y + paymentAndSignatureHeight > doc.internal.pageSize.getHeight() - 25) startContinuationPage();');
+    expect(clientSource).toContain('Keep the itemization and its enclosure list on the same page.');
+  });
+
   it("puts repair-estimate reading before all Subro Demand form fields", () => {
     const uploadMarker = 'aria-label="Repair estimate upload and prefill"';
     const claimInfoMarker = '<Panel title="Claim Information" tag="REQUIRED">';

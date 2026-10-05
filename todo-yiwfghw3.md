@@ -862,3 +862,11 @@
 - [x] Retain drag-and-drop auto-reading and the explicit **Read & pre-fill** control; its instructions now state the fields it populates below: claim, carrier, vehicle, VIN, claimant, loss date, and repair amount.
 - [x] Add a layout regression assertion confirming the sole upload control appears before Claim Information.
 - [x] Browser-verify the top-of-page sequence and validate: 312 passed / 1 skipped tests, production build, and diff check.
+
+
+## October 2026 — Subro Demand Letter Pagination
+- [x] Correct the supplied Subro Demand’s orphaned **Demand for Payment** heading and sparse split across pages.
+- [x] Keep Itemization and Enclosures together; when payment/remittance/signature do not fit, begin a clean letterhead continuation page and keep that entire unit together.
+- [x] Tighten section gaps and signature spacing without changing the colored Whip mark or letter content.
+- [x] Render and inspect the NF108376 proof: two intentionally structured letter pages, no dangling heading, no split payment block, and no embedded LOU schedule unless selected.
+- [x] Validate: 313 passed / 1 skipped tests, production build, and diff check.

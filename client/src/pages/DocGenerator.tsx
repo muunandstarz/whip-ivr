@@ -3965,6 +3965,15 @@ Whip Claims Management
         doc.addPage(); y = 20;
       }
     };
+    const startContinuationPage = () => {
+      doc.addPage();
+      y = addWhipLetterhead(doc);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} (continued)`, lm, y);
+      nl(7);
+    };
 
     // ── Date (left-aligned, no "For Settlement Purposes Only") ──
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
@@ -4047,51 +4056,62 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("Total Subrogation Demand", lm + 4, y);
     doc.text(`$${total}`, col2x, y, { align: "right" });
-    nl(12);
+    nl(7);
+
+    const encList = attachmentsText ? attachmentsText.split(", ") : ["Estimate", "Image Report", "Police Report"];
+    if (louSupportingSchedule && !encList.includes("Loss of Use Supporting Schedule")) encList.push("Loss of Use Supporting Schedule");
+    const demandText = `Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
+
+This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.`;
+    const demandLines = doc.splitTextToSize(demandText, tw) as string[];
+    const payText = `Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
+    const payLines = doc.splitTextToSize(payText, tw) as string[];
+    const enclosureHeight = 8 + encList.length * 5 + 3;
+    const paymentAndSignatureHeight = 8 + demandLines.length * 5 + 7 + 8 + payLines.length * 5 + 8 + (handlerName ? 29 : 24);
+
+    // Keep the itemization and its enclosure list on the same page. Then move
+    // the complete payment/remittance/signature unit together if needed. This
+    // prevents a dangling payment heading while avoiding an artificially blank
+    // lower half of the damages page.
+    if (y + enclosureHeight > doc.internal.pageSize.getHeight() - 25) startContinuationPage();
 
     // ── ENCLOSURES ──
-    checkPage(40);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("ENCLOSURES", lm, y); nl(2);
     doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    const encList = attachmentsText ? attachmentsText.split(", ") : ["Estimate", "Image Report", "Police Report"];
-    if (louSupportingSchedule && !encList.includes("Loss of Use Supporting Schedule")) encList.push("Loss of Use Supporting Schedule");
     encList.forEach(enc => {
       checkPage(7);
       doc.text(`•  ${enc}`, lm + 4, y); nl(5);
     });
-    nl(5);
+    nl(3);
+
+    if (y + paymentAndSignatureHeight > doc.internal.pageSize.getHeight() - 25) startContinuationPage();
 
     // ── DEMAND FOR PAYMENT ──
-    checkPage(40);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("DEMAND FOR PAYMENT", lm, y); nl(2);
     doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    const demandText = `Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
-
-This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.`;
-    const demandLines = doc.splitTextToSize(demandText, tw);
-    checkPage(demandLines.length * 5 + 20);
+    // Page breaks here are a last-resort safeguard for unusually long custom text.
+    // The normal flow above keeps this heading with its full payment demand.
+    checkPage(demandLines.length * 5 + 46);
     doc.text(demandLines, lm, y);
-    y += demandLines.length * 5 + 10;
+    y += demandLines.length * 5 + 7;
 
     // ── PAYMENT INSTRUCTIONS + SIGNATURE ──
     // Reserve the signature block with this final section so it cannot be orphaned on page three.
-    const payText = `Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
-    const payLines = doc.splitTextToSize(payText, tw) as string[];
-    checkPage(payLines.length * 5 + 48);
+    checkPage(payLines.length * 5 + 42);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10);
     doc.text("PAYMENT INSTRUCTIONS", lm, y); nl(2);
     doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text(payLines, lm, y);
-    y += payLines.length * 5 + 12;
+    y += payLines.length * 5 + 8;
 
     // ── Signature block ──
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    doc.text("Respectfully,", lm, y); nl(12);
+    doc.text("Respectfully,", lm, y); nl(9);
     if (handlerName) { doc.setFont("helvetica", "bold"); doc.text(handlerName, lm, y); nl(5); doc.setFont("helvetica", "normal"); }
     doc.text("Claims Resolution Specialist", lm, y); nl(5);
     doc.text("Whip Claims Management", lm, y); nl(5);
