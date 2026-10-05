@@ -895,3 +895,10 @@
 - [x] Research all other bundled national carriers against their own published sources. Their sites require state-, adjuster-, online-portal-, or claim-specific routing and do not publish a safe generic inbound auto-subrogation postal address, so no potentially incorrect address was fabricated. An address printed on the uploaded estimate continues to prefill the editable address field.
 - [x] Browser-validate selecting Allstate: carrier set to Allstate and its three-line mailing address populated immediately.
 - [x] Validate: 19 focused parser/form tests, TypeScript, production build, and diff check passed.
+
+
+## October 2026 — Full Carrier Correspondence Directory
+- [x] Give every bundled third-party carrier an editable mailing-address preset in Subro Demand: State Farm, Progressive, GEICO, Allstate, Liberty Mutual, Safeco, Nationwide, Travelers, USAA, Farmers, American Family, Erie, The Hartford, Kemper, The General, Auto-Owners, and Chubb.
+- [x] Add the carrier-published preferred delivery method and a claim-routing caveat beneath the selector so a handler can use fax, email, portal, assigned-adjuster delivery, or the address as appropriate.
+- [x] Preserve State Farm’s policy-state warning, Travelers’ FedEx-only subrogation-payment restriction, and The Hartford’s prohibition on using the NJ PIP-medical-billing address for PD demands.
+- [x] Browser-validate State Farm selection: the editable default address and explicit portal/policy-state routing cue render together; full suite 314 passed / 1 skipped, TypeScript, production build, and diff check passed.

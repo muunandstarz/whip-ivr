@@ -943,12 +943,29 @@ const THIRD_PARTY_CARRIERS = [
   "Chubb",
 ] as const;
 
-// Only carrier-published general claims addresses belong here.  Other national
-// carriers require state- or claim-specific routing, so an estimate/claim notice
-// should supply their address rather than a potentially incorrect generic one.
-const THIRD_PARTY_CARRIER_ADDRESSES: Partial<Record<typeof THIRD_PARTY_CARRIERS[number], string>> = {
-  "Allstate": "Allstate Insurance Company\nPO Box 660636\nDallas, TX 75266",
-  "The General": "The General Claims Department\nPO Box 8001\nStevens Point, WI 54481-9820",
+type ThirdPartyCarrierRouting = { address: string; preferredMethod: string; routingNote: string };
+
+// Carrier-published correspondence addresses are editable defaults. The claims
+// number must be on every demand, and an assigned adjuster's routing instructions
+// always control over this directory.
+const THIRD_PARTY_CARRIER_ROUTING: Record<typeof THIRD_PARTY_CARRIERS[number], ThirdPartyCarrierRouting> = {
+  "State Farm": { address: "State Farm Insurance\nPO Box 680001\nDallas, TX 75368-0001", preferredMethod: "Use State Farm's other-insurer claim portal or the assigned claim handler.", routingNote: "State Farm routes auto mail by policy state; confirm the policy-specific Auto Operation Center before mailing." },
+  "Progressive": { address: "The Progressive Corporation\n300 North Commons Blvd\nMayfield Village, OH 44143", preferredMethod: "Use the assigned adjuster's channel; Progressive also publishes General Fax 1-877-280-5587.", routingNote: "Corporate correspondence default; confirm claim-specific routing before mailing." },
+  "GEICO": { address: "GEICO\n5260 Western Avenue\nChevy Chase, MD 20815", preferredMethod: "Upload through the GEICO claim portal or obtain the fax/email from the assigned claims agent.", routingNote: "Corporate correspondence default; GEICO uses claim-specific claims routing." },
+  "Allstate": { address: "Allstate Insurance Company\nPO Box 660636\nDallas, TX 75266", preferredMethod: "Use Allstate MyClaim/assigned claim contact when available.", routingNote: "Allstate publishes this for property-and-casualty claims mail." },
+  "Liberty Mutual": { address: "Liberty Mutual Insurance\nP.O. Box 5014\nScranton, PA 18505-5014", preferredMethod: "Use Liberty Mutual's third-party carrier portal or assigned claims representative.", routingNote: "General auto-claims correspondence default; include the claim number." },
+  "Safeco": { address: "Liberty Mutual Insurance\nP.O. Box 1053\nMontgomeryville, PA 18936-1053", preferredMethod: "Use the Safeco/Liberty Mutual third-party portal or assigned claims representative.", routingNote: "General claims correspondence default; confirm the applicable Safeco entity and claim routing." },
+  "Nationwide": { address: "Nationwide Headquarters\nOne Nationwide Plaza\nColumbus, OH 43215-2220", preferredMethod: "Use Nationwide's claim tools or the assigned claims adjuster.", routingNote: "Home-office correspondence default; confirm claim-specific routing before mailing." },
+  "Travelers": { address: "Travelers Insurance\nAttention: Travelers – 4210\n3000 Kellway Drive, Suite 120\nCarrollton, TX 75006", preferredMethod: "Use Travelers' secure Claim Upload Center for demand documents.", routingNote: "Carrier publishes this subrogation address for FedEx-only payments; do not send ordinary USPS without confirming the adjuster's routing." },
+  "USAA": { address: "USAA Claims Service\nP.O. Box 33490\nSan Antonio, TX 78265", preferredMethod: "Email the assigned adjuster's address or fax 800-531-8669 with the claim number.", routingNote: "USAA publishes this as its claims mailing address." },
+  "Farmers Insurance": { address: "Farmers Insurance\n6301 Owensmouth Ave\nWoodland Hills, CA 91367", preferredMethod: "Use Farmers' document-upload portal or the assigned claims representative.", routingNote: "General correspondence default; confirm Claims Center routing for a demand." },
+  "American Family": { address: "American Family Insurance Claims Services, Inc.\n6000 American Parkway\nMadison, WI 53783-0001", preferredMethod: "Email claimdocuments@afics.com with the claim number in the subject; fax 1-866-935-2858 is also published.", routingNote: "American Family publishes this claims-documentation address." },
+  "Erie Insurance": { address: "Erie Branch Claims Office\nP.O. Box 13002\nErie, PA 16514-3002", preferredMethod: "Use the assigned claims handler; fax 814-451-5209 or 888-333-3743 is published by the claims office.", routingNote: "General claims-office correspondence default; include the ERIE claim number." },
+  "The Hartford": { address: "The Hartford\nP.O. Box 14219\nLexington, KY 40512", preferredMethod: "Use the third-party claim portal and the assigned adjuster.", routingNote: "General correspondence default; do not use the separate NJ PIP medical-billing address for property-damage demands." },
+  "Kemper": { address: "Kemper Claims\n123 Town Square Place, PMB 785\nJersey City, NJ 07310", preferredMethod: "Email mail.claims@kemper.com or fax 888-976-2123 with the claim number.", routingNote: "Kemper publishes this claims address and electronic document contacts." },
+  "The General": { address: "The General Claims Department\nPO Box 8001\nStevens Point, WI 54481-9820", preferredMethod: "Email Claims@thegeneral.com or fax 1-833-464-9908 with the claim number.", routingNote: "The General publishes this for claim documentation." },
+  "Auto-Owners Insurance": { address: "Auto-Owners Insurance\n6101 Anacapri Blvd\nLansing, MI 48917", preferredMethod: "Use the local independent agent or assigned claim representative.", routingNote: "Corporate correspondence default; Auto-Owners requires agent/claim-representative routing for claims." },
+  "Chubb": { address: "Chubb North America Claims\nP.O. Box 716\nPortland, ME 04104", preferredMethod: "Upload through Chubb's claim application or obtain the correct route from the assigned adjuster.", routingNote: "Chubb publishes this as a General Claims address; confirm the assigned adjuster's address/fax for a specific auto claim." },
 };
 
 function ThirdPartyCarrierSelect({
@@ -966,6 +983,7 @@ function ThirdPartyCarrierSelect({
     if (value && !isListed) setIsCustom(true);
   }, [isListed, value]);
   const selectedValue = isCustom ? "other" : (isListed ? value : undefined);
+  const selectedRouting = isListed ? THIRD_PARTY_CARRIER_ROUTING[value as keyof typeof THIRD_PARTY_CARRIER_ROUTING] : null;
   return (
     <div className="space-y-1">
       <Label htmlFor="sd-carrier" className="text-xs font-semibold text-foreground/80">Third-party carrier</Label>
@@ -974,8 +992,8 @@ function ThirdPartyCarrierSelect({
         setIsCustom(nextIsCustom);
         if (!nextIsCustom) {
           onChange(next);
-          const address = THIRD_PARTY_CARRIER_ADDRESSES[next as keyof typeof THIRD_PARTY_CARRIER_ADDRESSES];
-          if (address) onAddressChange?.(address);
+          const routing = THIRD_PARTY_CARRIER_ROUTING[next as keyof typeof THIRD_PARTY_CARRIER_ROUTING];
+          if (routing?.address) onAddressChange?.(routing.address);
         }
       }}>
         <SelectTrigger id="sd-carrier" className="h-8 text-sm"><SelectValue placeholder="Select their insurance carrier…" /></SelectTrigger>
@@ -994,6 +1012,12 @@ function ThirdPartyCarrierSelect({
         />
       )}
       <p className="text-[10px] leading-4 text-muted-foreground">Use the adverse/third-party carrier—not Whip, Metrocars, or the member’s carrier.</p>
+      {selectedRouting && (
+        <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] leading-4 text-slate-600">
+          <p><span className="font-semibold text-slate-800">Preferred delivery:</span> {selectedRouting.preferredMethod}</p>
+          <p className="mt-0.5"><span className="font-semibold text-slate-800">Mail routing:</span> {selectedRouting.routingNote}</p>
+        </div>
+      )}
     </div>
   );
 }
