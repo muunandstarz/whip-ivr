@@ -52,7 +52,7 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
 
   it("keeps updated correspondence printer-neutral outside the colored logo", () => {
     expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.5);');
-    expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);');
+    expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(4);');
   });
 
   it("pushes a complete LOU handoff into Subro Demand and provides an in-demand mini calculator", () => {
@@ -71,17 +71,23 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('const louUtilizationRows: LouUtilizationRow[]');
     expect(clientSource).toContain('function appendLouSupportingSchedule');
     expect(clientSource).toContain('if (louSupportingSchedule) appendLouSupportingSchedule(doc, louSupportingSchedule);');
-    expect(clientSource).toContain('Loss of Use Supporting Schedule');
     expect(clientSource).toContain('Include full LOU support schedule in this settlement packet.');
   });
 
-  it("uses a deliberate continuation instead of orphaning the payment heading", () => {
+  it("uses a compact Subro Demand letter without an enclosure block", () => {
+    const subroPdfSource = clientSource.slice(clientSource.indexOf("const buildSubroDoc"));
     expect(clientSource).toContain('const startContinuationPage = () => {');
     expect(clientSource).toContain('Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} (continued)');
-    expect(clientSource).toContain('const enclosureHeight = 8 + encList.length * 5 + 3;');
-    expect(clientSource).toContain('const paymentAndSignatureHeight = 8 + demandLines.length * 5');
+    expect(subroPdfSource).toContain('const lm = 18, rm = W - 18, tw = W - 36;');
+    expect(subroPdfSource).toContain('const compactFont = 8.8;');
+    expect(subroPdfSource).toContain('const compactLeading = 4.25;');
+    expect(subroPdfSource).toContain('const paymentAndSignatureHeight = 6 + demandLines.length * compactLeading');
     expect(clientSource).toContain('if (y + paymentAndSignatureHeight > doc.internal.pageSize.getHeight() - 25) startContinuationPage();');
-    expect(clientSource).toContain('Keep the itemization and its enclosure list on the same page.');
+    expect(subroPdfSource).toContain('Enclosures remain as selected attachments in the packet; they are not');
+    expect(subroPdfSource).not.toContain('doc.text("ENCLOSURES", lm, y);');
+    expect(subroPdfSource).not.toContain('doc.text("PAYMENT INSTRUCTIONS", lm, y);');
+    expect(subroPdfSource).toContain('Please make payment payable to Whip Claims Management');
+    expect(subroPdfSource).toContain('nl(9);');
   });
 
   it("puts repair-estimate reading before all Subro Demand form fields", () => {

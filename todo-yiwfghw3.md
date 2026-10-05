@@ -870,3 +870,11 @@
 - [x] Tighten section gaps and signature spacing without changing the colored Whip mark or letter content.
 - [x] Render and inspect the NF108376 proof: two intentionally structured letter pages, no dangling heading, no split payment block, and no embedded LOU schedule unless selected.
 - [x] Validate: 313 passed / 1 skipped tests, production build, and diff check.
+
+
+## October 2026 — Compact Subro Demand Letter
+- [x] Remove the printed enclosure block from the Subro Demand letter; selected documents still remain packet attachments, and the optional LOU schedule still appends separately.
+- [x] Use a wider 0.7-inch text frame, 8.8 pt body type, and 4.25 pt leading to improve readability while retaining one balanced correspondence page.
+- [x] Consolidate remittance language into Demand for Payment and add deliberate separation after Total Subrogation Demand before that section.
+- [x] Render and inspect a full claim proof: one page, no enclosure list, no continuation page, no orphaned payment heading, and clear whitespace between itemization total and Demand for Payment.
+- [x] Validate: 313 passed / 1 skipped tests, production build, and diff check.

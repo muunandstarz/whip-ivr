@@ -3957,9 +3957,13 @@ Whip Claims Management
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     const louSupportingSchedule = buildLouSupportingSchedule();
-    let y = addWhipLetterhead(doc);
-    const lm = 14, rm = W - 14, tw = W - 28;
-    const nl = (n = 5) => { y += n; };
+    let y = addWhipLetterhead(doc) - 2;
+    // A 0.7-inch text frame reads more like standard legal correspondence than
+    // the earlier narrow 0.55-inch frame, while the logo/header stays aligned.
+    const lm = 18, rm = W - 18, tw = W - 36;
+    const compactFont = 8.8;
+    const compactLeading = 4.25;
+    const nl = (n = compactLeading) => { y += n; };
     const checkPage = (needed = 20) => {
       if (y + needed > doc.internal.pageSize.getHeight() - 25) {
         doc.addPage(); y = 20;
@@ -3972,20 +3976,20 @@ Whip Claims Management
       doc.setFontSize(8);
       doc.setTextColor(100, 100, 100);
       doc.text(`Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} (continued)`, lm, y);
-      nl(7);
+      nl(5);
     };
 
     // ── Date (left-aligned, no "For Settlement Purposes Only") ──
-    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+    doc.setFontSize(compactFont); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
     doc.text(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), lm, y);
-    nl(7);
+    nl(5);
 
     // ── Carrier address block ──
-    doc.setFontSize(9); doc.setFont("helvetica", "normal");
-    doc.text(form.carrier || "[Insurance Company]", lm, y); nl(5);
-    doc.text(`Attn: ${form.adjusterName || "[Adjuster Name]"}`, lm, y); nl(5);
+    doc.setFontSize(compactFont); doc.setFont("helvetica", "normal");
+    doc.text(form.carrier || "[Insurance Company]", lm, y); nl();
+    doc.text(`Attn: ${form.adjusterName || "[Adjuster Name]"}`, lm, y); nl();
     const recipientAddress = doc.splitTextToSize(form.carrierAddress || "[Carrier Mailing Address]", tw) as string[];
-    doc.text(recipientAddress, lm, y); y += recipientAddress.length * 5 + 5;
+    doc.text(recipientAddress, lm, y); y += recipientAddress.length * compactLeading + 3;
 
     // ── RE block ──
     doc.setFont("helvetica", "bold");
@@ -3995,13 +3999,13 @@ Whip Claims Management
     const reText = `Subrogation Demand — Whip Claim No. ${form.ourClaim || "[Our Claim #]"} / Your Claim No. ${form.advClaim || "[Their Claim #]"}`;
     const reLines = doc.splitTextToSize(reText, tw - 8);
     doc.text(reLines, reStart, y);
-    y += reLines.length * 5;
-    doc.text(`Date of Loss: ${form.dol ? new Date(form.dol + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date of Loss]"}`, reStart, y); nl(5);
-    doc.text(`Vehicle: ${form.vehicle || "[Vehicle]"} — VIN ${form.vin || "[VIN]"}`, reStart, y); nl(5);
-    doc.text(`Our Insured: Metrocars Leasing Corp. (Driver: ${form.driver || "[Driver Name]"})`, reStart, y); nl(10);
+    y += reLines.length * compactLeading;
+    doc.text(`Date of Loss: ${form.dol ? new Date(form.dol + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date of Loss]"}`, reStart, y); nl();
+    doc.text(`Vehicle: ${form.vehicle || "[Vehicle]"} — VIN ${form.vin || "[VIN]"}`, reStart, y); nl();
+    doc.text(`Our Insured: Metrocars Leasing Corp. (Driver: ${form.driver || "[Driver Name]"})`, reStart, y); nl(7);
 
     // ── Salutation ──
-    doc.text(`Dear ${form.adjusterName || form.carrier || "[Carrier / Adjuster]"},`, lm, y); nl(7);
+    doc.text(`Dear ${form.adjusterName || form.carrier || "[Carrier / Adjuster]"},`, lm, y); nl(5);
 
     // ── Opening paragraph (editable) ──
     const openingText = form.openingParagraph ||
@@ -4009,18 +4013,18 @@ Whip Claims Management
 
 We accordingly submit this formal demand for reimbursement of the damages set forth below, pursuant to the doctrine of contractual and equitable subrogation, and request that this matter be resolved directly between our respective offices.`;
     const openLines = doc.splitTextToSize(openingText, tw);
-    checkPage(openLines.length * 5 + 20);
+    checkPage(openLines.length * compactLeading + 14);
     doc.text(openLines, lm, y);
-    y += openLines.length * 5 + 8;
+    y += openLines.length * compactLeading + 4;
 
     // ── ITEMIZATION OF DAMAGES ──
-    checkPage(60);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-    doc.text("ITEMIZATION OF DAMAGES", lm, y); nl(2);
+    checkPage(48);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("ITEMIZATION OF DAMAGES", lm, y); nl(1.5);
     // Correspondence stays printer-neutral: keep the Whip logo in color but
     // use only grayscale rules and text throughout the body.
     doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.5);
-    doc.line(lm, y, rm, y); nl(6);
+    doc.line(lm, y, rm, y); nl(4);
 
     // Table rows
     const rows: [string, string][] = [];
@@ -4043,78 +4047,52 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
     if (form.dv) rows.push(["Diminished Value", `$${parseFloat(form.dv).toFixed(2)}`]);
     if (form.lou) rows.push(["Rental Reimbursement (LOU)", `$${parseFloat(form.lou).toFixed(2)}`]);
 
-    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.setFontSize(compactFont); doc.setFont("helvetica", "normal");
     const col2x = rm - 30;
     rows.forEach(([label, amt]) => {
-      checkPage(8);
+      checkPage(6);
       doc.text(label, lm + 4, y);
       doc.text(amt, col2x, y, { align: "right" });
-      nl(6);
+      nl(4.5);
     });
     // Divider + total
-    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(5);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(4);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
     doc.text("Total Subrogation Demand", lm + 4, y);
     doc.text(`$${total}`, col2x, y, { align: "right" });
-    nl(7);
+    // Keep the demand heading visually distinct from the damages total while
+    // retaining the compact single-page correspondence layout.
+    nl(9);
 
-    const encList = attachmentsText ? attachmentsText.split(", ") : ["Estimate", "Image Report", "Police Report"];
-    if (louSupportingSchedule && !encList.includes("Loss of Use Supporting Schedule")) encList.push("Loss of Use Supporting Schedule");
     const demandText = `Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
 
-This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.`;
+This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
+
+Please make payment payable to Whip Claims Management and mail it to P.O. Box 10622, Rockville, MD 20849. For EFT instructions, contact the undersigned. Reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
     const demandLines = doc.splitTextToSize(demandText, tw) as string[];
-    const payText = `Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
-    const payLines = doc.splitTextToSize(payText, tw) as string[];
-    const enclosureHeight = 8 + encList.length * 5 + 3;
-    const paymentAndSignatureHeight = 8 + demandLines.length * 5 + 7 + 8 + payLines.length * 5 + 8 + (handlerName ? 29 : 24);
+    const paymentAndSignatureHeight = 6 + demandLines.length * compactLeading + 5 + (handlerName ? 21 : 17);
 
-    // Keep the itemization and its enclosure list on the same page. Then move
-    // the complete payment/remittance/signature unit together if needed. This
-    // prevents a dangling payment heading while avoiding an artificially blank
-    // lower half of the damages page.
-    if (y + enclosureHeight > doc.internal.pageSize.getHeight() - 25) startContinuationPage();
-
-    // ── ENCLOSURES ──
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-    doc.text("ENCLOSURES", lm, y); nl(2);
-    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    encList.forEach(enc => {
-      checkPage(7);
-      doc.text(`•  ${enc}`, lm + 4, y); nl(5);
-    });
-    nl(3);
-
+    // Enclosures remain as selected attachments in the packet; they are not
+    // repeated inside the correspondence. This lets the letter stay compact.
     if (y + paymentAndSignatureHeight > doc.internal.pageSize.getHeight() - 25) startContinuationPage();
 
     // ── DEMAND FOR PAYMENT ──
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-    doc.text("DEMAND FOR PAYMENT", lm, y); nl(2);
-    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("DEMAND FOR PAYMENT", lm, y); nl(1.5);
+    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(4);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(compactFont);
     // Page breaks here are a last-resort safeguard for unusually long custom text.
-    // The normal flow above keeps this heading with its full payment demand.
-    checkPage(demandLines.length * 5 + 46);
+    // Standard payment, remittance, and non-waiver language stays in one section.
+    checkPage(demandLines.length * compactLeading + 24);
     doc.text(demandLines, lm, y);
-    y += demandLines.length * 5 + 7;
-
-    // ── PAYMENT INSTRUCTIONS + SIGNATURE ──
-    // Reserve the signature block with this final section so it cannot be orphaned on page three.
-    checkPage(payLines.length * 5 + 42);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-    doc.text("PAYMENT INSTRUCTIONS", lm, y); nl(2);
-    doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    doc.text(payLines, lm, y);
-    y += payLines.length * 5 + 8;
+    y += demandLines.length * compactLeading + 5;
 
     // ── Signature block ──
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    doc.text("Respectfully,", lm, y); nl(9);
-    if (handlerName) { doc.setFont("helvetica", "bold"); doc.text(handlerName, lm, y); nl(5); doc.setFont("helvetica", "normal"); }
-    doc.text("Claims Resolution Specialist", lm, y); nl(5);
-    doc.text("Whip Claims Management", lm, y); nl(5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(compactFont);
+    doc.text("Respectfully,", lm, y); nl(6);
+    if (handlerName) { doc.setFont("helvetica", "bold"); doc.text(handlerName, lm, y); nl(); doc.setFont("helvetica", "normal"); }
+    doc.text("Claims Resolution Specialist", lm, y); nl();
+    doc.text("Whip Claims Management", lm, y); nl();
     doc.text("(855) 906-5949  |  claims@drivewhip.com", lm, y);
 
     addSOLNotice(doc);
