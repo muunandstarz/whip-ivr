@@ -88,6 +88,65 @@ type DocGenTab =
   | "klutch-policy-declarations"
   | "dv-calculator";
 
+type LouDemandHandoff = {
+  id: string;
+  total: string;
+  claimNumber: string;
+  adverseClaimNumber: string;
+  dateOfLoss: string;
+  adverseCarrier: string;
+  adjuster: string;
+  vehicle: string;
+  vin: string;
+  days: number;
+  dailyRate: string;
+};
+
+const LOU_DEMAND_HANDOFF_KEY = "lou_demand_handoff";
+
+function readLouDemandHandoff(): LouDemandHandoff | null {
+  try {
+    const raw = sessionStorage.getItem(LOU_DEMAND_HANDOFF_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<LouDemandHandoff>;
+      if (parsed.id && parsed.total) {
+        return {
+          id: parsed.id,
+          total: parsed.total,
+          claimNumber: parsed.claimNumber ?? "",
+          adverseClaimNumber: parsed.adverseClaimNumber ?? "",
+          dateOfLoss: parsed.dateOfLoss ?? "",
+          adverseCarrier: parsed.adverseCarrier ?? "",
+          adjuster: parsed.adjuster ?? "",
+          vehicle: parsed.vehicle ?? "",
+          vin: parsed.vin ?? "",
+          days: parsed.days ?? 0,
+          dailyRate: parsed.dailyRate ?? "",
+        };
+      }
+    }
+
+    // Retain compatibility with handoffs started immediately before this repair.
+    const legacyTotal = sessionStorage.getItem("lou_total");
+    if (!legacyTotal) return null;
+    return {
+      id: `legacy-${legacyTotal}-${sessionStorage.getItem("lou_claim") ?? ""}`,
+      total: legacyTotal,
+      claimNumber: sessionStorage.getItem("lou_claim") ?? "",
+      adverseClaimNumber: "",
+      dateOfLoss: "",
+      adverseCarrier: "",
+      adjuster: "",
+      vehicle: "",
+      vin: "",
+      days: Number(sessionStorage.getItem("lou_days") ?? 0),
+      dailyRate: sessionStorage.getItem("lou_rate") ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 interface NavGroup {
   label: string;
   items: { id: DocGenTab; label: string; icon: React.ElementType }[];
@@ -3380,7 +3439,7 @@ function TLSettlementTab() {
 }
 
 // ─── Tab: Subro Demand Letter ─────────────────────────────────────────────────
-function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
+function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNavigate?: (tab: DocGenTab) => void; louHandoff?: LouDemandHandoff | null; onLouHandoffConsumed?: (id: string) => void }) {
   const [form, setForm] = useState({
     carrier: "",
     adjusterName: "",
@@ -3408,6 +3467,9 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [handlerName, setHandlerName] = useState("");
   const [vinDecoding, setVinDecoding] = useState(false);
+  const [louRepairStart, setLouRepairStart] = useState("");
+  const [louRepairEnd, setLouRepairEnd] = useState("");
+  const [louDailyRate, setLouDailyRate] = useState("");
   const [estimateFile, setEstimateFile] = useState<File | null>(null);
   const [estimateParsing, setEstimateParsing] = useState(false);
   const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
@@ -3429,6 +3491,18 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
     );
   };
   const attachmentsText = selectedAttachments.join(", ");
+  const louRepairDays = louRepairStart && louRepairEnd
+    ? Math.max(0, Math.round((new Date(`${louRepairEnd}T00:00:00`).getTime() - new Date(`${louRepairStart}T00:00:00`).getTime()) / 86_400_000))
+    : 0;
+  const louCalculatedTotal = louRepairDays * (parseFloat(louDailyRate) || 0);
+  const applyLouCalculation = () => {
+    if (louRepairDays <= 0 || louCalculatedTotal <= 0) {
+      toast.error("Enter a valid repair period and daily rental rate to calculate LOU.");
+      return;
+    }
+    setForm((current) => ({ ...current, lou: louCalculatedTotal.toFixed(2) }));
+    toast.success(`LOU of $${louCalculatedTotal.toFixed(2)} added to this demand.`);
+  };
   const decodeVin = async () => {
     const vin = form.vin.trim();
     if (vin.length !== 17) { toast.error("VIN must be exactly 17 characters"); return; }
@@ -3455,22 +3529,35 @@ function SubroDemandTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void 
     }
   };
 
-  // Pre-fill LOU amount when navigated from LOU Calculator
+  const appliedLouHandoffRef = useRef<string | null>(null);
+
+  // Apply the parent handoff whenever this tab opens. Session storage remains a
+  // recovery path for a reload, while the in-memory contract prevents the
+  // transfer from depending on mount timing.
   useEffect(() => {
-    const louTotal = sessionStorage.getItem("lou_total");
-    const louClaim = sessionStorage.getItem("lou_claim");
-    if (louTotal) {
+    const handoff = louHandoff ?? readLouDemandHandoff();
+    if (handoff && appliedLouHandoffRef.current !== handoff.id) {
+      appliedLouHandoffRef.current = handoff.id;
       setForm(p => ({
         ...p,
-        lou: louTotal,
-        ...(louClaim ? { ourClaim: louClaim } : {}),
+        lou: handoff.total,
+        ...(handoff.claimNumber ? { ourClaim: handoff.claimNumber } : {}),
+        ...(handoff.adverseClaimNumber ? { advClaim: handoff.adverseClaimNumber } : {}),
+        ...(handoff.dateOfLoss ? { dol: handoff.dateOfLoss } : {}),
+        ...(handoff.adverseCarrier ? { carrier: handoff.adverseCarrier } : {}),
+        ...(handoff.adjuster ? { adjusterName: handoff.adjuster } : {}),
+        ...(handoff.vehicle ? { vehicle: handoff.vehicle } : {}),
+        ...(handoff.vin ? { vin: handoff.vin } : {}),
       }));
+      sessionStorage.removeItem(LOU_DEMAND_HANDOFF_KEY);
       sessionStorage.removeItem("lou_total");
       sessionStorage.removeItem("lou_claim");
       sessionStorage.removeItem("lou_days");
       sessionStorage.removeItem("lou_rate");
+      onLouHandoffConsumed?.(handoff.id);
+      toast.success(`LOU of $${handoff.total} added to this demand.`);
     }
-  }, []);
+  }, [louHandoff, onLouHandoffConsumed]);
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -3747,7 +3834,7 @@ This demand is made without waiver of any rights or remedies available to Metroc
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#171b31] hover:bg-[#1e2340] text-white transition-colors border border-[#171b31]/20"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-            LOU Calculator
+            Full LOU Packet
           </button>
           <button
             type="button"
@@ -3835,6 +3922,27 @@ This demand is made without waiver of any rights or remedies available to Metroc
               </SelectContent>
             </Select>
           </div>
+          <section className="mb-4 rounded-lg border border-slate-300 bg-slate-50/70 p-3" aria-label="LOU calculator for this demand">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Calculator className="h-3.5 w-3.5" /> Loss of Use calculator</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Calculate and add the rental amount directly to this demand. Use the Full LOU Packet only when separate supporting documentation is needed.</p>
+              </div>
+              {form.lou && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800">Demand LOU: ${parseFloat(form.lou || "0").toFixed(2)}</span>}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
+              <Field label="Repair Start" id="sd-lou-start" value={louRepairStart} onChange={setLouRepairStart} type="date" />
+              <Field label="Repair End" id="sd-lou-end" value={louRepairEnd} onChange={setLouRepairEnd} type="date" />
+              <Field label="Daily Rental Rate ($)" id="sd-lou-rate" value={louDailyRate} onChange={setLouDailyRate} placeholder="0.00" type="number" />
+              <div className="flex items-end gap-2">
+                <div className="min-w-[86px] rounded-md border bg-background px-2 py-1.5 text-right">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{louRepairDays} days</p>
+                  <output className="block text-sm font-bold text-foreground">${louCalculatedTotal.toFixed(2)}</output>
+                </div>
+                <Button type="button" size="sm" className="h-8 whitespace-nowrap bg-[#171b31] text-xs text-white hover:bg-[#1e2340]" onClick={applyLouCalculation}>Add to demand</Button>
+              </div>
+            </div>
+          </section>
           <div
             className="mb-3 rounded-lg border-2 border-dashed border-[#ff6221]/35 bg-[#ff6221]/[0.035] px-4 py-3 transition-colors hover:border-[#ff6221]/65"
             onDragOver={(event) => event.preventDefault()}
@@ -5388,7 +5496,7 @@ const STANDARD_LOU_RATES = [
   { label: "Custom / Enter manually", rate: "" },
 ];
 
-function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
+function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: DocGenTab) => void; onPushToDemand?: (handoff: LouDemandHandoff) => void }) {
   // Claim info
   const [claimNumber, setClaimNumber] = useState("");
   const [adverseClaimNo, setAdverseClaimNo] = useState("");
@@ -5534,12 +5642,33 @@ function LOUCalculatorTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => voi
   };
 
   const handlePushToDemand = () => {
-    sessionStorage.setItem("lou_total", louTotal);
-    sessionStorage.setItem("lou_claim", claimNumber);
-    sessionStorage.setItem("lou_days", String(days));
-    sessionStorage.setItem("lou_rate", effectiveRate.toFixed(2));
+    if (days <= 0 || effectiveRate <= 0) {
+      toast.error("Enter a valid repair period and daily rate before pushing LOU to the demand.");
+      return;
+    }
+    const handoff: LouDemandHandoff = {
+      id: `lou-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      total: louTotal,
+      claimNumber,
+      adverseClaimNumber: adverseClaimNo,
+      dateOfLoss,
+      adverseCarrier,
+      adjuster,
+      vehicle: ymm,
+      vin,
+      days,
+      dailyRate: effectiveRate.toFixed(2),
+    };
+    sessionStorage.setItem(LOU_DEMAND_HANDOFF_KEY, JSON.stringify(handoff));
+    // Preserve the old values only as a recovery path for sessions that are
+    // already open in an earlier client build.
+    sessionStorage.setItem("lou_total", handoff.total);
+    sessionStorage.setItem("lou_claim", handoff.claimNumber);
+    sessionStorage.setItem("lou_days", String(handoff.days));
+    sessionStorage.setItem("lou_rate", handoff.dailyRate);
+    onPushToDemand?.(handoff);
     setPushedToDemand(true);
-    toast.success("LOU amount pushed to Subrogation Demand tab");
+    toast.success(`LOU of $${handoff.total} pushed to Subrogation Demand.`);
     setTimeout(() => setPushedToDemand(false), 4000);
     // Navigate to subro-demand tab
     if (onNavigate) onNavigate("subro-demand");
@@ -8151,6 +8280,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     return WHIP_STATES.includes(s) ? s : "MD";
   })();
   const [activeTab, setActiveTab] = useState<DocGenTab>(initialTab);
+  const [louDemandHandoff, setLouDemandHandoff] = useState<LouDemandHandoff | null>(null);
   const [formResetKey, setFormResetKey] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRecentDocs, setShowRecentDocs] = useState(false);
@@ -8182,6 +8312,12 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const activeLabel = allItems.find(i => i.id === activeTab)?.label || "";
   const isFavorite = favTabKeys.includes(activeTab);
   const unreadShared = (sharedTemplatesQ.data ?? []).filter(t => !t.isRead).length;
+  const handleLouDemandHandoff = useCallback((handoff: LouDemandHandoff) => {
+    setLouDemandHandoff(handoff);
+  }, []);
+  const handleLouHandoffConsumed = useCallback((id: string) => {
+    setLouDemandHandoff((current) => current?.id === id ? null : current);
+  }, []);
 
   const handleToggleFavorite = () => {
     toggleFavMut.mutate({ tabKey: activeTab, tabLabel: activeLabel });
@@ -8190,10 +8326,12 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const handleClearForm = () => {
     if (activeTab === "lou-calculator") {
       sessionStorage.removeItem("lou_calc_state");
+      sessionStorage.removeItem(LOU_DEMAND_HANDOFF_KEY);
       sessionStorage.removeItem("lou_total");
       sessionStorage.removeItem("lou_claim");
       sessionStorage.removeItem("lou_days");
       sessionStorage.removeItem("lou_rate");
+      setLouDemandHandoff(null);
     }
     setFormResetKey((key) => key + 1);
     setCurrentFormData({});
@@ -8242,13 +8380,13 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "release-bi": return <ReleaseBITab />;
       case "release-pd": return <ReleasePDTab />;
       case "tl-settlement": return <TLSettlementTab />;
-      case "subro-demand": return <SubroDemandTab onNavigate={setActiveTab} />;
+      case "subro-demand": return <SubroDemandTab onNavigate={setActiveTab} louHandoff={louDemandHandoff} onLouHandoffConsumed={handleLouHandoffConsumed} />;
       case "carrier-rebuttal": return <CarrierRebuttalTab />;
       case "payment-receipt": return <PaymentReceiptTab />;
       case "urgently-invoice": return <UrgentlyInvoiceTab />;
       case "pip-exhaustion": return <PIPExhaustionTab />;
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
-      case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} />;
+      case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} />;
       case "pip-bill-review": return <MedicalBillReviewTab />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;

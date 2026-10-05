@@ -839,3 +839,10 @@
 - [x] Add a route-stability regression test guarding against inline Document Generator route functions.
 - [x] Browser-validate sustained Blank Letterhead entry: entered `John Smith`, waited through live-preview regeneration, retained input focus, and confirmed the updated recipient and greeting in the formatted preview.
 - [x] Validate: 309 passed / 1 skipped tests, TypeScript, production build, and diff check.
+
+
+## October 2026 — LOU Demand Integration
+- [x] Replace the fragile one-time LOU storage read with an explicit parent-managed handoff plus session recovery path. The handoff transfers LOU amount, Whip/adverse claim numbers, loss date, carrier, adjuster, vehicle, and VIN into Subro Demand.
+- [x] Add a compact **Loss of Use calculator** directly in Subro Demand: repair start/end, daily rental rate, automatic day/total calculation, and **Add to demand** action. The standalone **Full LOU Packet** remains available for a separate calculation/documentation PDF.
+- [x] Browser-validate full handoff: 5 days × $42.50 transferred $212.50 plus claim/carrier/vehicle fields; mini demand calculator: 3 days × $55.00 set demand LOU to $165.00 and updated the demand total.
+- [x] Validate: 310 passed / 1 skipped tests, TypeScript, production build, and diff check.

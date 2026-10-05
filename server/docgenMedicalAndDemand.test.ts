@@ -54,4 +54,14 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.5);');
     expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(6);');
   });
+
+  it("pushes a complete LOU handoff into Subro Demand and provides an in-demand mini calculator", () => {
+    expect(clientSource).toContain('const LOU_DEMAND_HANDOFF_KEY = "lou_demand_handoff";');
+    expect(clientSource).toContain('onPushToDemand?.(handoff);');
+    expect(clientSource).toContain('louHandoff={louDemandHandoff}');
+    expect(clientSource).toContain('onLouHandoffConsumed={handleLouHandoffConsumed}');
+    expect(clientSource).toContain('aria-label="LOU calculator for this demand"');
+    expect(clientSource).toContain('const applyLouCalculation = () => {');
+    expect(clientSource).toContain('lou: louCalculatedTotal.toFixed(2)');
+  });
 });
