@@ -810,7 +810,7 @@
 - [x] Use signed, model-readable document URLs for both Medical Bill Review and PIP document parsing, with successful non-production PDF smoke tests for analysis and PIP parsing.
 - [x] Add a formatted Pro-Rata explanation-letter preview/download and apply the restrained printer-neutral treatment to the document workspace while retaining the colored Whip mark.
 - [x] Normalize Aircall outcomes (answered, missed, voicemail, abandoned) and create callback tasks for missed/abandoned Claims Line calls as a durable application-side safety net.
-- [ ] Finish Aircall dashboard routing coverage: live inspection found the Claims Line group has six users but only Natashia and MJ marked available. The API has no safe documented write route for number call-flow membership; update requires a signed-in Aircall administrator session.
+- [x] Complete Aircall administrator routing review and publish the Whip Claims Line update path: Claims Processors (Daryl and MJ) ring simultaneously for 48 seconds, then Claims First-Party Overflow (Annie, Jovel, Lorraine, and Natashia) rings simultaneously for 48 seconds, followed by a final 48-second processor retry and voicemail. This removes the prior 204-second last retry from the existing-claim path (300 seconds down to 144 seconds) without changing the separate new-claim route. Aircall availability remains user-controlled; the flow does not mark an offline person available.
 
 
 ## October 2026 — Georgia UM/UIM COI Correction
