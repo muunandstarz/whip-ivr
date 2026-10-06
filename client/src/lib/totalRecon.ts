@@ -9,6 +9,7 @@ export type TotalReconShop = GeoPoint & {
   name: string;
   address: string;
   streetAddress: string;
+  phone: string;
   hours: string;
   contact: string;
   markets: string;
@@ -26,21 +27,23 @@ export const TOTAL_RECON_SHOPS: TotalReconShop[] = [
     name: "Total Recon — Laurel",
     streetAddress: "3521 Whiskey Bottom Rd",
     address: "3521 Whiskey Bottom Rd, Laurel, MD 20724",
+    phone: "(301) 762-2195",
     lat: 39.0884,
     lng: -76.873,
-    hours: "Mon–Fri 9 AM–4 PM · Appointment only",
+    hours: "Mon–Fri 8 AM–6 PM · Sat 8 AM–12 PM",
     contact: "Sebastian & Rafael via Slack",
     markets: "Rockville · Glen Burnie",
     label: "Laurel, MD 20724",
   },
   {
     id: "rockville",
-    name: "Total Recon — RV (Rockville)",
-    streetAddress: "14670 Southlawn Ln",
-    address: "14670 Southlawn Ln, Rockville, MD 20850",
+    name: "Total Recon — Rockville",
+    streetAddress: "627 Southlawn Lane",
+    address: "627 Southlawn Lane, Rockville, MD 20850",
+    phone: "(301) 762-2195",
     lat: 39.0855,
     lng: -77.1545,
-    hours: "Mon–Fri 9 AM–4 PM · Appointment only",
+    hours: "Mon–Fri 8 AM–6 PM · Sat 8 AM–12 PM",
     contact: "Sebastian & Rafael via Slack",
     markets: "Rockville · Glen Burnie",
     label: "Rockville, MD 20850",

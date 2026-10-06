@@ -908,3 +908,11 @@
 - [x] Remove the unsupported “Other listed repair partners” section and its legacy repair-shop data from the Total Recon repair workspace.
 - [x] Retain only the two actual Total Recon Maryland facilities: Laurel and Rockville.
 - [x] Add a regression assertion preventing unsupported repair-partner listings from returning; browser-validated the clean Total Recon page, with 10 focused tests, TypeScript, production build, and diff checks passing.
+
+
+## October 2026 — Total Recon Claimant Email and Aircall Readout
+- [x] Update the accepted-liability email to copy the selected Total Recon location, official address, official phone number, and distance into the claimant-facing message.
+- [x] Correct the Rockville repair-facility data to **627 Southlawn Lane, Rockville, MD 20850** and add the official Total Recon number, **(301) 762-2195**, for both locations (validated against totalreconauto.com).
+- [x] Add a booked-service toggle that states Total Recon will contact the claimant within 24–48 hours, replace transportation/POI wording with **Claimant needs a rental** and **Confirmed comprehensive and collision coverage on dec page**, and keep both actions directly reflected in the email preview.
+- [x] Browser-validate the complete Rockville flow: selected shop, correct address/phone, 0.1-mile recommendation, booked-service timeline, rental/coverage language, and copyable completed email.
+- [x] Compare matched Claims Line business days before (Sep 24, 25, 28) and after (Oct 1, 2, 5) the latest Aircall tracking/callback deployment: answer rate increased from 40.3% to 52.9%, while all non-answered calls declined from 59.7% to 47.1%. The new status normalization distinguishes 37 caller abandons from 36 no-agent misses after deployment; earlier calls used only the combined missed label, so the individual abandonment rate is not historically comparable.

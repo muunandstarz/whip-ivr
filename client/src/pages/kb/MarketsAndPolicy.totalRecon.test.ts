@@ -20,11 +20,14 @@ describe("Total Recon repair workspace", () => {
     expect(source).toContain('Scheduling & claim-file safeguards');
   });
 
-  it("includes a fillable Maryland claimant email with nearest-shop and POI safeguards", () => {
+  it("includes a fillable Maryland claimant email with selected-shop contact, timeline, and rental safeguards", () => {
     expect(source).toContain('Maryland accepted-liability email');
-    expect(source).toContain('closest location is ${nearestShop.name}');
-    expect(source).toContain('active personal auto insurance with both comprehensive and collision coverage');
-    expect(source).toContain('POI verified: active comprehensive + collision');
+    expect(source).toContain('Your Total Recon location is:');
+    expect(source).toContain('Phone: ${nearestShop.phone}');
+    expect(source).toContain('within 24–48 hours');
+    expect(source).toContain('Claimant needs a rental');
+    expect(source).toContain('Confirmed comprehensive and collision coverage on dec page');
+    expect(source).toContain('Service booked with Total Recon');
   });
 
   it("uses the expanded responsive content width rather than the former narrow padded shell", () => {

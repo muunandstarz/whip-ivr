@@ -8,11 +8,12 @@ describe("Total Recon repair guidance", () => {
     expect(TOTAL_RECON_PITCH).toContain("Would you like me to get that scheduled for you?");
   });
 
-  it("keeps both Total Recon facilities with the approved addresses", () => {
+  it("keeps both Total Recon facilities with official addresses and phone numbers", () => {
     expect(TOTAL_RECON_SHOPS.map((shop) => shop.address)).toEqual([
       "3521 Whiskey Bottom Rd, Laurel, MD 20724",
-      "14670 Southlawn Ln, Rockville, MD 20850",
+      "627 Southlawn Lane, Rockville, MD 20850",
     ]);
+    expect(TOTAL_RECON_SHOPS.map((shop) => shop.phone)).toEqual(["(301) 762-2195", "(301) 762-2195"]);
   });
 
   it("recommends Rockville for Rockville and Laurel for Laurel", () => {

@@ -186,7 +186,7 @@ function TotalReconRepairGuide() {
   const [status, setStatus] = useState("Enter a complete address, ZIP code, or a local city to find the closest Total Recon facility.");
   const [isSearching, setIsSearching] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const [emailForm, setEmailForm] = useState({ claimantName: "", claimNumber: "", vehicle: "", rentalNeeded: false, poiVerified: false });
+  const [emailForm, setEmailForm] = useState({ claimantName: "", claimNumber: "", vehicle: "", rentalNeeded: false, coverageConfirmedOnDecPage: false, serviceBooked: false });
   const [emailCopied, setEmailCopied] = useState(false);
 
   const clearMarkers = () => {
@@ -260,15 +260,33 @@ function TotalReconRepairGuide() {
   };
 
   const nearestShop = rankedShops?.[0] ?? null;
+  const totalReconLocation = nearestShop
+    ? `Your Total Recon location is:
+
+${nearestShop.name}
+${nearestShop.address}
+Phone: ${nearestShop.phone}${origin ? `
+Approximately ${nearestShop.distanceMiles.toFixed(1)} miles from the address provided.` : ""}`
+    : "Please provide your preferred Maryland address or ZIP code so we can confirm your Total Recon location, address, and phone number.";
+  const repairTimeline = emailForm.serviceBooked
+    ? "Your service has been booked with Total Recon. Their team will contact you within 24–48 hours to coordinate the next repair steps and confirm your appointment or drop-off details."
+    : "Once you choose Total Recon, we will coordinate the repair with the shop. Total Recon will then contact you within 24–48 hours to discuss the next repair steps and scheduling.";
+  const rentalDetails = emailForm.rentalNeeded
+    ? (emailForm.coverageConfirmedOnDecPage
+      ? "You told us that you need a rental while your vehicle is being repaired. We confirmed comprehensive and collision coverage on the dec page and will coordinate available rental options with the repair schedule."
+      : "You told us that you need a rental while your vehicle is being repaired. We will need confirmation of comprehensive and collision coverage on the dec page before coordinating rental options.")
+    : "If you need a rental while your vehicle is being repaired, please let us know. We will need confirmation of comprehensive and collision coverage on the dec page before coordinating rental options.";
   const claimantEmail = `Subject: Repair options for your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` — Claim ${emailForm.claimNumber}` : ""}
 
 Hello ${emailForm.claimantName || "[Claimant Name]"},
 
-We have accepted liability for the damage to your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` under claim ${emailForm.claimNumber}` : ""}. To make the repair process as straightforward as possible, we can coordinate your repair directly through Total Recon, our Maryland repair partner.${nearestShop ? ` Based on the address provided, the closest location is ${nearestShop.name} at ${nearestShop.address}${origin ? ` (approximately ${nearestShop.distanceMiles.toFixed(1)} miles away)` : ""}.` : " We can confirm the closest Total Recon location once you provide your preferred Maryland address or ZIP code."}
+We have accepted liability for the damage to your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` under claim ${emailForm.claimNumber}` : ""}. To make the repair process as straightforward as possible, we can coordinate your repair directly through Total Recon, our Maryland repair partner.
 
-Total Recon is familiar with our claims process, so the repair can be scheduled with less back-and-forth coordination. The shop can handle the vehicle repair directly with our team and will keep us informed as the work progresses.
+${totalReconLocation}
 
-${emailForm.rentalNeeded ? (emailForm.poiVerified ? "You told us that you need transportation while the vehicle is being repaired. Your proof of insurance has been verified as including comprehensive and collision coverage, and we will coordinate the available loaner/rental option with the repair scheduling process." : "You told us that you need transportation while the vehicle is being repaired. A loaner may be available after we verify active personal auto insurance with both comprehensive and collision coverage. Please send your current proof of insurance so we can review eligibility before making any promise or reservation.") : "If you need transportation while the vehicle is being repaired, please let us know. A loaner may be available after we verify active personal auto insurance with both comprehensive and collision coverage."}
+${repairTimeline}
+
+${rentalDetails}
 
 Please reply to this email to confirm whether you would like to use Total Recon. If you prefer another repair facility, let us know and we will discuss the next steps.
 
@@ -312,7 +330,7 @@ Whip Claims Management
             const travelUrl = origin ? directionsUrl(origin, shop) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shop.address)}`;
             return <div key={shop.id} className={`rounded-xl border p-4 transition-colors ${recommended ? "border-[#ff6221] bg-orange-50/70 ring-1 ring-[#ff6221]/20" : "border-border bg-background"}`}>
               <div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{shop.name}</p>{recommended && <Badge className="border-0 bg-[#ff6221] text-white">Recommended</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{shop.address}</p></div>{distanceMiles !== null && <p className="rounded-md bg-white px-2 py-1 text-sm font-semibold text-primary shadow-sm">{distanceMiles.toFixed(1)} mi</p>}</div>
-              <div className="mt-3 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2"><span>{shop.hours}</span><span>{shop.contact}</span></div>
+              <div className="mt-3 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3"><span>{shop.hours}</span><span>{shop.phone}</span><span>{shop.contact}</span></div>
               <div className="mt-3 flex flex-wrap gap-2"><Button asChild size="sm" variant={recommended ? "default" : "outline"} className={recommended ? "bg-[#ff6221] hover:bg-[#e5541a]" : ""}><a href={travelUrl} target="_blank" rel="noreferrer"><Navigation className="mr-1.5 h-3.5 w-3.5" />Directions</a></Button><Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(shop.address).then(() => toast.success("Shop address copied"))}><Copy className="mr-1.5 h-3.5 w-3.5" />Copy address</Button></div>
             </div>;
           })}
@@ -328,7 +346,7 @@ Whip Claims Management
             <div className="absolute left-0 top-[58%] h-12 w-full rotate-6 border-y-4 border-dashed border-white/80 bg-slate-400/35" />
             <div className="relative flex h-full flex-col justify-between">
               <div className="self-end rounded-full bg-white/85 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">Interactive map loading</div>
-              <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-[#ff6221]/30 bg-white/95 p-3 shadow-sm"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff6221] text-xs font-bold text-white">1</span><p className="text-sm font-semibold">Laurel</p></div><p className="mt-1 text-xs text-slate-600">3521 Whiskey Bottom Rd</p></div><div className="rounded-xl border border-blue-300 bg-white/95 p-3 shadow-sm"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">2</span><p className="text-sm font-semibold">Rockville</p></div><p className="mt-1 text-xs text-slate-600">14670 Southlawn Ln</p></div></div>
+              <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-[#ff6221]/30 bg-white/95 p-3 shadow-sm"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#ff6221] text-xs font-bold text-white">1</span><p className="text-sm font-semibold">Laurel</p></div><p className="mt-1 text-xs text-slate-600">3521 Whiskey Bottom Rd</p></div><div className="rounded-xl border border-blue-300 bg-white/95 p-3 shadow-sm"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">2</span><p className="text-sm font-semibold">Rockville</p></div><p className="mt-1 text-xs text-slate-600">627 Southlawn Lane</p></div></div>
               <p className="rounded-lg bg-white/85 px-3 py-2 text-xs text-slate-600 shadow-sm">The address finder above remains available with local ZIP/city coverage while the interactive map initializes.</p>
             </div>
           </div>}
@@ -347,11 +365,12 @@ Whip Claims Management
         <Input aria-label="Vehicle" value={emailForm.vehicle} onChange={(event) => setEmailForm((current) => ({ ...current, vehicle: event.target.value }))} placeholder="Vehicle (year/make/model)" />
       </div>
       <div className="mt-3 flex flex-wrap gap-4 text-sm">
-        <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.rentalNeeded} onChange={(event) => setEmailForm((current) => ({ ...current, rentalNeeded: event.target.checked }))} />Claimant needs transportation</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.poiVerified} disabled={!emailForm.rentalNeeded} onChange={(event) => setEmailForm((current) => ({ ...current, poiVerified: event.target.checked }))} />POI verified: active comprehensive + collision</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.rentalNeeded} onChange={(event) => setEmailForm((current) => ({ ...current, rentalNeeded: event.target.checked, coverageConfirmedOnDecPage: event.target.checked ? current.coverageConfirmedOnDecPage : false }))} />Claimant needs a rental</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.coverageConfirmedOnDecPage} disabled={!emailForm.rentalNeeded} onChange={(event) => setEmailForm((current) => ({ ...current, coverageConfirmedOnDecPage: event.target.checked }))} />Confirmed comprehensive and collision coverage on dec page</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.serviceBooked} onChange={(event) => setEmailForm((current) => ({ ...current, serviceBooked: event.target.checked }))} />Service booked with Total Recon</label>
       </div>
       <textarea readOnly value={claimantEmail} className="mt-4 min-h-[300px] w-full rounded-lg border bg-muted/20 p-3 font-mono text-xs leading-5 text-foreground" aria-label="Total Recon claimant email preview" />
-      <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={() => navigator.clipboard.writeText(claimantEmail).then(() => { setEmailCopied(true); toast.success("Claimant email copied"); window.setTimeout(() => setEmailCopied(false), 2000); })}>{emailCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}{emailCopied ? "Copied" : "Copy email"}</Button><Button variant="ghost" onClick={() => { setEmailForm({ claimantName: "", claimNumber: "", vehicle: "", rentalNeeded: false, poiVerified: false }); setEmailCopied(false); }}>Clear template</Button></div>
+      <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={() => navigator.clipboard.writeText(claimantEmail).then(() => { setEmailCopied(true); toast.success("Claimant email copied"); window.setTimeout(() => setEmailCopied(false), 2000); })}>{emailCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}{emailCopied ? "Copied" : "Copy email"}</Button><Button variant="ghost" onClick={() => { setEmailForm({ claimantName: "", claimNumber: "", vehicle: "", rentalNeeded: false, coverageConfirmedOnDecPage: false, serviceBooked: false }); setEmailCopied(false); }}>Clear template</Button></div>
     </div>
 
     <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
