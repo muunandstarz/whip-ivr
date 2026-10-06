@@ -24,15 +24,6 @@ const MARKET_DIRECTORY = [
   { state: "TEXAS", color: "#bf360c", city: "Dallas", address: "Dallas, TX", towing: "", towingPOC: "", towingBackup: "", claimsImpound: "", onSite: "" },
 ];
 
-const REPAIR_SHOPS = [
-  { market: "MD — Rockville", name: "Caliber Collision Rockville", address: "15800 Shady Grove Rd, Rockville, MD 20850", phone: "(301) 963-3700", preferred: true },
-  { market: "MD — Glen Burnie", name: "Caliber Collision Glen Burnie", address: "7409 Ritchie Hwy, Glen Burnie, MD 21061", phone: "(410) 761-2886", preferred: true },
-  { market: "GA — Atlanta", name: "Service King Atlanta", address: "1931 Roosevelt Hwy, College Park, GA 30337", phone: "(404) 762-1100", preferred: true },
-  { market: "IL — Chicago", name: "Gerber Collision Chicago", address: "2120 W Lake St, Chicago, IL 60612", phone: "(312) 421-8200", preferred: true },
-  { market: "FL — Miami", name: "Caliber Collision Miami", address: "1633 NW 27th Ave, Miami, FL 33125", phone: "(305) 635-4000", preferred: true },
-  { market: "FL — Orlando", name: "Caliber Collision Orlando", address: "6050 S Semoran Blvd, Orlando, FL 32822", phone: "(407) 380-0100", preferred: true },
-];
-
 const TOW_PARTNERS = [
   { market: "MD / VA (DC Metro)", name: "Urgently", contact: "Josue (Enrique Ramos Sorto)", phone: "Via Urgently app", notes: "Primary tow partner for DC metro area. Dispatch through Urgently platform." },
   { market: "GA — Atlanta", name: "Bar Recovery LLC", contact: "Darryl Leach", phone: "barrecoveryllc@gmail.com", notes: "$75 hookup + $4/mi. Call Darryl directly for Atlanta market." },
@@ -465,30 +456,6 @@ export default function MarketsAndPolicy() {
         {activeTab === "repair" && (
           <div className="space-y-6">
             <TotalReconRepairGuide />
-            <div className="border-t pt-6">
-              <h2 className="text-base font-semibold">Other listed repair partners</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Preferred repair network partners by market. Always verify current availability before dispatching.</p>
-              <div className="mt-3 space-y-3">
-                {REPAIR_SHOPS.map(s => (
-                  <div key={s.name} className="border border-border rounded-xl p-4 flex items-start justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-sm">{s.name}</p>
-                        {s.preferred && <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0">Preferred</Badge>}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{s.market}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{s.address}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <a href={`tel:${s.phone.replace(/\D/g, '')}`} className="text-sm font-medium text-primary hover:underline flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5" />{s.phone}
-                      </a>
-                      <CopyButton text={s.phone} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 

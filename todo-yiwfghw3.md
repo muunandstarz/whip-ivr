@@ -902,3 +902,9 @@
 - [x] Add the carrier-published preferred delivery method and a claim-routing caveat beneath the selector so a handler can use fax, email, portal, assigned-adjuster delivery, or the address as appropriate.
 - [x] Preserve State Farm’s policy-state warning, Travelers’ FedEx-only subrogation-payment restriction, and The Hartford’s prohibition on using the NJ PIP-medical-billing address for PD demands.
 - [x] Browser-validate State Farm selection: the editable default address and explicit portal/policy-state routing cue render together; full suite 314 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+
+## October 2026 — Total Recon Exclusivity
+- [x] Remove the unsupported “Other listed repair partners” section and its legacy repair-shop data from the Total Recon repair workspace.
+- [x] Retain only the two actual Total Recon Maryland facilities: Laurel and Rockville.
+- [x] Add a regression assertion preventing unsupported repair-partner listings from returning; browser-validated the clean Total Recon page, with 10 focused tests, TypeScript, production build, and diff checks passing.

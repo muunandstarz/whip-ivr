@@ -32,4 +32,9 @@ describe("Total Recon repair workspace", () => {
     expect(source).toContain('px-3 py-5 sm:px-4 sm:py-6 lg:px-5 xl:px-6');
     expect(source).not.toContain('max-w-5xl mx-auto p-6 space-y-6');
   });
+
+  it("lists only Total Recon repair locations and no unsupported repair partners", () => {
+    expect(source).not.toContain('Other listed repair partners');
+    expect(source).not.toContain('const REPAIR_SHOPS =');
+  });
 });
