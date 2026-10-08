@@ -926,3 +926,10 @@
 - [x] Keep automatically selected nearest-shop name/address/phone/distance available, and add an optional paste-or-type field for precise location or appointment details; pasted details take precedence in the copied message.
 - [x] Keep the simple rental and dec-page comprehensive/collision coverage language and tailor the 24–48-hour statement to whether a referral has already been made.
 - [x] Validate the updated form visually and with 10 focused Total Recon tests, TypeScript, production build, and diff checks.
+
+
+## October 2026 — Weekly Dashboard Updates
+- [x] Preserve feature announcements after their 48-hour lead period in an active, handler-facing seven-day recap instead of dropping them from the home dashboard.
+- [x] Add a visible **This week’s updates** section to the home header, with concise feature summaries and direct in-app actions; the current feature remains the primary banner without duplication.
+- [x] Seed this week’s functional updates: Medical Bill & PIP Review, the estimate-first Subro Demand workflow, Claims Line callback safety net, and the flexible Total Recon follow-up.
+- [x] Update admin wording so feature posts are understood as a 48-hour lead plus weekly recap, and validate the data contract, UI source, dashboard browser rendering, TypeScript, and focused announcement tests.

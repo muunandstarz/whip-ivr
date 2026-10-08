@@ -6,6 +6,7 @@ import type { TrpcContext } from '../_core/context.js';
 let conn: mysql.Connection;
 let userId: number;
 let announcementId: number;
+let weeklyAnnouncementId: number;
 let previewHandlerId: number;
 let previewUserId: number;
 
@@ -52,6 +53,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (announcementId) await conn.execute('DELETE FROM dashboard_announcements WHERE id=?', [announcementId]);
+  if (weeklyAnnouncementId) await conn.execute('DELETE FROM dashboard_announcements WHERE id=?', [weeklyAnnouncementId]);
   if (userId) await conn.execute('DELETE FROM user_birthday_preferences WHERE user_id=?', [userId]);
   if (previewUserId) await conn.execute('DELETE FROM user_birthday_preferences WHERE user_id=?', [previewUserId]);
   await conn.execute("DELETE FROM users WHERE openId='announcement-test-open-id'");
@@ -77,6 +79,22 @@ describe('dashboard announcements', () => {
     expect(dashboard.announcement).toMatchObject({ id: announcementId, kind: 'feature', actionHref: '/claims-workspace' });
     expect(new Date(dashboard.announcement!.endsAt!).getTime() - new Date(dashboard.announcement!.startsAt!).getTime()).toBe(48 * 60 * 60 * 1000);
     expect(dashboard.fallback.message).toBeTruthy();
+  });
+
+  it('keeps an active feature update in the weekly recap after its 48-hour lead window closes', async () => {
+    const admin = appRouter.createCaller(context('admin'));
+    const saved = await admin.announcements.save({
+      title: 'Weekly recap test',
+      message: 'Visible in the dashboard weekly updates section.',
+      kind: 'feature',
+      isActive: true,
+      startsAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+    });
+    weeklyAnnouncementId = saved.id;
+    const dashboard = await appRouter.createCaller(context('user')).announcements.getDashboardMessage();
+    expect(dashboard.weeklyUpdates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: weeklyAnnouncementId, title: 'Weekly recap test', kind: 'feature' }),
+    ]));
   });
 
   it('stores only an opt-in month and day for birthday recognition', async () => {

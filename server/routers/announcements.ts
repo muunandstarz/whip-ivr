@@ -65,6 +65,18 @@ export const announcementsRouter = router({
       or(isNull(dashboardAnnouncements.startsAt), lte(dashboardAnnouncements.startsAt, now)),
       or(isNull(dashboardAnnouncements.endsAt), gte(dashboardAnnouncements.endsAt, now)),
     )).orderBy(desc(dashboardAnnouncements.updatedAt), desc(dashboardAnnouncements.id));
+    // A feature takes the primary greeting position for 48 hours, but handlers
+    // should still be able to see the useful changes made this week after that
+    // initial window closes. Archived updates stay out of this list.
+    const weeklyStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const weeklyUpdates = await db.select().from(dashboardAnnouncements).where(and(
+      eq(dashboardAnnouncements.isActive, true),
+      eq(dashboardAnnouncements.kind, 'feature'),
+      or(
+        gte(dashboardAnnouncements.startsAt, weeklyStart),
+        and(isNull(dashboardAnnouncements.startsAt), gte(dashboardAnnouncements.createdAt, weeklyStart)),
+      ),
+    )).orderBy(desc(dashboardAnnouncements.startsAt), desc(dashboardAnnouncements.id));
     // New-feature messages take precedence over the automated daily message. A manual
     // non-feature message is next; the persisted daily entry is the final fallback.
     const announcement = active.find((item) => item.kind === 'feature')
@@ -81,6 +93,7 @@ export const announcementsRouter = router({
     const birthdays = summarizeBirthdays(preferences, now);
     return {
       announcement,
+      weeklyUpdates,
       fallback: { title: 'Good morning, team', message: dailyMessage(now) },
       birthdayNames: birthdays.todayBirthdays,
       upcomingBirthdays: birthdays.upcomingBirthdays,
