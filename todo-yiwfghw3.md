@@ -472,6 +472,7 @@
 - [x] Measure the legacy Mailroom content backlog and estimate its completion timeline under the safe refresh throughput (797 items; approximately 159.4 minutes at 25 items per five-minute pass)
 
 ## Mailroom Content Refresh Eligibility Repair
+- **Owner directive (2026-10-06): Mailroom and Mail Bot are dormant. Do not modify, activate, schedule, test against live sources, or expose either feature until explicitly resumed. All remaining Mailroom items below are intentionally deferred.**
 - [x] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
 - [x] Prevent unreadable manual-review items from repeatedly blocking later readable Gmail and Claims Mail records in bounded processing runs
 - [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
@@ -559,6 +560,7 @@
 - [ ] Create the approved `KIM-GitHubOIDC-Bootstrap-Staging` CloudFormation stack in the owner-controlled AWS account, us-east-1
 - [ ] Verify the staging-only GitHub OIDC trust and deployment role outputs
 - [ ] Stop before provisioning application infrastructure or changing any production KIM system
+- Deferred by owner on 2026-10-06. The required AWS authorization and approved CloudFormation template are not attached to this workspace; do not provision KIM resources until the owner explicitly resumes this staging-only task.
 
 ## Claims Workspace — Handler Productivity Desk
 - [x] Add a handler-facing Claims Workspace route and sidebar entry without replacing the existing application navigation
@@ -916,3 +918,11 @@
 - [x] Add a booked-service toggle that states Total Recon will contact the claimant within 24–48 hours, replace transportation/POI wording with **Claimant needs a rental** and **Confirmed comprehensive and collision coverage on dec page**, and keep both actions directly reflected in the email preview.
 - [x] Browser-validate the complete Rockville flow: selected shop, correct address/phone, 0.1-mile recommendation, booked-service timeline, rental/coverage language, and copyable completed email.
 - [x] Compare matched Claims Line business days before (Sep 24, 25, 28) and after (Oct 1, 2, 5) the latest Aircall tracking/callback deployment: answer rate increased from 40.3% to 52.9%, while all non-answered calls declined from 59.7% to 47.1%. The new status normalization distinguishes 37 caller abandons from 36 no-agent misses after deployment; earlier calls used only the combined missed label, so the individual abandonment rate is not historically comparable.
+
+
+## October 2026 — Flexible Total Recon Follow-up
+- [x] Replace the rigid accepted-liability email with a claimant-ready Total Recon repair follow-up that never assumes liability acceptance.
+- [x] Add three message contexts: discussed as an option, referred to Total Recon, and left voicemail/follow-up.
+- [x] Keep automatically selected nearest-shop name/address/phone/distance available, and add an optional paste-or-type field for precise location or appointment details; pasted details take precedence in the copied message.
+- [x] Keep the simple rental and dec-page comprehensive/collision coverage language and tailor the 24–48-hour statement to whether a referral has already been made.
+- [x] Validate the updated form visually and with 10 focused Total Recon tests, TypeScript, production build, and diff checks.

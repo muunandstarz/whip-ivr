@@ -20,14 +20,18 @@ describe("Total Recon repair workspace", () => {
     expect(source).toContain('Scheduling & claim-file safeguards');
   });
 
-  it("includes a fillable Maryland claimant email with selected-shop contact, timeline, and rental safeguards", () => {
-    expect(source).toContain('Maryland accepted-liability email');
-    expect(source).toContain('Your Total Recon location is:');
+  it("includes a flexible claimant follow-up with contact context, location details, timeline, and rental safeguards", () => {
+    expect(source).toContain('Total Recon repair follow-up');
+    expect(source).toContain('Total Recon location details:');
     expect(source).toContain('Phone: ${nearestShop.phone}');
     expect(source).toContain('within 24–48 hours');
     expect(source).toContain('Claimant needs a rental');
     expect(source).toContain('Confirmed comprehensive and collision coverage on dec page');
-    expect(source).toContain('Service booked with Total Recon');
+    expect(source).toContain('Discussed Total Recon as an option');
+    expect(source).toContain('Referred to Total Recon');
+    expect(source).toContain('Left voicemail / follow-up');
+    expect(source).toContain('Location or appointment details to include');
+    expect(source).not.toContain('We have accepted liability for the damage');
   });
 
   it("uses the expanded responsive content width rather than the former narrow padded shell", () => {

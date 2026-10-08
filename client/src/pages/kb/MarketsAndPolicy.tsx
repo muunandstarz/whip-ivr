@@ -186,7 +186,15 @@ function TotalReconRepairGuide() {
   const [status, setStatus] = useState("Enter a complete address, ZIP code, or a local city to find the closest Total Recon facility.");
   const [isSearching, setIsSearching] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const [emailForm, setEmailForm] = useState({ claimantName: "", claimNumber: "", vehicle: "", rentalNeeded: false, coverageConfirmedOnDecPage: false, serviceBooked: false });
+  const [emailForm, setEmailForm] = useState({
+    claimantName: "",
+    claimNumber: "",
+    vehicle: "",
+    messageContext: "discussion" as "discussion" | "referral" | "voicemail",
+    locationDetails: "",
+    rentalNeeded: false,
+    coverageConfirmedOnDecPage: false,
+  });
   const [emailCopied, setEmailCopied] = useState(false);
 
   const clearMarkers = () => {
@@ -260,27 +268,36 @@ function TotalReconRepairGuide() {
   };
 
   const nearestShop = rankedShops?.[0] ?? null;
-  const totalReconLocation = nearestShop
-    ? `Your Total Recon location is:
+  const totalReconLocation = emailForm.locationDetails.trim()
+    ? `Total Recon location details:
+
+${emailForm.locationDetails.trim()}`
+    : nearestShop
+      ? `Suggested Total Recon location:
 
 ${nearestShop.name}
 ${nearestShop.address}
 Phone: ${nearestShop.phone}${origin ? `
 Approximately ${nearestShop.distanceMiles.toFixed(1)} miles from the address provided.` : ""}`
-    : "Please provide your preferred Maryland address or ZIP code so we can confirm your Total Recon location, address, and phone number.";
-  const repairTimeline = emailForm.serviceBooked
-    ? "Your service has been booked with Total Recon. Their team will contact you within 24–48 hours to coordinate the next repair steps and confirm your appointment or drop-off details."
-    : "Once you choose Total Recon, we will coordinate the repair with the shop. Total Recon will then contact you within 24–48 hours to discuss the next repair steps and scheduling.";
+      : "If you would like to use Total Recon, please reply or call us so we can confirm the location that works best for you.";
+  const contextIntro = {
+    discussion: `Thank you for speaking with us about repair options for your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` under claim ${emailForm.claimNumber}` : ""}. As discussed, Total Recon is a Maryland repair option we can help coordinate if you choose to use them.`,
+    referral: `We have referred your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` under claim ${emailForm.claimNumber}` : ""} to Total Recon for repair coordination.`,
+    voicemail: `We tried to reach you and left a voicemail about repair options for your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` under claim ${emailForm.claimNumber}` : ""}. We are sending the Total Recon information here for your convenience.`,
+  }[emailForm.messageContext];
+  const repairTimeline = emailForm.messageContext === "referral"
+    ? "Total Recon will reach out within 24–48 hours to discuss next steps and confirm any appointment or drop-off details."
+    : "If you would like us to make a referral to Total Recon, reply to this message or call us. Once referred, their team will reach out within 24–48 hours to discuss next steps and scheduling.";
   const rentalDetails = emailForm.rentalNeeded
     ? (emailForm.coverageConfirmedOnDecPage
       ? "You told us that you need a rental while your vehicle is being repaired. We confirmed comprehensive and collision coverage on the dec page and will coordinate available rental options with the repair schedule."
       : "You told us that you need a rental while your vehicle is being repaired. We will need confirmation of comprehensive and collision coverage on the dec page before coordinating rental options.")
     : "If you need a rental while your vehicle is being repaired, please let us know. We will need confirmation of comprehensive and collision coverage on the dec page before coordinating rental options.";
-  const claimantEmail = `Subject: Repair options for your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` — Claim ${emailForm.claimNumber}` : ""}
+  const claimantEmail = `Subject: Total Recon repair follow-up${emailForm.claimNumber ? ` — Claim ${emailForm.claimNumber}` : ""}
 
 Hello ${emailForm.claimantName || "[Claimant Name]"},
 
-We have accepted liability for the damage to your ${emailForm.vehicle || "vehicle"}${emailForm.claimNumber ? ` under claim ${emailForm.claimNumber}` : ""}. To make the repair process as straightforward as possible, we can coordinate your repair directly through Total Recon, our Maryland repair partner.
+${contextIntro}
 
 ${totalReconLocation}
 
@@ -288,7 +305,7 @@ ${repairTimeline}
 
 ${rentalDetails}
 
-Please reply to this email to confirm whether you would like to use Total Recon. If you prefer another repair facility, let us know and we will discuss the next steps.
+Please reply to this email or call us if you have questions, would like us to proceed with Total Recon, or prefer to discuss another repair option.
 
 Sincerely,
 Whip Claims Management
@@ -356,7 +373,7 @@ Whip Claims Management
 
     <div className="rounded-xl border bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><h2 className="text-lg font-bold">Maryland accepted-liability email</h2></div><p className="mt-1 text-sm text-muted-foreground">Fill the claim details, find the closest shop above, then copy the completed claimant email.</p></div>
+        <div><div className="flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><h2 className="text-lg font-bold">Total Recon repair follow-up</h2></div><p className="mt-1 text-sm text-muted-foreground">Choose the contact context, add or paste location details when needed, then copy a claimant-ready message.</p></div>
         <Badge variant="outline">Internal template</Badge>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -364,13 +381,24 @@ Whip Claims Management
         <Input aria-label="Claim number" value={emailForm.claimNumber} onChange={(event) => setEmailForm((current) => ({ ...current, claimNumber: event.target.value }))} placeholder="Claim number" />
         <Input aria-label="Vehicle" value={emailForm.vehicle} onChange={(event) => setEmailForm((current) => ({ ...current, vehicle: event.target.value }))} placeholder="Vehicle (year/make/model)" />
       </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
+        <label className="grid gap-1.5 text-sm font-medium">Message context
+          <select aria-label="Total Recon message context" value={emailForm.messageContext} onChange={(event) => setEmailForm((current) => ({ ...current, messageContext: event.target.value as "discussion" | "referral" | "voicemail" }))} className="h-10 rounded-md border border-input bg-background px-3 text-sm font-normal shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <option value="discussion">Discussed Total Recon as an option</option>
+            <option value="referral">Referred to Total Recon</option>
+            <option value="voicemail">Left voicemail / follow-up</option>
+          </select>
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium">Location or appointment details to include <span className="font-normal text-muted-foreground">(optional — paste or type)</span>
+          <textarea aria-label="Total Recon location details" value={emailForm.locationDetails} onChange={(event) => setEmailForm((current) => ({ ...current, locationDetails: event.target.value }))} placeholder="e.g. Total Recon Rockville&#10;627 Southlawn Lane, Rockville, MD 20850&#10;(301) 762-2195&#10;Appointment: Tuesday at 10:00 AM" className="min-h-24 resize-y rounded-md border border-input bg-background p-3 text-sm font-normal shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+        </label>
+      </div>
       <div className="mt-3 flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.rentalNeeded} onChange={(event) => setEmailForm((current) => ({ ...current, rentalNeeded: event.target.checked, coverageConfirmedOnDecPage: event.target.checked ? current.coverageConfirmedOnDecPage : false }))} />Claimant needs a rental</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.coverageConfirmedOnDecPage} disabled={!emailForm.rentalNeeded} onChange={(event) => setEmailForm((current) => ({ ...current, coverageConfirmedOnDecPage: event.target.checked }))} />Confirmed comprehensive and collision coverage on dec page</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={emailForm.serviceBooked} onChange={(event) => setEmailForm((current) => ({ ...current, serviceBooked: event.target.checked }))} />Service booked with Total Recon</label>
       </div>
       <textarea readOnly value={claimantEmail} className="mt-4 min-h-[300px] w-full rounded-lg border bg-muted/20 p-3 font-mono text-xs leading-5 text-foreground" aria-label="Total Recon claimant email preview" />
-      <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={() => navigator.clipboard.writeText(claimantEmail).then(() => { setEmailCopied(true); toast.success("Claimant email copied"); window.setTimeout(() => setEmailCopied(false), 2000); })}>{emailCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}{emailCopied ? "Copied" : "Copy email"}</Button><Button variant="ghost" onClick={() => { setEmailForm({ claimantName: "", claimNumber: "", vehicle: "", rentalNeeded: false, coverageConfirmedOnDecPage: false, serviceBooked: false }); setEmailCopied(false); }}>Clear template</Button></div>
+      <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={() => navigator.clipboard.writeText(claimantEmail).then(() => { setEmailCopied(true); toast.success("Claimant message copied"); window.setTimeout(() => setEmailCopied(false), 2000); })}>{emailCopied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}{emailCopied ? "Copied" : "Copy message"}</Button><Button variant="ghost" onClick={() => { setEmailForm({ claimantName: "", claimNumber: "", vehicle: "", messageContext: "discussion", locationDetails: "", rentalNeeded: false, coverageConfirmedOnDecPage: false }); setEmailCopied(false); }}>Clear template</Button></div>
     </div>
 
     <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
