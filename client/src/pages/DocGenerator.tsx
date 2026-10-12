@@ -665,6 +665,13 @@ The subject vehicle is registered to ${schedule.registeredOwner || "the register
 }
 
 // ─── Denial Templates ─────────────────────────────────────────────────────────
+function formatNorthAmericanLetterDate(value?: string) {
+  if (!value) return "[Date of Loss]";
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
 const DENIAL_TEMPLATES: Record<
   string,
   { label: string; hint: string; fields: string[]; build: (f: Record<string, string>) => string }
@@ -674,7 +681,7 @@ const DENIAL_TEMPLATES: Record<
     hint: "Use when the member was in active rideshare/TNC activity and is claiming PIP benefits.",
     fields: ["recipient", "claimant", "dol", "tnc", "period", "adjuster"],
     build: (f) =>
-      `Hello ${f.recipient || "[Recipient Name: Member/Counsel]"},\n\nWe are in receipt of notice that ${f.claimant || "[Member Name]"} has reported bodily injuries arising from the above-referenced incident.\n\nPlease be advised that Personal Injury Protection (PIP) benefits are not available under this claim. Our investigation confirms that at the time of loss (Date of Loss: ${f.dol || "[Date of Loss]"}), the vehicle was engaged in Transportation Network Company (TNC) activity with ${f.tnc || "[Uber/Lyft]"} during Period ${f.period || "[1/2/3]"}.\n\nPer the applicable Whip Member Agreement and Terms of Service, first-party injury benefits, including PIP, are excluded when the vehicle is being operated in connection with rideshare or delivery activity. During active TNC periods, the TNC platform's insurance carrier is the primary insurer for bodily injury claims.\n\nAccordingly, PIP benefits are denied for this claim.\n\nFor reference, coverage may be available through the TNC platform's insurance carrier:\nTNC Insurance Carrier: ${f.tnc_carrier || "[TNC Carrier Name]"}\nClaim Number (if known): ${f.tnc_claim || "[TNC Claim Number]"}\n\nPlease contact our office if you have questions.\n\nRegards,\n${f.adjuster || "[Adjuster Name]"}\nWhip Claims Management`,
+      `Hello ${f.recipient || "[Recipient Name: Member/Counsel]"},\n\nWe are in receipt of notice that ${f.claimant || "[Member Name]"} has reported bodily injuries arising from the above-referenced incident.\n\nPlease be advised that Personal Injury Protection (PIP) benefits are not available under this claim. Our investigation confirms that on ${formatNorthAmericanLetterDate(f.dol)}, the vehicle was engaged in Transportation Network Company (TNC) activity with ${f.tnc || "[Uber/Lyft]"} during Period ${f.period || "[1/2/3]"}.\n\nPer the applicable Whip Member Agreement and Terms of Service, first-party injury benefits, including PIP, are excluded when the vehicle is being operated in connection with rideshare or delivery activity. During active TNC periods, the TNC platform's insurance carrier is the primary insurer for bodily injury claims.\n\nAccordingly, PIP benefits are denied for this claim.\n\nFor reference, coverage may be available through the TNC platform's insurance carrier:\nTNC Insurance Carrier: ${f.tnc_carrier || "[TNC Carrier Name]"}\nClaim Number: ${f.tnc_claim || "[TNC Claim Number]"}\n\nPlease contact our office if you have questions.\n\nRegards,\n${f.adjuster || "[Adjuster Name]"}\nWhip Claims Management`,
   },
   no_pip_state: {
     label: "No PIP — State Does Not Mandate",
@@ -695,7 +702,7 @@ const DENIAL_TEMPLATES: Record<
     hint: "Use when vehicle was in TNC activity and a third-party claimant or carrier is seeking liability coverage.",
     fields: ["recipient", "dol", "tnc", "period", "tnc_carrier", "tnc_claim", "tnc_contact"],
     build: (f) =>
-      `Hello ${f.recipient || "[Claimant/Carrier]"},\n\nWe have completed our review of the liability coverage portion of this claim.\n\nOur investigation confirms that at the time of loss (Date of Loss: ${f.dol || "[Date of Loss]"}), the vehicle was engaged in Transportation Network Company (TNC) activity with ${f.tnc || "[Uber/Lyft]"} during Period ${f.period || "[1/2/3]"}. Based on the applicable Whip Member Agreement and Terms of Service, liability coverage does not apply when the vehicle is being used in connection with rideshare or delivery activity.\n\nAccordingly, liability coverage is denied for this claim.\n\nIf you believe this determination is incorrect, please provide documentation showing the driver was not engaged in TNC activity at the time of loss.\n\nFor reference, coverage may be available through the TNC platform's insurance carrier during active rideshare periods:\nTNC Insurance Carrier: ${f.tnc_carrier || "[TNC Carrier Name]"}\nClaim Number (if known): ${f.tnc_claim || "[TNC Claim Number]"}\nCarrier Contact Information: ${f.tnc_contact || "[Carrier Contact Info]"}\n\nThis determination applies to liability coverage only. All other coverages, if any, are evaluated separately.\n\nPlease let us know if you have any questions.\n\nRegards,\nWhip Claims Management`,
+      `Hello ${f.recipient || "[Claimant/Carrier]"},\n\nWe have completed our review of the liability coverage portion of this claim.\n\nOur investigation confirms that on ${formatNorthAmericanLetterDate(f.dol)}, the vehicle was engaged in Transportation Network Company (TNC) activity with ${f.tnc || "[Uber/Lyft]"} during Period ${f.period || "[1/2/3]"}. Based on the applicable Whip Member Agreement and Terms of Service, liability coverage does not apply when the vehicle is being used in connection with rideshare or delivery activity.\n\nAccordingly, liability coverage is denied for this claim.\n\nIf you believe this determination is incorrect, please provide documentation showing the driver was not engaged in TNC activity at the time of loss.\n\nFor reference, coverage may be available through the TNC platform's insurance carrier during active rideshare periods:\nTNC Insurance Carrier: ${f.tnc_carrier || "[TNC Carrier Name]"}\nClaim Number: ${f.tnc_claim || "[TNC Claim Number]"}\nCarrier Contact Information: ${f.tnc_contact || "[Carrier Contact Info]"}\n\nThis determination applies to liability coverage only. All other coverages, if any, are evaluated separately.\n\nPlease let us know if you have any questions.\n\nRegards,\nWhip Claims Management`,
   },
   lor_acknowledgment: {
     label: "LOR — Acknowledge Only",
@@ -2546,7 +2553,7 @@ function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
   const claimHeading = template ? `${formatHeadingDate(letterDate)}
 
 Claim #${claimNumber || "[Claim Number]"}
-Date of Loss: ${dateOfLoss || "[Date of Loss]"}
+Date of Loss: ${formatNorthAmericanLetterDate(dateOfLoss)}
 Vehicle: ${vehicle || "[Year Make Model]"}
 VIN: ${vin || "[VIN]"}
 Driver: ${driverName || "[Driver Name]"}

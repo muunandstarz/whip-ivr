@@ -933,3 +933,10 @@
 - [x] Add a visible **This week’s updates** section to the home header, with concise feature summaries and direct in-app actions; the current feature remains the primary banner without duplication.
 - [x] Seed this week’s functional updates: Medical Bill & PIP Review, the estimate-first Subro Demand workflow, Claims Line callback safety net, and the flexible Total Recon follow-up.
 - [x] Update admin wording so feature posts are understood as a 48-hour lead plus weekly recap, and validate the data contract, UI source, dashboard browser rendering, TypeScript, and focused announcement tests.
+
+
+## October 2026 — TNC Denial Letter Corrections
+- [x] Replace the parenthetical raw ISO loss-date sentence in both TNC PIP and TNC Liability denials with a direct North American date sentence (for example, “on October 2, 2026”).
+- [x] Format the Date of Loss in the denial letter heading in the same North American form.
+- [x] Remove “(if known)” from the entered TNC carrier claim-number line; an available input is now presented simply as **Claim Number**.
+- [x] Browser-generate a populated TNC Liability Denial proof confirming the visible header and body both display October 2, 2026; focused letter tests, TypeScript, production build, and diff checks pass.

@@ -21,6 +21,14 @@ describe('Document Generator letter corrections', () => {
     expect(source).toContain('${form.adjusterName || "[Adjuster Name]"}');
   });
 
+  it('uses a North American date sentence and an unqualified known claim number in TNC denials', () => {
+    expect(source).toContain('function formatNorthAmericanLetterDate');
+    expect(source).toContain('Our investigation confirms that on ${formatNorthAmericanLetterDate(f.dol)}');
+    expect(source).toContain('Date of Loss: ${formatNorthAmericanLetterDate(dateOfLoss)}');
+    expect(source).toContain('Claim Number: ${f.tnc_claim || "[TNC Claim Number]"}');
+    expect(source).not.toContain('Claim Number (if known):');
+  });
+
   it('renders BI and PD releases as approved-style claimant-facing documents with a witness block', () => {
     expect(source).toContain('GENERAL RELEASE OF ALL CLAIMS – BODILY INJURY');
     expect(source).toContain('GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE');
