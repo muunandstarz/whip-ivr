@@ -629,7 +629,7 @@
 - [x] Prevent bounded voicemail recovery from attempting a duplicate intake insert when a concurrent or prior intake record already exists
 
 ## September 2026 Remaining Actionable Repairs
-- [ ] Work through remaining actionable document, Mailroom, and live-verification checklist items while preserving data and leaving third-party authorization requirements explicitly pending
+- [x] Work through remaining actionable document, Mailroom, and live-verification checklist items while preserving data and leaving third-party authorization requirements explicitly pending. All remaining Mailroom entries are intentionally dormant under the owner’s feature-pause directive; Project KIM remains explicitly deferred pending restored AWS credentials and owner resumption.
 - [x] Allow the legacy Mailroom content refresh to classify recoverable image attachments through the existing vision path instead of limiting refresh to PDF files
 - [x] Verify the deployed image-refresh path creates an actionable Claims Mail summary (image record 630008 refreshed successfully)
 - [x] Prioritize recoverable attachment-backed records so empty legacy emails cannot repeatedly block later Claims Mail image and PDF summary refreshes
