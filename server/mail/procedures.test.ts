@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
 import type { Connection } from 'mysql2/promise';
 import { appRouter } from '../routers.js';
-import { buildManualTriggerResult } from '../routers/mail.js';
+import { buildManualTriggerResult, withManualTriggerDeadline } from '../routers/mail.js';
 import { selectBalancedSlackBatch } from './jobs.js';
 import type { TrpcContext } from '../_core/context.js';
 
@@ -147,6 +147,17 @@ describe('mail tRPC procedures', () => {
     expect(result.results.ingest).toMatchObject({ inserted: 1, errors: [] });
     expect(result.results.slackIngest).toMatchObject({ inserted: 1, selected: 2, errors: [] });
     expect(result.results.process).toMatchObject({ queued: true, source: 'New Mailroom items' });
+  });
+
+  it('P0b: cancels a slow browser-triggered recovery at its deadline', async () => {
+    let cancelled = false;
+    await expect(withManualTriggerDeadline(
+      'test recovery',
+      () => new Promise<never>(() => undefined),
+      () => { cancelled = true; },
+      5,
+    )).rejects.toThrow('test recovery timed out after 1 seconds');
+    expect(cancelled).toBe(true);
   });
 
   it('P1: myPendingCount returns correct count for the handler', async () => {

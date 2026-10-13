@@ -947,3 +947,11 @@
 - [x] Confirm Massachusetts rule output: BI **$20,000/$40,000**, PD **$5,000**, UM **$20,000/$40,000**, UIM **$20,000/$40,000**, and PIP statutory minimum **$8,000**.
 - [x] Browser-render and inspect a Massachusetts Klutch proof (Oct. 1, 2026 issue date): all five amounts are visible in the PDF limit cells; no dash placeholders remain.
 - [x] Add a regression test preventing a return to Klutch blank-limit placeholders.
+
+
+## October 2026 — Bounded Mailroom Recovery Trigger
+- [x] Replace the browser-blocking Trigger Now path, which could sweep up to 30 Slack history pages and every file page in one tRPC request, with a bounded recovery that attempts at most one Gmail item, one Gmail attachment recovery, and one Claims Mail item.
+- [x] Add an 8-second deadline with best-effort database teardown; a slow external source now returns a clear handoff result instead of holding the dashboard open until the proxy deadline.
+- [x] Keep classification, content reading, routing, assignment, source acknowledgement, and broader attachment recovery in the bounded scheduled callbacks—not in the browser request. Existing manual-review holds stay skipped by the scheduled processor.
+- [x] Preserve the disabled Mailroom/Mail Bot feature gate. No schedule was enabled, no Gmail/Slack job was run, and no mail was ingested, classified, assigned, marked, or sent.
+- [x] Validate: targeted Mailroom suites 20 passed; full suite 321 passed / 1 skipped; TypeScript, production build, and diff check passed.

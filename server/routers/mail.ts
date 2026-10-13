@@ -110,13 +110,41 @@ export function buildManualTriggerResult(ingest: unknown, slackIngest: unknown) 
   return {
     ok: true,
     queued: true,
-    message: 'Completed a safe two-item Gmail and Claims Mail recovery pass. Remaining unread and unreviewed source mail continues in bounded scheduled batches.',
+    message: 'Queued safe bounded Gmail and Claims Mail recovery work. Remaining unread and unreviewed source mail continues in bounded scheduled batches.',
     results: {
       ingest,
       slackIngest,
       process: { queued: true, source: 'New Mailroom items' },
     },
   };
+}
+
+export const MANUAL_TRIGGER_DEADLINE_MS = 8_000;
+
+/**
+ * Bound a browser-initiated Mailroom operation so a slow external source cannot
+ * monopolize the tRPC request. The caller supplies teardown for in-flight DB work.
+ */
+export async function withManualTriggerDeadline<T>(
+  label: string,
+  work: () => Promise<T>,
+  onTimeout: () => void = () => undefined,
+  timeoutMs = MANUAL_TRIGGER_DEADLINE_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          try { onTimeout(); } catch { /* best-effort task teardown */ }
+          reject(new Error(`${label} timed out after ${Math.ceil(timeoutMs / 1000)} seconds`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 const CATEGORY_TITLE_MAP: Record<string, string> = {
@@ -913,20 +941,30 @@ export const mailRouter = router({
     }
   }),
 
-  /** Manual one-shot: run a small source-recovery pass, then leave deeper work to the scheduled processor. */
+  /**
+   * Manual one-shot source recovery.
+   *
+   * This deliberately queues only one Gmail and one Claims Mail candidate and
+   * returns a bounded acknowledgement. Longer classification/content work stays
+   * inside the scheduled callback so an administrator's browser cannot remain
+   * open behind a slow source, file download, or database connection.
+   */
   triggerNow: adminProcedure.mutation(async () => {
     await requireMailroomFeatureEnabled(await getDb());
-    // Production requests are capped at one record from each source. This gives an
-    // administrator an immediate, useful recovery action without reopening the
-    // previous full-history request that could exceed the edge deadline.
-    if (process.env.NODE_ENV === 'production') {
-      const conn = await mysql.createConnection(process.env.DATABASE_URL!);
-      const results: Record<string, unknown> = {};
+    let conn: mysql.Connection | null = null;
+    let timedOut = false;
+    const results: Record<string, unknown> = {};
+
+    const recovery = async () => {
+      conn = await mysql.createConnection(process.env.DATABASE_URL!);
+      if (timedOut) {
+        conn.destroy();
+        throw new Error('Mailroom recovery request timed out before the database connection was ready');
+      }
       try {
         try {
           const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
-          const gmail = buildRealGmailFetch(conn);
-          results.gmail = await ingestGmail(conn, gmail, 'claims@drivewhip.com', 1);
+          results.gmail = await ingestGmail(conn, buildRealGmailFetch(conn), 'claims@drivewhip.com', 1);
         } catch (error) {
           results.gmail = { ok: false, error: error instanceof Error ? error.message : String(error) };
         }
@@ -942,362 +980,41 @@ export const mailRouter = router({
         } catch (error) {
           results.claimsMail = { ok: false, error: error instanceof Error ? error.message : String(error) };
         }
-        return {
-          ok: true,
-          queued: false,
-          message: 'One safe Gmail and Claims Mail recovery batch completed. Classification and remaining recovery continue in scheduled passes.',
-          results,
-        };
+        return results;
       } finally {
-        await conn.end();
+        await conn?.end().catch(() => undefined);
+        conn = null;
       }
-    }
-    const conn = await mysql.createConnection(process.env.DATABASE_URL!);
-    const results: Record<string, unknown> = {};
+    };
+
     try {
-      // Step 1a: Ingest Gmail (OAuth — refresh_token from mail_settings)
-      try {
-        const { ingestGmail, buildRealGmailFetch } = await import('../mail/ingestGmail.js');
-        const gmail = buildRealGmailFetch(conn);
-        results.ingest = await ingestGmail(conn, gmail);
-        // Attachment health checks download and inspect source files. They run in
-        // the bounded scheduled ingest job so a manual request can return promptly.
-        results.gmailAttachmentRecovery = { deferred: true, maxPerScheduledRun: 30 };
-      } catch (ingestErr) {
-        results.ingest = { skipped: true, reason: String(ingestErr) };
-      }
-
-      // Step 1b: Poll Slack #claims-mail using files.list API (paginated, all files)
-      try {
-        // Read token from mail_bot_config (same token the mail bot uses) — fall back to env
-        let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
-        let CLAIMS_MAIL_CHANNEL = 'C07R60KAC2C';
-        try {
-          const [[botCfg]] = await conn.execute<any[]>(
-            'SELECT slack_bot_token, claims_mail_channel_id FROM mail_bot_config LIMIT 1'
-          );
-          if (botCfg?.slack_bot_token) slackToken = botCfg.slack_bot_token;
-          if (botCfg?.claims_mail_channel_id) CLAIMS_MAIL_CHANNEL = botCfg.claims_mail_channel_id;
-        } catch { /* mail_bot_config may not exist */ }
-        const REVIEWED_EMOJIS = ['white_check_mark', 'eyes', 'heavy_check_mark'];
-        if (!slackToken) {
-          results.slackIngest = { skipped: true, reason: 'No SLACK_BOT_TOKEN' };
-        } else {
-          const [[reviewedRow]] = await conn.execute<any[]>(
-            "SELECT value FROM mail_settings WHERE `key` = 'reviewed_emoji'"
-          );
-          const reviewedEmoji = reviewedRow?.value ?? 'white_check_mark';
-          const allReviewed = Array.from(new Set([...REVIEWED_EMOJIS, reviewedEmoji]));
-          const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
-          const slackFetch = buildRealSlackFetch(slackToken);
-          let inserted = 0, skipped = 0, resolved = 0, deferredAttachmentRecovery = 0;
-          let attachmentRecoveriesRemaining = 6;
-          const errors: string[] = [];
-          let totalFiles = 0;
-
-          // Load existing records once.  This avoids one database query per Slack file
-          // when inspecting a historical Claims Mail channel.
-          const [knownRows] = await conn.execute<any[]>(
-            `SELECT mi.id, mi.external_id, mi.status, COUNT(mif.id) AS file_count
-             FROM mail_items mi
-             LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
-             WHERE mi.source = 'mail'
-             GROUP BY mi.id, mi.external_id, mi.status`
-          );
-          const existingByFileId = new Map<string, any>(
-            knownRows.map(row => [String(row.external_id), row])
-          );
-
-          // One history pass supplies message reactions in batches.  The previous
-          // implementation made a reactions.get call for every historical file,
-          // causing Trigger Now to remain pending for many minutes.
-          const messagesByTs = new Map<string, { reactions: Array<{ name: string }> }>();
-          let historyCursor = '';
-          let historyPages = 0;
-          do {
-            const historyParams = new URLSearchParams({ channel: CLAIMS_MAIL_CHANNEL, limit: '100' });
-            if (historyCursor) historyParams.set('cursor', historyCursor);
-            const historyRes = await fetch(`https://slack.com/api/conversations.history?${historyParams}`, {
-              headers: { Authorization: `Bearer ${slackToken}` },
-            });
-            const historyData = await parseExternalJson(historyRes, `Slack conversations.history page ${historyPages + 1}`) as {
-              ok: boolean; messages?: Array<{ ts?: string; reactions?: Array<{ name: string }> }>;
-              response_metadata?: { next_cursor?: string };
-            };
-            if (!historyData.ok) {
-              errors.push(`conversations.history page ${historyPages + 1}: ${JSON.stringify(historyData)}`);
-              break;
-            }
-            for (const message of historyData.messages ?? []) {
-              if (message.ts) messagesByTs.set(message.ts, { reactions: message.reactions ?? [] });
-            }
-            historyCursor = historyData.response_metadata?.next_cursor?.trim() ?? '';
-            historyPages++;
-          } while (historyCursor && historyPages < 30);
-          if (historyCursor) errors.push('conversations.history stopped after 30 pages; remaining messages will be picked up on the next run');
-
-          // files.list remains the source of truth for every file, including files
-          // not represented in a normal channel-history page.
-          let page = 1;
-          let hasMore = true;
-          while (hasMore) {
-            const params = new URLSearchParams({
-              channel: CLAIMS_MAIL_CHANNEL,
-              count: '100',
-              page: String(page),
-              types: 'all',
-            });
-            const filesRes = await fetch(
-              `https://slack.com/api/files.list?${params}`,
-              { headers: { Authorization: `Bearer ${slackToken}` } }
-            );
-            const filesData = await parseExternalJson(filesRes, `Slack files.list page ${page}`) as { ok: boolean; files?: any[]; paging?: { pages: number } };
-            if (!filesData.ok) {
-              errors.push(`files.list page ${page}: ${JSON.stringify(filesData)}`);
-              break;
-            }
-            const files = filesData.files ?? [];
-            totalFiles += files.length;
-            hasMore = page < (filesData.paging?.pages ?? 1);
-            page++;
-            for (const file of files) {
-              // Get message ts from file shares
-              const shares = (file.shares?.public?.[CLAIMS_MAIL_CHANNEL] ?? file.shares?.private?.[CLAIMS_MAIL_CHANNEL] ?? []) as any[];
-              const messageTs = shares[0]?.ts ?? String(file.timestamp ?? file.id);
-              const reactions = messagesByTs.get(messageTs)?.reactions ?? file.reactions ?? [];
-              const alreadyReviewed = reactions.some((r: { name: string }) => allReviewed.includes(r.name));
-              // Existing files remain deduped. If a prior item has since been marked reviewed,
-              // preserve it in history as resolved instead of leaving a stale pending item.
-              const existing = existingByFileId.get(String(file.id));
-              if (existing) {
-                if (alreadyReviewed && existing.status !== 'resolved') {
-                  await conn.execute(
-                    "UPDATE mail_items SET pre_reviewed=1, status='resolved', resolved_at=COALESCE(resolved_at, NOW()) WHERE id=?",
-                    [existing.id]
-                  );
-                  resolved++;
-                }
-                if (!alreadyReviewed && Number(existing.file_count ?? 0) === 0 && attachmentRecoveriesRemaining > 0) {
-                  try {
-                    attachmentRecoveriesRemaining--;
-                    const hydrated = await slackFetch.getFileInfo(file.id);
-                    const downloadUrl = file.url_private_download ?? hydrated?.urlPrivateDownload;
-                    if (!downloadUrl) throw new Error('Slack did not provide a download URL');
-                    const downloaded = await slackFetch.downloadFile(downloadUrl);
-                    const storageName = file.name ?? file.title ?? hydrated?.filename ?? `${file.id}.bin`;
-                    const { key: storageKey } = await storagePut(
-                      `mail/slack/${CLAIMS_MAIL_CHANNEL}/${messageTs}/${storageName}`,
-                      downloaded.buffer,
-                      downloaded.contentType,
-                    );
-                    await conn.execute(
-                      `INSERT INTO mail_item_files (item_id, storage_key, filename, content_type, size_bytes, slack_file_id)
-                       VALUES (?, ?, ?, ?, ?, ?)`,
-                      [existing.id, storageKey, storageName, downloaded.contentType, downloaded.buffer.length, file.id]
-                    );
-                  } catch (recoveryError) {
-                    errors.push(`attachment recovery ${file.id}: ${String(recoveryError)}`);
-                  }
-                } else if (!alreadyReviewed && Number(existing.file_count ?? 0) === 0) {
-                  deferredAttachmentRecovery++;
-                }
-                skipped++;
-                continue;
-              }
-              // Pre-2025 filter: only ingest legal/injury-related mail from before 2025
-              // (post-2025 mail is ingested regardless of category)
-              const PRE_2025_CUTOFF = 1735689600; // 2025-01-01 00:00:00 UTC
-              const fileTimestamp = Number(file.timestamp ?? 0);
-              if (!alreadyReviewed && fileTimestamp > 0 && fileTimestamp < PRE_2025_CUTOFF) {
-                // Pre-2025 mail: only ingest if filename suggests legal/injury content
-                const fname = (file.name ?? file.title ?? '').toLowerCase();
-                const isLegalOrInjury = /demand|lawsuit|complaint|summons|legal|attorney|counsel|injury|medical|pip|bodily|claim|subrog|lien|arbitration|litigation|settlement|release|judgment/.test(fname);
-                if (!isLegalOrInjury) { skipped++; continue; }
-              }
-              try {
-                const result = await handleSlackFileEvent(conn, {
-                  fileId: file.id,
-                  messageTs,
-                  channelId: CLAIMS_MAIL_CHANNEL,
-                  filename: file.name ?? file.title,
-                  mimeType: file.mimetype,
-                  urlPrivateDownload: file.url_private_download,
-                  reactions,
-                  receivedAt: fileTimestamp > 0 ? new Date(fileTimestamp * 1000) : new Date(),
-                }, slackFetch, {
-                  reviewedEmoji,
-                  reviewedEmojis: allReviewed,
-                  addBotMarker: false,
-                });
-                if (result.action === 'inserted') inserted++;
-                else if (result.action === 'pre_reviewed') resolved++;
-                else skipped++;
-              } catch (e) {
-                errors.push(String(e));
-              }
-            }
-          }
-          results.slackIngest = {
-            inserted,
-            skipped,
-            resolved,
-            total: totalFiles,
-            attachmentRecoveriesAttempted: 6 - attachmentRecoveriesRemaining,
-            deferredAttachmentRecovery,
-            errors: errors.slice(0, 5),
-          };
-        }
-      } catch (slackErr) {
-        results.slackIngest = { skipped: true, reason: String(slackErr) };
-      }
-      // Step 2: Classify + assign pending items
-      // Cadence: 3 items per handler per run, Tue-Fri only (matches mail bot schedule)
-      // Manual triggers (from admin UI) bypass the day-of-week gate
-      const { classify } = await import('../mail/classify.js');
-      const { route } = await import('../mail/route.js');
-      const { createMailContentReader, parseMailContentFiles } = await import('../mail/contentRefresh.js');
-      const { markAssignedMailSource } = await import('../mail/sourceMarking.js');
-      const readMailContent = await createMailContentReader(conn);
-
-      // Day-of-week gate: 2=Tue, 3=Wed, 4=Thu, 5=Fri (ET)
-      const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-      const dayOfWeek = nowET.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-      const isScheduledDay = dayOfWeek >= 2 && dayOfWeek <= 5;
-      const isManualTrigger = true; // triggerNow is always manual — bypass day gate
-
-      const BATCH_PER_HANDLER = 3;
-
-      // Bound synchronous content and LLM work so a manual request stays below
-      // the production request deadline. Scheduled mailProcess continues the queue.
-      const [allItems] = await conn.execute<any[]>(
-        `SELECT mi.id, mi.external_id, mi.subject, mi.body_text, mi.from_email, mi.source, mi.received_at,
-                mi.slack_message_ts, mi.slack_channel_id,
-                GROUP_CONCAT(mif.filename SEPARATOR ', ') AS attachment_names,
-                GROUP_CONCAT(CONCAT(COALESCE(mif.content_type, ''), ':::', mif.storage_key, ':::', COALESCE(mif.slack_file_id, ''), ':::', COALESCE(mif.filename, '')) SEPARATOR '|||') AS file_entries
-         FROM mail_items mi
-         LEFT JOIN mail_item_files mif ON mif.item_id = mi.id
-         WHERE mi.category IS NULL
-           AND mi.status = 'new'
-           AND COALESCE(mi.needs_review, 0) = 0
-         GROUP BY mi.id ORDER BY mi.received_at ASC LIMIT 6`
+      await withManualTriggerDeadline(
+        'Mailroom Trigger Now recovery',
+        recovery,
+        () => {
+          timedOut = true;
+          conn?.destroy();
+        },
       );
-
-      let processed = 0, errors = 0, skippedDayGate = 0;
-      const handlerAssignedCount: Record<number, number> = {};
-
-      for (const item of allItems) {
-        try {
-          let fileEntries = item.file_entries;
-          if (!fileEntries && item.slack_message_ts && item.slack_channel_id) {
-            // No files stored yet — try to backfill from Slack
-            try {
-              let slackToken = process.env.SLACK_BOT_TOKEN ?? '';
-              try {
-                const [[botCfg]] = await conn.execute<any[]>('SELECT slack_bot_token FROM mail_bot_config LIMIT 1');
-                if (botCfg?.slack_bot_token) slackToken = botCfg.slack_bot_token;
-              } catch {}
-              if (slackToken) {
-                const msgRes = await fetch(`https://slack.com/api/conversations.replies?channel=${item.slack_channel_id}&ts=${item.slack_message_ts}&limit=1`, {
-                  headers: { Authorization: `Bearer ${slackToken}` }
-                });
-                const msgData = await msgRes.json() as { ok: boolean; messages?: any[] };
-                const msg = msgData.messages?.[0];
-                const fileObj = msg?.files?.[0];
-                if (fileObj?.url_private_download) {
-                  const { handleSlackFileEvent, buildRealSlackFetch } = await import('../mail/ingestSlack.js');
-                  const slackFetch = buildRealSlackFetch(slackToken);
-                  await handleSlackFileEvent(conn, {
-                    fileId: fileObj.id,
-                    messageTs: item.slack_message_ts,
-                    channelId: item.slack_channel_id,
-                    filename: fileObj.name ?? fileObj.title,
-                    mimeType: fileObj.mimetype,
-                    urlPrivateDownload: fileObj.url_private_download,
-                    reactions: [],
-                  }, slackFetch, { reviewedEmoji: 'white_check_mark', addBotMarker: false });
-                  // Re-fetch complete file metadata after recovery.
-                  const [newFiles] = await conn.execute<any[]>(
-                    `SELECT content_type, storage_key, slack_file_id, filename
-                     FROM mail_item_files WHERE item_id=?`,
-                    [item.id],
-                  );
-                  fileEntries = newFiles.map((f: any) =>
-                    `${f.content_type ?? ''}:::${f.storage_key}:::${f.slack_file_id ?? ''}:::${f.filename ?? ''}`,
-                  ).join('|||');
-                }
-              }
-            } catch { /* non-fatal — classify without file content */ }
-          }
-          const content = await readMailContent(
-            item.source,
-            item.external_id,
-            item.body_text,
-            parseMailContentFiles(fileEntries),
-          );
-          if (!content.hasReadableContent) {
-            await conn.execute(
-              `UPDATE mail_items
-               SET needs_review=1,
-                   reason=COALESCE(NULLIF(reason, ''), 'Awaiting readable email body or attachment content before assignment')
-               WHERE id=?`,
-              [item.id],
-            );
-            continue;
-          }
-          const cl = await classify({
-            subject: item.subject ?? undefined,
-            bodyText: content.indexedBody,
-            receivedAt: item.received_at,
-            attachmentNames: item.attachment_names ? item.attachment_names.split(', ').filter(Boolean) : undefined,
-          });
-          const patch = await route(conn, cl, { sourceText: content.indexedBody });
-
-          // Apply per-handler batch limit (3 per handler per run)
-          if (patch.assignedHandlerId && !patch.priorityAssignment) {
-            const currentCount = handlerAssignedCount[patch.assignedHandlerId] ?? 0;
-            if (currentCount >= BATCH_PER_HANDLER) {
-              // Classify but don't assign yet — mark as classified/needs_review
-              await conn.execute(
-                `UPDATE mail_items SET category=?,confidence=?,is_demand=?,is_medical_bill=?,needs_review=1,urgency=?,reason=? WHERE id=?`,
-                [patch.category, patch.confidence, patch.isDemand, patch.isMedicalBill, patch.urgency, 'Batch limit reached — pending assignment', item.id]
-              );
-              continue;
-            }
-            handlerAssignedCount[patch.assignedHandlerId] = currentCount + 1;
-          }
-
-          const summaryNote = buildMailSummary(cl);
-          const newSubject = buildAiSubject(cl, item.subject ?? null);
-          await conn.execute(
-            `UPDATE mail_items SET category=?,confidence=?,is_demand=?,is_medical_bill=?,needs_review=?,claim_number=?,from_name=?,sender_org=?,adverse_carrier=?,claimant_name=?,date_of_loss=?,requested_action=?,urgency=?,reason=?,demand_date=?,response_due_date=?,assigned_team_id=?,assigned_handler_id=?,status=?,assigned_at=?,due_at=?,initial_category=?,initial_handler_id=?,initial_confidence=?,summary_note=?,subject=?,body_text=? WHERE id=?`,
-            [patch.category,patch.confidence,patch.isDemand,patch.isMedicalBill,patch.needsReview,patch.claimNumber,patch.fromName,patch.senderOrg,patch.adverseCarrier,patch.claimantName,patch.dateOfLoss,patch.requestedAction,patch.urgency,patch.reason,patch.demandDate,patch.responseDueDate,patch.assignedTeamId,patch.assignedHandlerId,patch.status,patch.assignedAt,patch.dueAt,patch.initialCategory,patch.initialHandlerId,patch.initialConfidence,summaryNote,newSubject,content.indexedBody,item.id]
-          );
-          if (patch.assignedHandlerId) {
-            const sourceResult = await markAssignedMailSource(conn, {
-              id: item.id,
-              source: item.source,
-              externalId: item.external_id,
-              slackChannelId: item.slack_channel_id,
-              slackMessageTs: item.slack_message_ts,
-            });
-            if (sourceResult.errors.length) {
-              console.warn(`[mail.triggerNow] source marking failed for ${item.id}: ${sourceResult.errors.join('; ')}`);
-            }
-          }
-          for (const h of patch.historyActions) {
-            await conn.execute(`INSERT INTO mail_routing_history (item_id,action,to_handler_id,reason) VALUES (?,?,?,?)`, [item.id,h.action,h.toHandlerId??null,h.reason]);
-          }
-          processed++;
-        } catch { errors++; }
-      }
-      results.process = { processed, errors, total: allItems.length, skippedDayGate, handlerCounts: handlerAssignedCount };
-      // Existing item enrichment can involve source downloads, PDF parsing, and LLM
-      // calls. It is intentionally deferred to the bounded scheduled mailProcess job.
-      results.contentRefresh = { deferred: true, maxPerScheduledRun: 25 };
-    } finally {
-      await conn.end();
+    } catch (error) {
+      results.timeout = error instanceof Error ? error.message : String(error);
     }
-    return { ok: true, results };
+
+    const response = buildManualTriggerResult(
+      results.gmail ?? { skipped: true, reason: 'Gmail recovery did not start before the bounded acknowledgement' },
+      results.claimsMail ?? { skipped: true, reason: 'Claims Mail recovery did not start before the bounded acknowledgement' },
+    );
+    return {
+      ...response,
+      message: results.timeout
+        ? 'Mailroom recovery was handed off to bounded scheduled work before the browser deadline. Review the scheduled job result for source-specific detail.'
+        : response.message,
+      results: {
+        ...response.results,
+        gmailAttachmentRecovery: results.gmailAttachmentRecovery ?? { deferred: true, maxPerScheduledRun: 1 },
+        timeout: results.timeout ?? null,
+      },
+    };
   }),
   // ── Feature A: attach a file to an existing item ──────────────────────────
   /** Get presigned upload URL for a mail item file — caller POSTs to /api/mail/:id/files */
