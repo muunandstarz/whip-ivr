@@ -955,3 +955,9 @@
 - [x] Keep classification, content reading, routing, assignment, source acknowledgement, and broader attachment recovery in the bounded scheduled callbacks—not in the browser request. Existing manual-review holds stay skipped by the scheduled processor.
 - [x] Preserve the disabled Mailroom/Mail Bot feature gate. No schedule was enabled, no Gmail/Slack job was run, and no mail was ingested, classified, assigned, marked, or sent.
 - [x] Validate: targeted Mailroom suites 20 passed; full suite 321 passed / 1 skipped; TypeScript, production build, and diff check passed.
+
+
+## October 2026 — Massachusetts COI Preview Verification
+- [x] Reproduce the supplied MA/Klutch certificate in the published app using **MA**, **10/01/2026–10/08/2026**, and **KIS9312**. The formatted PDF preview opens and renders the Massachusetts BI $20,000/$40,000, PD $5,000, UM/UIM $20,000/$40,000, and PIP $8,000 amounts.
+- [x] Add a regression assertion that preserves the Unified COI Preview wiring (`handleDownload(false)` → data URL → PreviewPanel iframe) alongside the existing MA limit test.
+- [x] Validate against production in the connected browser and run 322 passing tests / 1 skipped, TypeScript, production build, and diff checks.

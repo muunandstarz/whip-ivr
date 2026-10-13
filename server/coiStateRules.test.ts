@@ -34,4 +34,11 @@ describe('COI and declarations state-specific coverage rules', () => {
     expect(source).toContain('`PER PERSON — STATUTORY MIN  ${rules.pipLimit}`');
     expect(source).not.toContain('isKlutch\n          ? "PER PERSON —\\nPER OCCURRENCE —"');
   });
+
+  it('keeps the formatted certificate preview wired for Massachusetts and Klutch certificates', () => {
+    expect(source).toContain('const handlePreviewOnly = () => { handleDownload(false); };');
+    expect(source).toContain('setPreviewPdfUrl(getPDFDataUrl(doc));');
+    expect(source).toContain('pdfUrl={previewPdfUrl}');
+    expect(source).toContain('onPreview={handlePreviewOnly}');
+  });
 });
