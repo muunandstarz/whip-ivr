@@ -475,9 +475,9 @@
 - **Owner directive (2026-10-06): Mailroom and Mail Bot are dormant. Do not modify, activate, schedule, test against live sources, or expose either feature until explicitly resumed. All remaining Mailroom items below are intentionally deferred.**
 - [x] Reprocess unresolved records with placeholder “attachment contents unavailable” summaries so stored Claims Mail PDFs receive content-based titles and summaries
 - [x] Prevent unreadable manual-review items from repeatedly blocking later readable Gmail and Claims Mail records in bounded processing runs
-- [ ] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
-- [ ] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
-- [ ] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable
+- [x] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
+- [x] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
+- [x] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable
 - [ ] Run one bounded unread-Gmail and unreviewed-Claims-Mail recovery pass from the proven Mailroom processing callback when source-specific schedules stall
 
 ## Session 2026-08-11 Mailroom Pagination
