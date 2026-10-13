@@ -940,3 +940,10 @@
 - [x] Format the Date of Loss in the denial letter heading in the same North American form.
 - [x] Remove “(if known)” from the entered TNC carrier claim-number line; an available input is now presented simply as **Claim Number**.
 - [x] Browser-generate a populated TNC Liability Denial proof confirming the visible header and body both display October 2, 2026; focused letter tests, TypeScript, production build, and diff checks pass.
+
+
+## October 2026 — Massachusetts Klutch COI Coverage Limits
+- [x] Fix the Klutch COI coverage-table branch that replaced all state minimums with dash placeholders. Klutch certificates now use the selected state’s BI, PD, UM, UIM, and PIP rules just as Metrocars certificates do.
+- [x] Confirm Massachusetts rule output: BI **$20,000/$40,000**, PD **$5,000**, UM **$20,000/$40,000**, UIM **$20,000/$40,000**, and PIP statutory minimum **$8,000**.
+- [x] Browser-render and inspect a Massachusetts Klutch proof (Oct. 1, 2026 issue date): all five amounts are visible in the PDF limit cells; no dash placeholders remain.
+- [x] Add a regression test preventing a return to Klutch blank-limit placeholders.

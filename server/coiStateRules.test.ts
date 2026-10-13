@@ -26,4 +26,12 @@ describe('COI and declarations state-specific coverage rules', () => {
     expect(source).toContain('limits: umRejected && rules.uimPP');
     expect(source).toContain('FL: { biPP: "$10,000", biPO: "$20,000", pdLimit: "$10,000", umPP: "$10,000", umPO: "$20,000", uimPP: "", uimPO: "", pip: true, pipLimit: "$10,000", umRejectable: true');
   });
+
+  it('renders Massachusetts coverage amounts on Klutch certificates instead of blank limit placeholders', () => {
+    expect(source).toContain('MA: { biPP: "$20,000", biPO: "$40,000", pdLimit: "$5,000", umPP: "$20,000", umPO: "$40,000", uimPP: "$20,000", uimPO: "$40,000", pip: true, pipLimit: "$8,000"');
+    expect(source).toContain('limits: `PER PERSON  ${rules.biPP}\\nPER OCCURRENCE  ${rules.biPO}`');
+    expect(source).toContain('limits: `PER OCCURRENCE  ${rules.pdLimit}`');
+    expect(source).toContain('`PER PERSON — STATUTORY MIN  ${rules.pipLimit}`');
+    expect(source).not.toContain('isKlutch\n          ? "PER PERSON —\\nPER OCCURRENCE —"');
+  });
 });

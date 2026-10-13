@@ -7591,31 +7591,23 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
     const coverageRows = [
       {
         insr: "BI", type: "BODILY INJURY LIABILITY",
-        limits: isKlutch
-          ? "PER PERSON —\nPER OCCURRENCE —"
-          : `PER PERSON  ${rules.biPP}\nPER OCCURRENCE  ${rules.biPO}`,
+        limits: `PER PERSON  ${rules.biPP}\nPER OCCURRENCE  ${rules.biPO}`,
       },
       {
         insr: "PD", type: "PROPERTY DAMAGE LIABILITY",
-        limits: isKlutch
-          ? "PER OCCURRENCE —"
-          : `PER OCCURRENCE  ${rules.pdLimit}`,
+        limits: `PER OCCURRENCE  ${rules.pdLimit}`,
       },
       {
         insr: "UM", type: "UNINSURED MOTORIST (UM)",
         limits: umRejected
           ? "REJECTED BY NAMED INSURED"
-          : isKlutch
-            ? "PER PERSON —\nPER OCCURRENCE —"
-            : `PER PERSON  ${rules.umPP}\nPER OCCURRENCE  ${rules.umPO}`,
+          : `PER PERSON  ${rules.umPP}\nPER OCCURRENCE  ${rules.umPO}`,
       },
       {
         insr: "UIM", type: "UNDERINSURED MOTORIST (UIM)",
         limits: umRejected && rules.uimPP
           ? "REJECTED BY NAMED INSURED"
-          : isKlutch
-            ? "PER PERSON —\nPER OCCURRENCE —"
-            : (rules.uimPP ? `PER PERSON  ${rules.uimPP}\nPER OCCURRENCE  ${rules.uimPO}` : "NOT APPLICABLE"),
+          : (rules.uimPP ? `PER PERSON  ${rules.uimPP}\nPER OCCURRENCE  ${rules.uimPO}` : "NOT APPLICABLE"),
       },
       {
         insr: "PIP", type: "PERSONAL INJURY PROTECTION (PIP)",
@@ -7623,9 +7615,7 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
           ? "NOT REQUIRED IN THIS STATE"
           : (pipWaived && !isFloridaPipMandatory)
             ? "WAIVED BY NAMED INSURED"
-            : isKlutch
-              ? "PER PERSON — STATUTORY MIN"
-              : `PER PERSON — STATUTORY MIN  ${rules.pipLimit}`,
+            : `PER PERSON — STATUTORY MIN  ${rules.pipLimit}`,
       },
       {
         insr: "COL", type: "PHYSICAL DAMAGE — COLLISION",
