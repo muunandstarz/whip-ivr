@@ -15,8 +15,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-
 import { jsPDF } from "jspdf";
+import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
 import {
   AlertTriangle,
   Brain,
@@ -5461,6 +5461,20 @@ Whip Claims Management`;
 }
 
 // ─── PIP Exhaustion Tab ───────────────────────────────────────────────────────
+function MedicalReviewWorkspace() {
+  const [workspace, setWorkspace] = useState<"pip" | "demand">("pip");
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2">
+        <Button size="sm" variant={workspace === "pip" ? "default" : "outline"} onClick={() => setWorkspace("pip")}>PIP Bill Review</Button>
+        <Button size="sm" variant={workspace === "demand" ? "default" : "outline"} onClick={() => setWorkspace("demand")}>Medical Demand Review</Button>
+        <p className="ml-1 text-xs text-muted-foreground">Switching workspaces does not remove the broader medical-record and demand analysis tools.</p>
+      </div>
+      {workspace === "pip" ? <PipBillReviewWorkflow addLetterhead={addWhipLetterhead} addFooter={addLetterFooter} /> : <MedicalBillReviewTab />}
+    </div>
+  );
+}
+
 function PIPExhaustionTab() {
 	  const pipSearch = useSearch();
 	  const requestedPipState = new URLSearchParams(pipSearch).get("memberState")?.toLowerCase();
@@ -8816,7 +8830,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "pip-exhaustion": return <PIPExhaustionTab />;
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} />;
-      case "pip-bill-review": return <MedicalBillReviewTab />;
+      case "pip-bill-review": return <MedicalReviewWorkspace />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;

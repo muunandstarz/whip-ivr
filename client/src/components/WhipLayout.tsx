@@ -32,6 +32,7 @@ import {
   Contrast,
   ListChecks,
   ClipboardCheck,
+  ExternalLink,
 } from "lucide-react";
 import { FileText } from "lucide-react";
 import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen, Ticket, Wrench } from "lucide-react";
@@ -56,6 +57,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/mailroom", label: "Mailroom", icon: Inbox },
   { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
   { href: "/tickets", label: "Tickets", icon: Ticket },
+  { href: "https://claude.ai/artifact/D4cSrZQwaMKCtiooyq8EQg", label: "Handler Productivity Dashboard", icon: BarChart3, external: true },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
 ];
 
@@ -85,6 +87,7 @@ const HANDLER_NAV_ITEMS_BASE = [
   { href: "/claims-qa", label: "Claims QA", icon: Star },
   { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
   { href: "/tickets", label: "My Tickets", icon: Ticket },
+  { href: "https://claude.ai/artifact/D4cSrZQwaMKCtiooyq8EQg", label: "Handler Productivity Dashboard", icon: BarChart3, external: true },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-mailroom", label: "myMailroom", icon: Inbox },
@@ -177,7 +180,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const handlerNavItems = showLossIntake
     ? [...HANDLER_NAV_ITEMS_BASE.slice(0, 4), LOSS_INTAKE_NAV, ...HANDLER_NAV_ITEMS_BASE.slice(4)]
     : HANDLER_NAV_ITEMS_BASE;
-  const navItems: { href: string; label: string; icon: React.ElementType }[] =
+  const navItems: { href: string; label: string; icon: React.ElementType; external?: boolean }[] =
     (isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems).filter((item) => {
       if (["/mailroom", "/my-mailroom"].includes(item.href)) return mailroomEnabled;
       if (item.href === "/mail-bot") return mailBotEnabled;
@@ -284,8 +287,24 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) => {
+          {navItems.map(({ href, label, icon: Icon, external }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
+            if (external) {
+              return (
+                <a
+                  key={href}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setMobileOpen(false)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-white/60 hover:bg-background/8 hover:text-white"
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-left flex-1">{label}</span>
+                  <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-70" aria-hidden="true" />
+                </a>
+              );
+            }
             return (
               <Link key={href} href={href}>
                 <button

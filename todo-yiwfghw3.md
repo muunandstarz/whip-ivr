@@ -973,3 +973,11 @@
 ## October 2026 — Sidebar Alignment
 - [x] Left-align wrapped Knowledge Base labels, including **Market and Policy Directory**, so two-line labels align with their icon rather than centering within the sidebar.
 - [x] Apply the same reliable left alignment to Knowledge Base extra navigation items; full validation passed with 323 tests / 1 skipped, TypeScript, production build, and diff checks.
+
+## October 2026 — Handler Productivity Dashboard and PIP Bill Review
+- [x] Add a universally visible **Handler Productivity Dashboard** sidebar entry for both admin and handler navigation. It opens the owner-selected Claude source in a new tab and does not frame, copy, proxy, or alter the source’s independent schedule.
+- [x] Rebuild the in-app **PIP Bill Review** as an editable five-step workflow alongside—not instead of—the existing AI-powered Medical Demand Review workspace.
+- [x] Support PA Act 6 (110% Medicare), MD reasonableness review, FL 80% of 200% Medicare with EMC/14-day flags, and MA WC schedule with the first-$2,000 health-insurance coordination control; include editable lines, multi-file PDF/image/ZIP intake, and line-by-line PIP exhaustion allocation.
+- [x] Add neutral, print-friendly PDF preview/download outputs: provider payment letter(s), provider EOR, internal EOR with review notes, attorney PIP log, and Generate All. Reuse the approved colored Whip logo with black/gray document styling.
+- [x] Resolve document signer identity from the effective active handler, including handler-view/impersonation, rather than hard-coding an administrator. Browser-validated admin and Jovel Villa contexts plus a synthetic PA calculation and PDF preview.
+- [x] Validate 330 tests passed / 1 skipped, TypeScript, production build, and diff check.
