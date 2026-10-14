@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { shouldProcessRecentVoicemail } from "./aircallSync";
-import { isDuplicateAircallIntakeError } from "./aircall";
+import { AGENT_EXTENSIONS, isClaimsTeamCall, isDuplicateAircallIntakeError } from "./aircall";
 
 describe("Aircall API credentials", () => {
   it("AIRCALL_API_ID is set in the environment", () => {
@@ -34,5 +34,13 @@ describe("voicemail intake duplicate recovery", () => {
   it("recognizes the unique Aircall intake constraint after a concurrent insert", () => {
     expect(isDuplicateAircallIntakeError(new Error("Duplicate entry '4115218103' for key 'intake_records.uq_intake_aircall_call_id'"))).toBe(true);
     expect(isDuplicateAircallIntakeError(new Error("Database unavailable"))).toBe(false);
+  });
+});
+
+describe("direct-handler Claims Line scope", () => {
+  it("keeps Demily's direct Aircall calls in Claims processing", () => {
+    expect(isClaimsTeamCall({ number: { id: 1128372 }, user: { id: 1763684 } })).toBe(true);
+    expect(isClaimsTeamCall({ number: { id: 1128372 }, user: { id: 9999999 } })).toBe(false);
+    expect(AGENT_EXTENSIONS[1763684]).toBe("011");
   });
 });

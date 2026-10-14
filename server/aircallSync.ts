@@ -71,10 +71,12 @@ export async function refreshClaimsTeamNumbers(): Promise<void> {
       "carlito.legarde@drivewhip.com":     { id: 4,     name: "Carlito Legarde Jr" },
       "annie.ortiz@drivewhip.com":         { id: 5,     name: "Annie Ortiz" },
       "anap@drivewhip.com":                { id: 6,     name: "Ana Padilla" },
+      "bennet.carlos@drivewhip.com":       { id: 30003, name: "Bennet Carlos" },
       "lorraine.tria@drivewhip.com":       { id: 9,     name: "Lorraine Tria" },
       "daniel.giono@drivewhip.com":        { id: 10,    name: "Daniel Giono" },
       "jovel.villa@drivewhip.com":         { id: 30001, name: "Jovel Villa" },
       "daryl.ochate@drivewhip.com":        { id: 30002, name: "Daryl Ochate" },
+      "demily.flores@drivewhip.com":       { id: 30005, name: "Demily Flores" },
       // Former Madeline coverage now resolves to Tim rather than a retired roster row.
       "madeline.green@drivewhip.com":      { id: 90001, name: "Tim Chan" },
       "tim.chan@drivewhip.com":            { id: 90001, name: "Tim Chan" },

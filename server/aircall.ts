@@ -593,6 +593,7 @@ const CLAIMS_AGENT_USER_IDS = new Set([
   1774596, // Bennet Carlos
   1756923, // Carlito Legarde
   1756924, // Natashia Edulan
+  1763684, // Demily Flores
   1827146, // Daryl Ochate
   1836484, // Jovel Villa
   1836944, // Annie Ortiz
@@ -605,11 +606,12 @@ const CLAIMS_AGENT_USER_IDS = new Set([
 ]);
 
 // Extension map: Aircall user ID → extension number
-const AGENT_EXTENSIONS: Record<number, string> = {
+export const AGENT_EXTENSIONS: Record<number, string> = {
   1794311: '012', // Ana Padilla
   1774596: '175', // Bennet Carlos
   1756923: '325', // Carlito Legarde
   1756924: '326', // Natashia Edulan
+  1763684: '011', // Demily Flores
   1827146: '017', // Daryl Ochate
   1836484: '018', // Jovel Villa
   1836944: '019', // Annie Ortiz
@@ -621,7 +623,7 @@ const AGENT_EXTENSIONS: Record<number, string> = {
   1947062: '996', // Giovanni Cabrera
 };
 
-function isClaimsTeamCall(call: any): boolean {
+export function isClaimsTeamCall(call: any): boolean {
   const numberId = call?.number?.id ? Number(call.number.id) : null;
   const numberName: string = call?.number?.name ?? "";
   const agentId = call?.user?.id ? Number(call.user.id) : null;
