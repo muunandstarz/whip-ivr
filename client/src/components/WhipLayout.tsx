@@ -328,7 +328,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 <Link key={href} href={href}>
                   <button
                     onClick={() => setMobileOpen(false)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg text-sm transition-colors ${
                       active
                         ? "bg-background/15 text-white font-medium"
                         : "text-white/60 hover:bg-background/8 hover:text-white"
@@ -346,7 +346,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 <Link key={href} href={href}>
                   <button
                     onClick={() => setMobileOpen(false)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg text-sm transition-colors ${
                       active
                         ? "bg-background/15 text-white font-medium"
                         : "text-white/60 hover:bg-background/8 hover:text-white"

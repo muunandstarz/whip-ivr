@@ -968,3 +968,8 @@
 - [x] Restore direct-extension tracking for Demily Flores (Aircall user `1763684`, extension `011`) and map both Demily and Bennet Carlos into the live voicemail sync’s handler directory, so direct calls and voicemails are retained in Claims processing and assigned to the correct handler rather than silently excluded or left unowned.
 - [x] Add regression coverage for Demily’s direct Claims call scope and registered extension; full validation passes: 323 tests / 1 skipped, TypeScript, production build, and diff check.
 - [x] Verify the 14 active Claims handler extensions remain provisioned in Aircall. Direct extensions are account-wide according to Aircall’s published support guidance; the shared Claims Line retains only the intentional Key 1/Key 2 routing and does not fan general inbound volume to individual handlers.
+
+
+## October 2026 — Sidebar Alignment
+- [x] Left-align wrapped Knowledge Base labels, including **Market and Policy Directory**, so two-line labels align with their icon rather than centering within the sidebar.
+- [x] Apply the same reliable left alignment to Knowledge Base extra navigation items; full validation passed with 323 tests / 1 skipped, TypeScript, production build, and diff checks.
