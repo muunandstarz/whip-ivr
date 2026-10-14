@@ -27,6 +27,7 @@ import {
 } from "../remoteOpsSlackEvents";
 import { storagePut } from "../storage";
 import { storageGetSignedUrl } from "../storage";
+import { extractPipBillLinesFromUpload } from "../pipBillExtraction";
 import { sdk } from "./sdk";
 import {
   MAIL_SLACK_EVENTS_PATH,
@@ -122,6 +123,40 @@ async function startServer() {
     } catch (err) {
       console.error("[upload/document] Error:", err);
       res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
+  // PIP medical-record uploads are analyzed in-memory and deliberately are not
+  // retained in document storage or analyzer history.
+  app.post("/api/pip-bill-review/extract", upload.array("files", 6), async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) {
+        res.status(401).json({ error: "Sign in to extract PIP bill lines." });
+        return;
+      }
+      const state = String(req.body?.state ?? "").toUpperCase();
+      if (!(["PA", "MD", "FL", "MA"] as const).includes(state as "PA" | "MD" | "FL" | "MA")) {
+        res.status(400).json({ error: "Choose PA, MD, FL, or MA before extracting bills." });
+        return;
+      }
+      const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+      if (!files.length) {
+        res.status(400).json({ error: "Add at least one bill or medical-record file." });
+        return;
+      }
+      const results = await Promise.all(files.map((file) => extractPipBillLinesFromUpload({
+        bytes: file.buffer,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        state: state as "PA" | "MD" | "FL" | "MA",
+      })));
+      const lines = results.flatMap((result) => result.lines);
+      const warnings = results.map((result) => result.warning).filter(Boolean);
+      res.json({ lines, warning: warnings[0] ?? "" });
+    } catch (error) {
+      console.error("[PIP bill extraction]", error);
+      res.status(500).json({ error: "Could not extract bill lines. Add or correct bill lines manually." });
     }
   });
 

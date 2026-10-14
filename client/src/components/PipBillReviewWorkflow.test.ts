@@ -16,4 +16,11 @@ describe("PIP Bill Review documents", () => {
     expect(source).toContain("Generate all");
     expect(source).toContain("addLetterhead(doc)");
   });
+
+  it("uses the private in-memory extraction route and presents upload feedback", () => {
+    expect(source).toContain('fetch("/api/pip-bill-review/extract", { method: "POST", body })');
+    expect(source).toContain("Files are analyzed in memory and are not saved to document storage.");
+    expect(source).toContain('role="status"');
+    expect(source).toContain("reviewPipBills({ state, locality");
+  });
 });

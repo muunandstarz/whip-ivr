@@ -981,3 +981,9 @@
 - [x] Add neutral, print-friendly PDF preview/download outputs: provider payment letter(s), provider EOR, internal EOR with review notes, attorney PIP log, and Generate All. Reuse the approved colored Whip logo with black/gray document styling.
 - [x] Resolve document signer identity from the effective active handler, including handler-view/impersonation, rather than hard-coding an administrator. Browser-validated admin and Jovel Villa contexts plus a synthetic PA calculation and PDF preview.
 - [x] Validate 330 tests passed / 1 skipped, TypeScript, production build, and diff check.
+
+## October 2026 — PIP Scan-Only Upload Repair
+- [x] Replace the incorrect PDF-as-image extraction path with a private, authenticated in-memory PIP upload route. PIP packet bytes are not placed in document storage or analyzer file history.
+- [x] Add structured scan-safe extraction: embedded PDF text when present and rendered first-page vision fallback for scan-only HCFA/EOB/itemized packets; preserve editable bill lines and immediately run the PIP calculation when lines are found.
+- [x] Add clear extraction status and error feedback rather than silently discarding unreadable uploads.
+- [x] Browser-validate the supplied 61-page scan-only PA packet: extracted 7 editable bill lines, produced review results, and opened a payment-letter PDF preview. Full validation: 332 passed / 1 skipped, TypeScript, production build, and diff check passed.

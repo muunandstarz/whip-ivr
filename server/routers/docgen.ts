@@ -119,6 +119,31 @@ const CARRIER_RESPONSE_OUTPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const PIP_BILL_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    lines: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          provider: { type: "string" },
+          dos: { type: "string" },
+          pos: { type: "string" },
+          cpt: { type: "string" },
+          modifier: { type: "string" },
+          units: { type: "number" },
+          billed: { type: "number" },
+        },
+        required: ["provider", "dos", "pos", "cpt", "modifier", "units", "billed"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["lines"],
+  additionalProperties: false,
+} as const;
+
 function hasEstimateEvidence(parsed: Record<string, unknown>): boolean {
   const scalarFields = ["repairTotal", "vehicle", "vin", "claimNumber", "dateOfLoss", "shopName", "insurerName", "carrierAddress", "claimantName", "adjusterName", "repairStart", "repairEnd", "roNumber"];
   return scalarFields.some((field) => String(parsed[field] ?? "").trim().length > 0)
@@ -180,6 +205,58 @@ async function rasterizeEstimatePdf(bytes: Buffer): Promise<string[]> {
     return dataUrls;
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const pipBillPrompt = (state: string, fileName?: string) => `You are a medical-billing extraction specialist reviewing uploaded bills for a ${state} Personal Injury Protection claim. Extract only submitted bill lines. The upload may be a scanned HCFA-1500/UB-04, EOB, itemized statement, or a medical-record packet containing one or more bill forms.
+
+Rules:
+1. Read every visible billed line from bill forms; do not create lines from narrative treatment notes or prescriptions without a billed charge.
+2. For HCFA-1500 forms, treat each Box 24 row as a separate line: DOS from 24A, POS from 24B, CPT/HCPCS and modifier from 24D, units from 24G, and charge from 24F.
+3. Preserve separate dates and separate CPT rows even if they have the same provider or code.
+4. Use the rendering provider from Box 33 (or a clearly printed billing provider). Use YYYY-MM-DD for DOS when the printed date is legible; otherwise use an empty string.
+5. If there are no bill lines, return an empty lines array. Do not infer charges from records, prescriptions, or treatment narratives.
+${fileName ? `The uploaded filename is ${fileName}.` : ""}
+Return only the required structured response.`;
+
+type PipBillExtractionLine = {
+  provider: string;
+  dos: string;
+  pos: string;
+  cpt: string;
+  modifier: string;
+  units: number;
+  billed: number;
+};
+
+function normalizePipBillLines(parsed: Record<string, unknown>): PipBillExtractionLine[] {
+  if (!Array.isArray(parsed.lines)) return [];
+  return parsed.lines.reduce<PipBillExtractionLine[]>((lines, item) => {
+    if (!item || typeof item !== "object") return lines;
+    const row = item as Record<string, unknown>;
+    const billed = Number(row.billed);
+    if (!Number.isFinite(billed) || billed <= 0) return lines;
+    const units = Number(row.units);
+    lines.push({
+      provider: String(row.provider ?? "").trim(),
+      dos: String(row.dos ?? "").trim(),
+      pos: String(row.pos ?? "").trim(),
+      cpt: String(row.cpt ?? "").trim(),
+      modifier: String(row.modifier ?? "").trim(),
+      units: Number.isFinite(units) && units > 0 ? units : 1,
+      billed,
+    });
+    return lines;
+  }, []);
+}
+
+function readPipBillLines(result: Awaited<ReturnType<typeof invokeLLM>>): PipBillExtractionLine[] {
+  const raw = extractText(result);
+  if (!raw) return [];
+  try {
+    return normalizePipBillLines(parseJsonObject(raw));
+  } catch {
+    return [];
   }
 }
 
@@ -1030,47 +1107,69 @@ Format as JSON: { payments: [{date, provider, amount, serviceType}], totalPaid: 
       return lookupClaimForDocgen(input.claimNumber);
     }),
   extractPIPBills: protectedProcedure
-    .input(z.object({ fileUrl: z.string().url(), state: z.enum(["PA", "FL", "MD", "MA"]) }))
+    .input(z.object({
+      fileUrl: z.string().url(),
+      state: z.enum(["PA", "FL", "MD", "MA"]),
+      fileName: z.string().max(255).optional(),
+      mimeType: z.string().max(120).optional(),
+      storageKey: z.string().regex(/^docgen-uploads\/[A-Za-z0-9._/-]+$/).optional(),
+    }))
     .mutation(async ({ input }) => {
-      const prompt = `You are a medical billing extraction specialist. Extract all line items from this HCFA-1500 health insurance claim form.
-
-CRITICAL RULES:
-1. Each row in Box 24 is a SEPARATE line item. Do NOT combine rows.
-2. If the same CPT appears on multiple dates, output a separate line for EACH date.
-3. ALWAYS read dollar amounts in Box 24F. Never return null for billed amounts.
-4. Read units in Box 24G. Each row's units stand alone.
-5. If the document contains MULTIPLE bills, include ALL line items from ALL bills.
-
-Return ONLY valid JSON in this exact schema:
-{
-  "lines": [
-    {
-      "provider": "string (provider name from box 33)",
-      "dos": "YYYY-MM-DD (box 24A From date for THIS row)",
-      "pos": "string (place of service from box 24B)",
-      "cpt": "string (CPT code from box 24D)",
-      "modifier": "string (modifiers from box 24D, empty if none)",
-      "units": number (from box 24G for THIS row),
-      "billed": number (dollars from box 24F for THIS row, no dollar sign)
-    }
-  ]
-}
-Return JSON only. No preamble, no markdown.`;
-      const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
-        { type: "text", text: prompt },
-        { type: "image_url", image_url: { url: input.fileUrl } },
-      ];
-      const result = await invokeLLM({
-        messages: [{ role: "user", content: userContent as any }],
-        max_tokens: 4000,
-      });
+      const prompt = pipBillPrompt(input.state, input.fileName);
+      const isImage = input.mimeType?.startsWith("image/") || /\.(png|jpe?g)$/i.test(input.fileName ?? "");
+      const documentPart = isImage
+        ? { type: "image_url" as const, image_url: { url: input.fileUrl, detail: "high" as const } }
+        : { type: "file_url" as const, file_url: { url: input.fileUrl, mime_type: "application/pdf" as const } };
+      const directMessages = [{
+        role: "user" as const,
+        content: [{ type: "text" as const, text: prompt }, documentPart] as any,
+      }];
+      let lines: PipBillExtractionLine[] = [];
+      const errors: string[] = [];
       try {
-        const text = extractText(result);
-        const clean = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-        const parsed = JSON.parse(clean) as { lines: Array<{ provider: string; dos: string; pos: string; cpt: string; modifier: string; units: number; billed: number }> };
-        return { lines: parsed.lines || [] };
-      } catch {
-        return { lines: [] };
+        const primary = await invokeLLM({
+          model: "gpt-5-mini",
+          messages: directMessages,
+          outputSchema: { name: "pip_bill_lines", strict: true, schema: PIP_BILL_OUTPUT_SCHEMA },
+        });
+        lines = readPipBillLines(primary);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "PDF analysis was unavailable");
       }
+
+      // Scan-only PDFs have no text layer. Render the first bill pages locally
+      // and pass images to vision rather than treating a PDF as an image URL.
+      const isPdf = input.mimeType === "application/pdf" || /\.pdf$/i.test(input.fileName ?? "");
+      if (!lines.length && input.storageKey && isPdf) {
+        try {
+          const uploadBytes = await downloadUploadedEstimate(input.storageKey);
+          const pageImages = await rasterizeEstimatePdf(uploadBytes);
+          if (pageImages.length) {
+            const vision = await invokeLLM({
+              model: "gemini-3-flash-preview",
+              messages: [{
+                role: "user",
+                content: [
+                  { type: "text", text: `${prompt}\nThese are the first pages of the retained PDF rendered as images. Extract only billed lines visible on these pages.` },
+                  ...pageImages.map((url) => ({ type: "image_url" as const, image_url: { url, detail: "high" as const } })),
+                ],
+              }],
+              outputSchema: { name: "pip_bill_lines", strict: true, schema: PIP_BILL_OUTPUT_SCHEMA },
+            });
+            lines = readPipBillLines(vision);
+          }
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : "scan rendering was unavailable");
+        }
+      }
+
+      return {
+        lines,
+        warning: lines.length
+          ? ""
+          : errors.length
+            ? "The upload could not be read automatically. Check the document, then add or correct bill lines below."
+            : "No billed service lines were found. This may be a records-only packet; add any bill lines manually below.",
+      };
     }),
 });
