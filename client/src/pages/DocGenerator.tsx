@@ -6366,11 +6366,12 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     y += 16;
 
     // Keep the factual calculation and its fixed footer on page one. Legal
-    // support and the signature receive a full, independently letterheaded
-    // page so they can never run beneath the footer band.
+    // support and the signature continue on a clean second page so they can
+    // never run beneath the footer band. The Whip letterhead is intentionally
+    // limited to the first page of this standalone request.
     addLetterFooter(doc);
     doc.addPage();
-    y = addWhipLetterhead(doc, "LOSS OF USE SUPPORTING BASIS", `Claim #${claimNumber || "[Claim Number]"}`);
+    y = 24;
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(40, 40, 40);

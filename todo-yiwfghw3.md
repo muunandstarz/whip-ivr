@@ -1007,3 +1007,5 @@
 ## October 2026 — Standalone Loss of Use Footer Repair
 - [x] Move the standalone Loss of Use legal support, note, and signature block to a separately letterheaded second page. The factual utilization schedule and total remain on page 1 with its own fixed footer, preventing the prior footer collision.
 - [x] Browser-validate the regenerated two-page sample: page 1 ends with the $150.00 total and clear footer; page 2 contains the supporting basis and signature without clipping. Full validation: 340 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+- [x] Refine the standalone Loss of Use pagination so the **Whip letterhead appears only on page 1**. Page 2 retains a clean supporting-basis title, signature, and footer without repeating the logo/contact header; visually validated in the regenerated two-page PDF.
