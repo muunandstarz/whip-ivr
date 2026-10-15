@@ -3466,10 +3466,77 @@ function TLSettlementTab() {
   const [otherDeductions, setOtherDeductions] = useState<{label: string; amount: string}[]>([]);
   const [aiLetter, setAiLetter] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [cccFile, setCccFile] = useState<File | null>(null);
+  const [cccParsing, setCccParsing] = useState(false);
+  const [cccSummary, setCccSummary] = useState<{
+    reportReference: string;
+    baseVehicleValue: string;
+    priorDamage: string;
+    adjustedVehicleValue: string;
+    taxRateLabel: string;
+    salesTax: string;
+    salvageDeducted: string;
+    cccTotal: string;
+  } | null>(null);
   const aiMutation = trpc.docgen.generateTLSettlementLetter.useMutation();
+  const parseCccValuationMutation = trpc.docgen.parseCccValuation.useMutation();
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
+
+  const parseCccValuation = async (file = cccFile) => {
+    if (!file) { toast.error("Choose a CCC valuation PDF first"); return; }
+    if (file.type && file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+      toast.error("Upload a CCC valuation PDF");
+      return;
+    }
+    setCccFile(file);
+    setCccParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
+      const payload = await upload.json().catch(() => ({})) as { url?: string; signedUrl?: string; key?: string; error?: string };
+      if (!upload.ok) throw new Error(payload.error || `Upload failed: ${file.name}`);
+      const fileUrl = payload.signedUrl || payload.url;
+      if (!fileUrl || !payload.key || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable CCC document");
+      const parsed = await parseCccValuationMutation.mutateAsync({
+        fileUrl,
+        fileName: file.name,
+        storageKey: payload.key,
+        mimeType: file.type || "application/pdf",
+      });
+      setForm((p) => ({
+        ...p,
+        claimantName: parsed.claimantName || p.claimantName,
+        claimNumber: parsed.claimNumber || p.claimNumber,
+        dateOfLoss: parsed.dateOfLoss || p.dateOfLoss,
+        vehicle: parsed.vehicle || p.vehicle,
+        vin: parsed.vin || p.vin,
+        market: parsed.market || p.market,
+        // CCC's Adjusted Vehicle Value already includes condition/prior-damage adjustments.
+        // It is the ACV for this settlement; do not deduct Prior Damage again.
+        acv: parsed.adjustedVehicleValue || p.acv,
+        salesTax: parsed.salesTax || p.salesTax,
+        salvageDeducted: parsed.salvageDeducted || p.salvageDeducted,
+      }));
+      setCccSummary({
+        reportReference: parsed.reportReference,
+        baseVehicleValue: parsed.baseVehicleValue,
+        priorDamage: parsed.priorDamage,
+        adjustedVehicleValue: parsed.adjustedVehicleValue,
+        taxRateLabel: parsed.taxRateLabel,
+        salesTax: parsed.salesTax,
+        salvageDeducted: parsed.salvageDeducted,
+        cccTotal: parsed.cccTotal,
+      });
+      toast.success(`CCC valuation applied${parsed.cccTotal ? ` — reported total $${parsed.cccTotal}` : ""}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not read the CCC valuation");
+    } finally {
+      setCccParsing(false);
+    }
+  };
 
   const netAmount = (() => {
     const acv = parseFloat(form.acv) || 0;
@@ -3673,6 +3740,47 @@ function TLSettlementTab() {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <div>
+        <Panel title="CCC Market Valuation" tag="CLAIMANT SETTLEMENT">
+          <section
+            aria-label="CCC valuation upload and prefill"
+            className="rounded-lg border border-dashed border-foreground/25 bg-muted/20 px-4 py-4 transition-colors hover:border-foreground/45"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files?.[0]; if (file) void parseCccValuation(file); }}
+          >
+            <input id="tls-ccc-upload" type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) setCccFile(file); }} />
+            <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><Upload className="h-4 w-4" /> CCC valuation PDF</div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Upload a CCC ONE Market Valuation PDF to prefill key claimant and settlement values. Review before issuance.</p>
+                {cccFile && <p className="mt-1 truncate text-[11px] font-medium text-foreground/75">Selected: {cccFile.name}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label htmlFor="tls-ccc-upload" className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-muted">
+                  <Upload className="h-3.5 w-3.5" /> {cccFile ? "Replace" : "Choose PDF"}
+                </label>
+                <Button type="button" size="sm" className="h-9 bg-[#171b31] text-xs text-white hover:bg-[#171b31]/90" disabled={!cccFile || cccParsing} onClick={() => void parseCccValuation()}>
+                  {cccParsing ? <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileCheck className="mr-1 h-3.5 w-3.5" />}
+                  {cccParsing ? "Reading CCC…" : "Read & pre-fill"}
+                </Button>
+              </div>
+            </div>
+          </section>
+          {cccSummary && (
+            <div className="mt-3 rounded-md border border-border bg-background p-3 text-xs">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="font-semibold text-foreground">CCC report values applied{cccSummary.reportReference ? ` · Ref. ${cccSummary.reportReference}` : ""}</span>
+                <span className={`font-semibold ${cccSummary.cccTotal && cccSummary.cccTotal === netAmount ? "text-emerald-700" : "text-foreground"}`}>
+                  CCC total {cccSummary.cccTotal ? `$${cccSummary.cccTotal}` : "—"} · settlement total ${netAmount}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground sm:grid-cols-4">
+                <span>Base: <strong className="text-foreground">{cccSummary.baseVehicleValue ? `$${cccSummary.baseVehicleValue}` : "—"}</strong></span>
+                <span>Prior damage: <strong className="text-foreground">{cccSummary.priorDamage ? `($${cccSummary.priorDamage})` : "—"}</strong></span>
+                <span>Adjusted ACV: <strong className="text-foreground">{cccSummary.adjustedVehicleValue ? `$${cccSummary.adjustedVehicleValue}` : "—"}</strong></span>
+                <span>Tax {cccSummary.taxRateLabel}: <strong className="text-foreground">{cccSummary.salesTax ? `$${cccSummary.salesTax}` : "—"}</strong></span>
+              </div>
+              <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Prior damage is informational only because CCC has already reflected it in the adjusted ACV. Add title, registration, storage, lien, or other claim-specific amounts manually when applicable.</p>
+            </div>
+          )}
+        </Panel>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid3>
             <Field label="Claimant Name" id="tls-name" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" required />

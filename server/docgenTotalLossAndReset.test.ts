@@ -52,4 +52,15 @@ describe('Total Loss settlement and form reset repairs', () => {
     expect(source).toContain('Clear Form');
     expect(source).toContain('key={`${activeTab}-${formResetKey}`}');
   });
+
+  it('offers claimant-only CCC valuation upload with adjusted ACV, tax, and salvage prefilling', () => {
+    expect(source).toContain('CCC Market Valuation');
+    expect(source).toContain('CLAIMANT SETTLEMENT');
+    expect(source).toContain('id="tls-ccc-upload"');
+    expect(source).toContain('trpc.docgen.parseCccValuation.useMutation()');
+    expect(source).toContain('acv: parsed.adjustedVehicleValue || p.acv');
+    expect(source).toContain('salesTax: parsed.salesTax || p.salesTax');
+    expect(source).toContain('salvageDeducted: parsed.salvageDeducted || p.salvageDeducted');
+    expect(source).toContain('do not deduct Prior Damage again');
+  });
 });

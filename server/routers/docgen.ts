@@ -8,6 +8,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { parseCccValuationText } from "../cccValuation";
 import {
   saveDocgenDraft, getDocgenDrafts, deleteDocgenDraft,
   toggleDocgenFavorite, getDocgenFavorites,
@@ -283,6 +284,29 @@ function getStateCoverageInfo(state: string): string {
 
 
 export const docgenRouter = router({
+  parseCccValuation: protectedProcedure
+    .input(z.object({
+      fileUrl: z.string().url(),
+      fileName: z.string().max(255).optional(),
+      storageKey: z.string().regex(/^docgen-uploads\/[A-Za-z0-9._/-]+$/),
+      mimeType: z.string().max(120).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      if (input.mimeType && input.mimeType !== "application/pdf" && !/\.pdf$/i.test(input.fileName ?? "")) {
+        throw new Error("Upload a CCC valuation PDF.");
+      }
+      try {
+        const bytes = await downloadUploadedEstimate(input.storageKey);
+        const text = await extractUploadedEstimateText(bytes);
+        const parsed = parseCccValuationText(text);
+        if (!parsed) throw new Error("The uploaded PDF is not a readable CCC Market Valuation report.");
+        return parsed;
+      } catch (error) {
+        if (error instanceof Error && /CCC|readable|Upload/.test(error.message)) throw error;
+        console.warn("[Docgen] CCC valuation extraction failed", error);
+        throw new Error("Could not read this CCC valuation PDF. Use a text-readable CCC Market Valuation report or enter the values manually.");
+      }
+    }),
   parseEstimate: protectedProcedure
     .input(z.object({
       fileUrl: z.string().url(),

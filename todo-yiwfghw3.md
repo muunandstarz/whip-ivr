@@ -1009,3 +1009,8 @@
 - [x] Browser-validate the regenerated two-page sample: page 1 ends with the $150.00 total and clear footer; page 2 contains the supporting basis and signature without clipping. Full validation: 340 passed / 1 skipped, TypeScript, production build, and diff check passed.
 
 - [x] Refine the standalone Loss of Use pagination so the **Whip letterhead appears only on page 1**. Page 2 retains a clean supporting-basis title, signature, and footer without repeating the logo/contact header; visually validated in the regenerated two-page PDF.
+
+## October 2026 — Claimant Total Loss CCC Valuation Prefill
+- [x] Add a claimant-settlement-only CCC ONE Market Valuation upload in **TL Settlement & Release**. The deterministic parser reads a text-readable CCC PDF and prefills claimant, claim number, loss date, vehicle, VIN, supported market, adjusted ACV, CCC vehicular tax, and salvage/TMU deduction.
+- [x] Treat CCC **Adjusted Vehicle Value** as the settlement ACV and display Prior Damage for review only, preventing a second subtraction. Expose CCC report reference, base value, prior damage, adjusted ACV, tax, CCC total, and the live settlement total so the handler can spot a mismatch before issuing a document.
+- [x] Validate the supplied `ALEMANVAL.pdf` in browser: Jose Aleman / ATL-5683-480561-102835 / GA, $1,337.50 adjusted ACV + $88.28 tax − $1,100.00 salvage = matching $325.78 CCC and settlement total; generate a formatted claimant settlement PDF preview.
