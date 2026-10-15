@@ -987,3 +987,8 @@
 - [x] Add structured scan-safe extraction: embedded PDF text when present and rendered first-page vision fallback for scan-only HCFA/EOB/itemized packets; preserve editable bill lines and immediately run the PIP calculation when lines are found.
 - [x] Add clear extraction status and error feedback rather than silently discarding unreadable uploads.
 - [x] Browser-validate the supplied 61-page scan-only PA packet: extracted 7 editable bill lines, produced review results, and opened a payment-letter PDF preview. Full validation: 332 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — PIP PDF Preview and Formatting Repair
+- [x] Replace the compressed inherited PIP PDF presentation with dedicated neutral templates: a full-width Whip letterhead, clean claim and total summary blocks, readable black/gray EOR/log tables, controlled internal-review notes, separate footer/page-number bands, and correct zero-payment wording.
+- [x] Keep PDF object URLs alive for the entire PIP workspace and restore the same in-app iframe preview pattern used by the established Document Generator, with Open and Download fallbacks for each output.
+- [x] Browser-validate a synthetic PA packet: all four preview payloads are nonempty `application/pdf` files; visually inspect the Payment Letter and Internal EOR in Chromium’s PDF viewer with no header/footer overlap or table clipping. Validation: 334 passed / 1 skipped, TypeScript, production build, and diff check passed.

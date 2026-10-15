@@ -23,4 +23,13 @@ describe("PIP Bill Review documents", () => {
     expect(source).toContain('role="status"');
     expect(source).toContain("reviewPipBills({ state, locality");
   });
+
+  it("keeps previews live and uses a structured neutral document layout", () => {
+    expect(source).toContain("previewUrls.current.forEach");
+    expect(source).toContain("<iframe key={value.url}");
+    expect(source).toContain("INTERNAL REVIEW — DO NOT DISTRIBUTE");
+    expect(source).toContain("No payment is issued with this determination.");
+    expect(source).toContain("TOTAL BILLED");
+    expect(source).toContain("INTERNAL REVIEW — DO NOT DISTRIBUTE");
+  });
 });

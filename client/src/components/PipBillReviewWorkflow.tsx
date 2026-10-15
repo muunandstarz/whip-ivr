@@ -29,7 +29,7 @@ const asNumber = (value: string) => Number(value.replace(/[^0-9.-]/g, "")) || 0;
 
 function PdfOutput({ value, emptyText }: { value?: PdfPreview; emptyText: string }) {
   if (!value) return <p className="text-xs text-muted-foreground">{emptyText}</p>;
-  return <div className="space-y-2"><div className="flex items-center justify-between gap-2"><span className="text-xs font-medium truncate">{value.title}</span><a href={value.url} download={value.filename} className="shrink-0 text-xs underline underline-offset-2">Download</a></div><iframe title={value.title} src={value.url} className="h-[380px] w-full rounded border bg-white" /></div>;
+  return <div className="space-y-2"><div className="flex items-center justify-between gap-2"><span className="text-xs font-medium truncate">{value.title}</span><div className="flex shrink-0 gap-3 text-xs"><a href={value.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">Open</a><a href={value.url} download={value.filename} className="underline underline-offset-2">Download</a></div></div><iframe key={value.url} title={value.title} src={value.url} className="h-[520px] w-full rounded border bg-white" /></div>;
 }
 
 export default function PipBillReviewWorkflow({ addLetterhead, addFooter }: Props) {
@@ -52,6 +52,7 @@ export default function PipBillReviewWorkflow({ addLetterhead, addFooter }: Prop
   const [lines, setLines] = useState<PipBillLine[]>([blankLine()]);
   const [result, setResult] = useState<PipReviewResult | null>(null);
   const [previews, setPreviews] = useState<Partial<Record<PdfKind, PdfPreview>>>({});
+  const previewUrls = useRef(new Set<string>());
 
   const config = PIP_STATE_CONFIG[state];
   const effectiveHandler = useMemo(() => {
@@ -67,7 +68,7 @@ export default function PipBillReviewWorkflow({ addLetterhead, addFooter }: Prop
     setResult(null);
   }, [state]);
   useEffect(() => { if (state === "FL") setPipLimit(String(defaultPipLimit("FL", emcStatus))); }, [emcStatus, state]);
-  useEffect(() => () => Object.values(previews).forEach((preview) => preview && URL.revokeObjectURL(preview.url)), [previews]);
+  useEffect(() => () => previewUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
   const updateLine = (id: string, patch: Partial<PipBillLine>) => { setLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line)); setResult(null); };
   const removeLine = (id: string) => { setLines((current) => current.length === 1 ? [blankLine()] : current.filter((line) => line.id !== id)); setResult(null); };
@@ -140,52 +141,141 @@ export default function PipBillReviewWorkflow({ addLetterhead, addFooter }: Prop
   };
 
   const runReview = () => setResult(reviewPipBills({ state, locality, pipLimit: asNumber(pipLimit), pipUsed: asNumber(pipUsed), dateOfLoss, emcStatus, cobStatus, lines }));
-  const bodyWidth = (doc: jsPDF) => doc.internal.pageSize.getWidth() - 72;
+  const bodyWidth = (doc: jsPDF) => doc.internal.pageSize.getWidth() - 84;
   const metadata = () => ({ claim: claimNumber || "[Claim Number]", member: memberName || "[Member]", dol: dateOfLoss || "[DOL]" });
 
   const drawMeta = (doc: jsPDF, y: number, landscape = false) => {
-    const meta = metadata(); const x = 36;
-    doc.setFont("helvetica", "bold"); doc.setTextColor(35, 35, 35); doc.setFontSize(8);
-    doc.text("Claim:", x, y); doc.text("Member:", x + 185, y); doc.text("Date of loss:", x + 365, y);
-    doc.setFont("helvetica", "normal"); doc.text(meta.claim, x + 36, y); doc.text(meta.member, x + 228, y); doc.text(meta.dol, x + 425, y);
-    if (landscape) { doc.setFont("helvetica", "bold"); doc.text("PIP limit:", x + 560, y); doc.setFont("helvetica", "normal"); doc.text(money(asNumber(pipLimit)), x + 605, y); }
-    return y + 18;
+    const meta = metadata(); const x = 42; const pageW = doc.internal.pageSize.getWidth();
+    const fields = landscape
+      ? [{ label: "Claim number", value: meta.claim }, { label: "Member", value: meta.member }, { label: "Date of loss", value: meta.dol }, { label: "PIP limit", value: money(asNumber(pipLimit)) }]
+      : [{ label: "Claim number", value: meta.claim }, { label: "Member", value: meta.member }, { label: "Date of loss", value: meta.dol }];
+    const fieldW = (pageW - 84) / fields.length;
+    fields.forEach((field, index) => {
+      const left = x + fieldW * index;
+      doc.setFillColor(248, 248, 248); doc.setDrawColor(224, 224, 224); doc.rect(left, y, fieldW, 30, "FD");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(105); doc.text(field.label.toUpperCase(), left + 7, y + 10);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(35); doc.text(String(field.value).slice(0, 40), left + 7, y + 22);
+    });
+    return y + 42;
   };
-  const footerAllPages = (doc: jsPDF) => { const count = doc.getNumberOfPages(); for (let page = 1; page <= count; page++) { doc.setPage(page); addFooter(doc); doc.setFontSize(7); doc.setTextColor(100); doc.text(`Page ${page} of ${count} · ${config.statute}`, doc.internal.pageSize.getWidth() - 36, doc.internal.pageSize.getHeight() - 18, { align: "right" }); } };
+  const footerAllPages = (doc: jsPDF) => { const count = doc.getNumberOfPages(); for (let page = 1; page <= count; page++) { doc.setPage(page); addFooter(doc); doc.setFontSize(7); doc.setTextColor(100); doc.text(`Page ${page} of ${count} · ${config.statute}`, doc.internal.pageSize.getWidth() - 42, doc.internal.pageSize.getHeight() - 32, { align: "right" }); } };
   const createPdf = (kind: PdfKind, provider?: string) => {
     if (!result) return null;
     const landscape = kind === "pip-log";
     const doc = new jsPDF({ unit: "pt", format: "letter", orientation: landscape ? "landscape" : "portrait" });
-    const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight(), margin = 36;
-    let y = addLetterhead(doc);
-    const heading = kind === "payment" ? "PIP PAYMENT DETERMINATION" : kind === "provider-eor" || kind === "internal-eor" ? "EXPLANATION OF REVIEW" : "PIP PAYMENT LOG";
-    doc.setTextColor(25, 25, 25); doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text(heading, margin, y); if (kind === "internal-eor") { doc.setFontSize(8); doc.text("INTERNAL — DO NOT DISTRIBUTE", margin + 190, y); }
-    y += 18; doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(80); doc.text(today(), margin, y); y = drawMeta(doc, y + 17, landscape);
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 42;
+    const heading = kind === "payment" ? "PIP PAYMENT DETERMINATION" : kind === "pip-log" ? "PIP PAYMENT LOG" : "EXPLANATION OF REVIEW";
     const displayLines = provider ? result.lines.filter((line) => (line.provider || "Unknown Provider") === provider) : result.lines;
-    if (kind === "payment") {
-      const billed = displayLines.reduce((sum, line) => sum + line.billed, 0), allowed = displayLines.reduce((sum, line) => sum + line.allowed, 0);
-      doc.setFont("helvetica", "bold"); doc.setTextColor(25); doc.text("To:", margin, y); doc.setFont("helvetica", "normal"); doc.text(provider || "Provider", margin + 24, y); y += 24;
-      const text = `Whip has completed its review of the bills submitted by your office under Personal Injury Protection coverage. ${config.letterClause}\n\nBills reviewed: ${displayLines.length} line item${displayLines.length === 1 ? "" : "s"}\nTotal billed: ${money(billed)}\nTotal allowed: ${money(allowed)}\nTotal reduction: ${money(billed - allowed)}\n\nPayment in the amount of ${money(allowed)} is being processed under separate cover. A line-by-line Explanation of Review accompanies this determination.\n\n${config.paymentInFullClause}\n\nIf you have questions, please contact the assigned claims handler listed below.`;
-      doc.setFontSize(10); doc.setTextColor(40); const body = doc.splitTextToSize(text, bodyWidth(doc)); doc.text(body, margin, y); y += body.length * 13 + 22;
-      doc.setFont("helvetica", "normal"); doc.text("Sincerely,", margin, y); y += 28; doc.setFont("helvetica", "bold"); doc.text(effectiveHandler.name, margin, y); y += 12; doc.setFont("helvetica", "normal"); doc.text(effectiveHandler.title, margin, y); if (effectiveHandler.email) { y += 12; doc.text(effectiveHandler.email, margin, y); }
-    } else {
-      doc.setFillColor(245, 245, 245); doc.rect(margin, y, pageW - margin * 2, 28, "F"); doc.setTextColor(30); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(`Total billed: ${money(result.totalBilled)}`, margin + 8, y + 12); doc.text(`Total allowed: ${money(result.totalAllowed)}`, margin + 190, y + 12); doc.text(`Remaining PIP: ${money(result.pipRemaining)}`, margin + 370, y + 12); y += 40;
-      const columns = landscape ? [{ label: "DOS", x: margin, w: 58 }, { label: "Provider", x: margin + 58, w: 150 }, { label: "CPT", x: margin + 208, w: 45 }, { label: "Units", x: margin + 253, w: 40 }, { label: "Billed", x: margin + 293, w: 70 }, { label: "Paid", x: margin + 363, w: 70 }, { label: "Denied / pend.", x: margin + 433, w: 88 }, { label: "Notes", x: margin + 521, w: pageW - margin - (margin + 521) }] : [{ label: "DOS", x: margin, w: 52 }, { label: "CPT", x: margin + 52, w: 44 }, { label: "Units", x: margin + 96, w: 36 }, { label: "Billed", x: margin + 132, w: 56 }, { label: "Schedule", x: margin + 188, w: 60 }, { label: "Allowed", x: margin + 248, w: 58 }, { label: "Status", x: margin + 306, w: 52 }, { label: "Reason", x: margin + 358, w: pageW - margin - (margin + 358) }];
-      const header = () => { doc.setFillColor(60, 60, 60); doc.rect(margin, y, pageW - margin * 2, 16, "F"); doc.setFont("helvetica", "bold"); doc.setTextColor(255); doc.setFontSize(7); columns.forEach((column) => doc.text(column.label, column.x + 3, y + 11)); y += 16; };
-      const nextPage = () => { if (y <= pageH - 78) return; doc.addPage(); y = addLetterhead(doc) + 18; header(); };
-      header(); doc.setFont("helvetica", "normal");
-      displayLines.forEach((line, index) => { nextPage(); const rowH = landscape ? 24 : 31; if (index % 2 === 0) { doc.setFillColor(249, 249, 249); doc.rect(margin, y, pageW - margin * 2, rowH, "F"); } doc.setTextColor(40); doc.setFontSize(7); if (landscape) { doc.text(line.dos || "—", columns[0]!.x + 3, y + 12); doc.text((line.provider || "—").slice(0, 25), columns[1]!.x + 3, y + 12); doc.text(line.cpt, columns[2]!.x + 3, y + 12); doc.text(String(line.units), columns[3]!.x + 3, y + 12); doc.text(money(line.billed), columns[4]!.x + 3, y + 12); doc.text(money(line.allowed), columns[5]!.x + 3, y + 12); doc.text(money(line.billed - line.allowed), columns[6]!.x + 3, y + 12); doc.text((line.status === "allowed" ? "Paid" : line.status === "partial" ? "Reduced" : "Denied") + " — see EOR", columns[7]!.x + 3, y + 12); } else { doc.text(line.dos || "—", columns[0]!.x + 3, y + 11); doc.setFont("helvetica", "bold"); doc.text(line.cpt, columns[1]!.x + 3, y + 11); doc.setFont("helvetica", "normal"); doc.text(String(line.units), columns[2]!.x + 3, y + 11); doc.text(money(line.billed), columns[3]!.x + 3, y + 11); doc.text(line.scheduleCap === null ? "—" : money(line.scheduleCap), columns[4]!.x + 3, y + 11); doc.text(money(line.allowed), columns[5]!.x + 3, y + 11); doc.text(line.status.toUpperCase(), columns[6]!.x + 3, y + 11); const reason = doc.splitTextToSize(line.reason, columns[7]!.w - 5); doc.text(reason.slice(0, 3), columns[7]!.x + 3, y + 9); } y += rowH; });
-      if (kind === "internal-eor" && result.flags.length) { doc.addPage(); y = addLetterhead(doc); doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(25); doc.text("Internal Review Notes", margin, y); y += 20; result.flags.forEach((flag) => { const titleLines = doc.splitTextToSize(`• ${flag.title}`, bodyWidth(doc)); const detailLines = doc.splitTextToSize(flag.detail, bodyWidth(doc) - 12); if (y + titleLines.length * 11 + detailLines.length * 10 > pageH - 58) { doc.addPage(); y = addLetterhead(doc); } doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(titleLines, margin, y); y += titleLines.length * 11; doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text(detailLines, margin + 10, y); y += detailLines.length * 10 + 10; }); }
-    }
-    footerAllPages(doc); return doc;
-  };
 
+    const startDocument = () => {
+      let y = addLetterhead(doc);
+      doc.setTextColor(25, 25, 25); doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.text(heading, margin, y);
+      if (kind === "internal-eor") {
+        doc.setFontSize(7.5); doc.setTextColor(90); doc.text("INTERNAL REVIEW — DO NOT DISTRIBUTE", pageW - margin, y, { align: "right" });
+      }
+      doc.setDrawColor(185, 185, 185); doc.setLineWidth(0.5); doc.line(margin, y + 9, pageW - margin, y + 9); doc.setLineWidth(0.2);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(80); doc.text(today(), margin, y + 25);
+      return drawMeta(doc, y + 39, landscape);
+    };
+    const drawTotals = (y: number) => {
+      const totalFields = [
+        { label: "TOTAL BILLED", value: money(result.totalBilled) },
+        { label: "TOTAL ALLOWED", value: money(result.totalAllowed) },
+        { label: "PIP REMAINING", value: money(result.pipRemaining) },
+      ];
+      const totalW = (pageW - margin * 2) / totalFields.length;
+      totalFields.forEach((field, index) => {
+        const x = margin + totalW * index;
+        doc.setFillColor(246, 246, 246); doc.setDrawColor(224, 224, 224); doc.rect(x, y, totalW, 32, "FD");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(105); doc.text(field.label, x + 8, y + 11);
+        doc.setFontSize(10); doc.setTextColor(30); doc.text(field.value, x + 8, y + 24);
+      });
+      return y + 45;
+    };
+
+    let y = startDocument();
+    if (kind === "payment") {
+      const billed = displayLines.reduce((sum, line) => sum + line.billed, 0);
+      const allowed = displayLines.reduce((sum, line) => sum + line.allowed, 0);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(40); doc.text("TO", margin, y);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.text(provider || "Provider", margin, y + 16); y += 38;
+      const paymentSentence = allowed > 0
+        ? `Payment of ${money(allowed)} is being processed under separate cover. A line-by-line Explanation of Review accompanies this determination.`
+        : "No payment is issued with this determination. A line-by-line Explanation of Review accompanies this notice.";
+      const paragraphs = [
+        `Whip Claims Management completed its review of the bills submitted by your office under Personal Injury Protection coverage. ${config.letterClause}`,
+        `Bills reviewed: ${displayLines.length} line item${displayLines.length === 1 ? "" : "s"}
+Total billed: ${money(billed)}
+Total allowed: ${money(allowed)}
+Total reduction: ${money(billed - allowed)}`,
+        paymentSentence,
+        config.paymentInFullClause,
+        "For questions about this determination, please contact the assigned claims handler below.",
+      ];
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.setTextColor(40);
+      paragraphs.forEach((paragraph) => {
+        const text = doc.splitTextToSize(paragraph, bodyWidth(doc));
+        doc.text(text, margin, y, { lineHeightFactor: 1.38 });
+        y += text.length * 14.5 + 13;
+      });
+      doc.setDrawColor(205, 205, 205); doc.line(margin, y + 3, margin + 175, y + 3); y += 22;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Sincerely,", margin, y); y += 30;
+      doc.setFont("helvetica", "bold"); doc.text(effectiveHandler.name, margin, y); y += 14;
+      doc.setFont("helvetica", "normal"); doc.text(effectiveHandler.title, margin, y); if (effectiveHandler.email) { y += 14; doc.text(effectiveHandler.email, margin, y); }
+    } else if (landscape) {
+      y = drawTotals(y);
+      const columns = [
+        { label: "DOS", x: margin, w: 66 }, { label: "PROVIDER", x: margin + 66, w: 135 }, { label: "CPT / HCPCS", x: margin + 201, w: 74 }, { label: "UNITS", x: margin + 275, w: 43 }, { label: "BILLED", x: margin + 318, w: 65 }, { label: "PAID", x: margin + 383, w: 65 }, { label: "NOT PAID", x: margin + 448, w: 75 }, { label: "NOTES", x: margin + 523, w: pageW - margin - (margin + 523) },
+      ];
+      const drawHeader = () => { doc.setFillColor(48, 48, 48); doc.rect(margin, y, pageW - margin * 2, 18, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(255); columns.forEach((column) => doc.text(column.label, column.x + 5, y + 12)); y += 18; };
+      const pageBreak = () => { if (y < pageH - 70) return; doc.addPage(); y = startDocument(); y = drawTotals(y); drawHeader(); };
+      drawHeader();
+      displayLines.forEach((line, index) => {
+        pageBreak(); const rowH = 27;
+        if (index % 2 === 0) { doc.setFillColor(249, 249, 249); doc.rect(margin, y, pageW - margin * 2, rowH, "F"); }
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.4); doc.setTextColor(42);
+        const cells = [line.dos || "—", (line.provider || "—").slice(0, 25), line.cpt || "—", String(line.units), money(line.billed), money(line.allowed), money(line.billed - line.allowed), line.status === "allowed" ? "Paid — see EOR" : line.status === "partial" ? "Reduced — see EOR" : "Denied — see EOR"];
+        columns.forEach((column, columnIndex) => doc.text(cells[columnIndex]!, column.x + 5, y + 16)); y += rowH;
+      });
+    } else {
+      y = drawTotals(y);
+      const columns = [
+        { label: "DOS", x: margin, w: 68 }, { label: "CPT / HCPCS", x: margin + 68, w: 82 }, { label: "BILLED", x: margin + 150, w: 63 }, { label: "ALLOWED", x: margin + 213, w: 66 }, { label: "STATUS", x: margin + 279, w: 65 }, { label: "REASON", x: margin + 344, w: pageW - margin - (margin + 344) },
+      ];
+      const drawHeader = () => { doc.setFillColor(48, 48, 48); doc.rect(margin, y, pageW - margin * 2, 18, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(255); columns.forEach((column) => doc.text(column.label, column.x + 5, y + 12)); y += 18; };
+      const pageBreak = (rowH: number) => { if (y + rowH < pageH - 62) return; doc.addPage(); y = startDocument(); y = drawTotals(y); drawHeader(); };
+      drawHeader();
+      displayLines.forEach((line, index) => {
+        const reasonLines = doc.splitTextToSize(line.reason, columns[5]!.w - 10).slice(0, 3);
+        const rowH = Math.max(29, reasonLines.length * 8.5 + 12); pageBreak(rowH);
+        if (index % 2 === 0) { doc.setFillColor(249, 249, 249); doc.rect(margin, y, pageW - margin * 2, rowH, "F"); }
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(42);
+        doc.text(line.dos || "—", columns[0]!.x + 5, y + 15); doc.setFont("helvetica", "bold"); doc.text(line.cpt || "—", columns[1]!.x + 5, y + 15); doc.setFont("helvetica", "normal");
+        doc.text(money(line.billed), columns[2]!.x + 5, y + 15); doc.text(money(line.allowed), columns[3]!.x + 5, y + 15); doc.setFont("helvetica", "bold"); doc.text(line.status.toUpperCase(), columns[4]!.x + 5, y + 15); doc.setFont("helvetica", "normal"); doc.text(reasonLines, columns[5]!.x + 5, y + 12, { lineHeightFactor: 1.2 }); y += rowH;
+      });
+      if (kind === "internal-eor" && result.flags.length) {
+        const addNotesHeading = () => { doc.setDrawColor(185, 185, 185); doc.line(margin, y + 7, pageW - margin, y + 7); y += 24; doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(30); doc.text("Internal review notes", margin, y); y += 17; };
+        if (y + 70 > pageH - 62) { doc.addPage(); y = startDocument(); } addNotesHeading();
+        result.flags.forEach((flag) => {
+          const detail = doc.splitTextToSize(flag.detail, bodyWidth(doc) - 14);
+          const noteH = detail.length * 9 + 24;
+          if (y + noteH > pageH - 62) { doc.addPage(); y = startDocument(); addNotesHeading(); }
+          doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.text(`• ${flag.title}`, margin, y); y += 12;
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(72); doc.text(detail, margin + 12, y, { lineHeightFactor: 1.25 }); y += detail.length * 9 + 10;
+        });
+      }
+    }
+    footerAllPages(doc);
+    return doc;
+  };
   const build = (kind: PdfKind, download = false) => {
     if (!result) return;
     const firstProvider = result.providerSummaries[0]?.provider;
     if (kind === "payment") {
-      result.providerSummaries.forEach((summary, index) => { const doc = createPdf("payment", summary.provider); if (!doc) return; const filename = `PIP_Payment_Letter_${safeName(claimNumber)}_${safeName(summary.provider)}.pdf`; if (download) doc.save(filename); if (index === 0) { const url = URL.createObjectURL(doc.output("blob")); setPreviews((current) => ({ ...current, payment: { title: `Payment Letter — ${summary.provider}`, filename, url } })); } });
-    } else { const doc = createPdf(kind); if (!doc) return; const filename = `${kind === "provider-eor" ? "Provider_EOR" : kind === "internal-eor" ? "Internal_EOR" : "PIP_Log"}_${safeName(claimNumber)}.pdf`; if (download) doc.save(filename); const url = URL.createObjectURL(doc.output("blob")); setPreviews((current) => ({ ...current, [kind]: { title: kind === "provider-eor" ? "Provider EOR" : kind === "internal-eor" ? "Internal EOR" : "Attorney PIP Log", filename, url } })); }
+      result.providerSummaries.forEach((summary, index) => { const doc = createPdf("payment", summary.provider); if (!doc) return; const filename = `PIP_Payment_Letter_${safeName(claimNumber)}_${safeName(summary.provider)}.pdf`; if (download) doc.save(filename); if (index === 0) { const url = URL.createObjectURL(doc.output("blob")); previewUrls.current.add(url); setPreviews((current) => ({ ...current, payment: { title: `Payment Letter — ${summary.provider}`, filename, url } })); } });
+    } else { const doc = createPdf(kind); if (!doc) return; const filename = `${kind === "provider-eor" ? "Provider_EOR" : kind === "internal-eor" ? "Internal_EOR" : "PIP_Log"}_${safeName(claimNumber)}.pdf`; if (download) doc.save(filename); const url = URL.createObjectURL(doc.output("blob")); previewUrls.current.add(url); setPreviews((current) => ({ ...current, [kind]: { title: kind === "provider-eor" ? "Provider EOR" : kind === "internal-eor" ? "Internal EOR" : "Attorney PIP Log", filename, url } })); }
   };
   const generateAll = () => { (["payment", "provider-eor", "internal-eor", "pip-log"] as PdfKind[]).forEach((kind) => build(kind, true)); };
 

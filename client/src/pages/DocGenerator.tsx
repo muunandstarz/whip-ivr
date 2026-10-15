@@ -297,7 +297,6 @@ function addWhipLetterhead(doc: jsPDF, _title?: string, _subtitle?: string) {
   doc.setTextColor(80, 80, 80);
   doc.text("P.O. Box 10622  Rockville, MD 20849-0622", W - 14, 17, { align: "right" });
   doc.text("(855) 906-5949  |  claims@drivewhip.com", W - 14, 22, { align: "right" });
-  // Horizontal rule below header
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.5);
   doc.line(14, 30, W - 14, 30);
@@ -321,6 +320,29 @@ function addLetterFooter(doc: jsPDF) {
     H - 7,
     { align: "center" }
   );
+}
+
+function addPipLetterhead(doc: jsPDF) {
+  const W = doc.internal.pageSize.getWidth();
+  try {
+    doc.addImage("data:image/png;base64," + WHIP_LOGO_B64, "PNG", 42, 16, 38, 25);
+  } catch {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...WHIP_ORANGE); doc.text("whip", 42, 31);
+  }
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(20, 20, 20);
+  doc.text("WHIP CLAIMS MANAGEMENT", W - 42, 22, { align: "right" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(80, 80, 80);
+  doc.text("P.O. Box 10622 · Rockville, MD 20850", W - 42, 34, { align: "right" });
+  doc.text("(855) 906-5949 · claims@drivewhip.com", W - 42, 45, { align: "right" });
+  doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.5); doc.line(42, 58, W - 42, 58); doc.setLineWidth(0.2);
+  return 76;
+}
+
+function addPipLetterFooter(doc: jsPDF) {
+  const W = doc.internal.pageSize.getWidth(); const H = doc.internal.pageSize.getHeight();
+  doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.4); doc.line(42, H - 26, W - 42, H - 26); doc.setLineWidth(0.2);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 100, 100);
+  doc.text("Whip Claims Management  |  P.O. Box 10622  |  Rockville, MD 20850  |  (855) 906-5949", W / 2, H - 15, { align: "center" });
 }
 const PD_SOL_YEARS: Record<string, number> = {
   AL: 2, AK: 2, AZ: 2, AR: 3, CA: 3, CO: 3, CT: 2, DE: 2, DC: 3, FL: 4,
@@ -5470,7 +5492,7 @@ function MedicalReviewWorkspace() {
         <Button size="sm" variant={workspace === "demand" ? "default" : "outline"} onClick={() => setWorkspace("demand")}>Medical Demand Review</Button>
         <p className="ml-1 text-xs text-muted-foreground">Switching workspaces does not remove the broader medical-record and demand analysis tools.</p>
       </div>
-      {workspace === "pip" ? <PipBillReviewWorkflow addLetterhead={addWhipLetterhead} addFooter={addLetterFooter} /> : <MedicalBillReviewTab />}
+      {workspace === "pip" ? <PipBillReviewWorkflow addLetterhead={addPipLetterhead} addFooter={addPipLetterFooter} /> : <MedicalBillReviewTab />}
     </div>
   );
 }
