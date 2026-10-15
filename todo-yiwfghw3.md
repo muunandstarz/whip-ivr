@@ -997,3 +997,9 @@
 - [x] Add an explicit **PIP exhaustion letter** to PIP Bill Review. It is available for preview/download after a recalculated review reaches a $0.00 remaining PIP balance and is included in Generate All when exhausted.
 - [x] Exhaustion notices show the applicable PIP limit, prior payments, payment in the current review, total benefits applied, $0.00 remaining benefit, state-aware neutral explanatory wording, and the effective handler signature.
 - [x] Create five synthetic samples (payment letter, provider EOR, internal EOR, attorney log, and exhaustion notice); visually inspect the exhaustion notice and retain all samples as a review ZIP.
+
+## October 2026 — Loss of Use Utilization Update
+- [x] Import `UtilizationReport_9-30-26.xlsx` into the LOU runtime dataset: 204 market-month entries across 22 report months, through September 30, 2026.
+- [x] Fix the standalone LOU and Subro-support schedules to use the workbook’s reported Occupancy/Utilization value rather than recomputing from incompatible columns. This prevents the prior impossible 10,000% rates.
+- [x] Preserve source counts as **Available Fleet** and **Rented**, add the report month/source note (including an explicit latest-available-report label for future dates), and remove unsupported blanket claims about historical utilization ranges.
+- [x] Correct the standalone LOU PDF total-box contrast so the claim amount remains readable. Browser/PDF validation: a synthetic October 2026 DC example renders 749 Available Fleet, 739 Rented, 98.7% reported utilization, and a visible $150.00 total.

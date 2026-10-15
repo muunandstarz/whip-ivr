@@ -1,15 +1,15 @@
 {
   "markets": {
-    "RCK": "Washington DC",
+    "ATL": "Atlanta",
+    "BOS": "Boston",
+    "CHI": "Chicago",
+    "DAL": "Dallas",
     "GB": "Baltimore",
     "MIA": "Miami",
-    "ATL": "Atlanta",
-    "CHI": "Chicago",
     "ORL": "Orlando",
     "PHL": "Philadelphia",
-    "BOS": "Boston",
-    "RVA": "Richmond",
-    "DAL": "Dallas"
+    "RCK": "Washington DC",
+    "RVA": "Richmond"
   },
   "monthly_data": {
     "2024-12-31": {
@@ -21,17 +21,33 @@
       "rented": 1345,
       "total_available_fleet": 1473,
       "market_utilization": 91.3,
-      "total_owned_fleet": 1813,
-      "true_utilization": 74.2,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 47,
-          "rented": 577,
-          "total": 624,
-          "utilization": 92.5
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 35,
+          "rented": 140,
+          "total": 175,
+          "utilization": 80.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 0,
+          "rented": 0,
+          "total": 0,
+          "utilization": 0.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 2,
+          "rented": 0,
+          "total": 2,
+          "utilization": 0.0
         },
         {
           "code": "GB",
@@ -52,24 +68,6 @@
           "utilization": 91.4
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 35,
-          "rented": 140,
-          "total": 175,
-          "utilization": 80.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 2,
-          "rented": 0,
-          "total": 2,
-          "utilization": 0.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -88,13 +86,13 @@
           "utilization": 80.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 0,
-          "rented": 0,
-          "total": 0,
-          "utilization": 0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 47,
+          "rented": 577,
+          "total": 624,
+          "utilization": 92.5
         },
         {
           "code": "RVA",
@@ -116,17 +114,33 @@
       "rented": 1432,
       "total_available_fleet": 1571,
       "market_utilization": 91.2,
-      "total_owned_fleet": 1876,
-      "true_utilization": 76.3,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 27,
-          "rented": 615,
-          "total": 642,
-          "utilization": 95.8
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 45,
+          "rented": 160,
+          "total": 205,
+          "utilization": 78.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 0,
+          "rented": 0,
+          "total": 0,
+          "utilization": 0.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 20,
+          "rented": 0,
+          "total": 20,
+          "utilization": 0.0
         },
         {
           "code": "GB",
@@ -147,24 +161,6 @@
           "utilization": 92.4
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 45,
-          "rented": 160,
-          "total": 205,
-          "utilization": 78.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 20,
-          "rented": 0,
-          "total": 20,
-          "utilization": 0.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -183,13 +179,13 @@
           "utilization": 84.2
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 0,
-          "rented": 0,
-          "total": 0,
-          "utilization": 0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 27,
+          "rented": 615,
+          "total": 642,
+          "utilization": 95.8
         },
         {
           "code": "RVA",
@@ -211,17 +207,33 @@
       "rented": 1480,
       "total_available_fleet": 1677,
       "market_utilization": 88.3,
-      "total_owned_fleet": 2027,
-      "true_utilization": 73.0,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 45,
-          "rented": 614,
-          "total": 659,
-          "utilization": 93.2
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 47,
+          "rented": 182,
+          "total": 229,
+          "utilization": 79.5
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 0,
+          "rented": 0,
+          "total": 0,
+          "utilization": 0.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 35,
+          "rented": 9,
+          "total": 44,
+          "utilization": 20.5
         },
         {
           "code": "GB",
@@ -242,24 +254,6 @@
           "utilization": 91.5
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 47,
-          "rented": 182,
-          "total": 229,
-          "utilization": 79.5
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 35,
-          "rented": 9,
-          "total": 44,
-          "utilization": 20.5
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -278,13 +272,13 @@
           "utilization": 75.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 0,
-          "rented": 0,
-          "total": 0,
-          "utilization": 0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 45,
+          "rented": 614,
+          "total": 659,
+          "utilization": 93.2
         },
         {
           "code": "RVA",
@@ -306,17 +300,33 @@
       "rented": 1554,
       "total_available_fleet": 1784,
       "market_utilization": 87.1,
-      "total_owned_fleet": 2027,
-      "true_utilization": 76.7,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 55,
-          "rented": 598,
-          "total": 653,
-          "utilization": 91.6
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 47,
+          "rented": 228,
+          "total": 275,
+          "utilization": 82.9
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 0,
+          "rented": 0,
+          "total": 0,
+          "utilization": 0.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 36,
+          "rented": 32,
+          "total": 68,
+          "utilization": 47.1
         },
         {
           "code": "GB",
@@ -337,24 +347,6 @@
           "utilization": 90.0
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 47,
-          "rented": 228,
-          "total": 275,
-          "utilization": 82.9
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 36,
-          "rented": 32,
-          "total": 68,
-          "utilization": 47.1
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -373,13 +365,13 @@
           "utilization": 80.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 0,
-          "rented": 0,
-          "total": 0,
-          "utilization": 0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 55,
+          "rented": 598,
+          "total": 653,
+          "utilization": 91.6
         },
         {
           "code": "RVA",
@@ -401,17 +393,33 @@
       "rented": 1568,
       "total_available_fleet": 1884,
       "market_utilization": 83.2,
-      "total_owned_fleet": 2149,
-      "true_utilization": 73.0,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 67,
-          "rented": 569,
-          "total": 636,
-          "utilization": 89.5
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 90,
+          "rented": 265,
+          "total": 355,
+          "utilization": 74.6
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 0,
+          "rented": 0,
+          "total": 0,
+          "utilization": 0.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 52,
+          "rented": 45,
+          "total": 97,
+          "utilization": 46.4
         },
         {
           "code": "GB",
@@ -432,24 +440,6 @@
           "utilization": 89.1
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 90,
-          "rented": 265,
-          "total": 355,
-          "utilization": 74.6
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 52,
-          "rented": 45,
-          "total": 97,
-          "utilization": 46.4
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -468,13 +458,13 @@
           "utilization": 90.7
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 0,
-          "rented": 0,
-          "total": 0,
-          "utilization": 0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 67,
+          "rented": 569,
+          "total": 636,
+          "utilization": 89.5
         },
         {
           "code": "RVA",
@@ -496,17 +486,33 @@
       "rented": 1635,
       "total_available_fleet": 1949,
       "market_utilization": 83.9,
-      "total_owned_fleet": 2164,
-      "true_utilization": 75.6,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 72,
-          "rented": 547,
-          "total": 619,
-          "utilization": 88.4
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 87,
+          "rented": 303,
+          "total": 390,
+          "utilization": 77.7
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 6,
+          "rented": 0,
+          "total": 6,
+          "utilization": 0.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 51,
+          "rented": 85,
+          "total": 136,
+          "utilization": 62.5
         },
         {
           "code": "GB",
@@ -527,24 +533,6 @@
           "utilization": 89.3
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 87,
-          "rented": 303,
-          "total": 390,
-          "utilization": 77.7
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 51,
-          "rented": 85,
-          "total": 136,
-          "utilization": 62.5
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -563,13 +551,13 @@
           "utilization": 97.9
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 6,
-          "rented": 0,
-          "total": 6,
-          "utilization": 0.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 72,
+          "rented": 547,
+          "total": 619,
+          "utilization": 88.4
         },
         {
           "code": "RVA",
@@ -591,17 +579,33 @@
       "rented": 1869,
       "total_available_fleet": 2036,
       "market_utilization": 91.8,
-      "total_owned_fleet": 2356,
-      "true_utilization": 79.3,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 45,
-          "rented": 588,
-          "total": 633,
-          "utilization": 92.9
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 25,
+          "rented": 386,
+          "total": 411,
+          "utilization": 93.9
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 6,
+          "rented": 12,
+          "total": 18,
+          "utilization": 66.7
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 34,
+          "rented": 136,
+          "total": 170,
+          "utilization": 80.0
         },
         {
           "code": "GB",
@@ -622,24 +626,6 @@
           "utilization": 89.7
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 25,
-          "rented": 386,
-          "total": 411,
-          "utilization": 93.9
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 34,
-          "rented": 136,
-          "total": 170,
-          "utilization": 80.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -658,13 +644,13 @@
           "utilization": 90.7
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 6,
-          "rented": 12,
-          "total": 18,
-          "utilization": 66.7
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 45,
+          "rented": 588,
+          "total": 633,
+          "utilization": 92.9
         },
         {
           "code": "RVA",
@@ -686,17 +672,33 @@
       "rented": 1977,
       "total_available_fleet": 2178,
       "market_utilization": 90.8,
-      "total_owned_fleet": 2485,
-      "true_utilization": 79.6,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 44,
-          "rented": 606,
-          "total": 650,
-          "utilization": 93.2
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 71,
+          "rented": 417,
+          "total": 488,
+          "utilization": 85.5
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 5,
+          "rented": 23,
+          "total": 28,
+          "utilization": 82.1
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 37,
+          "rented": 181,
+          "total": 218,
+          "utilization": 83.0
         },
         {
           "code": "GB",
@@ -717,24 +719,6 @@
           "utilization": 91.8
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 71,
-          "rented": 417,
-          "total": 488,
-          "utilization": 85.5
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 37,
-          "rented": 181,
-          "total": 218,
-          "utilization": 83.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -753,13 +737,13 @@
           "utilization": 92.6
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 5,
-          "rented": 23,
-          "total": 28,
-          "utilization": 82.1
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 44,
+          "rented": 606,
+          "total": 650,
+          "utilization": 93.2
         },
         {
           "code": "RVA",
@@ -781,17 +765,33 @@
       "rented": 2086,
       "total_available_fleet": 2251,
       "market_utilization": 92.7,
-      "total_owned_fleet": 2602,
-      "true_utilization": 80.2,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 37,
-          "rented": 616,
-          "total": 653,
-          "utilization": 94.3
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 45,
+          "rented": 455,
+          "total": 500,
+          "utilization": 91.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 8,
+          "rented": 25,
+          "total": 33,
+          "utilization": 75.8
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 34,
+          "rented": 232,
+          "total": 266,
+          "utilization": 87.2
         },
         {
           "code": "GB",
@@ -812,24 +812,6 @@
           "utilization": 94.1
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 45,
-          "rented": 455,
-          "total": 500,
-          "utilization": 91.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 34,
-          "rented": 232,
-          "total": 266,
-          "utilization": 87.2
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -848,13 +830,13 @@
           "utilization": 93.3
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 8,
-          "rented": 25,
-          "total": 33,
-          "utilization": 75.8
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 37,
+          "rented": 616,
+          "total": 653,
+          "utilization": 94.3
         },
         {
           "code": "RVA",
@@ -876,17 +858,33 @@
       "rented": 2179,
       "total_available_fleet": 2445,
       "market_utilization": 89.1,
-      "total_owned_fleet": 2834,
-      "true_utilization": 76.9,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 45,
-          "rented": 611,
-          "total": 656,
-          "utilization": 93.1
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 80,
+          "rented": 490,
+          "total": 570,
+          "utilization": 86.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 9,
+          "rented": 45,
+          "total": 54,
+          "utilization": 83.3
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 61,
+          "rented": 259,
+          "total": 320,
+          "utilization": 80.9
         },
         {
           "code": "GB",
@@ -907,24 +905,6 @@
           "utilization": 89.7
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 80,
-          "rented": 490,
-          "total": 570,
-          "utilization": 86.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 61,
-          "rented": 259,
-          "total": 320,
-          "utilization": 80.9
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -943,13 +923,13 @@
           "utilization": 81.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 9,
-          "rented": 45,
-          "total": 54,
-          "utilization": 83.3
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 45,
+          "rented": 611,
+          "total": 656,
+          "utilization": 93.1
         },
         {
           "code": "RVA",
@@ -971,17 +951,33 @@
       "rented": 2399,
       "total_available_fleet": 2656,
       "market_utilization": 90.3,
-      "total_owned_fleet": 2932,
-      "true_utilization": 81.8,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
           "available": 64,
-          "rented": 634,
-          "total": 698,
-          "utilization": 90.8
+          "rented": 559,
+          "total": 623,
+          "utilization": 89.7
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 11,
+          "rented": 62,
+          "total": 73,
+          "utilization": 84.9
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 58,
+          "rented": 303,
+          "total": 361,
+          "utilization": 83.9
         },
         {
           "code": "GB",
@@ -1002,24 +998,6 @@
           "utilization": 88.9
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 64,
-          "rented": 559,
-          "total": 623,
-          "utilization": 89.7
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 58,
-          "rented": 303,
-          "total": 361,
-          "utilization": 83.9
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1038,13 +1016,13 @@
           "utilization": 84.7
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 11,
-          "rented": 62,
-          "total": 73,
-          "utilization": 84.9
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 64,
+          "rented": 634,
+          "total": 698,
+          "utilization": 90.8
         },
         {
           "code": "RVA",
@@ -1066,17 +1044,33 @@
       "rented": 2474,
       "total_available_fleet": 2700,
       "market_utilization": 91.6,
-      "total_owned_fleet": 2961,
-      "true_utilization": 83.6,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 54,
-          "rented": 636,
-          "total": 690,
-          "utilization": 92.2
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 66,
+          "rented": 574,
+          "total": 640,
+          "utilization": 89.7
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 10,
+          "rented": 81,
+          "total": 91,
+          "utilization": 89.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 37,
+          "rented": 323,
+          "total": 360,
+          "utilization": 89.7
         },
         {
           "code": "GB",
@@ -1097,24 +1091,6 @@
           "utilization": 94.9
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 66,
-          "rented": 574,
-          "total": 640,
-          "utilization": 89.7
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 37,
-          "rented": 323,
-          "total": 360,
-          "utilization": 89.7
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1133,13 +1109,13 @@
           "utilization": 94.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 10,
-          "rented": 81,
-          "total": 91,
-          "utilization": 89.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 54,
+          "rented": 636,
+          "total": 690,
+          "utilization": 92.2
         },
         {
           "code": "RVA",
@@ -1161,17 +1137,33 @@
       "rented": 2577,
       "total_available_fleet": 2753,
       "market_utilization": 93.6,
-      "total_owned_fleet": 3036,
-      "true_utilization": 84.9,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 48,
-          "rented": 664,
-          "total": 712,
-          "utilization": 93.3
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 41,
+          "rented": 586,
+          "total": 627,
+          "utilization": 93.5
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 1,
+          "rented": 86,
+          "total": 87,
+          "utilization": 98.9
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 32,
+          "rented": 335,
+          "total": 367,
+          "utilization": 91.3
         },
         {
           "code": "GB",
@@ -1192,24 +1184,6 @@
           "utilization": 95.6
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 41,
-          "rented": 586,
-          "total": 627,
-          "utilization": 93.5
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 32,
-          "rented": 335,
-          "total": 367,
-          "utilization": 91.3
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1228,13 +1202,13 @@
           "utilization": 94.4
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 1,
-          "rented": 86,
-          "total": 87,
-          "utilization": 98.9
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 48,
+          "rented": 664,
+          "total": 712,
+          "utilization": 93.3
         },
         {
           "code": "RVA",
@@ -1255,18 +1229,34 @@
       "available_fleet": 140,
       "rented": 2569,
       "total_available_fleet": 2709,
-      "market_utilization": 95.0,
-      "total_owned_fleet": 3066,
-      "true_utilization": 83.8,
+      "market_utilization": 94.8,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 35,
-          "rented": 654,
-          "total": 689,
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 29,
+          "rented": 575,
+          "total": 604,
           "utilization": 95.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 3,
+          "rented": 87,
+          "total": 90,
+          "utilization": 97.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 35,
+          "rented": 338,
+          "total": 373,
+          "utilization": 91.0
         },
         {
           "code": "GB",
@@ -1287,24 +1277,6 @@
           "utilization": 97.0
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 29,
-          "rented": 575,
-          "total": 604,
-          "utilization": 95.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 35,
-          "rented": 338,
-          "total": 373,
-          "utilization": 91.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1323,13 +1295,13 @@
           "utilization": 93.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 3,
-          "rented": 87,
-          "total": 90,
-          "utilization": 97.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 35,
+          "rented": 654,
+          "total": 689,
+          "utilization": 95.0
         },
         {
           "code": "RVA",
@@ -1350,18 +1322,34 @@
       "available_fleet": 77,
       "rented": 2655,
       "total_available_fleet": 2732,
-      "market_utilization": 97.0,
-      "total_owned_fleet": 3083,
-      "true_utilization": 86.1,
+      "market_utilization": 97.2,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 12,
-          "rented": 691,
-          "total": 703,
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 21,
+          "rented": 577,
+          "total": 598,
+          "utilization": 96.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 2,
+          "rented": 104,
+          "total": 106,
           "utilization": 98.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 22,
+          "rented": 362,
+          "total": 384,
+          "utilization": 94.0
         },
         {
           "code": "GB",
@@ -1382,24 +1370,6 @@
           "utilization": 93.0
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 21,
-          "rented": 577,
-          "total": 598,
-          "utilization": 96.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 22,
-          "rented": 362,
-          "total": 384,
-          "utilization": 94.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1418,12 +1388,12 @@
           "utilization": 100.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 2,
-          "rented": 104,
-          "total": 106,
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 12,
+          "rented": 691,
+          "total": 703,
           "utilization": 98.0
         },
         {
@@ -1445,18 +1415,34 @@
       "available_fleet": 182,
       "rented": 2729,
       "total_available_fleet": 2911,
-      "market_utilization": 94.0,
-      "total_owned_fleet": 3254,
-      "true_utilization": 83.9,
+      "market_utilization": 93.7,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 21,
-          "rented": 706,
-          "total": 727,
-          "utilization": 97.0
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 33,
+          "rented": 605,
+          "total": 638,
+          "utilization": 95.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 7,
+          "rented": 102,
+          "total": 109,
+          "utilization": 94.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 63,
+          "rented": 368,
+          "total": 431,
+          "utilization": 85.0
         },
         {
           "code": "GB",
@@ -1477,24 +1463,6 @@
           "utilization": 93.0
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 33,
-          "rented": 605,
-          "total": 638,
-          "utilization": 95.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 63,
-          "rented": 368,
-          "total": 431,
-          "utilization": 85.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1513,13 +1481,13 @@
           "utilization": 84.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 7,
-          "rented": 102,
-          "total": 109,
-          "utilization": 94.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 21,
+          "rented": 706,
+          "total": 727,
+          "utilization": 97.0
         },
         {
           "code": "RVA",
@@ -1541,17 +1509,42 @@
       "rented": 2757,
       "total_available_fleet": 2961,
       "market_utilization": 93.1,
-      "total_owned_fleet": 3279,
-      "true_utilization": 84.1,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 21,
-          "rented": 715,
-          "total": 736,
-          "utilization": 97.0
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 43,
+          "rented": 608,
+          "total": 651,
+          "utilization": 93.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 2,
+          "rented": 111,
+          "total": 113,
+          "utilization": 98.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 51,
+          "rented": 377,
+          "total": 428,
+          "utilization": 88.0
+        },
+        {
+          "code": "DAL",
+          "name": "Dallas",
+          "period": "DALLAS",
+          "available": 4,
+          "rented": 3,
+          "total": 7,
+          "utilization": 42.9
         },
         {
           "code": "GB",
@@ -1572,24 +1565,6 @@
           "utilization": 93.0
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 43,
-          "rented": 608,
-          "total": 651,
-          "utilization": 93.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 51,
-          "rented": 377,
-          "total": 428,
-          "utilization": 88.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1608,13 +1583,13 @@
           "utilization": 92.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 2,
-          "rented": 111,
-          "total": 113,
-          "utilization": 98.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 21,
+          "rented": 715,
+          "total": 736,
+          "utilization": 97.0
         },
         {
           "code": "RVA",
@@ -1624,15 +1599,6 @@
           "rented": 21,
           "total": 23,
           "utilization": 91.0
-        },
-        {
-          "code": "DAL",
-          "name": "Dallas",
-          "period": "DALLAS",
-          "available": 4,
-          "rented": 3,
-          "total": 7,
-          "utilization": 42.9
         }
       ]
     },
@@ -1645,17 +1611,42 @@
       "rented": 2798,
       "total_available_fleet": 2924,
       "market_utilization": 95.7,
-      "total_owned_fleet": 3245,
-      "true_utilization": 86.2,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 19,
-          "rented": 724,
-          "total": 743,
-          "utilization": 97.0
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 27,
+          "rented": 604,
+          "total": 631,
+          "utilization": 96.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 1,
+          "rented": 118,
+          "total": 119,
+          "utilization": 99.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 32,
+          "rented": 387,
+          "total": 419,
+          "utilization": 92.0
+        },
+        {
+          "code": "DAL",
+          "name": "Dallas",
+          "period": "DALLAS",
+          "available": 10,
+          "rented": 8,
+          "total": 18,
+          "utilization": 44.4
         },
         {
           "code": "GB",
@@ -1676,24 +1667,6 @@
           "utilization": 93.0
         },
         {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 27,
-          "rented": 604,
-          "total": 631,
-          "utilization": 96.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 32,
-          "rented": 387,
-          "total": 419,
-          "utilization": 92.0
-        },
-        {
           "code": "ORL",
           "name": "Orlando",
           "period": "ORLANDO",
@@ -1712,13 +1685,13 @@
           "utilization": 89.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 1,
-          "rented": 118,
-          "total": 119,
-          "utilization": 99.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 19,
+          "rented": 724,
+          "total": 743,
+          "utilization": 97.0
         },
         {
           "code": "RVA",
@@ -1728,15 +1701,6 @@
           "rented": 22,
           "total": 22,
           "utilization": 100.0
-        },
-        {
-          "code": "DAL",
-          "name": "Dallas",
-          "period": "DALLAS",
-          "available": 10,
-          "rented": 8,
-          "total": 18,
-          "utilization": 44.4
         }
       ]
     },
@@ -1749,17 +1713,42 @@
       "rented": 2874,
       "total_available_fleet": 2942,
       "market_utilization": 97.7,
-      "total_owned_fleet": 3286,
-      "true_utilization": 87.5,
       "markets": [
         {
-          "code": "RCK",
-          "name": "Washington DC",
-          "period": "ROCKVILLE",
-          "available": 18,
-          "rented": 749,
-          "total": 767,
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 10,
+          "rented": 619,
+          "total": 629,
           "utilization": 98.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 1,
+          "rented": 130,
+          "total": 131,
+          "utilization": 99.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 12,
+          "rented": 405,
+          "total": 417,
+          "utilization": 97.0
+        },
+        {
+          "code": "DAL",
+          "name": "Dallas",
+          "period": "DALLAS",
+          "available": 7,
+          "rented": 14,
+          "total": 21,
+          "utilization": 66.7
         },
         {
           "code": "GB",
@@ -1777,24 +1766,6 @@
           "available": 5,
           "rented": 153,
           "total": 158,
-          "utilization": 97.0
-        },
-        {
-          "code": "ATL",
-          "name": "Atlanta",
-          "period": "ATL",
-          "available": 10,
-          "rented": 619,
-          "total": 629,
-          "utilization": 98.0
-        },
-        {
-          "code": "CHI",
-          "name": "Chicago",
-          "period": "CHICAGO",
-          "available": 12,
-          "rented": 405,
-          "total": 417,
           "utilization": 97.0
         },
         {
@@ -1816,13 +1787,13 @@
           "utilization": 100.0
         },
         {
-          "code": "BOS",
-          "name": "Boston",
-          "period": "BOSTON",
-          "available": 1,
-          "rented": 130,
-          "total": 131,
-          "utilization": 99.0
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 18,
+          "rented": 749,
+          "total": 767,
+          "utilization": 98.0
         },
         {
           "code": "RVA",
@@ -1832,23 +1803,321 @@
           "rented": 19,
           "total": 20,
           "utilization": 95.0
+        }
+      ]
+    },
+    "2026-07-31": {
+      "date": "2026-07-31",
+      "month": "July 2026",
+      "year": 2026,
+      "month_num": 7,
+      "available_fleet": 86,
+      "rented": 2885,
+      "total_available_fleet": 2971,
+      "market_utilization": 97.1,
+      "markets": [
+        {
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 5,
+          "rented": 594,
+          "total": 599,
+          "utilization": 99.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 2,
+          "rented": 125,
+          "total": 127,
+          "utilization": 98.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 35,
+          "rented": 403,
+          "total": 438,
+          "utilization": 92.0
         },
         {
           "code": "DAL",
           "name": "Dallas",
           "period": "DALLAS",
-          "available": 7,
-          "rented": 14,
-          "total": 21,
-          "utilization": 66.7
+          "available": 3,
+          "rented": 20,
+          "total": 23,
+          "utilization": 87.0
+        },
+        {
+          "code": "GB",
+          "name": "Baltimore",
+          "period": "BWI",
+          "available": 4,
+          "rented": 705,
+          "total": 709,
+          "utilization": 99.0
+        },
+        {
+          "code": "MIA",
+          "name": "Miami",
+          "period": "MIAMI",
+          "available": 14,
+          "rented": 147,
+          "total": 161,
+          "utilization": 91.0
+        },
+        {
+          "code": "ORL",
+          "name": "Orlando",
+          "period": "ORLANDO",
+          "available": 0,
+          "rented": 22,
+          "total": 22,
+          "utilization": 100.0
+        },
+        {
+          "code": "PHL",
+          "name": "Philadelphia",
+          "period": "PHILLY",
+          "available": 5,
+          "rented": 69,
+          "total": 74,
+          "utilization": 93.0
+        },
+        {
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 18,
+          "rented": 781,
+          "total": 799,
+          "utilization": 98.0
+        },
+        {
+          "code": "RVA",
+          "name": "Richmond",
+          "period": "RICHMOND",
+          "available": 0,
+          "rented": 19,
+          "total": 19,
+          "utilization": 100.0
+        }
+      ]
+    },
+    "2026-08-31": {
+      "date": "2026-08-31",
+      "month": "August 2026",
+      "year": 2026,
+      "month_num": 8,
+      "available_fleet": 131,
+      "rented": 2910,
+      "total_available_fleet": 3041,
+      "market_utilization": 95.7,
+      "markets": [
+        {
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 36,
+          "rented": 588,
+          "total": 624,
+          "utilization": 94.0
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 6,
+          "rented": 139,
+          "total": 145,
+          "utilization": 96.0
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 26,
+          "rented": 426,
+          "total": 452,
+          "utilization": 94.0
+        },
+        {
+          "code": "DAL",
+          "name": "Dallas",
+          "period": "DALLAS",
+          "available": 6,
+          "rented": 21,
+          "total": 27,
+          "utilization": 78.0
+        },
+        {
+          "code": "GB",
+          "name": "Baltimore",
+          "period": "BWI",
+          "available": 14,
+          "rented": 689,
+          "total": 703,
+          "utilization": 98.0
+        },
+        {
+          "code": "MIA",
+          "name": "Miami",
+          "period": "MIAMI",
+          "available": 8,
+          "rented": 142,
+          "total": 150,
+          "utilization": 95.0
+        },
+        {
+          "code": "ORL",
+          "name": "Orlando",
+          "period": "ORLANDO",
+          "available": 5,
+          "rented": 20,
+          "total": 25,
+          "utilization": 80.0
+        },
+        {
+          "code": "PHL",
+          "name": "Philadelphia",
+          "period": "PHILLY",
+          "available": 10,
+          "rented": 68,
+          "total": 78,
+          "utilization": 87.0
+        },
+        {
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 18,
+          "rented": 799,
+          "total": 817,
+          "utilization": 98.0
+        },
+        {
+          "code": "RVA",
+          "name": "Richmond",
+          "period": "RICHMOND",
+          "available": 2,
+          "rented": 18,
+          "total": 20,
+          "utilization": 90.0
+        }
+      ]
+    },
+    "2026-09-30": {
+      "date": "2026-09-30",
+      "month": "September 2026",
+      "year": 2026,
+      "month_num": 9,
+      "available_fleet": 51,
+      "rented": 2999,
+      "total_available_fleet": 3050,
+      "market_utilization": 98.3,
+      "markets": [
+        {
+          "code": "ATL",
+          "name": "Atlanta",
+          "period": "ATL",
+          "available": 17,
+          "rented": 595,
+          "total": 612,
+          "utilization": 97.2
+        },
+        {
+          "code": "BOS",
+          "name": "Boston",
+          "period": "BOSTON",
+          "available": 2,
+          "rented": 156,
+          "total": 158,
+          "utilization": 98.7
+        },
+        {
+          "code": "CHI",
+          "name": "Chicago",
+          "period": "CHICAGO",
+          "available": 8,
+          "rented": 442,
+          "total": 450,
+          "utilization": 98.2
+        },
+        {
+          "code": "DAL",
+          "name": "Dallas",
+          "period": "DALLAS",
+          "available": 2,
+          "rented": 26,
+          "total": 28,
+          "utilization": 92.9
+        },
+        {
+          "code": "GB",
+          "name": "Baltimore",
+          "period": "BWI",
+          "available": 0,
+          "rented": 784,
+          "total": 784,
+          "utilization": 100.0
+        },
+        {
+          "code": "MIA",
+          "name": "Miami",
+          "period": "MIAMI",
+          "available": 10,
+          "rented": 147,
+          "total": 157,
+          "utilization": 93.6
+        },
+        {
+          "code": "ORL",
+          "name": "Orlando",
+          "period": "ORLANDO",
+          "available": 2,
+          "rented": 23,
+          "total": 25,
+          "utilization": 92.0
+        },
+        {
+          "code": "PHL",
+          "name": "Philadelphia",
+          "period": "PHILLY",
+          "available": 0,
+          "rented": 67,
+          "total": 67,
+          "utilization": 100.0
+        },
+        {
+          "code": "RCK",
+          "name": "Washington DC",
+          "period": "ROCKVILLE",
+          "available": 10,
+          "rented": 739,
+          "total": 749,
+          "utilization": 98.7
+        },
+        {
+          "code": "RVA",
+          "name": "Richmond",
+          "period": "RICHMOND",
+          "available": 0,
+          "rented": 20,
+          "total": 20,
+          "utilization": 100.0
         }
       ]
     }
   },
-  "data_as_of": "2026-06-30",
-  "description": {
-    "market_utilization": "Available fleet utilization (rented/available) - excludes vehicles in repair, reconditioning, or awaiting auction. Ranges 95-100%.",
-    "true_utilization": "True fleet utilization (rented/total owned) - includes all owned vehicles. Ranges 73-87%.",
-    "note": "Market-level utilization is the metric used for Loss of Use documentation. True utilization reflects company-wide fleet efficiency."
+  "data_as_of": "2026-09-30",
+  "source": {
+    "file": "UtilizationReport_9-30-26.xlsx",
+    "worksheet": "3_Utilizaton",
+    "reported_field": "Occupancy",
+    "methodology": "The reported Occupancy field is retained as utilization. The denominator is the workbook's Available Fleet field, not the Available column."
   }
 }

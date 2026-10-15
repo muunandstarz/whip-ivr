@@ -115,7 +115,22 @@ type LouUtilizationRow = {
   fleetCount: number;
   rentCount: number;
   utilization: string;
+  sourceMonth?: string | null;
+  dataStatus?: "reported" | "latest_available" | "unavailable";
 };
+
+function formatLouUtilization(value: unknown): string {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) return "—";
+  return `${numeric.toFixed(1)}%`;
+}
+
+function louUtilizationSourceNote(rows: LouUtilizationRow[]): string {
+  const months = Array.from(new Set(rows.map((row) => row.sourceMonth).filter((month): month is string => Boolean(month))));
+  if (!months.length) return "No reported market utilization snapshot was available for this repair period; no utilization percentage is represented.";
+  const hasLatestFallback = rows.some((row) => row.dataStatus === "latest_available");
+  return `Source: Whip Utilization Report (${months.join(", ")}). Utilization is the report's stated Occupancy rate, supported by Rented and Available Fleet counts—not a percentage independently recalculated from another field.${hasLatestFallback ? " Repair dates after the last available report use the most recent reported monthly snapshot and are identified as such." : ""}`;
+}
 
 type LouSupportingSchedule = {
   claimNumber: string;
@@ -606,7 +621,7 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
   ]);
 
   section("FLEET UTILIZATION LOG");
-  const methodNote = `The table below reflects the fleet utilization rate for ${schedule.vehicleClass || "the applicable"} class vehicles at the ${schedule.marketName} market/location for each day the vehicle was out of service. Utilization is the ratio of rented vehicles to the total available fleet, excluding vehicles in repair, awaiting reconditioning, or pending auction.`;
+  const methodNote = `The table below documents the Whip Utilization Report's stated Occupancy rate for the ${schedule.marketName} market/location during the applicable reporting month. The report supplies Rented, Available Fleet, and Occupancy values. This schedule carries forward the report's stated Occupancy value; it does not independently calculate a percentage from a different source column.`;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(60, 60, 60);
@@ -616,7 +631,7 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
   y += methodLines.length * 4 + 4;
 
   const cols = [lm, 45, 90, 130, 155, 175];
-  const headers = ["Date", "Renting Location", "Vehicle Class", "Fleet Count", "Rent Count", "Utilization"];
+  const headers = ["Date", "Renting Location", "Vehicle Class", "Available Fleet", "Rented", "Utilization"];
   ensure(10);
   doc.setFillColor(45, 45, 45);
   doc.rect(lm, y, tw, 7, "F");
@@ -633,6 +648,7 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
       rentCount: 0,
       utilization: "—",
     }));
+  const utilizationSourceNote = louUtilizationSourceNote(utilizationRows);
   utilizationRows.slice(0, 20).forEach((row, index) => {
     ensure(7);
     if (index % 2 === 0) { doc.setFillColor(248, 248, 248); doc.rect(lm, y, tw, 6, "F"); }
@@ -649,6 +665,14 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
     y += 6;
   });
   y += 5;
+
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(6.8);
+  doc.setTextColor(85, 85, 85);
+  const sourceLines = doc.splitTextToSize(utilizationSourceNote, tw) as string[];
+  ensure(sourceLines.length * 3.5 + 7);
+  doc.text(sourceLines, lm, y);
+  y += sourceLines.length * 3.5 + 5;
 
   section("LOSS OF USE / RENTAL CALCULATION");
   const averageUtilization = utilizationRows.find((row) => row.utilization !== "—")?.utilization || "—";
@@ -3866,12 +3890,9 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
     date: new Date(`${row.date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     fleetCount: row.fleet || 0,
     rentCount: row.rented || 0,
-    // The LOU service supplies the canonical market utilization value. Do not
-    // recalculate it from aggregate fields: those represent different source
-    // populations in historical snapshots and can create impossible rates.
-    utilization: row.utilization > 0
-      ? `${Math.min(100, row.utilization <= 1 ? row.utilization * 100 : row.utilization).toFixed(1)}%`
-      : "—",
+    utilization: row.dataStatus === "unavailable" ? "—" : formatLouUtilization(row.utilization),
+    sourceMonth: row.sourceMonth,
+    dataStatus: row.dataStatus,
   }));
   const buildLouSupportingSchedule = (): LouSupportingSchedule | null => {
     if (!louSupportEnabled || louRepairDays <= 0 || louCalculatedTotal <= 0) return null;
@@ -6078,7 +6099,9 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   const effectiveRate = parseFloat(customRate || dailyRate || "0");
   const louTotal = (days * effectiveRate).toFixed(2);
 
-  // Build utilization rows for display (use real data if available, else generate stubs)
+  // The server resolves reported workbook Occupancy/Utilization values. Never
+  // derive a percentage from the display counts here: the source columns have
+  // distinct meanings and that error previously produced 10,000% rates.
   const getUtilizationRows = () => {
     if (utilRows.length > 0) {
       return utilRows.map(r => ({
@@ -6087,11 +6110,13 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
         vehicleClass: vehicleClass || "Vehicle",
         fleetCount: r.fleet || 0,
         rentCount: r.rented || 0,
-        utilization: r.fleet > 0 ? `${((r.rented / r.fleet) * 100).toFixed(1)}%` : (r.utilization ? `${(r.utilization * 100).toFixed(1)}%` : "—"),
+        utilization: r.dataStatus === "unavailable" ? "—" : formatLouUtilization(r.utilization),
+        sourceMonth: r.sourceMonth,
+        dataStatus: r.dataStatus,
       }));
     }
     if (!dropOffDate || !pickUpDate || days <= 0) return [];
-    const rows: Array<{date: string; location: string; vehicleClass: string; fleetCount: number; rentCount: number; utilization: string}> = [];
+    const rows: Array<{date: string; location: string; vehicleClass: string; fleetCount: number; rentCount: number; utilization: string; sourceMonth: string | null; dataStatus: "unavailable"}> = [];
     const start = new Date(dropOffDate);
     for (let i = 0; i < days; i++) {
       const d = new Date(start);
@@ -6103,6 +6128,8 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
         fleetCount: 0,
         rentCount: 0,
         utilization: "—",
+        sourceMonth: null,
+        dataStatus: "unavailable" as const,
       });
     }
     return rows;
@@ -6245,7 +6272,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     y += 4;
 
     // Utilization methodology note
-    const methodNote = `The table below reflects the fleet utilization rate for ${vehicleClass} class vehicles at the ${marketName} market/location where the vehicle was in active service, for each day the vehicle was out of service for repair as a result of this loss. Utilization data reflects the ratio of rented vehicles to the total available fleet at that location. The available fleet excludes vehicles in repair, awaiting reconditioning, or pending auction — consistent with industry-standard utilization methodology used by major rental companies.`;
+    const methodNote = `The table below documents the Whip Utilization Report's stated Occupancy rate for the ${marketName} market/location during the applicable reporting month. The report supplies Rented, Available Fleet, and Occupancy values. This schedule carries forward the report's stated Occupancy value; it does not independently calculate a percentage from a different source column.`;
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -6260,7 +6287,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.setFontSize(7);
     doc.setFont("helvetica", "bold");
     const cols = [14, 45, 90, 130, 155, 175];
-    const headers = ["Date", "Renting Location", "Vehicle Class", "Fleet Count", "Rent Count", "Utilization"];
+    const headers = ["Date", "Renting Location", "Vehicle Class", "Available Fleet", "Rented", "Utilization"];
     headers.forEach((h, i) => doc.text(h, cols[i] + 1, y + 4.5));
     y += 7;
 
@@ -6278,7 +6305,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
       doc.text(row.vehicleClass, cols[2] + 1, y + 4);
       doc.text(String(row.fleetCount), cols[3] + 1, y + 4);
       doc.text(String(row.rentCount), cols[4] + 1, y + 4);
-      doc.setTextColor(200, 50, 50);
+      doc.setTextColor(40, 40, 40);
       doc.setFont("helvetica", "bold");
       doc.text(row.utilization, cols[5] + 1, y + 4);
       doc.setTextColor(40, 40, 40);
@@ -6288,13 +6315,14 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     }
     y += 4;
 
-    // Utilization methodology note at bottom of table
-    const methNote2 = "Utilization Methodology Note: Fleet utilization is calculated as rented vehicles ÷ available fleet at month-end for the applicable market. The available fleet excludes vehicles being repaired, waiting to be repaired, waiting to be sold at auction, or recently purchased vehicles still being transported or reconditioned. This market-level utilization (ranging from 95% to 100% across Whip's operating history) reflects the true opportunity cost of the out-of-service vehicle and is the metric used by Whip's operations team to track fleet efficiency.";
+    // Report provenance belongs with the table so a carrier can identify the
+    // evidence source and distinguish an actual rate from a later projection.
+    const utilizationSourceNote = louUtilizationSourceNote(utilRows);
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(80, 80, 80);
     doc.setFillColor(245, 245, 250);
-    const methLines = doc.splitTextToSize(methNote2, W - 30);
+    const methLines = doc.splitTextToSize(utilizationSourceNote, W - 30);
     doc.rect(14, y, W - 28, methLines.length * 3.5 + 4, "F");
     doc.text(methLines, 16, y + 3.5);
     y += methLines.length * 3.5 + 8;
@@ -6333,7 +6361,6 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);
-    doc.setTextColor(23, 27, 49);
     doc.setFontSize(11);
     doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
     y += 16;
@@ -6353,7 +6380,9 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.text(legal1Lines, 14, y);
     y += legal1Lines.length * 4 + 4;
 
-    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"}, and is actively leased to a Whip member as a revenue-generating fleet asset. The vehicle was unavailable for service during the repair period described above, resulting in direct economic loss equal to the contracted daily lease rate multiplied by the number of days out of service. The fleet utilization data above — showing ${getUtilizationRows()[0]?.utilization || "98%"} average utilization during the repair period — confirms that a replacement vehicle would have been rented but for this loss.`;
+    const displayedUtilizationRows = getUtilizationRows();
+    const reportedUtilization = displayedUtilizationRows.find((row) => row.utilization !== "—")?.utilization;
+    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"} and is identified as a revenue-generating fleet asset. It was unavailable for service during the repair period described above. The requested loss of use equals the applicable daily rate multiplied by the documented days out of service. ${reportedUtilization ? `The attached utilization log records ${reportedUtilization} market utilization in the applicable report month and supports the business basis for this claimed out-of-service period.` : "No reported market-utilization percentage was available for the requested period, so this schedule does not represent one."} This request remains subject to the applicable jurisdiction, policy, liability, repair-period, and claim-specific evidence.`;
     const legal2Lines = doc.splitTextToSize(legalText2, W - 28);
     doc.text(legal2Lines, 14, y);
     y += legal2Lines.length * 4 + 4;
@@ -6546,8 +6575,8 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
                   <th className="px-2 py-1.5 text-left">Date</th>
                   <th className="px-2 py-1.5 text-left">Renting Location</th>
                   <th className="px-2 py-1.5 text-left">Vehicle Class</th>
-                  <th className="px-2 py-1.5 text-right">Fleet Count</th>
-                  <th className="px-2 py-1.5 text-right">Rent Count</th>
+                  <th className="px-2 py-1.5 text-right">Available Fleet</th>
+                  <th className="px-2 py-1.5 text-right">Rented</th>
                   <th className="px-2 py-1.5 text-right">Utilization</th>
                 </tr>
               </thead>
@@ -6559,7 +6588,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
                     <td className="px-2 py-1">{row.vehicleClass}</td>
                     <td className="px-2 py-1 text-right">{row.fleetCount}</td>
                     <td className="px-2 py-1 text-right">{row.rentCount}</td>
-                    <td className="px-2 py-1 text-right font-bold text-red-600">{row.utilization}</td>
+                    <td className="px-2 py-1 text-right font-bold text-foreground">{row.utilization}</td>
                   </tr>
                 ))}
                 {days > 10 && (

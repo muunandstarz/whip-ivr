@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
+import { resolveUtilizationRows } from "../louUtilization";
 
 // ── Inline pricing data ────────────────────────────────────────────────────
 const MARKET_PRICING = [
@@ -357,45 +358,6 @@ All dates must be in YYYY-MM-DD format. VIN must be 17 characters if found.`;
     .query(({ input }) => {
       const data = getUtilizationData();
       const dataCode = MKT_BRIDGE[input.marketCode] || input.marketCode;
-      const start = new Date(input.dropOff + "T00:00:00");
-      const end = new Date(input.pickUp + "T00:00:00");
-      const rows: Array<{ date: string; fleet: number; rented: number; utilization: number; month: string }> = [];
-      const sortedMonths = Object.keys(data.monthly_data || {}).sort();
-      const latestMonthKey = sortedMonths[sortedMonths.length - 1];
-      const current = new Date(start);
-      while (current < end) {
-        const dateStr = current.toISOString().split("T")[0];
-        const year = current.getFullYear();
-        const month = current.getMonth() + 1;
-        let matchKey = sortedMonths.find((k: string) => {
-          const d = new Date(k);
-          return d.getFullYear() === year && d.getMonth() + 1 === month;
-        });
-        if (!matchKey) matchKey = latestMonthKey;
-        const monthData = matchKey ? data.monthly_data[matchKey] : null;
-        let fleet = 0, rented = 0, utilization = 0;
-        if (monthData) {
-          const mktArr: any[] = monthData.markets || [];
-          const mktEntry = mktArr.find((m: any) => m.code === dataCode);
-          if (mktEntry) {
-            fleet = mktEntry.available ?? 0;
-            rented = mktEntry.rented ?? 0;
-            utilization = mktEntry.utilization ?? 0;
-          } else {
-            fleet = monthData.total_available_fleet ?? 0;
-            rented = monthData.rented ?? 0;
-            utilization = monthData.market_utilization ?? 0;
-          }
-        }
-        rows.push({
-          date: dateStr,
-          fleet,
-          rented,
-          utilization,
-          month: current.toLocaleString("default", { month: "long", year: "numeric" }),
-        });
-        current.setDate(current.getDate() + 1);
-      }
-      return rows;
+      return resolveUtilizationRows(data, { ...input, dataCode });
     }),
 });
