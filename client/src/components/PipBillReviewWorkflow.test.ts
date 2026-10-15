@@ -10,10 +10,14 @@ describe("PIP Bill Review documents", () => {
     expect(source).toContain("impersonating.name");
     expect(source).toContain("effectiveHandler.name");
     expect(source).toContain("Payment letter");
+    expect(source).toContain("PIP exhaustion letter");
+    expect(source).toContain("PIP BENEFITS EXHAUSTION NOTICE");
+    expect(source).toContain("Remaining available PIP");
     expect(source).toContain("EOR — provider version");
     expect(source).toContain("EOR — internal version");
     expect(source).toContain("PIP log — attorney version");
     expect(source).toContain("Generate all");
+    expect(source).toContain("canGenerateExhaustion");
     expect(source).toContain("addLetterhead(doc)");
   });
 

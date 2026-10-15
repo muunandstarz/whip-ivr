@@ -15,7 +15,7 @@ import {
   type PipBillLine, type PipProviderType, type PipReviewResult, type PipState,
 } from "@/lib/pipBillReviewRules";
 
-type PdfKind = "payment" | "provider-eor" | "internal-eor" | "pip-log";
+type PdfKind = "payment" | "exhaustion" | "provider-eor" | "internal-eor" | "pip-log";
 type PdfPreview = { title: string; filename: string; url: string };
 
 type Props = { addLetterhead: (doc: jsPDF) => number; addFooter: (doc: jsPDF) => void };
@@ -166,7 +166,7 @@ export default function PipBillReviewWorkflow({ addLetterhead, addFooter }: Prop
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const margin = 42;
-    const heading = kind === "payment" ? "PIP PAYMENT DETERMINATION" : kind === "pip-log" ? "PIP PAYMENT LOG" : "EXPLANATION OF REVIEW";
+    const heading = kind === "payment" ? "PIP PAYMENT DETERMINATION" : kind === "exhaustion" ? "PIP BENEFITS EXHAUSTION NOTICE" : kind === "pip-log" ? "PIP PAYMENT LOG" : "EXPLANATION OF REVIEW";
     const displayLines = provider ? result.lines.filter((line) => (line.provider || "Unknown Provider") === provider) : result.lines;
 
     const startDocument = () => {
@@ -196,15 +196,17 @@ export default function PipBillReviewWorkflow({ addLetterhead, addFooter }: Prop
     };
 
     let y = startDocument();
-    if (kind === "payment") {
+    if (kind === "payment" || kind === "exhaustion") {
       const billed = displayLines.reduce((sum, line) => sum + line.billed, 0);
       const allowed = displayLines.reduce((sum, line) => sum + line.allowed, 0);
+      const isExhaustion = kind === "exhaustion";
+      const recipient = isExhaustion ? memberName || "[Member / Representative]" : provider || "Provider";
       doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(40); doc.text("TO", margin, y);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.text(provider || "Provider", margin, y + 16); y += 38;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.text(recipient, margin, y + 16); y += 38;
       const paymentSentence = allowed > 0
         ? `Payment of ${money(allowed)} is being processed under separate cover. A line-by-line Explanation of Review accompanies this determination.`
         : "No payment is issued with this determination. A line-by-line Explanation of Review accompanies this notice.";
-      const paragraphs = [
+      const paymentParagraphs = [
         `Whip Claims Management completed its review of the bills submitted by your office under Personal Injury Protection coverage. ${config.letterClause}`,
         `Bills reviewed: ${displayLines.length} line item${displayLines.length === 1 ? "" : "s"}
 Total billed: ${money(billed)}
@@ -214,6 +216,23 @@ Total reduction: ${money(billed - allowed)}`,
         config.paymentInFullClause,
         "For questions about this determination, please contact the assigned claims handler below.",
       ];
+      const exhaustionParagraphs = [
+        `This letter confirms that the Personal Injury Protection benefits available for the above-referenced claim are fully exhausted as of ${today()}. No additional PIP benefit remains available for payment under this claim, subject to applicable coverage and claim facts.`,
+        `PIP benefit limit: ${money(asNumber(pipLimit))}
+PIP paid before this review: ${money(asNumber(pipUsed))}
+Payment applied in this review: ${money(result.totalAllowed)}
+Total PIP benefits applied: ${money(Math.min(asNumber(pipLimit), asNumber(pipUsed) + result.totalAllowed))}
+Remaining available PIP: ${money(result.pipRemaining)}`,
+        state === "PA"
+          ? "This notice concerns first-party medical benefits. Ongoing medical expenses may be submitted to any applicable health insurer, consistent with the claimant's coverage and applicable law."
+          : state === "FL"
+            ? "This notice concerns Florida personal injury protection benefits. It does not determine or waive any separate claim, coverage, or legal right."
+            : state === "MA"
+              ? "This notice concerns Massachusetts personal injury protection benefits and does not determine any separate health-insurance, liability, or workers' compensation coverage."
+              : "This notice concerns Maryland personal injury protection benefits and does not determine any separate health-insurance or liability coverage.",
+        "Please retain this notice with the claim records. For questions regarding the exhaustion calculation, contact the assigned claims handler below.",
+      ];
+      const paragraphs = isExhaustion ? exhaustionParagraphs : paymentParagraphs;
       doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); doc.setTextColor(40);
       paragraphs.forEach((paragraph) => {
         const text = doc.splitTextToSize(paragraph, bodyWidth(doc));
@@ -272,12 +291,23 @@ Total reduction: ${money(billed - allowed)}`,
   };
   const build = (kind: PdfKind, download = false) => {
     if (!result) return;
-    const firstProvider = result.providerSummaries[0]?.provider;
     if (kind === "payment") {
       result.providerSummaries.forEach((summary, index) => { const doc = createPdf("payment", summary.provider); if (!doc) return; const filename = `PIP_Payment_Letter_${safeName(claimNumber)}_${safeName(summary.provider)}.pdf`; if (download) doc.save(filename); if (index === 0) { const url = URL.createObjectURL(doc.output("blob")); previewUrls.current.add(url); setPreviews((current) => ({ ...current, payment: { title: `Payment Letter — ${summary.provider}`, filename, url } })); } });
-    } else { const doc = createPdf(kind); if (!doc) return; const filename = `${kind === "provider-eor" ? "Provider_EOR" : kind === "internal-eor" ? "Internal_EOR" : "PIP_Log"}_${safeName(claimNumber)}.pdf`; if (download) doc.save(filename); const url = URL.createObjectURL(doc.output("blob")); previewUrls.current.add(url); setPreviews((current) => ({ ...current, [kind]: { title: kind === "provider-eor" ? "Provider EOR" : kind === "internal-eor" ? "Internal EOR" : "Attorney PIP Log", filename, url } })); }
+    } else {
+      const doc = createPdf(kind); if (!doc) return;
+      const label = kind === "exhaustion" ? "PIP Exhaustion Notice" : kind === "provider-eor" ? "Provider EOR" : kind === "internal-eor" ? "Internal EOR" : "Attorney PIP Log";
+      const filename = `${kind === "exhaustion" ? "PIP_Exhaustion_Notice" : kind === "provider-eor" ? "Provider_EOR" : kind === "internal-eor" ? "Internal_EOR" : "PIP_Log"}_${safeName(claimNumber)}.pdf`;
+      if (download) doc.save(filename);
+      const url = URL.createObjectURL(doc.output("blob")); previewUrls.current.add(url);
+      setPreviews((current) => ({ ...current, [kind]: { title: label, filename, url } }));
+    }
   };
-  const generateAll = () => { (["payment", "provider-eor", "internal-eor", "pip-log"] as PdfKind[]).forEach((kind) => build(kind, true)); };
+  const canGenerateExhaustion = Boolean(result && result.pipRemaining <= 0.01);
+  const generateAll = () => {
+    (["payment", "provider-eor", "internal-eor", "pip-log"] as PdfKind[]).forEach((kind) => build(kind, true));
+    if (canGenerateExhaustion) build("exhaustion", true);
+    else toast.info("Payment and EOR documents were created. The PIP exhaustion notice is available when the remaining PIP balance reaches $0.00.");
+  };
 
   return <div className="space-y-5">
     <div className="rounded-lg border border-border bg-card p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-foreground">PIP Bill Review</h2><p className="mt-1 text-sm text-muted-foreground">Five-step bill review, editable before calculation and document output.</p></div><div className="rounded border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"><span className="font-semibold text-foreground">Prepared by:</span> {effectiveHandler.name}{effectiveHandler.email ? ` · ${effectiveHandler.email}` : ""}</div></div></div>
@@ -285,6 +315,30 @@ Total reduction: ${money(billed - allowed)}`,
     <section className="rounded-lg border border-border bg-card p-4"><div className="mb-3 flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background">2</span><h3 className="font-semibold">Upload bills</h3></div><input ref={fileInput} className="hidden" type="file" accept=".pdf,.png,.jpg,.jpeg,.zip" multiple onChange={(event) => { if (event.target.files) void acceptFiles(event.target.files); event.target.value = ""; }} /><div role="button" tabIndex={0} onClick={() => fileInput.current?.click()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fileInput.current?.click(); }} onDrop={(event) => { event.preventDefault(); void acceptFiles(event.dataTransfer.files); }} onDragOver={(event) => event.preventDefault()} className="cursor-pointer rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-4 py-5 text-center"><Upload className="mx-auto h-5 w-5 text-muted-foreground" /><p className="mt-2 text-sm font-medium">Drop HCFA-1500s, scans, or a ZIP archive</p><p className="mt-1 text-xs text-muted-foreground">PDF, PNG, JPG, and ZIP are accepted. Multiple source files are consolidated into this claim.</p></div>{files.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{files.map((file, index) => <span key={`${file.name}-${index}`} className="inline-flex items-center gap-1 rounded border bg-background px-2 py-1 text-xs"><FileText className="h-3 w-3" />{file.name}<button aria-label={`Remove ${file.name}`} onClick={() => setFiles((current) => current.filter((_, candidate) => candidate !== index))}><X className="h-3 w-3" /></button></span>)}</div>}<div className="mt-3 flex flex-wrap gap-2"><Button onClick={extractBills} disabled={!files.length || extracting} variant="outline">{extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{extracting ? "Extracting bills…" : "Extract uploaded bills"}</Button><Button onClick={() => { setFiles([]); setLines([blankLine()]); setResult(null); setExtractionMessage(""); }} variant="ghost">Clear</Button></div>{extractionMessage && <p role="status" className="mt-2 rounded border border-muted-foreground/20 bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">{extractionMessage}</p>}<p className="mt-2 text-xs text-muted-foreground">Extraction is a convenience. Review and correct every editable line below before using an output.</p></section>
     <section className="rounded-lg border border-border bg-card p-4"><div className="mb-3 flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background">3</span><h3 className="font-semibold">Review editable bill lines</h3></div><div className="overflow-x-auto"><table className="min-w-[1040px] w-full text-xs"><thead className="border-b text-left text-muted-foreground"><tr><th className="pb-2 pr-2">Provider</th><th className="pb-2 pr-2">Type</th><th className="pb-2 pr-2">DOS</th><th className="pb-2 pr-2">POS</th><th className="pb-2 pr-2">CPT</th><th className="pb-2 pr-2">Mod.</th><th className="pb-2 pr-2">Units</th><th className="pb-2 pr-2">Billed</th><th className="pb-2 pr-2">DX ptr.</th><th className="pb-2" /></tr></thead><tbody>{lines.map((line) => <tr key={line.id} className="border-b border-border/60"><td className="py-1 pr-2"><Input className="h-8 min-w-40" value={line.provider} onChange={(event) => updateLine(line.id, { provider: event.target.value })} /></td><td className="py-1 pr-2"><Select value={line.providerType} onValueChange={(value) => updateLine(line.id, { providerType: value as PipProviderType })}><SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger><SelectContent>{(["medical", "chiro", "therapy", "imaging", "hospital", "other"] as PipProviderType[]).map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent></Select></td><td className="py-1 pr-2"><Input className="h-8 w-32" type="date" value={line.dos} onChange={(event) => updateLine(line.id, { dos: event.target.value })} /></td><td className="py-1 pr-2"><Input className="h-8 w-14" value={line.pos} onChange={(event) => updateLine(line.id, { pos: event.target.value })} /></td><td className="py-1 pr-2"><Input className="h-8 w-18" value={line.cpt} onChange={(event) => updateLine(line.id, { cpt: event.target.value })} /></td><td className="py-1 pr-2"><Input className="h-8 w-16" value={line.modifier} onChange={(event) => updateLine(line.id, { modifier: event.target.value })} /></td><td className="py-1 pr-2"><Input className="h-8 w-16" type="number" min="1" value={line.units} onChange={(event) => updateLine(line.id, { units: Number(event.target.value) || 1 })} /></td><td className="py-1 pr-2"><Input className="h-8 w-24" inputMode="decimal" value={line.billed || ""} onChange={(event) => updateLine(line.id, { billed: Number(event.target.value) || 0 })} /></td><td className="py-1 pr-2"><Input className="h-8 w-16" value={line.dxPointer} onChange={(event) => updateLine(line.id, { dxPointer: event.target.value })} /></td><td className="py-1"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeLine(line.id)} aria-label="Remove bill line"><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody></table></div><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={() => setLines((current) => [...current, blankLine()])}><Plus className="h-4 w-4" />Add line</Button><Button onClick={runReview}><CheckCircle className="h-4 w-4" />Run PIP bill review</Button></div></section>
     {result && <><section className="rounded-lg border border-border bg-card p-4"><div className="mb-3 flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background">4</span><h3 className="font-semibold">Bill review results</h3></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><div className="rounded border p-3"><p className="text-[11px] text-muted-foreground">Total billed</p><p className="font-semibold">{money(result.totalBilled)}</p></div><div className="rounded border p-3"><p className="text-[11px] text-muted-foreground">Total allowed</p><p className="font-semibold">{money(result.totalAllowed)}</p></div><div className="rounded border p-3"><p className="text-[11px] text-muted-foreground">Reduced / denied</p><p className="font-semibold">{money(result.totalReduced)}</p></div><div className="rounded border p-3"><p className="text-[11px] text-muted-foreground">PIP remaining</p><p className="font-semibold">{money(result.pipRemaining)}</p></div></div><div className="mt-4 overflow-x-auto"><table className="min-w-[850px] w-full text-xs"><thead className="border-b text-left text-muted-foreground"><tr><th className="pb-2">Provider</th><th className="pb-2">DOS</th><th className="pb-2">CPT</th><th className="pb-2 text-right">Billed</th><th className="pb-2 text-right">Schedule</th><th className="pb-2 text-right">Allowed</th><th className="pb-2">Status</th><th className="pb-2">Reason</th></tr></thead><tbody>{result.lines.map((line) => <tr key={line.id} className="border-b border-border/60 align-top"><td className="py-2 pr-2">{line.provider || "—"}</td><td className="py-2 pr-2">{line.dos || "—"}</td><td className="py-2 pr-2 font-mono">{line.cpt || "—"}</td><td className="py-2 pr-2 text-right">{money(line.billed)}</td><td className="py-2 pr-2 text-right">{line.scheduleCap === null ? "—" : money(line.scheduleCap)}</td><td className="py-2 pr-2 text-right font-medium">{money(line.allowed)}</td><td className="py-2 pr-2"><span className="rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase">{line.status}</span></td><td className="py-2 text-muted-foreground">{line.reason}</td></tr>)}</tbody></table></div>{result.flags.length > 0 && <div className="mt-4 space-y-2"><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Flags and notices</h4>{result.flags.map((flag, index) => <div key={`${flag.title}-${index}`} className="flex gap-2 rounded border p-3"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><p className="text-xs font-semibold">{flag.title}</p><p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{flag.detail}</p></div></div>)}</div>}</section>
-    <section className="rounded-lg border border-border bg-card p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background">5</span><h3 className="font-semibold">Standardized PIP outputs</h3></div><Button variant="outline" onClick={generateAll}><Download className="h-4 w-4" />Generate all</Button></div><p className="mb-4 text-xs text-muted-foreground">Neutral black/gray documents use the approved Whip logo. Every output identifies the active handler, including handler-view context.</p><div className="grid gap-4 xl:grid-cols-2">{([ ["payment", `Payment letter (${result.providerSummaries.length} provider${result.providerSummaries.length === 1 ? "" : "s"})`], ["provider-eor", "EOR — provider version"], ["internal-eor", "EOR — internal version"], ["pip-log", "PIP log — attorney version"] ] as Array<[PdfKind, string]>).map(([kind, label]) => <div key={kind} className="rounded border p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">{label}</h4><div className="flex gap-1.5"><Button size="sm" variant="outline" onClick={() => build(kind)}><Eye className="h-3.5 w-3.5" />Preview</Button><Button size="sm" variant="outline" onClick={() => build(kind, true)}><Download className="h-3.5 w-3.5" />Download</Button></div></div><PdfOutput value={previews[kind]} emptyText="Build a preview to review this PDF in the workspace." /></div>)}</div></section></>}
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background">5</span><h3 className="font-semibold">Standardized PIP outputs</h3></div>
+        <Button variant="outline" onClick={generateAll}><Download className="h-4 w-4" />Generate all</Button>
+      </div>
+      <p className="mb-4 text-xs text-muted-foreground">Neutral black/gray documents use the approved Whip logo. Every output identifies the active handler, including handler-view context.</p>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {([
+          ["payment", `Payment letter (${result.providerSummaries.length} provider${result.providerSummaries.length === 1 ? "" : "s"})`],
+          ["exhaustion", "PIP exhaustion letter"],
+          ["provider-eor", "EOR — provider version"],
+          ["internal-eor", "EOR — internal version"],
+          ["pip-log", "PIP log — attorney version"],
+        ] as Array<[PdfKind, string]>).map(([kind, label]) => {
+          const exhaustionUnavailable = kind === "exhaustion" && !canGenerateExhaustion;
+          return <div key={kind} className="rounded border p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">{label}</h4><div className="flex gap-1.5">
+              <Button size="sm" variant="outline" disabled={exhaustionUnavailable} onClick={() => build(kind)}><Eye className="h-3.5 w-3.5" />Preview</Button>
+              <Button size="sm" variant="outline" disabled={exhaustionUnavailable} onClick={() => build(kind, true)}><Download className="h-3.5 w-3.5" />Download</Button>
+            </div></div>
+            <PdfOutput value={previews[kind]} emptyText={kind === "exhaustion" && exhaustionUnavailable ? "Set PIP used to date so the remaining PIP balance reaches $0.00, then rerun the review to create this notice." : "Build a preview to review this PDF in the workspace."} />
+          </div>;
+        })}
+      </div>
+    </section></>}
   </div>;
 }

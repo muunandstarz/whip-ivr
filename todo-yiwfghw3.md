@@ -992,3 +992,8 @@
 - [x] Replace the compressed inherited PIP PDF presentation with dedicated neutral templates: a full-width Whip letterhead, clean claim and total summary blocks, readable black/gray EOR/log tables, controlled internal-review notes, separate footer/page-number bands, and correct zero-payment wording.
 - [x] Keep PDF object URLs alive for the entire PIP workspace and restore the same in-app iframe preview pattern used by the established Document Generator, with Open and Download fallbacks for each output.
 - [x] Browser-validate a synthetic PA packet: all four preview payloads are nonempty `application/pdf` files; visually inspect the Payment Letter and Internal EOR in Chromium’s PDF viewer with no header/footer overlap or table clipping. Validation: 334 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — PIP Payment and Exhaustion Outputs
+- [x] Add an explicit **PIP exhaustion letter** to PIP Bill Review. It is available for preview/download after a recalculated review reaches a $0.00 remaining PIP balance and is included in Generate All when exhausted.
+- [x] Exhaustion notices show the applicable PIP limit, prior payments, payment in the current review, total benefits applied, $0.00 remaining benefit, state-aware neutral explanatory wording, and the effective handler signature.
+- [x] Create five synthetic samples (payment letter, provider EOR, internal EOR, attorney log, and exhaustion notice); visually inspect the exhaustion notice and retain all samples as a review ZIP.
