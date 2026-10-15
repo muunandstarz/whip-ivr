@@ -14,6 +14,18 @@ describe("standalone Loss of Use utilization evidence", () => {
     expect(source).toContain('doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });');
   });
 
+  it("puts standalone legal support on a separately letterheaded page before the footer can overlap it", () => {
+    const totalBox = source.indexOf('doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);');
+    const firstPageFooter = source.indexOf("addLetterFooter(doc);", totalBox);
+    const supportingPage = source.indexOf('"LOSS OF USE SUPPORTING BASIS"', totalBox);
+    const legalBasis = source.indexOf('doc.text("Legal Basis — Tort / Third-Party Liability:", 14, y);', totalBox);
+
+    expect(totalBox).toBeGreaterThan(-1);
+    expect(firstPageFooter).toBeGreaterThan(totalBox);
+    expect(supportingPage).toBeGreaterThan(firstPageFooter);
+    expect(legalBasis).toBeGreaterThan(supportingPage);
+  });
+
   it("does not retain the prior recomputed 10,000% expression or unsupported range claim", () => {
     expect(source).not.toContain("((r.rented / r.fleet) * 100)");
     expect(source).not.toContain("ranging from 95% to 100% across Whip's operating history");

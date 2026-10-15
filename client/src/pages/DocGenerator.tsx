@@ -6365,6 +6365,23 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
     y += 16;
 
+    // Keep the factual calculation and its fixed footer on page one. Legal
+    // support and the signature receive a full, independently letterheaded
+    // page so they can never run beneath the footer band.
+    addLetterFooter(doc);
+    doc.addPage();
+    y = addWhipLetterhead(doc, "LOSS OF USE SUPPORTING BASIS", `Claim #${claimNumber || "[Claim Number]"}`);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(40, 40, 40);
+    doc.text("Loss of Use / Rental Reimbursement Supporting Basis", 14, y);
+    y += 6;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Attached to the preceding utilization log and reimbursement calculation.", 14, y);
+    y += 10;
+
     // Legal basis section
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");

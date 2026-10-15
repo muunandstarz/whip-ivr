@@ -1003,3 +1003,7 @@
 - [x] Fix the standalone LOU and Subro-support schedules to use the workbook’s reported Occupancy/Utilization value rather than recomputing from incompatible columns. This prevents the prior impossible 10,000% rates.
 - [x] Preserve source counts as **Available Fleet** and **Rented**, add the report month/source note (including an explicit latest-available-report label for future dates), and remove unsupported blanket claims about historical utilization ranges.
 - [x] Correct the standalone LOU PDF total-box contrast so the claim amount remains readable. Browser/PDF validation: a synthetic October 2026 DC example renders 749 Available Fleet, 739 Rented, 98.7% reported utilization, and a visible $150.00 total.
+
+## October 2026 — Standalone Loss of Use Footer Repair
+- [x] Move the standalone Loss of Use legal support, note, and signature block to a separately letterheaded second page. The factual utilization schedule and total remain on page 1 with its own fixed footer, preventing the prior footer collision.
+- [x] Browser-validate the regenerated two-page sample: page 1 ends with the $150.00 total and clear footer; page 2 contains the supporting basis and signature without clipping. Full validation: 340 passed / 1 skipped, TypeScript, production build, and diff check passed.
