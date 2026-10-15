@@ -1014,3 +1014,9 @@
 - [x] Add a claimant-settlement-only CCC ONE Market Valuation upload in **TL Settlement & Release**. The deterministic parser reads a text-readable CCC PDF and prefills claimant, claim number, loss date, vehicle, VIN, supported market, adjusted ACV, CCC vehicular tax, and salvage/TMU deduction.
 - [x] Treat CCC **Adjusted Vehicle Value** as the settlement ACV and display Prior Damage for review only, preventing a second subtraction. Expose CCC report reference, base value, prior damage, adjusted ACV, tax, CCC total, and the live settlement total so the handler can spot a mismatch before issuing a document.
 - [x] Validate the supplied `ALEMANVAL.pdf` in browser: Jose Aleman / ATL-5683-480561-102835 / GA, $1,337.50 adjusted ACV + $88.28 tax − $1,100.00 salvage = matching $325.78 CCC and settlement total; generate a formatted claimant settlement PDF preview.
+
+## October 2026 — Total Loss Claimant Release Output
+- [x] Make **TL Settlement & Release** produce a separate matching **Claimant Property-Damage Release**, not only the settlement offer. The release uses the same claimant, calculated net settlement consideration, date of loss, and state/market jurisdiction.
+- [x] Match the supplied approved `General_Release_Winston.pdf` format: an unbranded one-page legal document, centered bold title, compact plain-text paragraphs, Illinois/state-specific governing-law line, and side-by-side claimant and witness signature/printed-name/date blocks.
+- [x] Add both Preview Claimant Release and Download Claimant Release actions; the shared PDF preview switches to the selected release output.
+- [x] Browser-validate a synthetic Illinois release for Quianna Winston with March 20, 2026 loss and $9,223.44 consideration. Full validation: 344 passed / 1 skipped, TypeScript, production build, and diff check passed.

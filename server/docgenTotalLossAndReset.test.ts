@@ -38,11 +38,25 @@ describe('Total Loss settlement and form reset repairs', () => {
   it('keeps applicable damage rows visible in the form, formatted preview, and AI-generated PDF branch', () => {
     expect(source).toContain('const visibleDamageRows = damageRows.filter');
     expect(source).toContain('aria-label="Itemization of Damages preview"');
-    expect(source).toContain('text={aiLetter ? `${aiLetter}\\n\\n${itemizationPreview}` : preview}');
+    expect(source).toContain('const activeOutputText = activeOutput === "release"');
     expect(source).toContain('doc.addPage();');
     expect(source).toContain('if (!aiLetter) {');
     expect(source).toContain('doc.text("ITEMIZATION OF DAMAGES", 14, y);');
     expect(source).toContain('writeDamageRow("Vehicle Valuation (ACV)", parseFloat(form.acv) || 0);');
+  });
+
+  it('generates a claimant property-damage release from the Total Loss settlement calculation', () => {
+    expect(source).toContain('function buildPropertyDamageReleaseText');
+    expect(source).toContain('GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE');
+    expect(source).toContain('const claimantReleaseText = buildPropertyDamageReleaseText');
+    expect(source).toContain('settlementAmount: netAmount');
+    expect(source).toContain('const handleClaimantRelease');
+    expect(source).toContain('writeReleaseText(doc, claimantReleaseText');
+    expect(source).toContain('Preview Claimant Release');
+    expect(source).toContain('Download Claimant Release');
+    expect(source).toContain('Whip_TLClaimantRelease_');
+    expect(source).toContain('const witnessX = 108;');
+    expect(source).toContain('renderPair(labelForSigner, "Witness Signature:");');
   });
 
   it('uses browser-safe blob URLs for formatted previews and a shared clear-form action', () => {

@@ -42,8 +42,9 @@ describe('Document Generator letter corrections', () => {
 
   it('keeps releases plain, compact, and claimant-completed at signature', () => {
     expect(source).toContain('doc.setTextColor(0, 0, 0);');
-    expect(source).toContain('renderLine(printLabel);');
-    expect(source).toContain('renderLine("Relationship to Minor:");');
+    expect(source).toContain('renderPair(printLabel, "Printed Name:");');
+    expect(source).toContain('renderPair("Relationship to Minor:", "Witness Address:");');
+    expect(source).toContain('renderPair(labelForSigner, "Witness Signature:");');
     expect(source).not.toContain('renderLine(printLabel, details.signerName);');
     expect(source).toContain('const bodyLineH = 4.45;');
     expect(source).toContain('const paragraphGap = 2.4;');

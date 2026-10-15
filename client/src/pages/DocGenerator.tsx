@@ -426,19 +426,21 @@ type ReleaseSignatureDetails = {
 };
 
 function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSignatureDetails): void {
-  const marginX = 19;
-  const lineEnd = 122;
+  const signerX = 19;
+  const signerLineEnd = 101;
+  const witnessX = 108;
+  const witnessLineEnd = 190;
   const labelForSigner = details.signerType === "guardian"
     ? "Signature of Parent/Guardian:"
     : details.signerType === "carrier"
       ? "Carrier Representative Signature:"
       : "Claimant Signature:";
   const printLabel = details.signerType === "guardian" ? "Printed Name (Parent/Guardian):" : "Printed Name:";
-  const renderLine = (label: string, value = "") => {
+  const renderLine = (label: string, x: number, lineEnd: number, value = "") => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
-    doc.text(label, marginX, y);
-    const start = marginX + doc.getTextWidth(label) + 2;
+    doc.text(label, x, y);
+    const start = x + doc.getTextWidth(label) + 2;
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.2);
     doc.line(start, y + 0.8, lineEnd, y + 0.8);
@@ -446,22 +448,23 @@ function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSigna
       doc.setFont("helvetica", "normal");
       doc.text(value, start + 1.5, y - 0.7);
     }
+  };
+
+  const renderPair = (signerLabel: string, witnessLabel: string, signerValue = "") => {
+    renderLine(signerLabel, signerX, signerLineEnd, signerValue);
+    renderLine(witnessLabel, witnessX, witnessLineEnd);
     y += 8;
   };
 
-  renderLine(labelForSigner);
+  renderPair(labelForSigner, "Witness Signature:");
   // Releases are signed by the claimant or guardian. Do not pre-populate any
   // signature, printed name, relationship, or date fields from form data.
-  renderLine(printLabel);
+  renderPair(printLabel, "Printed Name:");
   if (details.signerType === "guardian") {
-    renderLine("Relationship to Minor:");
-    renderLine("Minor's Name:");
+    renderPair("Relationship to Minor:", "Witness Address:");
+    renderPair("Minor's Name:", "");
   }
-  renderLine("Date:");
-  y += 7;
-  renderLine("Witness Signature:");
-  renderLine("Printed Name:");
-  renderLine("Date:");
+  renderPair("Date:", "Date:");
 }
 
 function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignatureDetails): void {
@@ -483,7 +486,7 @@ function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignature
   };
 
   doc.setTextColor(0, 0, 0);
-  doc.setFont("helvetica", "normal");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text(title, pageWidth / 2, y, { align: "center" });
   y += 10;
@@ -499,7 +502,7 @@ function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignature
   }
 
   if (signature) {
-    const signatureHeight = signature.signerType === "guardian" ? 81 : 65;
+    const signatureHeight = signature.signerType === "guardian" ? 54 : 38;
     if (y + signatureHeight > maxY) nextPage();
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
@@ -513,6 +516,30 @@ const RELEASE_STATE_NAMES: Record<string, string> = {
   MD: "Maryland", VA: "Virginia", PA: "Pennsylvania", FL: "Florida",
   IL: "Illinois", GA: "Georgia", MA: "Massachusetts", TX: "Texas",
 };
+
+function buildPropertyDamageReleaseText(input: {
+  releasorDescription: string;
+  settlementAmount: string;
+  dateOfLoss: string;
+  state: string;
+}): string {
+  const releaseStateName = RELEASE_STATE_NAMES[input.state] || input.state || "[State]";
+  return [
+    "GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE",
+    "",
+    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${input.releasorDescription}, for and in consideration of the sum of $${input.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors, and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${formatReleaseDate(input.dateOfLoss)} (the "Incident"), and from any and all other property damage claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
+    "",
+    "This Release is intended to operate as a full, complete, and final settlement of all property damage claims that Claimant has or may have against the Releasees as of the date of execution, including but not limited to vehicle repair costs, total loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any and all other property-related damages of any kind, whether currently known or that may later be discovered. Claimant expressly waives any rights or benefits under any statute or common law principle that would otherwise limit the effect of this Release to claims known to exist at the time of execution.",
+    "",
+    "Claimant represents and warrants that all liens, subrogation interests, and reimbursement claims related to the property at issue, including but not limited to those of insurers, lienholders, and finance companies, have been disclosed. Claimant agrees to satisfy and resolve any such liens or reimbursement obligations from the settlement proceeds and further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to unpaid balances, liens, or reimbursement rights arising from the Incident or otherwise.",
+    "",
+    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
+    "",
+    "Claimant acknowledges that this is a general release intended to resolve all property damage claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.",
+    "",
+    `This Release shall be governed by and construed in accordance with the laws of the State of ${releaseStateName}.`,
+  ].join("\n");
+}
 
 function formatReleaseDate(value: string): string {
   const date = parseLocalDate(value);
@@ -3277,23 +3304,12 @@ function ReleasePDTab() {
     : form.isMinor
       ? `${signerName}, as parent and natural guardian of ${form.claimantName || "[Minor's Name]"}, a minor ("Claimant")`
       : `${form.claimantName || "[Claimant Full Name]"} ("Claimant")`;
-  const releaseStateName = RELEASE_STATE_NAMES[form.state] || form.state || "[State]";
-
-  const releaseText = [
-    "GENERAL RELEASE OF ALL CLAIMS – PROPERTY DAMAGE",
-    "",
-    `KNOW ALL PERSONS BY THESE PRESENTS, that the undersigned, ${releasorDescription}, for and in consideration of the sum of $${form.settlementAmount || "[Settlement Amount]"}, the receipt and sufficiency of which is hereby acknowledged, does hereby release, acquit, and forever discharge Whip Inc., Metrocars Leasing Corp., Assurant LLC, and Whip Claims Management, and their respective members, drivers, agents, employees, officers, representatives, affiliates, successors and assigns (collectively, the "Releasees"), from any and all claims, demands, actions, causes of action, damages, costs, loss of services, expenses, and compensation of any kind whatsoever, whether known or unknown, anticipated or unanticipated, arising out of or in any way connected with the motor vehicle incident that occurred on or about ${formatReleaseDate(form.dateOfLoss)} (the "Incident"), and from any and all other claims of any kind or nature that Claimant has or may have against the Releasees as of the date of this Release.`,
-    "",
-    "This Release is intended to operate as a full, complete, and final settlement of all property damage claims and all other claims of any kind that Claimant has or may have against the Releasees as of the date of execution, including but not limited to vehicle repair costs, total-loss settlement, diminished value, loss of use, rental expenses, towing and storage charges, personal property damage, and any other property-related damages of any kind, whether currently known or that may later be discovered.",
-    "",
-    "Claimant represents and warrants that Claimant has the authority to settle the property damage claims released by this document; that all owners, lienholders, subrogation interests, and reimbursement claims related to the property damage have been disclosed; and that Claimant will satisfy and resolve any such interest from the settlement proceeds. Claimant further agrees to indemnify, defend, and hold harmless the Releasees from any claim, demand, or action related to an undisclosed ownership, lien, reimbursement, or subrogation interest arising from the Incident.",
-    "",
-    "It is understood and agreed that this settlement is the compromise of a disputed claim, and that the payment made is not to be construed as an admission of liability on the part of the Releasees, by whom liability is expressly denied.",
-    "",
-    "Claimant acknowledges that this is a general release intended to resolve all claims of any nature, known or unknown, that Claimant has or may have against the Releasees as of the date of execution, that Claimant has read this Release in its entirety, fully understands its terms, and has executed this Release voluntarily and with the opportunity to consult with counsel of Claimant's choosing.",
-    "",
-    `This Release shall be governed by and construed in accordance with the laws of the State of ${releaseStateName}.`,
-  ].join("\n");
+  const releaseText = buildPropertyDamageReleaseText({
+    releasorDescription,
+    settlementAmount: form.settlementAmount,
+    dateOfLoss: form.dateOfLoss,
+    state: form.state,
+  });
 
   const handleGenerateEmail = async () => {
     if (!form.claimantName || !form.claimNumber || !form.settlementAmount) {
@@ -3463,6 +3479,8 @@ function TLSettlementTab() {
     additionalNotes: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [releasePreviewPdfUrl, setReleasePreviewPdfUrl] = useState<string | null>(null);
+  const [activeOutput, setActiveOutput] = useState<"settlement" | "release">("settlement");
   const [otherDeductions, setOtherDeductions] = useState<{label: string; amount: string}[]>([]);
   const [aiLetter, setAiLetter] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -3582,6 +3600,12 @@ function TLSettlementTab() {
     ...deductionLines,
     `Total: $${netAmount}`,
   ].join("\n");
+  const claimantReleaseText = buildPropertyDamageReleaseText({
+    releasorDescription: `${form.claimantName || "[Claimant Full Name]"} ("Claimant")`,
+    settlementAmount: netAmount,
+    dateOfLoss: form.dateOfLoss,
+    state: form.market,
+  });
 
   const preview = [
     "TOTAL LOSS SETTLEMENT OFFER",
@@ -3733,9 +3757,35 @@ function TLSettlementTab() {
       wrapText(doc, "claims@drivewhip.com", 14, y, W - 28, 6.5);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
+    setActiveOutput("settlement");
     if (shouldDownload) downloadPDF(doc, `Whip_TLSettlement_${form.claimNumber || "Draft"}.pdf`);
   };
+  const handleClaimantRelease = (shouldDownload = true) => {
+    if (!form.claimantName || !form.dateOfLoss || !form.acv) {
+      toast.error("Fill in Claimant Name, Date of Loss, and the settlement calculation first");
+      return;
+    }
+    const doc = new jsPDF();
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    writeReleaseText(doc, claimantReleaseText, {
+      signerName: form.claimantName,
+      signerType: "claimant",
+    });
+    setReleasePreviewPdfUrl(getPDFDataUrl(doc));
+    setActiveOutput("release");
+    if (shouldDownload) downloadPDF(doc, `Whip_TLClaimantRelease_${form.claimNumber || "Draft"}.pdf`);
+  };
   const handlePreviewOnly = () => { handleDownload(false); };
+  const activeOutputText = activeOutput === "release"
+    ? claimantReleaseText
+    : aiLetter ? `${aiLetter}\n\n${itemizationPreview}` : preview;
+  const activeOutputPdfUrl = activeOutput === "release" ? releasePreviewPdfUrl : previewPdfUrl;
+  const handleActiveOutput = (shouldDownload = true) => {
+    if (activeOutput === "release") handleClaimantRelease(shouldDownload);
+    else handleDownload(shouldDownload);
+  };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -3878,6 +3928,18 @@ function TLSettlementTab() {
             </div>
           </div>
         </Panel>
+        <Panel title="Claimant Property-Damage Release" tag="INCLUDED">
+          <p className="text-xs leading-5 text-muted-foreground">Create the matching unbranded general property-damage release from this settlement. It uses the claimant, net settlement amount, date of loss, and market selected above, with claimant and witness signature lines.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" className="gap-1.5 border-foreground/25 text-foreground hover:bg-muted" onClick={() => handleClaimantRelease(false)}>
+              <Eye className="w-3.5 h-3.5" /> Preview Claimant Release
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5 border-foreground/25 text-foreground hover:bg-muted" onClick={() => handleClaimantRelease(true)}>
+              <Download className="w-3.5 h-3.5" /> Download Claimant Release
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Release consideration: <strong className="text-foreground">${netAmount}</strong> · State law: <strong className="text-foreground">{RELEASE_STATE_NAMES[form.market] || form.market}</strong></p>
+        </Panel>
         <Panel title="Additional Details">
           <Grid2 children={<>
             <Field label="Rental Cutoff Date" id="tls-rental" value={form.rentalCutoffDate} onChange={set("rentalCutoffDate")} type="date" />
@@ -3911,13 +3973,11 @@ function TLSettlementTab() {
         </Panel>
       </div>
       <PreviewPanel
-        text={aiLetter ? `${aiLetter}\n\n${itemizationPreview}` : preview}
-        onCopy={() => { navigator.clipboard.writeText(aiLetter ? `${aiLetter}\n\n${itemizationPreview}` : preview); toast.success("Copied"); }}
-        onDownload={handleDownload}
-      
-        pdfUrl={previewPdfUrl}
-      
-        onPreview={handlePreviewOnly}/>
+        text={activeOutputText}
+        onCopy={() => { navigator.clipboard.writeText(activeOutputText); toast.success("Copied"); }}
+        onDownload={handleActiveOutput}
+        pdfUrl={activeOutputPdfUrl}
+        onPreview={() => handleActiveOutput(false)}/>
     </div>
   );
 }
