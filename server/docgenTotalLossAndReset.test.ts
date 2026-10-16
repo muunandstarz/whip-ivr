@@ -25,24 +25,28 @@ describe('Total Loss settlement and form reset repairs', () => {
     expect(source).toContain('acv + storage + adminFee + salesTax + titleRegFees + tearDown - salvage');
   });
 
-  it('renders the requested damage-itemization treatment and a clean RE line', () => {
+  it('renders the requested damage-itemization treatment in the compact settlement offer', () => {
     expect(source).toContain('ITEMIZATION OF DAMAGES');
     expect(source).toContain('Vehicle Valuation (ACV)');
     expect(source).toContain('Title & Registration Fees');
     expect(source).toContain('Tear Down');
     expect(source).toContain('Salvage (deducted)');
-    expect(source).toContain('doc.setLineDashPattern([0.7, 1.3], 0);');
-    expect(source).toContain('"RE: Total Loss Settlement Offer"');
+    expect(source).toContain('SETTLEMENT BREAKDOWN');
+    expect(source).toContain('Actual cash value / amount tendered');
+    expect(source).toContain('SETTLEMENT ACCEPTANCE');
   });
 
-  it('keeps applicable damage rows visible in the form, formatted preview, and AI-generated PDF branch', () => {
+  it('keeps applicable damage rows visible in the form and creates a separate deterministic settlement PDF', () => {
     expect(source).toContain('const visibleDamageRows = damageRows.filter');
     expect(source).toContain('aria-label="Itemization of Damages preview"');
     expect(source).toContain('const activeOutputText = activeOutput === "release"');
     expect(source).toContain('doc.addPage();');
-    expect(source).toContain('if (!aiLetter) {');
-    expect(source).toContain('doc.text("ITEMIZATION OF DAMAGES", 14, y);');
-    expect(source).toContain('writeDamageRow("Vehicle Valuation (ACV)", parseFloat(form.acv) || 0);');
+    expect(source).toContain('const settlementRows: Array');
+    expect(source).toContain('Preview Settlement Offer');
+    expect(source).toContain('Download Settlement Offer');
+    expect(source).toContain('Whip_TLSettlement_');
+    expect(source).toContain('settlementOpening: ""');
+    expect(source).toContain('settlementClosing: ""');
   });
 
   it('generates a claimant property-damage release from the Total Loss settlement calculation', () => {
@@ -67,13 +71,15 @@ describe('Total Loss settlement and form reset repairs', () => {
     expect(source).toContain('key={`${activeTab}-${formResetKey}`}');
   });
 
-  it('offers claimant-only CCC valuation upload with adjusted ACV, tax, and salvage prefilling', () => {
+  it('offers claimant-only CCC valuation upload with address, adjusted ACV, tax, transfer-fee, and salvage prefilling', () => {
     expect(source).toContain('CCC Market Valuation');
     expect(source).toContain('CLAIMANT SETTLEMENT');
     expect(source).toContain('id="tls-ccc-upload"');
     expect(source).toContain('trpc.docgen.parseCccValuation.useMutation()');
     expect(source).toContain('acv: parsed.adjustedVehicleValue || p.acv');
+    expect(source).toContain('claimantAddress: parsed.claimantAddress || p.claimantAddress');
     expect(source).toContain('salesTax: parsed.salesTax || p.salesTax');
+    expect(source).toContain('titleRegFees: parsed.titleRegFees || p.titleRegFees');
     expect(source).toContain('salvageDeducted: parsed.salvageDeducted || p.salvageDeducted');
     expect(source).toContain('do not deduct Prior Damage again');
   });

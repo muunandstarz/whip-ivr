@@ -46,7 +46,7 @@ describe('Document Generator letter corrections', () => {
     expect(source).toContain('renderPair("Relationship to Minor:", "Witness Address:");');
     expect(source).toContain('renderPair(labelForSigner, "Witness Signature:");');
     expect(source).not.toContain('renderLine(printLabel, details.signerName);');
-    expect(source).toContain('const bodyLineH = 4.45;');
-    expect(source).toContain('const paragraphGap = 2.4;');
+    expect(source).toContain('const bodyLineH = 4.05;');
+    expect(source).toContain('const paragraphGap = 2.1;');
   });
 });

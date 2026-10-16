@@ -46,8 +46,8 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('return (v + t + s + admin + tax + d + l - salvage).toFixed(2);');
   });
 
-  it("keeps a full VIN on its own Total Loss settlement PDF line", () => {
-    expect(clientSource).toContain('if (form.vin) y = wrapText(doc, `VIN: ${form.vin}`, 14, y, W - 28, 6.5);');
+  it("keeps a full VIN on its own Total Loss settlement PDF claim-detail line", () => {
+    expect(clientSource).toContain('fieldLine("VIN", form.vin);');
   });
 
   it("keeps updated correspondence printer-neutral outside the colored logo", () => {

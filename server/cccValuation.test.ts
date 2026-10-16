@@ -7,6 +7,8 @@ The CCC ONE® Market Valuation Summary
 REPORT SUMMARY
 CLAIM INFORMATION
 Owner                                                   Aleman, Jose
+                                                        12 Market Street
+                                                        Norcross, GA 30093-3056
 Loss Vehicle                                            2004 Ford F-150 XL Supercab 145" WB
 Loss Incident Date                                      08/28/2026
 INSURANCE INFORMATION
@@ -18,6 +20,7 @@ Base Vehicle Value                                                    $ 3,883.00
 Prior Damage*                                                         - $ 2,545.50
 Adjusted Vehicle Value                                                $ 1,337.50
 Vehicular Tax (6.6%)                                                   + $ 88.28
+Transfer Fees*                                                          + $ 400.00
 SALVAGE / TMU *                                                       - $ 1,100.00
 Total                                                                 $ 325.78
 VEHICLE INFORMATION
@@ -29,6 +32,7 @@ describe("CCC Market Valuation parsing", () => {
   it("prefills the claimant settlement from CCC adjusted valuation fields", () => {
     expect(parseCccValuationText(cccText)).toEqual({
       claimantName: "Jose Aleman",
+      claimantAddress: "12 Market Street\nNorcross, GA 30093-3056",
       claimNumber: "ATL-5683-480561-102835",
       dateOfLoss: "2026-08-28",
       vehicle: '2004 Ford F-150 XL Supercab 145" WB',
@@ -41,6 +45,7 @@ describe("CCC Market Valuation parsing", () => {
       adjustedVehicleValue: "1337.50",
       salesTax: "88.28",
       taxRateLabel: "(6.6%)",
+      titleRegFees: "400.00",
       salvageDeducted: "1100.00",
       cccTotal: "325.78",
     });

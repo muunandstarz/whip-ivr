@@ -1,5 +1,6 @@
 export type CccValuationFields = {
   claimantName: string;
+  claimantAddress: string;
   claimNumber: string;
   dateOfLoss: string;
   vehicle: string;
@@ -12,6 +13,7 @@ export type CccValuationFields = {
   adjustedVehicleValue: string;
   salesTax: string;
   taxRateLabel: string;
+  titleRegFees: string;
   salvageDeducted: string;
   cccTotal: string;
 };
@@ -57,7 +59,11 @@ export function parseCccValuationText(source: string): CccValuationFields | null
     return null;
   }
 
-  const claimantName = personName(firstMatch(text, /\bOwner\s+([A-Za-z][A-Za-z' .-]+,\s*[A-Za-z][A-Za-z' .-]+)/i));
+  const claimantName = personName(firstMatch(text, /^\s*Owner\s+([A-Za-z][A-Za-z' .-]+,\s*[A-Za-z][A-Za-z' .-]+)/im));
+  const claimantAddressMatch = text.match(/^\s*Owner\s+[^\n]+\n\s*([^\n]+)\n\s*([^\n]+\b[A-Z]{2}\s+\d{5}(?:-\d{4})?)/im);
+  const claimantAddress = claimantAddressMatch
+    ? `${squash(claimantAddressMatch[1])}\n${squash(claimantAddressMatch[2])}`
+    : "";
   const claimNumber = firstMatch(text, /\bClaim\s+Reference\s+([A-Za-z0-9-]+)/i);
   const reportReference = firstMatch(text, /\b(?:Report\s+Reference\s+Number|Report\s+Reference)\s+([A-Za-z0-9-]+)/i);
   const dateOfLoss = toIsoDate(firstMatch(text, /\bLoss\s+Incident\s+Date\s+(\d{1,2}\/\d{1,2}\/\d{4})/i));
@@ -70,6 +76,7 @@ export function parseCccValuationText(source: string): CccValuationFields | null
   const adjustedVehicleValue = asAmount(firstMatch(text, /\bAdjusted\s+Vehicle\s+Value\s+\$?\s*([0-9,]+\.\d{2})/i));
   const salesTax = asAmount(firstMatch(text, /\bVehicular\s+Tax\s*(?:\([^)]*\))?\s*\+\s*\$?\s*([0-9,]+\.\d{2})/i));
   const taxRateLabel = firstMatch(text, /\bVehicular\s+Tax\s*(\([^)]*\))/i);
+  const titleRegFees = asAmount(firstMatch(text, /\b(?:Transfer\s+Fees|Title\s*(?:&|and)\s*Registration\s+Fees)\*?\s*\+\s*\$?\s*([0-9,]+\.\d{2})/i));
   const salvageDeducted = asAmount(firstMatch(text, /\bSALVAGE\s*\/\s*TMU\s*\*?\s*-\s*\$?\s*([0-9,]+\.\d{2})/i));
   const cccTotal = asAmount(firstMatch(text, /(?:^|\n)\s*Total\s+\$?\s*([0-9,]+\.\d{2})/im));
 
@@ -81,6 +88,7 @@ export function parseCccValuationText(source: string): CccValuationFields | null
 
   return {
     claimantName,
+    claimantAddress,
     claimNumber,
     dateOfLoss,
     vehicle,
@@ -93,6 +101,7 @@ export function parseCccValuationText(source: string): CccValuationFields | null
     adjustedVehicleValue: acv,
     salesTax,
     taxRateLabel,
+    titleRegFees,
     salvageDeducted,
     cccTotal,
   };

@@ -426,10 +426,10 @@ type ReleaseSignatureDetails = {
 };
 
 function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSignatureDetails): void {
-  const signerX = 19;
-  const signerLineEnd = 101;
+  const signerX = 14;
+  const signerLineEnd = 82;
   const witnessX = 108;
-  const witnessLineEnd = 190;
+  const witnessLineEnd = 176;
   const labelForSigner = details.signerType === "guardian"
     ? "Signature of Parent/Guardian:"
     : details.signerType === "carrier"
@@ -438,22 +438,21 @@ function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSigna
   const printLabel = details.signerType === "guardian" ? "Printed Name (Parent/Guardian):" : "Printed Name:";
   const renderLine = (label: string, x: number, lineEnd: number, value = "") => {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.text(label, x, y);
-    const start = x + doc.getTextWidth(label) + 2;
+    doc.setFontSize(8);
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.2);
-    doc.line(start, y + 0.8, lineEnd, y + 0.8);
+    doc.line(x, y, lineEnd, y);
     if (value) {
       doc.setFont("helvetica", "normal");
-      doc.text(value, start + 1.5, y - 0.7);
+      doc.text(value, x + 1.5, y - 1.5);
     }
+    doc.text(label, x, y + 4);
   };
 
   const renderPair = (signerLabel: string, witnessLabel: string, signerValue = "") => {
     renderLine(signerLabel, signerX, signerLineEnd, signerValue);
     renderLine(witnessLabel, witnessX, witnessLineEnd);
-    y += 8;
+    y += 10;
   };
 
   renderPair(labelForSigner, "Witness Signature:");
@@ -468,12 +467,12 @@ function writeReleaseSignatureBlock(doc: jsPDF, y: number, details: ReleaseSigna
 }
 
 function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignatureDetails): void {
-  // Standard U.S. legal-document page protection: 0.75in margins on all sides.
-  const marginX = 19.05;
-  const marginTop = 19.05;
-  const marginBottom = 19.05;
-  const bodyLineH = 4.45;
-  const paragraphGap = 2.4;
+  // Compact claimant release matching the approved one-page legal-document form.
+  const marginX = 14;
+  const marginTop = 16;
+  const marginBottom = 16;
+  const bodyLineH = 4.05;
+  const paragraphGap = 2.1;
   const pageWidth = doc.internal.pageSize.getWidth();
   const maxY = doc.internal.pageSize.getHeight() - marginBottom;
   const blocks = text.trim().split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
@@ -487,27 +486,27 @@ function writeReleaseText(doc: jsPDF, text: string, signature?: ReleaseSignature
 
   doc.setTextColor(0, 0, 0);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.4);
   doc.text(title, pageWidth / 2, y, { align: "center" });
-  y += 10;
+  y += 8;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  doc.setFontSize(8.7);
   for (const block of bodyBlocks) {
     const lines = doc.splitTextToSize(block, pageWidth - marginX * 2) as string[];
     const blockHeight = lines.length * bodyLineH;
     if (y + blockHeight > maxY) nextPage();
-    doc.text(lines, marginX, y, { lineHeightFactor: 1.08 });
+    doc.text(lines, marginX, y, { lineHeightFactor: 1.04 });
     y += blockHeight + paragraphGap;
   }
 
   if (signature) {
-    const signatureHeight = signature.signerType === "guardian" ? 54 : 38;
+    const signatureHeight = signature.signerType === "guardian" ? 44 : 32;
     if (y + signatureHeight > maxY) nextPage();
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
+    doc.setFontSize(8.7);
     doc.text("IN WITNESS WHEREOF, the undersigned has executed this Release on the date set forth below.", marginX, y);
-    y += 16;
+    y += 10;
     writeReleaseSignatureBlock(doc, y, signature);
   }
 }
@@ -3458,6 +3457,7 @@ function TLSettlementTab() {
   const WHIP_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"];
   const [form, setForm] = useState({
     claimantName: "",
+    claimantAddress: "",
     claimNumber: "",
     dateOfLoss: "",
     vehicle: "",
@@ -3477,12 +3477,13 @@ function TLSettlementTab() {
     rentalCutoffDate: "",
     adjusterName: "",
     additionalNotes: "",
+    settlementOpening: "",
+    settlementClosing: "",
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [releasePreviewPdfUrl, setReleasePreviewPdfUrl] = useState<string | null>(null);
   const [activeOutput, setActiveOutput] = useState<"settlement" | "release">("settlement");
   const [otherDeductions, setOtherDeductions] = useState<{label: string; amount: string}[]>([]);
-  const [aiLetter, setAiLetter] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [cccFile, setCccFile] = useState<File | null>(null);
   const [cccParsing, setCccParsing] = useState(false);
@@ -3493,6 +3494,7 @@ function TLSettlementTab() {
     adjustedVehicleValue: string;
     taxRateLabel: string;
     salesTax: string;
+    titleRegFees: string;
     salvageDeducted: string;
     cccTotal: string;
   } | null>(null);
@@ -3527,6 +3529,7 @@ function TLSettlementTab() {
       setForm((p) => ({
         ...p,
         claimantName: parsed.claimantName || p.claimantName,
+        claimantAddress: parsed.claimantAddress || p.claimantAddress,
         claimNumber: parsed.claimNumber || p.claimNumber,
         dateOfLoss: parsed.dateOfLoss || p.dateOfLoss,
         vehicle: parsed.vehicle || p.vehicle,
@@ -3536,6 +3539,7 @@ function TLSettlementTab() {
         // It is the ACV for this settlement; do not deduct Prior Damage again.
         acv: parsed.adjustedVehicleValue || p.acv,
         salesTax: parsed.salesTax || p.salesTax,
+        titleRegFees: parsed.titleRegFees || p.titleRegFees,
         salvageDeducted: parsed.salvageDeducted || p.salvageDeducted,
       }));
       setCccSummary({
@@ -3545,6 +3549,7 @@ function TLSettlementTab() {
         adjustedVehicleValue: parsed.adjustedVehicleValue,
         taxRateLabel: parsed.taxRateLabel,
         salesTax: parsed.salesTax,
+        titleRegFees: parsed.titleRegFees,
         salvageDeducted: parsed.salvageDeducted,
         cccTotal: parsed.cccTotal,
       });
@@ -3658,8 +3663,8 @@ function TLSettlementTab() {
         rentalCutoffDate: form.rentalCutoffDate,
         additionalNotes: form.additionalNotes,
       });
-      setAiLetter(result.letter);
-      toast.success("TL Settlement letter generated");
+      setForm((current) => ({ ...current, settlementOpening: result.letter }));
+      toast.success("Editable settlement language added");
     } catch (e: unknown) {
       toast.error((e as Error).message || "AI error");
     } finally {
@@ -3668,93 +3673,136 @@ function TLSettlementTab() {
   };
 
   const handleDownload = (shouldDownload = true) => {
+    if (!form.claimantName || !form.claimNumber || !form.acv) {
+      toast.error("Fill in Claimant Name, Claim Number, and ACV first");
+      return;
+    }
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+    const left = 14;
+    const right = W - 14;
+    const bottom = H - 20;
     let y = addWhipLetterhead(doc);
-    doc.setFontSize(9);
+    doc.setTextColor(35, 35, 35);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    if (aiLetter) {
-      y = wrapText(doc, aiLetter, 14, y, W - 28, 6.5);
+    doc.setFontSize(9.2);
+
+    const nextPage = () => {
+      addLetterFooter(doc);
       doc.addPage();
       y = addWhipLetterhead(doc);
-      doc.setFontSize(9);
+      doc.setTextColor(35, 35, 35);
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(60, 60, 60);
+      doc.setFontSize(9.2);
+    };
+    const ensure = (needed: number) => {
+      if (y + needed > bottom) nextPage();
+    };
+    const paragraph = (text: string, after = 4) => {
+      if (!text.trim()) return;
+      const lines = doc.splitTextToSize(text.trim(), right - left) as string[];
+      ensure(lines.length * 4.65 + after);
+      doc.text(lines, left, y, { lineHeightFactor: 1.12 });
+      y += lines.length * 4.65 + after;
+    };
+    const fieldLine = (label: string, value: string) => {
+      ensure(5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(95, 95, 95);
+      doc.text(label, left, y);
+      doc.setTextColor(25, 25, 25);
+      doc.text(value || "—", left + 31, y);
+      y += 5;
+    };
+    const firstName = form.claimantName.split(/\s+/)[0] || form.claimantName;
+    const todayStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    paragraph(todayStr, 6);
+    paragraph(form.claimantName, 1);
+    for (const addressLine of form.claimantAddress.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) paragraph(addressLine, 1);
+    y += 3;
+    fieldLine("Our claim no.", form.claimNumber);
+    fieldLine("Date of loss", formatReleaseDate(form.dateOfLoss));
+    fieldLine("Vehicle", form.vehicle);
+    fieldLine("VIN", form.vin);
+    y += 3;
+    paragraph(`Dear ${firstName},`, 6);
+
+    const defaultOpening = `Your ${form.vehicle || "vehicle"} has been determined to be a total loss. The valuation materials supporting our evaluation are enclosed for your review.`;
+    paragraph(form.settlementOpening || defaultOpening, 5);
+
+    const settlementRows: Array<{ label: string; amount: number; deducted?: boolean; required?: boolean }> = [
+      { label: "Vehicle valuation", amount: parseFloat(form.acv) || 0, required: true },
+      { label: "Vehicular / sales tax", amount: parseFloat(form.salesTax) || 0 },
+      { label: "Transfer, title & registration fees", amount: parseFloat(form.titleRegFees) || 0 },
+      { label: "Administration fee", amount: parseFloat(form.adminFee) || 0 },
+      { label: "Tear-down charge", amount: parseFloat(form.tearDown) || 0 },
+      { label: "Storage", amount: parseFloat(form.storage) || 0 },
+      { label: "Salvage", amount: parseFloat(form.salvageDeducted) || 0, deducted: true },
+      { label: "Prior payment to claimant", amount: parseFloat(form.priorPayment) || 0, deducted: true },
+      { label: form.lienHolder ? `Loan payoff — ${form.lienHolder}` : "Loan payoff", amount: parseFloat(form.lienPayoff) || 0, deducted: Boolean(form.lienPayoff) },
+      { label: "Disallowed storage", amount: parseFloat(form.storageDeducted) || 0, deducted: true },
+      ...otherDeductions.filter((deduction) => deduction.label && Number(deduction.amount) > 0).map((deduction) => ({ label: deduction.label, amount: Number(deduction.amount), deducted: true })),
+    ].filter((row) => row.required || row.amount > 0);
+
+    ensure(13 + settlementRows.length * 5.6);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.6);
+    doc.text("SETTLEMENT BREAKDOWN", left, y);
+    y += 3;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.25);
+    doc.line(left, y, right, y);
+    y += 5;
+    const settlementRow = (label: string, amount: number, deducted = false, emphasized = false) => {
+      doc.setFont("helvetica", emphasized ? "bold" : "normal");
+      doc.setFontSize(9.2);
+      doc.setTextColor(25, 25, 25);
+      doc.text(label, left, y);
+      doc.setFont("helvetica", emphasized ? "bold" : "normal");
+      doc.text(`${deducted ? "(" : ""}$${amount.toFixed(2)}${deducted ? ")" : ""}`, right, y, { align: "right" });
+      y += 5.5;
+    };
+    settlementRows.forEach((row) => settlementRow(row.label, row.amount, Boolean(row.deducted)));
+    doc.setDrawColor(80, 80, 80);
+    doc.setLineWidth(0.35);
+    doc.line(left, y - 1.5, right, y - 1.5);
+    y += 3;
+    settlementRow("Actual cash value / amount tendered", Number(netAmount), false, true);
+    y += 1.5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
+
+    const standardTender = form.lienHolder && parseFloat(form.lienPayoff) > 0
+      ? `A loan payoff of $${parseFloat(form.lienPayoff).toFixed(2)} will be issued directly to ${form.lienHolder}. The remaining $${netAmount} will be issued to you after the required settlement documents are received and reviewed.`
+      : `The actual cash value of your vehicle is $${netAmount}, and we are tendering that amount in settlement of your property damage claim. Payment will be issued directly to you after the required settlement documents are received and reviewed.`;
+    paragraph(standardTender, 4);
+    if (form.rentalCutoffDate) {
+      paragraph(`Rental reimbursement is reviewed separately. Charges incurred through ${formatReleaseDate(form.rentalCutoffDate)} may be considered upon receipt of supporting documentation; later charges remain subject to review.`, 4);
     }
-    if (!aiLetter) {
-      const todayStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-      y = wrapText(doc, todayStr, 14, y, W - 28, 6.5); y += 4;
-      y = wrapText(doc, `Claimant: ${form.claimantName || "[Claimant Name]"}`, 14, y, W - 28, 6.5);
-      y = wrapText(doc, `Claim No.: ${form.claimNumber || "[Claim Number]"}`, 14, y, W - 28, 6.5);
-      y = wrapText(doc, `Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}`, 14, y, W - 28, 6.5);
-      if (form.vehicle) y = wrapText(doc, `Vehicle: ${form.vehicle}`, 14, y, W - 28, 6.5);
-      // A full VIN can overrun the available page width beside a long vehicle
-      // description. Keep it on its own line in every rendered settlement PDF.
-      if (form.vin) y = wrapText(doc, `VIN: ${form.vin}`, 14, y, W - 28, 6.5);
-      if (form.market) y = wrapText(doc, `Market: ${form.market}`, 14, y, W - 28, 6.5);
-      y += 4;
-      const firstName = form.claimantName.split(/[\s,]+/)[0] || form.claimantName || "[Claimant]";
-      y = wrapText(doc, "RE: Total Loss Settlement Offer", 14, y, W - 28, 6.5); y += 4;
-      y = wrapText(doc, `Dear ${firstName},`, 14, y, W - 28, 6.5); y += 4;
-      y = wrapText(doc, `Following our investigation of the above-referenced claim, the ${form.vehicle || "vehicle"} has been determined to be a total loss. After review of the vehicle's condition, applicable market data, and comparable valuations, Metro Cars Leasing Corp. has calculated your net settlement as follows:`, 14, y, W - 28, 6.5); y += 5;
-    }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10.5);
-      doc.text("ITEMIZATION OF DAMAGES", 14, y); y += 2;
-      doc.setDrawColor(185, 185, 185); doc.setLineWidth(0.3);
-      doc.line(14, y, W - 14, y); y += 5;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      const rightX = W - 14;
-      const writeDamageRow = (label: string, amount: number, deducted = false) => {
-        doc.text(label, 18, y);
-        doc.setDrawColor(185, 185, 185);
-        doc.setLineDashPattern([0.7, 1.3], 0);
-        doc.line(Math.min(168, 21 + doc.getTextWidth(label)), y - 1, rightX - 36, y - 1);
-        doc.setLineDashPattern([], 0);
-        doc.text(deducted ? `($${amount.toFixed(2)})` : `$ ${amount.toFixed(2)}`, rightX, y, { align: "right" });
-        y += 6.5;
-      };
-      writeDamageRow("Vehicle Valuation (ACV)", parseFloat(form.acv) || 0);
-      if (form.salesTax && parseFloat(form.salesTax) > 0) writeDamageRow("Sales Tax", parseFloat(form.salesTax));
-      if (form.titleRegFees && parseFloat(form.titleRegFees) > 0) writeDamageRow("Title & Registration Fees", parseFloat(form.titleRegFees));
-      if (form.adminFee && parseFloat(form.adminFee) > 0) writeDamageRow("Admin Fee", parseFloat(form.adminFee));
-      if (form.tearDown && parseFloat(form.tearDown) > 0) writeDamageRow("Tear Down", parseFloat(form.tearDown));
-      if (form.storage && parseFloat(form.storage) > 0) writeDamageRow("Storage", parseFloat(form.storage));
-      if (form.salvageDeducted && parseFloat(form.salvageDeducted) > 0) writeDamageRow("Salvage (deducted)", parseFloat(form.salvageDeducted), true);
-      if (form.priorPayment && parseFloat(form.priorPayment) > 0) writeDamageRow("Prior Payment to Claimant (deducted)", parseFloat(form.priorPayment), true);
-      if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) writeDamageRow(`Loan Payoff — ${form.lienHolder} (deducted)`, parseFloat(form.lienPayoff), true);
-      if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) writeDamageRow("Disallowed Storage (deducted)", parseFloat(form.storageDeducted), true);
-      for (const d of otherDeductions) if (d.label && d.amount && parseFloat(d.amount) > 0) writeDamageRow(`${d.label} (deducted)`, parseFloat(d.amount), true);
-      doc.setLineDashPattern([], 0);
-      doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.45);
-      doc.line(14, y, W - 14, y); y += 5;
-      doc.setFont("helvetica", "bold");
-      doc.text("Total", 18, y);
-      doc.text(`$ ${netAmount}`, rightX, y, { align: "right" }); y += 7;
-      doc.setFont("helvetica", "normal");
-      y = wrapText(doc, "Payment will be issued as follows:", 14, y, W - 28, 6.5); y += 2;
-      if (form.lienHolder && form.lienPayoff && parseFloat(form.lienPayoff) > 0) {
-        y = wrapText(doc, `• Loan payoff of $${parseFloat(form.lienPayoff).toFixed(2)} payable directly to ${form.lienHolder} in satisfaction of the outstanding lien.`, 14, y, W - 28, 6.5);
-      }
-      y = wrapText(doc, `• Net proceeds of $${netAmount} payable directly to ${form.claimantName || "[Claimant]"}.`, 14, y, W - 28, 6.5); y += 4;
-      y = wrapText(doc, "We hereby tender the above amount in full and final resolution of all property damage claims arising from this loss.", 14, y, W - 28, 6.5); y += 4;
-      if (form.storageDeducted && parseFloat(form.storageDeducted) > 0) {
-        y = wrapText(doc, "Please note that the storage deduction reflected above represents the portion of billed storage fees that exceeded a reasonable and customary rate and was therefore disallowed. Only reasonable and customary storage charges have been considered in this settlement.", 14, y, W - 28, 6.5); y += 4;
-      }
-      if (form.rentalCutoffDate) {
-        const rentalDisplay = new Date(form.rentalCutoffDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-        y = wrapText(doc, `Rental reimbursement is a separate matter and will be reviewed upon receipt of invoice. Charges incurred through ${rentalDisplay} will be considered; any amounts beyond that date are subject to further review.`, 14, y, W - 28, 6.5); y += 4;
-      }
-      y = wrapText(doc, "To accept this settlement, please contact our office at your earliest convenience. Payment will be issued promptly upon confirmation of acceptance.", 14, y, W - 28, 6.5); y += 4;
-      y = wrapText(doc, "If you have any questions, please do not hesitate to contact the undersigned.", 14, y, W - 28, 6.5); y += 6;
-      y = wrapText(doc, "Sincerely,", 14, y, W - 28, 6.5); y += 8;
-      doc.setFont("helvetica", "bold");
-      y = wrapText(doc, form.adjusterName || "[Handler Name]", 14, y, W - 28, 6.5);
-      doc.setFont("helvetica", "normal");
-      y = wrapText(doc, "Claims Adjuster | Metro Cars Leasing Corp. — Claims Management", 14, y, W - 28, 6.5);
-      wrapText(doc, "claims@drivewhip.com", 14, y, W - 28, 6.5);
+    paragraph(form.settlementClosing || "To accept this settlement, sign below and return this letter together with the enclosed General Release of All Claims. The valuation materials are enclosed for your records. Please contact the undersigned with any questions.", 5);
+
+    ensure(42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.6);
+    doc.text("SETTLEMENT ACCEPTANCE", left, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
+    paragraph(`I accept the total loss settlement of $${netAmount}, payable as described above, in full and final resolution of my property damage claims arising from this loss.`, 8);
+    ensure(21);
+    const signatureEnd = left + 88;
+    const dateX = right - 76;
+    doc.setDrawColor(65, 65, 65);
+    doc.setLineWidth(0.2);
+    doc.line(left, y, signatureEnd, y);
+    doc.line(dateX, y, right, y);
+    doc.setFontSize(7.6);
+    doc.text("Signature", left, y + 4);
+    doc.text("Date", dateX, y + 4);
+    y += 12;
+    doc.line(left, y, signatureEnd, y);
+    doc.text("Printed Name", left, y + 4);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
     setActiveOutput("settlement");
@@ -3780,7 +3828,7 @@ function TLSettlementTab() {
   const handlePreviewOnly = () => { handleDownload(false); };
   const activeOutputText = activeOutput === "release"
     ? claimantReleaseText
-    : aiLetter ? `${aiLetter}\n\n${itemizationPreview}` : preview;
+    : preview;
   const activeOutputPdfUrl = activeOutput === "release" ? releasePreviewPdfUrl : previewPdfUrl;
   const handleActiveOutput = (shouldDownload = true) => {
     if (activeOutput === "release") handleClaimantRelease(shouldDownload);
@@ -3821,11 +3869,12 @@ function TLSettlementTab() {
                   CCC total {cccSummary.cccTotal ? `$${cccSummary.cccTotal}` : "—"} · settlement total ${netAmount}
                 </span>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground sm:grid-cols-5">
                 <span>Base: <strong className="text-foreground">{cccSummary.baseVehicleValue ? `$${cccSummary.baseVehicleValue}` : "—"}</strong></span>
                 <span>Prior damage: <strong className="text-foreground">{cccSummary.priorDamage ? `($${cccSummary.priorDamage})` : "—"}</strong></span>
                 <span>Adjusted ACV: <strong className="text-foreground">{cccSummary.adjustedVehicleValue ? `$${cccSummary.adjustedVehicleValue}` : "—"}</strong></span>
                 <span>Tax {cccSummary.taxRateLabel}: <strong className="text-foreground">{cccSummary.salesTax ? `$${cccSummary.salesTax}` : "—"}</strong></span>
+                <span>Transfer fees: <strong className="text-foreground">{cccSummary.titleRegFees ? `$${cccSummary.titleRegFees}` : "—"}</strong></span>
               </div>
               <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Prior damage is informational only because CCC has already reflected it in the adjusted ACV. Add title, registration, storage, lien, or other claim-specific amounts manually when applicable.</p>
             </div>
@@ -3837,6 +3886,7 @@ function TLSettlementTab() {
             <Field label="Claim Number" id="tls-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" />
             <Field label="Date of Loss" id="tls-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
           </Grid3>
+          <div className="mt-3"><TextareaField label="Claimant Mailing Address" id="tls-address" value={form.claimantAddress} onChange={set("claimantAddress")} placeholder={'Street address\nCity, State ZIP'} rows={2} /></div>
           <Grid3 children={<>
             <Field label="Vehicle (Year/Make/Model)" id="tls-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" />
             <Field label="VIN" id="tls-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" />
@@ -3928,6 +3978,17 @@ function TLSettlementTab() {
             </div>
           </div>
         </Panel>
+        <Panel title="Settlement Offer Letter" tag="CLAIMANT">
+          <p className="text-xs leading-5 text-muted-foreground">Generate the claimant-facing settlement offer separately from the release. The document uses the calculated total and itemization above, then includes a claimant acceptance block.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" className="gap-1.5 border-foreground/25 text-foreground hover:bg-muted" onClick={() => handleDownload(false)}>
+              <Eye className="w-3.5 h-3.5" /> Preview Settlement Offer
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5 border-foreground/25 text-foreground hover:bg-muted" onClick={() => handleDownload(true)}>
+              <Download className="w-3.5 h-3.5" /> Download Settlement Offer
+            </Button>
+          </div>
+        </Panel>
         <Panel title="Claimant Property-Damage Release" tag="INCLUDED">
           <p className="text-xs leading-5 text-muted-foreground">Create the matching unbranded general property-damage release from this settlement. It uses the claimant, net settlement amount, date of loss, and market selected above, with claimant and witness signature lines.</p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -3949,27 +4010,16 @@ function TLSettlementTab() {
             <Field label="Additional Notes" id="tls-notes" value={form.additionalNotes} onChange={set("additionalNotes")} placeholder="Any additional context for the letter..." />
           </div>
         </Panel>
-        <Panel title="AI Letter Generation" tag="AI">
-          <p className="text-xs text-muted-foreground mb-3">Generate a professional total loss settlement letter with the breakdown above.</p>
-          <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10 mb-3" onClick={handleGenerateLetter} disabled={aiLoading}>
+        <Panel title="Settlement Letter Language" tag="EDITABLE">
+          <p className="mb-3 text-xs leading-5 text-muted-foreground">Use the standard compact letter or edit the opening and acceptance instructions for the situation. The calculation table, acceptance block, and claimant details stay controlled by the fields above.</p>
+          <TextareaField label="Custom opening (optional)" id="tls-opening" value={form.settlementOpening} onChange={set("settlementOpening")} placeholder="For example: This letter replaces our prior settlement letter of [date]. Your vehicle has been determined to be a total loss…" rows={4} />
+          <div className="mt-3"><TextareaField label="Custom payment / acceptance instructions (optional)" id="tls-closing" value={form.settlementClosing} onChange={set("settlementClosing")} placeholder="For example: Payment will issue after receipt of the signed letter and enclosed release…" rows={3} /></div>
+          <div className="mt-3">
+          <Button variant="outline" size="sm" className="gap-1.5 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handleGenerateLetter} disabled={aiLoading}>
             {aiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-            {aiLoading ? "Generating..." : "✨ Generate TL Settlement Letter"}
+            {aiLoading ? "Generating..." : "✨ Draft editable opening with AI"}
           </Button>
-          {aiLetter && (
-            <div className="border border-border rounded-md overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
-                <FileText className="w-3.5 h-3.5 text-[#ff6221]" />
-                <span className="text-xs font-semibold flex-1">AI Letter Draft</span>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs" onClick={() => { navigator.clipboard.writeText(aiLetter); toast.success("Copied"); }}>
-                  <Copy className="w-3 h-3" /> Copy
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs text-[#ff6221]" onClick={handleGenerateLetter} disabled={aiLoading}>
-                  <RefreshCw className="w-3 h-3" /> Regen
-                </Button>
-              </div>
-              <pre className="p-3 text-xs whitespace-pre-wrap text-foreground/80 max-h-[300px] overflow-y-auto">{aiLetter}</pre>
-            </div>
-          )}
+          </div>
         </Panel>
       </div>
       <PreviewPanel
