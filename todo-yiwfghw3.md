@@ -559,7 +559,7 @@
 ## Project KIM — Owner-Authorized Staging Bootstrap
 - [ ] Create the approved `KIM-GitHubOIDC-Bootstrap-Staging` CloudFormation stack in the owner-controlled AWS account, us-east-1
 - [ ] Verify the staging-only GitHub OIDC trust and deployment role outputs
-- [ ] Stop before provisioning application infrastructure or changing any production KIM system
+- [x] Stop before provisioning application infrastructure or changing any production KIM system
 - Deferred by owner on 2026-10-06. The required AWS authorization and approved CloudFormation template are not attached to this workspace; do not provision KIM resources until the owner explicitly resumes this staging-only task.
 
 ## Claims Workspace — Handler Productivity Desk
