@@ -67,6 +67,16 @@ describe("approved Klutch Policy Declarations HTML", () => {
     expect(html).toContain('function updateRentalExpiration()');
   });
 
+  it("prints exactly two self-contained Letter pages without browser headers, URLs, or footer-only overflow pages", () => {
+    expect(html).toContain('@page { size: letter; margin: 0; }');
+    expect(html).toContain('height: 11in;');
+    expect(html).toContain('max-height: 11in;');
+    expect(html).toContain('.page + .page { page-break-before: always; break-before: page; }');
+    expect(html).toContain('.page:last-of-type { page-break-after: avoid; break-after: avoid; }');
+    expect(html).toContain('.page-footer { flex: 0 0 auto; margin-top: auto; }');
+    expect(html).toContain('turn off <strong>Headers and footers</strong>');
+  });
+
   it("uses one issued and subscription-start date, keeps only supported markets, and identifies Klutch by NAIC", () => {
     expect(html).toContain('Date Issued / Subscription Start Date (Pick-Up Date)');
     expect(html).not.toContain('id="f_issued"');

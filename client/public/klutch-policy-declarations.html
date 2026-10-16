@@ -43,7 +43,7 @@
   }
   .filler-field input:focus, .filler-field select:focus { border-color: var(--blue); }
   .filler-field input[readonly] { background: #f5f5f5; color: #666; }
-  .filler-actions { display: flex; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; }
+  .filler-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; }
   .filler-actions button {
     font-family: 'Source Sans 3', Arial, sans-serif;
     font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
@@ -54,6 +54,7 @@
   .btn-clear { background: #888; color: white; }
   .btn-apply:hover { background: #0f2640; }
   .btn-print:hover { background: #1a5a1a; }
+  .print-hint { margin-left: auto; color: var(--mid); font-size: 10.5px; line-height: 1.35; }
 
   .state-options { grid-column: 1 / -1; background: #fefbe8; border: 1px solid #e6d88a; border-radius: 2px; padding: 10px 14px; margin-top: 4px; }
   .state-options-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #8a6d00; margin-bottom: 8px; }
@@ -139,13 +140,30 @@
   .page-footer { border-top: 1px solid var(--rule); padding: 8px 26px; display: flex; justify-content: space-between; font-size: 9.5px; color: var(--mid); margin-top: auto; }
   .page-footer .ki-badge { font-weight: 700; letter-spacing: 0.05em; color: var(--blue); }
 
-  @page { size: letter; margin: 0.35in 0.4in; }
+  /* Each declaration owns the complete Letter page. Browser print margins plus
+     a 11in minimum-height page pushed each footer onto a blank follow-on sheet. */
+  @page { size: letter; margin: 0; }
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-    body { background: white; padding: 0; display: block; font-size: 10.5px; }
+    html, body { width: 8.5in; margin: 0; padding: 0; }
+    body { background: white; display: block; font-size: 10.5px; }
     .no-print, .filler { display: none !important; }
-    .page { box-shadow: none; width: 100%; margin-bottom: 0; page-break-after: always; break-after: page; page-break-inside: avoid; }
-    .page:last-child { page-break-after: avoid; break-after: avoid; }
+    .page {
+      box-shadow: none;
+      width: 8.5in;
+      min-width: 8.5in;
+      max-width: 8.5in;
+      height: 11in;
+      min-height: 11in;
+      max-height: 11in;
+      margin: 0;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      page-break-inside: avoid;
+    }
+    .page + .page { page-break-before: always; break-before: page; }
+    .page:last-of-type { page-break-after: avoid; break-after: avoid; }
     .top-bar { padding: 8px 18px 6px; }
     .top-bar-left .page-title { font-size: 17px; }
     .main-col { padding: 10px 16px 12px; }
@@ -182,7 +200,8 @@
     .covered-block { margin-bottom: 3px; }
     .covered-label { font-size: 10px; }
     .covered-value { font-size: 10px; }
-    .body-wrap { overflow: hidden; }
+    .body-wrap { min-height: 0; overflow: hidden; }
+    .page-footer { flex: 0 0 auto; margin-top: auto; }
   }
 </style>
 </head>
@@ -341,6 +360,7 @@
     <button class="btn-apply" onclick="applyAll()">✓ Apply to Document</button>
     <button class="btn-print" onclick="window.print()">🖶 Print / Save PDF</button>
     <button class="btn-clear" onclick="clearAll()">↻ Clear All</button>
+    <span class="print-hint">Print dialog: turn off <strong>Headers and footers</strong> to omit browser file names, URLs, and dates.</span>
   </div>
 </div>
 

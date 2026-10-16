@@ -1020,3 +1020,8 @@
 - [x] Match the supplied approved `General_Release_Winston.pdf` format: an unbranded one-page legal document, centered bold title, compact plain-text paragraphs, Illinois/state-specific governing-law line, and side-by-side claimant and witness signature/printed-name/date blocks.
 - [x] Add both Preview Claimant Release and Download Claimant Release actions; the shared PDF preview switches to the selected release output.
 - [x] Browser-validate a synthetic Illinois release for Quianna Winston with March 20, 2026 loss and $9,223.44 consideration. Full validation: 344 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — Klutch Policy Declarations Print Repair
+- [x] Fix the Approved Klutch Policy Declarations print stylesheet so each intended declaration page owns exactly one 8.5×11-inch Letter sheet. The document no longer emits the prior footer-only blank pages.
+- [x] Add a visible Print/Save PDF reminder that browser file names, URLs, dates, and other Chrome headers/footers are controlled by the native dialog; turning that setting off produces the clean document without browser-added fields.
+- [x] Render and visually inspect a fresh Chromium PDF: exactly 2 Letter pages, page 1 and 2 declarations intact, one document footer per page, and no `file:`/user-path browser artifacts. Full validation: 345 passed / 1 skipped, TypeScript, production build, and diff check passed.
