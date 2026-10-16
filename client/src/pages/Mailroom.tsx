@@ -580,6 +580,7 @@ function AdminMailQueue({ activeTab }: { activeTab: AdminTab }) {
       from: dateFrom ? new Date(dateFrom) : undefined,
       to: dateTo ? new Date(dateTo) : undefined,
       source: sourceFilter !== "all" ? sourceFilter as any : undefined,
+      sort: sortOrder,
     };
     if (activeTab === "overdue") base.overdue = true;
     else if (activeTab === "urgent") base.urgent = true;

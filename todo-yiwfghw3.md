@@ -647,7 +647,7 @@
 - [x] Diagnose the reported Softphone loading failure and confirm the live embedded Aircall workspace loads successfully without changing the paused Mailroom or Mail Bot state
 
 ## September 2026 Mailroom Dropdown Repair
-- [ ] Diagnose and repair the reported Mailroom dropdown interaction failure while retaining administrator-controlled feature pausing
+- [x] Diagnose and repair the reported Mailroom dropdown interaction failure while retaining administrator-controlled feature pausing. The Admin Mail sort selector now passes its selected mode to `mail.adminQueue` (it previously changed local state but never changed the server query); category, source/type, handler, status, date, and search filters remain wired to the queue query. No Mailroom schedule, direct-route gate, or visibility setting was enabled.
 
 ## September 2026 Settlement Demand and Form Reset Repairs
 - [x] Add Total Loss itemized damages fields for ACV, storage, admin fee, sales tax, salvage deduction, and calculated total
