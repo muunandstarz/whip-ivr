@@ -18,8 +18,11 @@ export type UtilizationDataset = {
 
 export type ResolvedUtilizationRow = {
   date: string;
+  /** Reported "Avaible Fleet" denominator: rented + the source's Available count. */
   fleet: number;
   rented: number;
+  /** Source workbook's "Available" count: reported unrented within the rentable-fleet denominator. */
+  available: number;
   utilization: number;
   sourceMonth: string | null;
   isLatestAvailableFallback: boolean;
@@ -44,10 +47,11 @@ function reportedPercent(value: unknown): number {
 /**
  * Resolves each calendar repair day to a reported monthly market snapshot.
  *
- * The workbook's Occupancy/Utilization field is canonical.  We intentionally
- * do not compute a percentage from the `available` (unrented vehicle) column:
- * its denominator differs from the source's Available Fleet denominator and
- * was the cause of impossible 10,000% document values.
+ * The workbook's Occupancy/Utilization field is canonical. We intentionally
+ * do not compute a percentage from the source's `available` (reported
+ * unrented) count: its denominator is the source's reported rentable fleet,
+ * not the workbook's separate total-fleet population. That confusion was the
+ * cause of the prior impossible 10,000% document values.
  */
 export function resolveUtilizationRows(
   data: UtilizationDataset,
@@ -82,6 +86,7 @@ export function resolveUtilizationRows(
         date,
         fleet: Number(market.total) || 0,
         rented: Number(market.rented) || 0,
+        available: Number(market.available) || 0,
         utilization: reportedPercent(market.utilization),
         sourceMonth: monthData?.month ?? selectedKey,
         isLatestAvailableFallback: !exactKey,
@@ -92,6 +97,7 @@ export function resolveUtilizationRows(
         date,
         fleet: 0,
         rented: 0,
+        available: 0,
         utilization: 0,
         sourceMonth: null,
         isLatestAvailableFallback: false,

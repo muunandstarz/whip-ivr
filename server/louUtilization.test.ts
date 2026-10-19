@@ -22,8 +22,8 @@ describe("Loss of Use utilization evidence", () => {
     });
 
     expect(rows).toEqual([
-      expect.objectContaining({ fleet: 749, rented: 739, utilization: 98.7, sourceMonth: "September 2026", dataStatus: "reported" }),
-      expect.objectContaining({ fleet: 749, rented: 739, utilization: 98.7, sourceMonth: "September 2026", dataStatus: "reported" }),
+      expect.objectContaining({ fleet: 749, rented: 739, available: 10, utilization: 98.7, sourceMonth: "September 2026", dataStatus: "reported" }),
+      expect.objectContaining({ fleet: 749, rented: 739, available: 10, utilization: 98.7, sourceMonth: "September 2026", dataStatus: "reported" }),
     ]);
     expect(formatReportedUtilization(rows[0]!.utilization)).toBe("98.7%");
     expect(formatReportedUtilization(10_000)).toBe("—");
@@ -37,7 +37,7 @@ describe("Loss of Use utilization evidence", () => {
       pickUp: "2026-10-02",
     });
 
-    expect(row).toMatchObject({ utilization: 98.7, sourceMonth: "September 2026", dataStatus: "latest_available", isLatestAvailableFallback: true });
+    expect(row).toMatchObject({ available: 10, utilization: 98.7, sourceMonth: "September 2026", dataStatus: "latest_available", isLatestAvailableFallback: true });
   });
 
   it("does not invent a historical utilization rate where the source report has no matching month", () => {
@@ -48,6 +48,6 @@ describe("Loss of Use utilization evidence", () => {
       pickUp: "2026-08-02",
     });
 
-    expect(row).toMatchObject({ utilization: 0, sourceMonth: null, dataStatus: "unavailable", isLatestAvailableFallback: false });
+    expect(row).toMatchObject({ available: 0, utilization: 0, sourceMonth: null, dataStatus: "unavailable", isLatestAvailableFallback: false });
   });
 });

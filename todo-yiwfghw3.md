@@ -1037,3 +1037,9 @@
 - [x] Compact the release into a readable one-page legal form with a centered title, regular-weight legal paragraphs, state-law line, and aligned claimant/witness signature, printed-name, and date blocks.
 - [x] Extend CCC upload parsing for claimant address and CCC transfer/title fees, and constrain AI drafting to optional editable opening prose so it cannot duplicate the controlled breakdown or closing.
 - [x] Browser-validate the supplied `DidionSettlementPacket.pdf`: Eric Didion / GB-12601-299010-261171X / 2017 Acura ILX / MD; $9,035.00 ACV + $587.28 tax + $400.00 fees = matching $10,022.28 settlement. Visually inspect both the final one-page settlement offer and compact release with no clipping or abnormal spacing. Full validation: 348 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — Loss of Use Monthly Utilization Reconciliation
+- [x] Corrected standalone LOU and appended Subro Demand LOU schedules to present one source row per applicable monthly utilization snapshot, instead of incorrectly repeating a month-end snapshot as daily telemetry.
+- [x] Added the source workbook's reported-unrented count and clear reconciliation: Rented + Reported Unrented = Reported Rentable Fleet. The source’s separate total-fleet unavailable/hold population is now explicitly identified as unallocated by individual market rather than inferred.
+- [x] Verified the supplied Miami July 2026 packet facts: 147 rented + 14 reported unrented = 161 reported rentable fleet; source-reported occupancy is 91.0%. Generated and visually reviewed updated standalone and Subro Demand examples.
+- [x] Retained the reported workbook occupancy without recomputing from incompatible columns. No dashboard announcement was created; await the owner’s explicit all-clear for team-facing announcement publication.

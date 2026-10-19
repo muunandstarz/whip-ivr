@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Convert a Whip monthly utilization workbook into the LOU runtime dataset.
 
-The workbook's reported Occupancy value is the canonical utilization value.  The
-runtime dataset keeps both its raw counts and that reported percentage so the
-application never derives a rate from an incompatible denominator.
+The workbook's reported Occupancy value is the canonical utilization value. The
+market-level ``Avaible Fleet`` field is its rentable-fleet denominator and equals
+Rented + Available (reported unrented). It is distinct from the workbook's
+separate total-fleet population. The runtime keeps these counts and the reported
+percentage so documents never imply daily telemetry or derive a rate from an
+incompatible denominator.
 """
 
 from __future__ import annotations
@@ -132,7 +135,7 @@ def main() -> None:
             "file": args.workbook.name,
             "worksheet": worksheet.title,
             "reported_field": "Occupancy",
-            "methodology": "The reported Occupancy field is retained as utilization. The denominator is the workbook's Available Fleet field, not the Available column.",
+            "methodology": "The reported Occupancy field is retained as utilization. Its market denominator is the workbook's Avaible Fleet (rentable fleet = Rented + Available/reported unrented), not the workbook's separate total-fleet population.",
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -9,9 +9,18 @@ describe("standalone Loss of Use utilization evidence", () => {
     expect(source).toContain("function formatLouUtilization(value: unknown): string");
     expect(source).toContain('r.dataStatus === "unavailable" ? "—" : formatLouUtilization(r.utilization)');
     expect(source).toContain("const utilizationSourceNote = louUtilizationSourceNote(utilRows);");
-    expect(source).toContain("Available Fleet");
-    expect(source).toContain("Utilization is the report's stated Occupancy rate");
+    expect(source).toContain("reported unrented");
+    expect(source).toContain("reported rentable fleet");
     expect(source).toContain('doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });');
+  });
+
+  it("uses one reconciled row per monthly source snapshot rather than representing repeated daily telemetry", () => {
+    expect(source).toContain("function summarizeLouUtilizationRows(rows: LouUtilizationRow[]): LouUtilizationSnapshot[]");
+    expect(source).toContain("MONTHLY FLEET UTILIZATION SNAPSHOTS");
+    expect(source).toContain("const utilizationSnapshots = summarizeLouUtilizationRows(utilRows);");
+    expect(source).toContain("const louUtilizationSnapshots = summarizeLouUtilizationRows(louUtilizationRows);");
+    expect(source).toContain("Reported unrented");
+    expect(source).not.toContain("daily record${louUtilizationRows.length");
   });
 
   it("moves standalone legal support to a clean second page without repeating the Whip header", () => {
