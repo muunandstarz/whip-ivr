@@ -1043,3 +1043,8 @@
 - [x] Added the source workbook's reported-unrented count and clear reconciliation: Rented + Reported Unrented = Reported Rentable Fleet. The source’s separate total-fleet unavailable/hold population is now explicitly identified as unallocated by individual market rather than inferred.
 - [x] Verified the supplied Miami July 2026 packet facts: 147 rented + 14 reported unrented = 161 reported rentable fleet; source-reported occupancy is 91.0%. Generated and visually reviewed updated standalone and Subro Demand examples.
 - [x] Retained the reported workbook occupancy without recomputing from incompatible columns. No dashboard announcement was created; await the owner’s explicit all-clear for team-facing announcement publication.
+
+## October 2026 — Loss of Use Carrier-Safe Utilization Format
+- [x] Remove carrier-facing fleet, rented, and reported-unrented counts from standalone LOU and appended Subro Demand support schedules. The documents now show only report month, repair days, market, and the source-reported occupancy percentage.
+- [x] Reframe the monthly source as an aggregate **Market Utilization Indicator**, not a fleet capacity, daily tracking, or substitute-vehicle availability record. The evidence notes expressly state that it does not identify any individual replacement vehicle’s availability, class, location, reservation, maintenance/hold status, or suitability.
+- [x] Reproduce and visually inspect the latest Miami standalone LOU: it retains the 91.0% reported occupancy indicator but contains no rentable-fleet/rented/reported-unrented count fields or availability assertion. Full validation: 349 passed / 1 skipped, TypeScript, production build, and diff check passed.

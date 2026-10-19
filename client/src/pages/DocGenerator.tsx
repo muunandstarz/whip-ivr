@@ -164,17 +164,17 @@ function summarizeLouUtilizationRows(rows: LouUtilizationRow[]): LouUtilizationS
   return Array.from(snapshots.values());
 }
 
-function louUtilizationReconciliation(snapshots: LouUtilizationSnapshot[]): string {
+function louUtilizationEvidenceNote(snapshots: LouUtilizationSnapshot[]): string {
   const reported = snapshots.filter((snapshot) => snapshot.dataStatus !== "unavailable");
-  if (!reported.length) return "No monthly market snapshot was available to reconcile fleet counts for this repair period.";
-  return `Monthly reconciliation: ${reported.map((snapshot) => `${snapshot.reportMonth}: ${snapshot.rentCount} rented + ${snapshot.availableCount} reported unrented = ${snapshot.fleetCount} reported rentable fleet (${snapshot.utilization} reported occupancy)`).join("; ")}.`;
+  if (!reported.length) return "No monthly market-utilization indicator was available for this repair period.";
+  return `Monthly market-utilization indicator: ${reported.map((snapshot) => `${snapshot.reportMonth}: ${snapshot.utilization} reported occupancy`).join("; ")}. This aggregate does not identify the availability, class, location, reservation status, maintenance/hold status, or suitability of any individual replacement vehicle.`;
 }
 
 function louUtilizationSourceNote(rows: LouUtilizationRow[]): string {
   const months = Array.from(new Set(rows.map((row) => row.sourceMonth).filter((month): month is string => Boolean(month))));
   if (!months.length) return "No reported market utilization snapshot was available for this repair period; no utilization percentage is represented.";
   const hasLatestFallback = rows.some((row) => row.dataStatus === "latest_available");
-  return `Source: Whip Utilization Report (${months.join(", ")}). Each row is one monthly market snapshot, not a repeated daily measurement. The snapshot reconciles Rented + Reported Unrented to the report's rentable-fleet denominator; Occupancy is the report's stated monthly occupancy rate. The source does not allocate its separate total-fleet or unavailable/hold population to individual markets.${hasLatestFallback ? " Repair dates after the last available report use the most recent reported monthly snapshot and are identified as such." : ""}`;
+  return `Source: Whip Utilization Report (${months.join(", ")}). Each row is a monthly, market-level utilization indicator—not a daily measurement or a vehicle-availability inventory. The reported occupancy metric provides aggregate utilization context only and does not establish that any particular substitute vehicle was available, suitable, or unavailable for this claim.${hasLatestFallback ? " Repair dates after the last available report use the most recent reported monthly snapshot and are identified as such." : ""}`;
 }
 
 type LouSupportingSchedule = {
@@ -691,8 +691,8 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
     ["Days Claimed", String(schedule.days)],
   ]);
 
-  section("MONTHLY FLEET UTILIZATION SNAPSHOTS");
-  const methodNote = `The Whip Utilization Report is a monthly market snapshot, not a daily tracking feed. Accordingly, this table shows one reconciled snapshot for each applicable report month rather than repeating the same month-end values for every repair day. The report supplies Rented, Reported Unrented, Rentable Fleet, and Occupancy values.`;
+  section("MONTHLY MARKET UTILIZATION INDICATOR");
+  const methodNote = `The Whip Utilization Report is a monthly, market-level utilization source—not a daily tracking feed or a vehicle-availability inventory. One source indicator is shown for each applicable report month rather than repeating a month-end value for every repair day.`;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(60, 60, 60);
@@ -701,18 +701,16 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
   doc.text(methodLines, lm, y);
   y += methodLines.length * 4 + 4;
 
-  const cols = [lm, 45, 60, 91, 111, 130, 166];
-  const headers = ["Report month", "Repair days", "Location", "Rentable fleet", "Rented", "Reported", "Occupancy"];
-  ensure(10);
+  const cols = [lm, 67, 100, 151];
+  const headers = ["Report month", "Repair days", "Location", "Reported occupancy"];
+  ensure(7);
   doc.setFillColor(45, 45, 45);
-  doc.rect(lm, y, tw, 10, "F");
+  doc.rect(lm, y, tw, 7, "F");
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(6.2);
+  doc.setFontSize(6.6);
   doc.setFont("helvetica", "bold");
   headers.forEach((header, index) => doc.text(header, cols[index] + 1, y + 4));
-  doc.setFontSize(5.6);
-  doc.text("unrented", cols[5] + 1, y + 7.5);
-  y += 10;
+  y += 7;
   const utilizationRows = schedule.utilizationRows.length > 0
     ? schedule.utilizationRows
     : Array.from({ length: schedule.days }, (_, index) => ({
@@ -733,11 +731,8 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
     doc.text(snapshot.reportMonth, cols[0] + 1, y + 4);
     doc.text(String(snapshot.repairDays), cols[1] + 1, y + 4);
     doc.text(schedule.marketName, cols[2] + 1, y + 4);
-    doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.fleetCount), cols[3] + 1, y + 4);
-    doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.rentCount), cols[4] + 1, y + 4);
-    doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.availableCount), cols[5] + 1, y + 4);
     doc.setFont("helvetica", "bold");
-    doc.text(snapshot.utilization, cols[6] + 1, y + 4);
+    doc.text(snapshot.utilization, cols[3] + 1, y + 4);
     y += 6;
   });
   y += 5;
@@ -749,7 +744,7 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
   ensure(sourceLines.length * 3.5 + 7);
   doc.text(sourceLines, lm, y);
   y += sourceLines.length * 3.5 + 5;
-  const reconciliationLines = doc.splitTextToSize(louUtilizationReconciliation(utilizationSnapshots), tw) as string[];
+  const reconciliationLines = doc.splitTextToSize(louUtilizationEvidenceNote(utilizationSnapshots), tw) as string[];
   ensure(reconciliationLines.length * 3.5 + 7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(55, 55, 55);
@@ -777,7 +772,7 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
   section("LEGAL BASIS & UTILIZATION METHODOLOGY");
   const legalText = `Under the common law of negligence and applicable state tort statutes, a tortfeasor is liable for economic losses proximately caused by a negligent act, including loss of use of a damaged vehicle. Loss-of-use damages are recoverable for each day a revenue-generating vehicle is out of service due to the collision, regardless of whether a substitute vehicle was rented. See Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).
 
-The subject vehicle is registered to ${schedule.registeredOwner || "the registered owner"} and is actively leased as a revenue-generating fleet asset. It was unavailable for service during the repair period, resulting in direct economic loss equal to the applicable daily rate multiplied by the days out of service. The monthly utilization snapshot above${averageUtilization === "—" ? "" : ` (showing ${averageUtilization} reported occupancy)`} documents the applicable market utilization basis for this claimed period.`;
+The subject vehicle is registered to ${schedule.registeredOwner || "the registered owner"} and is actively leased as a revenue-generating fleet asset. It was unavailable for service during the repair period, resulting in direct economic loss equal to the applicable daily rate multiplied by the days out of service. The monthly utilization indicator above${averageUtilization === "—" ? "" : ` (showing ${averageUtilization} reported market occupancy)`} provides aggregate demand context for this claimed period; it is not a substitute-vehicle availability ledger.`;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(60, 60, 60);
@@ -6469,7 +6464,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
-    doc.text("Monthly Fleet Utilization & Claim Documentation", 14, y);
+    doc.text("Monthly Market Utilization & Claim Documentation", 14, y);
     y += 5;
     doc.text(today, 14, y);
     y += 8;
@@ -6538,13 +6533,13 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     }
     y += 6;
 
-    // Monthly Fleet Utilization Snapshot section. The source report is monthly,
-    // so presenting one snapshot per report month is materially more accurate
-    // than repeating the same values once for every repair date.
+    // Monthly Market Utilization section. The source report is monthly and
+    // market-level, so it must not be presented as daily telemetry or an
+    // individual vehicle-availability inventory.
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(23, 27, 49);
-    doc.text("MONTHLY FLEET UTILIZATION SNAPSHOTS", 14, y);
+    doc.text("MONTHLY MARKET UTILIZATION INDICATOR", 14, y);
     y += 2;
     doc.setDrawColor(23, 27, 49);
     doc.setLineWidth(0.5);
@@ -6553,7 +6548,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     y += 4;
 
     // Utilization methodology note
-    const methodNote = `The Whip Utilization Report is a monthly market snapshot, not a daily tracking feed. This table therefore shows one reconciled snapshot for each applicable report month, rather than repeating the same month-end numbers for every repair day. The report supplies Rented, Reported Unrented, Rentable Fleet, and Occupancy values.`;
+    const methodNote = `The Whip Utilization Report is a monthly, market-level utilization source—not a daily tracking feed or a vehicle-availability inventory. One source indicator is shown for each applicable report month rather than repeating a month-end value for every repair day.`;
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -6565,16 +6560,14 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     const utilizationSnapshots = summarizeLouUtilizationRows(utilRows);
     // Utilization table header
     doc.setFillColor(23, 27, 49);
-    doc.rect(14, y, W - 28, 10, "F");
+    doc.rect(14, y, W - 28, 7, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6.2);
+    doc.setFontSize(6.6);
     doc.setFont("helvetica", "bold");
-    const cols = [14, 45, 60, 91, 111, 130, 166];
-    const headers = ["Report month", "Repair days", "Location", "Rentable fleet", "Rented", "Reported", "Occupancy"];
+    const cols = [14, 67, 100, 151];
+    const headers = ["Report month", "Repair days", "Location", "Reported occupancy"];
     headers.forEach((h, i) => doc.text(h, cols[i] + 1, y + 4));
-    doc.setFontSize(5.6);
-    doc.text("unrented", cols[5] + 1, y + 7.5);
-    y += 10;
+    y += 7;
 
     // Utilization snapshots, one per actual report month.
     for (let i = 0; i < utilizationSnapshots.length; i++) {
@@ -6586,12 +6579,9 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
       doc.text(snapshot.reportMonth, cols[0] + 1, y + 4);
       doc.text(String(snapshot.repairDays), cols[1] + 1, y + 4);
       doc.text(marketName, cols[2] + 1, y + 4);
-      doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.fleetCount), cols[3] + 1, y + 4);
-      doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.rentCount), cols[4] + 1, y + 4);
-      doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.availableCount), cols[5] + 1, y + 4);
       doc.setTextColor(40, 40, 40);
       doc.setFont("helvetica", "bold");
-      doc.text(snapshot.utilization, cols[6] + 1, y + 4);
+      doc.text(snapshot.utilization, cols[3] + 1, y + 4);
       doc.setTextColor(40, 40, 40);
       doc.setFont("helvetica", "normal");
       y += 6;
@@ -6610,7 +6600,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.rect(14, y, W - 28, methLines.length * 3.5 + 4, "F");
     doc.text(methLines, 16, y + 3.5);
     y += methLines.length * 3.5 + 8;
-    const reconciliation = louUtilizationReconciliation(utilizationSnapshots);
+    const reconciliation = louUtilizationEvidenceNote(utilizationSnapshots);
     const reconciliationLines = doc.splitTextToSize(reconciliation, W - 28);
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "bold");
@@ -6691,7 +6681,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
 
     const displayedUtilizationRows = getUtilizationRows();
     const reportedUtilization = displayedUtilizationRows.find((row) => row.utilization !== "—")?.utilization;
-    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"} and is identified as a revenue-generating fleet asset. It was unavailable for service during the repair period described above. The requested loss of use equals the applicable daily rate multiplied by the documented days out of service. ${reportedUtilization ? `The attached monthly utilization snapshot records ${reportedUtilization} market occupancy in the applicable report month and supports the business basis for this claimed out-of-service period.` : "No reported market-utilization percentage was available for the requested period, so this schedule does not represent one."} This request remains subject to the applicable jurisdiction, policy, liability, repair-period, and claim-specific evidence.`;
+    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"} and is identified as a revenue-generating fleet asset. It was unavailable for service during the repair period described above. The requested loss of use equals the applicable daily rate multiplied by the documented days out of service. ${reportedUtilization ? `The attached monthly utilization indicator records ${reportedUtilization} market occupancy in the applicable report month and provides aggregate demand context for this claimed period; it is not a substitute-vehicle availability ledger.` : "No reported market-utilization percentage was available for the requested period, so this schedule does not represent one."} This request remains subject to the applicable jurisdiction, policy, liability, repair-period, and claim-specific evidence.`;
     const legal2Lines = doc.splitTextToSize(legalText2, W - 28);
     doc.text(legal2Lines, 14, y);
     y += legal2Lines.length * 4 + 4;
@@ -6874,10 +6864,10 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
         </div>
       </div>
 
-      {/* Monthly Fleet Utilization Preview */}
+      {/* Monthly Market Utilization Preview */}
       {days > 0 && dropOffDate && pickUpDate && (
-        <Panel title="Monthly Fleet Utilization Snapshot Preview" tag="INCLUDED IN PDF">
-          <p className="mb-2 text-xs text-muted-foreground">One row is shown for each source reporting month. “Reported unrented” accounts for the unoccupied portion of the report’s rentable-fleet denominator; this is not a daily utilization feed.</p>
+        <Panel title="Monthly Market Utilization Indicator Preview" tag="INCLUDED IN PDF">
+          <p className="mb-2 text-xs text-muted-foreground">One row is shown for each source reporting month. The occupancy percentage is aggregate market context, not a daily feed or an individual substitute-vehicle availability inventory.</p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -6885,9 +6875,6 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
                   <th className="px-2 py-1.5 text-left">Report month</th>
                   <th className="px-2 py-1.5 text-right">Repair days</th>
                   <th className="px-2 py-1.5 text-left">Location</th>
-                  <th className="px-2 py-1.5 text-right">Rentable fleet</th>
-                  <th className="px-2 py-1.5 text-right">Rented</th>
-                  <th className="px-2 py-1.5 text-right">Reported unrented</th>
                   <th className="px-2 py-1.5 text-right">Reported occupancy</th>
                 </tr>
               </thead>
@@ -6897,16 +6884,13 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
                     <td className="px-2 py-1">{snapshot.reportMonth}</td>
                     <td className="px-2 py-1 text-right">{snapshot.repairDays}</td>
                     <td className="px-2 py-1">{marketName}</td>
-                    <td className="px-2 py-1 text-right">{snapshot.dataStatus === "unavailable" ? "—" : snapshot.fleetCount}</td>
-                    <td className="px-2 py-1 text-right">{snapshot.dataStatus === "unavailable" ? "—" : snapshot.rentCount}</td>
-                    <td className="px-2 py-1 text-right">{snapshot.dataStatus === "unavailable" ? "—" : snapshot.availableCount}</td>
                     <td className="px-2 py-1 text-right font-bold text-foreground">{snapshot.utilization}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs font-medium text-foreground/80">{louUtilizationReconciliation(utilizationSnapshots)}</p>
+          <p className="mt-2 text-xs font-medium text-foreground/80">{louUtilizationEvidenceNote(utilizationSnapshots)}</p>
         </Panel>
       )}
 
