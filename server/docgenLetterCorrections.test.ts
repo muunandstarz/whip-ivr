@@ -21,11 +21,17 @@ describe('Document Generator letter corrections', () => {
     expect(source).toContain('${form.adjusterName || "[Adjuster Name]"}');
   });
 
-  it('uses a North American date sentence and an unqualified known claim number in TNC denials', () => {
+  it('uses a North American date sentence and renders TNC carrier details only when supplied', () => {
+    const tncPipTemplate = source.slice(source.indexOf('tnc_pip:'), source.indexOf('no_pip_state:'));
     expect(source).toContain('function formatNorthAmericanLetterDate');
-    expect(source).toContain('Our investigation confirms that on ${formatNorthAmericanLetterDate(f.dol)}');
+    expect(tncPipTemplate).toContain('Our investigation confirms that on ${formatNorthAmericanLetterDate(f.dol)}');
     expect(source).toContain('Date of Loss: ${formatNorthAmericanLetterDate(dateOfLoss)}');
-    expect(source).toContain('Claim Number: ${f.tnc_claim || "[TNC Claim Number]"}');
+    expect(tncPipTemplate).toContain('fields: ["recipient", "claimant", "dol", "tnc", "period", "tnc_carrier", "tnc_claim", "adjuster"]');
+    expect(tncPipTemplate).toContain('f.tnc_carrier && `TNC Insurance Carrier: ${f.tnc_carrier}`');
+    expect(tncPipTemplate).toContain('f.tnc_claim && `Claim Number: ${f.tnc_claim}`');
+    expect(tncPipTemplate).toContain('const carrierReferenceBlock = carrierReference');
+    expect(tncPipTemplate).not.toContain('TNC Insurance Carrier: ${f.tnc_carrier || "[TNC Carrier Name]"}');
+    expect(tncPipTemplate).not.toContain('Claim Number: ${f.tnc_claim || "[TNC Claim Number]"}');
     expect(source).not.toContain('Claim Number (if known):');
   });
 

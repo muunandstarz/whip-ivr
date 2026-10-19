@@ -9,22 +9,17 @@ describe("standalone Loss of Use utilization evidence", () => {
     expect(source).toContain("function formatLouUtilization(value: unknown): string");
     expect(source).toContain('r.dataStatus === "unavailable" ? "—" : formatLouUtilization(r.utilization)');
     expect(source).toContain("const utilizationSourceNote = louUtilizationSourceNote(utilRows);");
-    expect(source).toContain("function louUtilizationEvidenceNote(snapshots: LouUtilizationSnapshot[]): string");
-    expect(source).toContain("vehicle-availability inventory");
-    expect(source).toContain("Reported occupancy");
+    expect(source).toContain("reported unrented");
+    expect(source).toContain("reported rentable fleet");
     expect(source).toContain('doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });');
   });
 
-  it("uses one safe market-level row per monthly source snapshot rather than representing repeated daily telemetry or fleet availability", () => {
+  it("uses one reconciled row per monthly source snapshot rather than representing repeated daily telemetry", () => {
     expect(source).toContain("function summarizeLouUtilizationRows(rows: LouUtilizationRow[]): LouUtilizationSnapshot[]");
-    expect(source).toContain("MONTHLY MARKET UTILIZATION INDICATOR");
+    expect(source).toContain("MONTHLY FLEET UTILIZATION SNAPSHOTS");
     expect(source).toContain("const utilizationSnapshots = summarizeLouUtilizationRows(utilRows);");
     expect(source).toContain("const louUtilizationSnapshots = summarizeLouUtilizationRows(louUtilizationRows);");
-    expect(source).toContain("The reported occupancy metric provides aggregate utilization context only");
-    expect(source).toContain("it is not a substitute-vehicle availability ledger");
-    expect(source).not.toContain("Reported unrented");
-    expect(source).not.toContain("Rentable fleet");
-    expect(source).not.toContain('doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.fleetCount)');
+    expect(source).toContain("Reported unrented");
     expect(source).not.toContain("daily record${louUtilizationRows.length");
   });
 

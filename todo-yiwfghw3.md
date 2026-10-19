@@ -1044,7 +1044,12 @@
 - [x] Verified the supplied Miami July 2026 packet facts: 147 rented + 14 reported unrented = 161 reported rentable fleet; source-reported occupancy is 91.0%. Generated and visually reviewed updated standalone and Subro Demand examples.
 - [x] Retained the reported workbook occupancy without recomputing from incompatible columns. No dashboard announcement was created; await the owner’s explicit all-clear for team-facing announcement publication.
 
-## October 2026 — Loss of Use Carrier-Safe Utilization Format
-- [x] Remove carrier-facing fleet, rented, and reported-unrented counts from standalone LOU and appended Subro Demand support schedules. The documents now show only report month, repair days, market, and the source-reported occupancy percentage.
-- [x] Reframe the monthly source as an aggregate **Market Utilization Indicator**, not a fleet capacity, daily tracking, or substitute-vehicle availability record. The evidence notes expressly state that it does not identify any individual replacement vehicle’s availability, class, location, reservation, maintenance/hold status, or suitability.
-- [x] Reproduce and visually inspect the latest Miami standalone LOU: it retains the 91.0% reported occupancy indicator but contains no rentable-fleet/rented/reported-unrented count fields or availability assertion. Full validation: 349 passed / 1 skipped, TypeScript, production build, and diff check passed.
+## October 2026 — Loss of Use Carrier-Safe Utilization Format (Reverted; Daily Source Pending)
+- [x] Tested and visually validated an alternate carrier-safe monthly aggregate format without fleet-count fields.
+- [x] Reverted that alternate format at the owner’s direction on October 19, 2026. The current standalone and Subro Demand LOU documents again use the prior monthly-reconciliation format from checkpoint `32b2dab`.
+- [ ] Replace the monthly utilization presentation with a day-by-day utilization source once the owner supplies or authorizes that data. Do not represent monthly snapshots as daily evidence or announce the interim format as team-ready.
+
+## October 2026 — TNC PIP Denial Carrier Fields
+- [x] Add the missing **TNC Carrier Name** and **TNC Claim Number** inputs to the TNC PIP Denial template. The values now reach the generated denial instead of producing `[TNC Carrier Name]` and `[TNC Claim Number]` placeholders.
+- [x] Make the carrier-reference paragraph conditional: it prints only when at least one carrier detail is supplied, avoiding an empty reference section in a denial that does not yet have a TNC carrier claim.
+- [x] Browser/PDF-validate a synthetic TNC PIP denial: it displayed both inputs and rendered `James River Insurance` with `JR-987654321`; a second empty-field output omitted the carrier-reference block entirely. Full validation: 349 passed / 1 skipped, TypeScript, production build, and diff check passed.
