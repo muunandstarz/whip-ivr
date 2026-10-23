@@ -30,6 +30,10 @@ export type KlutchPolicyTerms = {
   leaseId: string;
   memberName: string;
   memberAddress?: string;
+  memberStreet?: string;
+  memberCity?: string;
+  memberState?: KlutchState;
+  memberZip?: string;
   memberEmail?: string;
   vehicle: string;
   vin?: string;

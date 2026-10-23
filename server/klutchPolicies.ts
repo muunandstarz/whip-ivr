@@ -104,7 +104,7 @@ async function allocateSequence(conn: mysql.Connection, key: "policy" | "claim")
 
 async function getClaimForPolicy(conn: mysql.Connection, policyId: number, snapsheetClaimNumber: string, actor: KlutchActor) {
   const canonical = canonicalizeSnapSheetClaim(snapsheetClaimNumber);
-  if (!canonical) throw new Error("A SnapSheet claim number is required to save this claim document.");
+  if (!canonical) throw new Error("A Whip / SnapSheet claim number is required to save this claim document.");
   const [existingRows] = await conn.execute<DbClaim[]>(
     "SELECT * FROM klutch_claims WHERE snapsheet_claim_number = ? FOR UPDATE",
     [canonical]
@@ -142,7 +142,7 @@ export async function issueKlutchPolicy(input: {
   assertState(input.state);
   assertTerm(input.effectiveOn, input.expiresOn);
   if (!input.issueRequestKey.trim() || !input.leaseId.trim() || !input.terms.memberName.trim() || !input.terms.vehicle.trim()) {
-    throw new Error("Lease ID, member name, vehicle, and an idempotency key are required to issue a policy.");
+    throw new Error("Whip claim number, member name, vehicle, and an idempotency key are required to issue a policy.");
   }
   const conn = await mysql.createConnection(databaseUrl());
   try {
@@ -306,7 +306,7 @@ export async function recordKlutchDocument(input: {
       throw new Error("A TNC denial cannot be created for Period 0 personal use.");
     }
     const claimRequired = ["tnc_denial", "carrier_position", "endorsement"].includes(input.documentType);
-    if (claimRequired && !input.claimNumber?.trim()) throw new Error("A SnapSheet claim number is required for this claim document.");
+    if (claimRequired && !input.claimNumber?.trim()) throw new Error("A Whip / SnapSheet claim number is required for this claim document.");
     const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
     if (input.documentType === "carrier_position") {
       const [enclosures] = await conn.execute<RowDataPacket[]>(

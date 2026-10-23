@@ -22,15 +22,39 @@ describe("Klutch policy documents workspace", () => {
       expect(contract).toContain(label);
     }
     expect(workspace).toContain("CREATED_NOT_SENT");
-    expect(workspace).toContain("This workspace does not email, mail, or deliver anything.");
+    expect(workspace).toContain("Created is not sent");
     expect(workspace).toContain("Period 0 is personal use");
     expect(workspace).toContain("Manager approval required.");
   });
 
   it("keeps declarations policy-level while requiring claim data only for claim documents", () => {
     expect(workspace).toContain('const documentRequiresClaim = (["tnc_denial", "carrier_position", "endorsement"] as KlutchDocumentType[]).includes(documentType);');
-    expect(workspace).toContain('if (documentRequiresClaim && !docForm.claimNumber)');
+    expect(workspace).toContain('const sourceClaimNumber = docForm.claimNumber || activePolicy.leaseId;');
+    expect(workspace).toContain('if (documentRequiresClaim && !sourceClaimNumber)');
     expect(workspace).not.toContain('if (!docForm.claimNumber && documentType !== "cancellation_notice")');
+  });
+
+  it("offers a no-save declaration preview plus visible native print and download controls", () => {
+    expect(workspace).toContain('Preview draft declaration');
+    expect(workspace).toContain('DRAFT PREVIEW — NOT SAVED OR SENT');
+    expect(workspace).toContain('Preview PDF & save audit');
+    expect(workspace).toContain('Download PDF & save audit');
+    expect(workspace).toContain('Open / Print');
+    expect(workspace).toContain('Use <strong>Open / Print</strong> for the browser’s native print dialog');
+  });
+
+  it("uses Whip claim mapping, structured mailing fields, and complete TNC denial inputs", () => {
+    expect(workspace).toContain('>Whip claim number<');
+    expect(workspace).toContain('memberStreet');
+    expect(workspace).toContain('memberCity');
+    expect(workspace).toContain('memberState');
+    expect(workspace).toContain('memberZip');
+    expect(workspace).toContain('writeMemberMailingAddress');
+    expect(workspace).toContain('Optional TNC insurer reference');
+    expect(workspace).toContain('TNC insurer name');
+    expect(workspace).toContain('TNC insurer claim number');
+    expect(contract).toContain('memberStreet?: string');
+    expect(contract).toContain('memberZip?: string');
   });
 
   it("uses the supplied Klutch asset and standard document identity treatment", () => {

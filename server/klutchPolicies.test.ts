@@ -20,8 +20,12 @@ describe("Klutch policy service safeguards", () => {
     expect(source).toContain("issue_request_key = ? FOR UPDATE");
     expect(source).toContain("created_by_user_id");
     expect(source).toContain("snapsheet_claim_number");
+    expect(source).toContain("Whip / SnapSheet claim number");
     expect(routerSource).toContain("issueRequestKey");
     expect(routerSource).toContain("input.terms.state !== input.state");
+    expect(routerSource).toContain("memberStreet");
+    expect(routerSource).toContain("memberCity");
+    expect(routerSource).toContain("memberZip");
   });
 
   it("blocks Period 0 denial records and preserves created-not-sent lifecycle", () => {
