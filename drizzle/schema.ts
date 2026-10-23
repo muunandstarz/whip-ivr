@@ -1245,3 +1245,111 @@ export const userBirthdayPreferences = mysqlTable('user_birthday_preferences', {
   birthdayLookup: index('user_birthday_preferences_lookup_idx').on(t.isOptedIn, t.birthMonth, t.birthDay),
 }));
 export type UserBirthdayPreference = typeof userBirthdayPreferences.$inferSelect;
+
+// ─── Klutch Policy Documents ─────────────────────────────────────────────────
+// These records are the system of record for issued Klutch policies and claim-file
+// document audits. They intentionally do not reuse personal DocGen drafts/recent
+// history, which is user-scoped and pruned.
+export const klutchNumberSequences = mysqlTable('klutch_number_sequences', {
+  sequenceKey: varchar('sequence_key', { length: 32 }).primaryKey(),
+  lastIssued: int('last_issued').default(0).notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+});
+export type KlutchNumberSequence = typeof klutchNumberSequences.$inferSelect;
+
+export const klutchPolicies = mysqlTable('klutch_policies', {
+  id: int('id').primaryKey().autoincrement(),
+  policyNumber: varchar('policy_number', { length: 24 }).notNull().unique(),
+  policySequence: int('policy_sequence').notNull().unique(),
+  issueRequestKey: varchar('issue_request_key', { length: 96 }).notNull().unique(),
+  leaseId: varchar('lease_id', { length: 128 }).notNull(),
+  state: varchar('state', { length: 2 }).notNull(),
+  effectiveOn: drizzleDate('effective_on').notNull(),
+  expiresOn: drizzleDate('expires_on').notNull(),
+  status: mysqlEnum('status', ['active', 'cancelled', 'expired']).default('active').notNull(),
+  cancelledOn: drizzleDate('cancelled_on'),
+  cancellationReason: text('cancellation_reason'),
+  terms: json('terms').notNull(),
+  createdByUserId: int('created_by_user_id').notNull(),
+  createdByName: varchar('created_by_name', { length: 255 }).notNull(),
+  updatedByUserId: int('updated_by_user_id').notNull(),
+  updatedByName: varchar('updated_by_name', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  activeLease: index('klutch_policies_lease_status_idx').on(t.leaseId, t.status),
+  stateDates: index('klutch_policies_state_dates_idx').on(t.state, t.effectiveOn, t.expiresOn),
+}));
+export type KlutchPolicy = typeof klutchPolicies.$inferSelect;
+
+export const klutchPolicyTerms = mysqlTable('klutch_policy_terms', {
+  id: int('id').primaryKey().autoincrement(),
+  policyId: int('policy_id').notNull(),
+  termNumber: int('term_number').notNull(),
+  effectiveOn: drizzleDate('effective_on').notNull(),
+  expiresOn: drizzleDate('expires_on').notNull(),
+  terms: json('terms').notNull(),
+  createdByUserId: int('created_by_user_id').notNull(),
+  createdByName: varchar('created_by_name', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  policyTerm: uniqueIndex('klutch_policy_terms_policy_term_uniq').on(t.policyId, t.termNumber),
+}));
+export type KlutchPolicyTerm = typeof klutchPolicyTerms.$inferSelect;
+
+export const klutchClaims = mysqlTable('klutch_claims', {
+  id: int('id').primaryKey().autoincrement(),
+  policyId: int('policy_id').notNull(),
+  klutchClaimNumber: varchar('klutch_claim_number', { length: 24 }).notNull().unique(),
+  claimSequence: int('claim_sequence').notNull().unique(),
+  snapsheetClaimNumber: varchar('snapsheet_claim_number', { length: 128 }).notNull().unique(),
+  createdByUserId: int('created_by_user_id').notNull(),
+  createdByName: varchar('created_by_name', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  policyLookup: index('klutch_claims_policy_idx').on(t.policyId),
+}));
+export type KlutchClaim = typeof klutchClaims.$inferSelect;
+
+export const klutchPolicyEvents = mysqlTable('klutch_policy_events', {
+  id: int('id').primaryKey().autoincrement(),
+  policyId: int('policy_id').notNull(),
+  eventType: mysqlEnum('event_type', ['issued', 'renewed', 'terms_amended', 'cancelled', 'claim_mapped', 'document_created']).notNull(),
+  actorUserId: int('actor_user_id').notNull(),
+  actorName: varchar('actor_name', { length: 255 }).notNull(),
+  metadata: json('metadata'),
+  occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+}, (t) => ({
+  policyEvents: index('klutch_policy_events_policy_idx').on(t.policyId, t.occurredAt),
+}));
+export type KlutchPolicyEvent = typeof klutchPolicyEvents.$inferSelect;
+
+export const klutchPolicyDocuments = mysqlTable('klutch_policy_documents', {
+  id: int('id').primaryKey().autoincrement(),
+  policyId: int('policy_id').notNull(),
+  claimId: int('claim_id'),
+  documentType: mysqlEnum('document_type', ['declarations', 'tnc_denial', 'carrier_position', 'cancellation_notice', 'endorsement']).notNull(),
+  documentVersion: varchar('document_version', { length: 48 }).notNull(),
+  deliveryStatus: mysqlEnum('delivery_status', ['CREATED_NOT_SENT']).default('CREATED_NOT_SENT').notNull(),
+  inputSnapshot: json('input_snapshot').notNull(),
+  createdByUserId: int('created_by_user_id').notNull(),
+  createdByName: varchar('created_by_name', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  policyDocument: index('klutch_policy_documents_policy_type_idx').on(t.policyId, t.documentType, t.createdAt),
+  claimDocument: index('klutch_policy_documents_claim_type_idx').on(t.claimId, t.documentType, t.createdAt),
+}));
+export type KlutchPolicyDocument = typeof klutchPolicyDocuments.$inferSelect;
+
+export const klutchEndorsementApprovals = mysqlTable('klutch_endorsement_approvals', {
+  id: int('id').primaryKey().autoincrement(),
+  policyId: int('policy_id').notNull(),
+  claimId: int('claim_id'),
+  carrierRequestEvidence: text('carrier_request_evidence').notNull(),
+  approvedByUserId: int('approved_by_user_id').notNull(),
+  approvedByName: varchar('approved_by_name', { length: 255 }).notNull(),
+  approvedAt: timestamp('approved_at').defaultNow().notNull(),
+}, (t) => ({
+  policyApproval: index('klutch_endorsement_approvals_policy_idx').on(t.policyId, t.approvedAt),
+}));
+export type KlutchEndorsementApproval = typeof klutchEndorsementApprovals.$inferSelect;

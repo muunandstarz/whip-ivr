@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("./DocGenerator.tsx", import.meta.url), "utf8");
 
-describe("approved Klutch Declarations navigation", () => {
-  it("keeps one approved entry and preserves its approved HTML view", () => {
+describe("Klutch declarations navigation", () => {
+  it("routes legacy declaration links to the single durable policy workspace", () => {
     expect(source).not.toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page"');
-    expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)"');
-    expect(source).toContain('case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html"');
-    expect(source).toContain('if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;');
+    expect(source).not.toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)"');
+    expect(source).toContain('{ id: "klutch-policy-documents", label: "Klutch Policy Documents"');
+    expect(source).toContain('case "klutch-policy-documents": return <KlutchPolicyDocumentsWorkspace');
+    expect(source).toContain('"klutch-policy-declarations"');
+    expect(source).toContain('return "klutch-policy-documents"');
   });
 
   it("uses one COI date control and one Declarations issue/subscription date for the rental-expiration calculator", () => {

@@ -10,13 +10,14 @@ describe('Klutch coverage navigation', () => {
     expect(source).not.toContain('case "dec-page-klutch":');
   });
 
-  it('retains the approved Klutch Policy Declarations entry', () => {
-    expect(source).toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText }');
-    expect(source).toContain('case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html"');
+  it('replaces legacy individual pages with the Klutch policy documents workspace', () => {
+    expect(source).toContain('{ id: "klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText }');
+    expect(source).toContain('case "klutch-policy-documents": return <KlutchPolicyDocumentsWorkspace');
   });
 
-  it('removes the separate Klutch Dec Page entry and routes legacy links to the approved page', () => {
+  it('removes the separate Klutch Dec Page entry and normalizes every legacy link to the workspace', () => {
     expect(source).not.toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page", icon: FileText }');
-    expect(source).toContain('if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;');
+    expect(source).toContain('const LEGACY_KLUTCH_TAB_IDS = new Set(["coverage-tnc", "coi-whip", "coi-klutch", "klutch-policy-declarations", "dec-page-whip"]);');
+    expect(source).toContain('if (LEGACY_KLUTCH_TAB_IDS.has(tab ?? "")) return "klutch-policy-documents";');
   });
 });

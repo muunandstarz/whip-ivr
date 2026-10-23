@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { jsPDF } from "jspdf";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
+import KlutchPolicyDocumentsWorkspace from "@/components/KlutchPolicyDocumentsWorkspace";
 import {
   AlertTriangle,
   Brain,
@@ -86,6 +87,7 @@ type DocGenTab =
   | "coi-whip"
   | "coi-klutch"
   | "klutch-policy-declarations"
+  | "klutch-policy-documents"
   | "dv-calculator";
 
 type LouDemandHandoff = {
@@ -282,9 +284,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Coverage",
     items: [
 
-      { id: "coverage-tnc", label: "Coverage Position — TNC Primary", icon: Shield },
-      { id: "coi-whip", label: "Certificate of Insurance", icon: Shield },
-      { id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)", icon: FileText },
+      { id: "klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText },
     ],
   },
   {
@@ -324,6 +324,14 @@ const NAV_GROUPS: NavGroup[] = [
   },
 
 ];
+
+const LEGACY_KLUTCH_TAB_IDS = new Set(["coverage-tnc", "coi-whip", "coi-klutch", "klutch-policy-declarations", "dec-page-whip"]);
+
+function normalizeDocGeneratorTab(tab: string | null | undefined): DocGenTab {
+  if (LEGACY_KLUTCH_TAB_IDS.has(tab ?? "")) return "klutch-policy-documents";
+  const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","klutch-policy-documents","dv-calculator"];
+  return valid.includes(tab as DocGenTab) ? tab as DocGenTab : "blank-letterhead";
+}
 
 // ─── PDF Helpers ──────────────────────────────────────────────────────────────
 const WHIP_ORANGE: [number, number, number] = [255, 98, 33];
@@ -9074,12 +9082,9 @@ function DVCalculatorTab() {
 export default function DocGenerator({ initialTab: directInitialTab }: { initialTab?: DocGenTab }) {
   const search = useSearch();
   const initialTab = (() => {
-    if (directInitialTab) return directInitialTab;
+    if (directInitialTab) return normalizeDocGeneratorTab(directInitialTab);
     const params = new URLSearchParams(search);
-    const t = params.get("tab");
-    if (t === "dec-page-whip") return "klutch-policy-declarations" as DocGenTab;
-    const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","coi-whip","coi-klutch","klutch-policy-declarations","dv-calculator"];
-    return (valid.includes(t as DocGenTab) ? t : "blank-letterhead") as DocGenTab;
+    return normalizeDocGeneratorTab(params.get("tab"));
   })();
   const initialMemberState = (() => {
     const params = new URLSearchParams(search);
@@ -9154,7 +9159,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   };
 
   const handleLoadDraft = (draft: { id: number; tabKey: string; formData: unknown }) => {
-    setActiveTab(draft.tabKey as DocGenTab);
+    setActiveTab(normalizeDocGeneratorTab(draft.tabKey));
     setCurrentDraftId(draft.id);
     setCurrentFormData(draft.formData as Record<string, unknown>);
     setShowMyDocs(false);
@@ -9167,7 +9172,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   };
 
   const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
-    setActiveTab(t.tabKey as DocGenTab);
+    setActiveTab(normalizeDocGeneratorTab(t.tabKey));
     setCurrentFormData(t.formData as Record<string, unknown>);
     markReadMut.mutate({ templateId: t.id });
     setShowSharedTemplates(false);
@@ -9196,6 +9201,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} />;
       case "pip-bill-review": return <MedicalReviewWorkspace />;
+      case "klutch-policy-documents": return <KlutchPolicyDocumentsWorkspace initialState={initialMemberState} />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;
@@ -9349,7 +9355,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
                             </span>
                           </td>
                           <td className="py-1.5">
-                            <button onClick={() => { setActiveTab(doc.tabKey as DocGenTab); setShowRecentDocs(false); }} className="text-[#ff6221] hover:underline text-[10px]">Open</button>
+                            <button onClick={() => { setActiveTab(normalizeDocGeneratorTab(doc.tabKey)); setShowRecentDocs(false); }} className="text-[#ff6221] hover:underline text-[10px]">Open</button>
                             {doc.pdfDataUrl && (
                               <button onClick={() => { setPreviewPdfUrl(doc.pdfDataUrl!); setFullScreenPreview(true); }} className="ml-2 text-foreground/50 hover:text-foreground text-[10px]">Preview</button>
                             )}
