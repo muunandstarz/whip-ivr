@@ -34,13 +34,13 @@ describe("Klutch policy documents workspace", () => {
     expect(workspace).not.toContain('if (!docForm.claimNumber && documentType !== "cancellation_notice")');
   });
 
-  it("offers a no-save declaration preview plus visible native print and download controls", () => {
-    expect(workspace).toContain('Preview draft declaration');
-    expect(workspace).toContain('DRAFT PREVIEW — NOT SAVED OR SENT');
-    expect(workspace).toContain('Preview PDF & save audit');
-    expect(workspace).toContain('Download PDF & save audit');
+  it("offers no-save document previews plus visible native print and download controls", () => {
+    expect(workspace).toContain('Preview declaration');
+    expect(workspace).toContain('Preview PDF');
+    expect(workspace).toContain('Create record & download');
     expect(workspace).toContain('Open / Print');
     expect(workspace).toContain('Use <strong>Open / Print</strong> for the browser’s native print dialog');
+    expect(workspace).toContain('No audit record was created.');
   });
 
   it("uses Whip claim mapping, structured mailing fields, and complete TNC denial inputs", () => {
@@ -53,8 +53,16 @@ describe("Klutch policy documents workspace", () => {
     expect(workspace).toContain('Optional TNC insurer reference');
     expect(workspace).toContain('TNC insurer name');
     expect(workspace).toContain('TNC insurer claim number');
+    expect(workspace).toContain('TNC insurer: ${docForm.tncCarrierName}');
+    expect(workspace).toContain('TNC insurer claim number: ${docForm.tncCarrierClaimNumber}');
+    expect(workspace).toContain('This information does not state or imply a coverage determination by that insurer.');
     expect(contract).toContain('memberStreet?: string');
     expect(contract).toContain('memberZip?: string');
+  });
+
+  it("clears an open preview before switching to a different Klutch form", () => {
+    expect(workspace).toContain('}, [documentType]);');
+    expect(workspace).toContain('if (current) URL.revokeObjectURL(current);');
   });
 
   it("uses the supplied Klutch asset and standard document identity treatment", () => {
@@ -62,12 +70,19 @@ describe("Klutch policy documents workspace", () => {
     expect(workspace).toContain("NAIC 17966");
     expect(workspace).toContain("Bobby Taheri");
     expect(workspace).toContain("Metrocars Leasing Corp");
-    expect(workspace).toContain("Created for policy or claim handling — not sent");
+    expect(workspace).toContain("Created is not sent");
     expect(workspace).not.toContain("Head of Claims");
   });
 
-  it("uses physical line leading for multi-line Klutch legal text", () => {
-    expect(workspace).toContain('const lineHeightFactor = Math.max(1.2, lineHeight / (10.2 * 0.3528));');
-    expect(workspace).not.toContain('lineHeightFactor: lineHeight / 10.2');
+  it("uses reference-specific forms and physical line leading for legal text", () => {
+    expect(workspace).toContain('function writeReferenceParagraph');
+    expect(workspace).toContain('leading / (fontSize * 0.3528)');
+    expect(workspace).toContain('Auto insurance policy declarations');
+    expect(workspace).toContain('Coverage Determination – Denial of Claim');
+    expect(workspace).toContain('RE: Coverage Position');
+    expect(workspace).toContain('Notice of Policy Cancellation');
+    expect(workspace).toContain('ENDORSEMENT NO. KIC-END-002');
+    expect(workspace).not.toContain('function addKlutchHeader');
+    expect(workspace).not.toContain('function addFooterAllPages');
   });
 });
