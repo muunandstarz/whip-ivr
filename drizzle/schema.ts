@@ -1263,6 +1263,12 @@ export const klutchPolicies = mysqlTable('klutch_policies', {
   policySequence: int('policy_sequence').notNull().unique(),
   issueRequestKey: varchar('issue_request_key', { length: 96 }).notNull().unique(),
   leaseId: varchar('lease_id', { length: 128 }).notNull(),
+  memberName: varchar('member_name', { length: 255 }).notNull(),
+  memberNumber: varchar('member_number', { length: 128 }).notNull(),
+  vinNormalized: varchar('vin_normalized', { length: 40 }).notNull(),
+  vehicle: varchar('vehicle', { length: 255 }).notNull(),
+  previousPolicyId: int('previous_policy_id'),
+  newLeaseConfirmed: boolean('new_lease_confirmed').default(false).notNull(),
   state: varchar('state', { length: 2 }).notNull(),
   effectiveOn: drizzleDate('effective_on').notNull(),
   expiresOn: drizzleDate('expires_on').notNull(),
@@ -1279,13 +1285,27 @@ export const klutchPolicies = mysqlTable('klutch_policies', {
 }, (t) => ({
   activeLease: index('klutch_policies_lease_status_idx').on(t.leaseId, t.status),
   stateDates: index('klutch_policies_state_dates_idx').on(t.state, t.effectiveOn, t.expiresOn),
+  vinStatus: index('klutch_policies_vin_status_idx').on(t.vinNormalized, t.status),
+  memberLookup: index('klutch_policies_member_lookup_idx').on(t.memberName, t.memberNumber),
 }));
 export type KlutchPolicy = typeof klutchPolicies.$inferSelect;
+
+/** A lockable per-VIN register serializes duplicate-lease decisions across
+ * simultaneous handler sessions. Policy rows retain the actual history. */
+export const klutchVinRegister = mysqlTable('klutch_vin_register', {
+  vinNormalized: varchar('vin_normalized', { length: 40 }).primaryKey(),
+  latestPolicyId: int('latest_policy_id'),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+});
+export type KlutchVinRegister = typeof klutchVinRegister.$inferSelect;
 
 export const klutchPolicyTerms = mysqlTable('klutch_policy_terms', {
   id: int('id').primaryKey().autoincrement(),
   policyId: int('policy_id').notNull(),
   termNumber: int('term_number').notNull(),
+  revisionNumber: int('revision_number').default(1).notNull(),
+  termMonths: int('term_months').notNull(),
+  transactionType: varchar('transaction_type', { length: 16 }).notNull(),
   effectiveOn: drizzleDate('effective_on').notNull(),
   expiresOn: drizzleDate('expires_on').notNull(),
   terms: json('terms').notNull(),
@@ -1293,7 +1313,7 @@ export const klutchPolicyTerms = mysqlTable('klutch_policy_terms', {
   createdByName: varchar('created_by_name', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => ({
-  policyTerm: uniqueIndex('klutch_policy_terms_policy_term_uniq').on(t.policyId, t.termNumber),
+  policyTermRevision: uniqueIndex('klutch_policy_terms_policy_term_revision_uniq').on(t.policyId, t.termNumber, t.revisionNumber),
 }));
 export type KlutchPolicyTerm = typeof klutchPolicyTerms.$inferSelect;
 
@@ -1301,7 +1321,7 @@ export const klutchClaims = mysqlTable('klutch_claims', {
   id: int('id').primaryKey().autoincrement(),
   policyId: int('policy_id').notNull(),
   klutchClaimNumber: varchar('klutch_claim_number', { length: 24 }).notNull().unique(),
-  claimSequence: int('claim_sequence').notNull().unique(),
+  claimSequence: int('claim_sequence'),
   snapsheetClaimNumber: varchar('snapsheet_claim_number', { length: 128 }).notNull().unique(),
   createdByUserId: int('created_by_user_id').notNull(),
   createdByName: varchar('created_by_name', { length: 255 }).notNull(),
@@ -1314,7 +1334,7 @@ export type KlutchClaim = typeof klutchClaims.$inferSelect;
 export const klutchPolicyEvents = mysqlTable('klutch_policy_events', {
   id: int('id').primaryKey().autoincrement(),
   policyId: int('policy_id').notNull(),
-  eventType: mysqlEnum('event_type', ['issued', 'renewed', 'terms_amended', 'cancelled', 'claim_mapped', 'document_created']).notNull(),
+  eventType: mysqlEnum('event_type', ['issued', 'renewed', 'corrected', 'terms_amended', 'cancelled', 'claim_mapped', 'document_created']).notNull(),
   actorUserId: int('actor_user_id').notNull(),
   actorName: varchar('actor_name', { length: 255 }).notNull(),
   metadata: json('metadata'),
@@ -1328,9 +1348,15 @@ export const klutchPolicyDocuments = mysqlTable('klutch_policy_documents', {
   id: int('id').primaryKey().autoincrement(),
   policyId: int('policy_id').notNull(),
   claimId: int('claim_id'),
+  termId: int('term_id'),
   documentType: mysqlEnum('document_type', ['declarations', 'tnc_denial', 'carrier_position', 'cancellation_notice', 'endorsement']).notNull(),
   documentVersion: varchar('document_version', { length: 48 }).notNull(),
   deliveryStatus: mysqlEnum('delivery_status', ['CREATED_NOT_SENT']).default('CREATED_NOT_SENT').notNull(),
+  policyTransactionType: varchar('policy_transaction_type', { length: 16 }).default('new').notNull(),
+  policyNumber: varchar('policy_number', { length: 24 }).notNull(),
+  klutchClaimNumber: varchar('klutch_claim_number', { length: 24 }),
+  memberName: varchar('member_name', { length: 255 }).notNull(),
+  handlerTitle: varchar('handler_title', { length: 255 }).notNull(),
   inputSnapshot: json('input_snapshot').notNull(),
   createdByUserId: int('created_by_user_id').notNull(),
   createdByName: varchar('created_by_name', { length: 255 }).notNull(),
@@ -1338,6 +1364,8 @@ export const klutchPolicyDocuments = mysqlTable('klutch_policy_documents', {
 }, (t) => ({
   policyDocument: index('klutch_policy_documents_policy_type_idx').on(t.policyId, t.documentType, t.createdAt),
   claimDocument: index('klutch_policy_documents_claim_type_idx').on(t.claimId, t.documentType, t.createdAt),
+  policyLog: index('klutch_policy_documents_number_created_idx').on(t.policyNumber, t.createdAt),
+  transactionLog: index('klutch_policy_documents_transaction_created_idx').on(t.policyTransactionType, t.createdAt),
 }));
 export type KlutchPolicyDocument = typeof klutchPolicyDocuments.$inferSelect;
 
@@ -1346,6 +1374,8 @@ export const klutchEndorsementApprovals = mysqlTable('klutch_endorsement_approva
   policyId: int('policy_id').notNull(),
   claimId: int('claim_id'),
   carrierRequestEvidence: text('carrier_request_evidence').notNull(),
+  managerName: varchar('manager_name', { length: 255 }).notNull(),
+  approvalConfirmed: boolean('approval_confirmed').default(false).notNull(),
   approvedByUserId: int('approved_by_user_id').notNull(),
   approvedByName: varchar('approved_by_name', { length: 255 }).notNull(),
   approvedAt: timestamp('approved_at').defaultNow().notNull(),
@@ -1353,3 +1383,15 @@ export const klutchEndorsementApprovals = mysqlTable('klutch_endorsement_approva
   policyApproval: index('klutch_endorsement_approvals_policy_idx').on(t.policyId, t.approvedAt),
 }));
 export type KlutchEndorsementApproval = typeof klutchEndorsementApprovals.$inferSelect;
+
+/** Per-handler working drafts and signature preferences. These are deliberately
+ * separate from the shared policy register and cannot alter issued policy data. */
+export const klutchPolicyDrafts = mysqlTable('klutch_policy_drafts', {
+  id: int('id').primaryKey().autoincrement(),
+  userId: int('user_id').notNull().unique(),
+  handlerName: varchar('handler_name', { length: 255 }).default('').notNull(),
+  handlerTitle: varchar('handler_title', { length: 255 }).default('').notNull(),
+  draft: json('draft').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+});
+export type KlutchPolicyDraft = typeof klutchPolicyDrafts.$inferSelect;

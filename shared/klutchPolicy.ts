@@ -19,25 +19,32 @@ export const KLUTCH_DOCUMENT_LABELS: Record<KlutchDocumentType, string> = {
 };
 
 export const KLUTCH_CREATED_NOT_SENT = "CREATED_NOT_SENT" as const;
-
 export const DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE = 35;
+export const KLUTCH_FIRST_POLICY_SEQUENCE = 100100;
+export const KLUTCH_CLAIM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export type KlutchPolicyTransactionType = "new" | "renewal" | "correction";
 
 type KlutchCoverageRule = {
   bi: string;
   pd: string;
-  pip?: string;
-  umRejectable?: boolean;
+  pip?: { limit: string; waivable: boolean };
+  umRejectable: boolean;
 };
 
+/**
+ * These limits and elections intentionally match the supplied final Klutch
+ * policy-document page. Do not infer or substitute a market's state rule.
+ */
 export const KLUTCH_COVERAGE_RULES: Record<KlutchState, KlutchCoverageRule> = {
-  MD: { bi: "$30,000 / $60,000", pd: "$15,000", pip: "$2,500" },
-  VA: { bi: "$25,000 / $50,000", pd: "$20,000", umRejectable: true },
-  PA: { bi: "$15,000 / $30,000", pd: "$5,000", pip: "$5,000" },
-  FL: { bi: "$10,000 / $20,000", pd: "$10,000", pip: "$10,000" },
-  IL: { bi: "$25,000 / $50,000", pd: "$20,000", umRejectable: true },
+  MD: { bi: "$30,000 / $60,000", pd: "$15,000", pip: { limit: "$2,500", waivable: true }, umRejectable: false },
   GA: { bi: "$25,000 / $50,000", pd: "$25,000", umRejectable: true },
-  MA: { bi: "$20,000 / $40,000", pd: "$5,000", pip: "$8,000" },
-  TX: { bi: "$30,000 / $60,000", pd: "$25,000", umRejectable: true },
+  FL: { bi: "$10,000 / $20,000", pd: "$10,000", pip: { limit: "$10,000", waivable: false }, umRejectable: true },
+  IL: { bi: "$25,000 / $50,000", pd: "$20,000", umRejectable: false },
+  VA: { bi: "$50,000 / $100,000", pd: "$25,000", umRejectable: false },
+  PA: { bi: "$15,000 / $30,000", pd: "$5,000", pip: { limit: "$5,000", waivable: false }, umRejectable: true },
+  MA: { bi: "$20,000 / $40,000", pd: "$5,000", pip: { limit: "$8,000", waivable: false }, umRejectable: false },
+  TX: { bi: "$30,000 / $60,000", pd: "$25,000", pip: { limit: "$2,500", waivable: true }, umRejectable: true },
 };
 
 export type KlutchCoverageAllocation = {
@@ -58,64 +65,74 @@ function roundCurrency(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/**
- * Uses the prior Klutch declaration's policy-period convention: whole coverage
- * weeks are the nearest number of seven-day intervals between the term dates.
- * A standard 12-month term is therefore 52 weeks (including leap-year terms).
- */
+export function addKlutchTermMonths(effectiveOn: string, months: 6 | 12) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(effectiveOn);
+  if (!match) return "";
+  const [, year, month, day] = match;
+  const target = new Date(Date.UTC(Number(year), Number(month) - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(Number(day), lastDay)).padStart(2, "0")}`;
+}
+
+/** Whole nearest weeks used by the supplied final Klutch declarations page. */
 export function calculateKlutchCoverageWeeks(effectiveOn: string, expiresOn: string) {
   const start = new Date(`${effectiveOn}T00:00:00Z`).getTime();
   const end = new Date(`${expiresOn}T00:00:00Z`).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-  return Math.max(1, Math.round((end - start) / (7 * 24 * 60 * 60 * 1000)));
+  return Math.max(0, Math.round((end - start) / (7 * 24 * 60 * 60 * 1000)));
 }
 
 /**
- * Reproduces the prior declaration allocation formula: BI 30, PD 12,
- * Collision 25, Comprehensive 13, PIP 8, UM 7, and UIM 5. Weights for
- * unavailable or rejected coverages are removed and the remaining elected
- * coverages receive their proportional share of the membership-fee premium.
+ * Server-owned reproduction of the supplied $35/week premium formula. Premium
+ * allocation is in integer cents using largest remainder, so coverage rows
+ * always add exactly to the policy-period premium.
  */
 export function calculateKlutchPremium(input: {
   state: KlutchState;
   effectiveOn: string;
   expiresOn: string;
-  weeklyMembershipFee?: number;
   pipWaived?: boolean;
   umRejected?: boolean;
+  comprehensiveDeductible?: string;
+  collisionDeductible?: string;
 }): KlutchPremiumCalculation {
   const rule = KLUTCH_COVERAGE_RULES[input.state];
-  const weeklyMembershipFee = Number.isFinite(input.weeklyMembershipFee)
-    ? Math.max(0, Number(input.weeklyMembershipFee))
-    : DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE;
   const coverageWeeks = calculateKlutchCoverageWeeks(input.effectiveOn, input.expiresOn);
-  const totalPremium = roundCurrency(weeklyMembershipFee * coverageWeeks);
-  const pipWaived = Boolean(input.pipWaived && input.state === "MD" && rule.pip);
+  const totalCents = Math.round(DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE * coverageWeeks * 100);
+  const pipWaived = Boolean(input.pipWaived && rule.pip?.waivable);
   const umRejected = Boolean(input.umRejected && rule.umRejectable);
-  const raw: Array<Omit<KlutchCoverageAllocation, "premium"> & { weight: number }> = [
-    { label: "Bodily Injury Liability", limit: rule.bi, weight: 30 },
-    { label: "Property Damage Liability", limit: rule.pd, weight: 12 },
-    { label: "Personal Injury Protection", limit: rule.pip ? (pipWaived ? "Waived" : rule.pip) : "Not included", weight: rule.pip && !pipWaived ? 8 : 0 },
-    { label: "Uninsured Motorist", limit: umRejected ? "Rejected" : rule.bi, weight: umRejected ? 0 : 7 },
-    { label: "Underinsured Motorist", limit: umRejected ? "Rejected" : rule.bi, weight: umRejected ? 0 : 5 },
-    { label: "UMPD", limit: "Not included", weight: 0 },
-    { label: "Collision", limit: "Actual Cash Value", deductible: "$500", weight: 25 },
-    { label: "Comprehensive", limit: "Actual Cash Value", deductible: "$500", weight: 13 },
+  const raw: Array<Omit<KlutchCoverageAllocation, "premium"> & { weight: number; order: number }> = [
+    { label: "Bodily Injury Liability", limit: rule.bi, weight: 30, order: 0 },
+    { label: "Property Damage Liability", limit: rule.pd, weight: 12, order: 1 },
+    { label: "Personal Injury Protection", limit: rule.pip ? (pipWaived ? "Waived" : rule.pip.limit) : "Waived", weight: rule.pip && !pipWaived ? 8 : 0, order: 2 },
+    { label: "Uninsured Motorist", limit: umRejected ? "Rejected" : rule.bi, weight: umRejected ? 0 : 7, order: 3 },
+    { label: "Underinsured Motorist", limit: umRejected ? "Rejected" : rule.bi, weight: umRejected ? 0 : 5, order: 4 },
+    { label: "UMPD", limit: "Not included", weight: 0, order: 5 },
+    { label: "Comprehensive", limit: "Actual Cash Value", deductible: input.comprehensiveDeductible || "$500", weight: 13, order: 6 },
+    { label: "Collision", limit: "Actual Cash Value", deductible: input.collisionDeductible || "$500", weight: 25, order: 7 },
   ];
-  const activeWeight = raw.reduce((total, coverage) => total + coverage.weight, 0) || 1;
   const active = raw.filter((coverage) => coverage.weight > 0);
-  let allocated = 0;
-  const coverages = raw.map((coverage) => {
-    let premium = 0;
-    if (coverage.weight > 0) {
-      premium = coverage === active[active.length - 1]
-        ? roundCurrency(totalPremium - allocated)
-        : roundCurrency(totalPremium * coverage.weight / activeWeight);
-      allocated = roundCurrency(allocated + premium);
-    }
-    return { label: coverage.label, limit: coverage.limit, deductible: coverage.deductible, premium };
+  const activeWeight = active.reduce((sum, coverage) => sum + coverage.weight, 0) || 1;
+  const bases = active.map((coverage) => {
+    const exact = totalCents * coverage.weight / activeWeight;
+    return { coverage, cents: Math.floor(exact), remainder: exact - Math.floor(exact) };
   });
-  return { weeklyMembershipFee, coverageWeeks, totalPremium, coverages };
+  let remaining = totalCents - bases.reduce((sum, row) => sum + row.cents, 0);
+  [...bases]
+    .sort((a, b) => b.remainder - a.remainder || a.coverage.order - b.coverage.order)
+    .forEach((row) => {
+      if (remaining > 0) {
+        row.cents += 1;
+        remaining -= 1;
+      }
+    });
+  const allocated = new Map(bases.map((row) => [row.coverage.label, row.cents / 100]));
+  return {
+    weeklyMembershipFee: DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE,
+    coverageWeeks,
+    totalPremium: totalCents / 100,
+    coverages: raw.map(({ weight: _weight, order: _order, ...coverage }) => ({ ...coverage, premium: allocated.get(coverage.label) ?? 0 })),
+  };
 }
 
 export const TNC_PERIODS = {
@@ -127,6 +144,7 @@ export const TNC_PERIODS = {
 export type KlutchPolicyTerms = {
   leaseId: string;
   memberName: string;
+  memberNumber: string;
   memberAddress?: string;
   memberStreet?: string;
   memberCity?: string;
@@ -134,16 +152,22 @@ export type KlutchPolicyTerms = {
   memberZip?: string;
   memberEmail?: string;
   vehicle: string;
-  vin?: string;
+  vin: string;
   effectiveOn: string;
   expiresOn: string;
   state: KlutchState;
+  termMonths: 6 | 12;
+  transactionType: KlutchPolicyTransactionType;
   coverages: Array<{ label: string; limit: string; deductible?: string; premium: number }>;
   totalPremium: number;
   weeklyMembershipFee?: number;
   coverageWeeks?: number;
   pipWaived?: boolean;
   umRejected?: boolean;
+  comprehensiveDeductible?: string;
+  collisionDeductible?: string;
+  leaseStatus?: "active" | "terminated";
+  cancellationDate?: string;
   tncUseNote: string;
 };
 
@@ -151,10 +175,14 @@ export function canonicalizeSnapSheetClaim(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "");
 }
 
+export function normalizeKlutchVin(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 export function formatKlutchPolicyNumber(state: KlutchState, sequence: number) {
   return `KIC-${state}-${String(sequence).padStart(6, "0")}`;
 }
 
-export function formatKlutchClaimNumber(sequence: number) {
-  return `KC-${String(sequence).padStart(6, "0")}`;
+export function formatKlutchClaimNumber(suffix: string) {
+  return `KC-${suffix}`;
 }

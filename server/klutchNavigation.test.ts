@@ -12,7 +12,8 @@ describe('Klutch coverage navigation', () => {
 
   it('replaces legacy individual pages with the Klutch policy documents workspace', () => {
     expect(source).toContain('{ id: "klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText }');
-    expect(source).toContain('case "klutch-policy-documents": return <KlutchPolicyDocumentsWorkspace');
+    expect(source).toContain('case "klutch-policy-documents": return <iframe src="/klutch-policy-documents.html"');
+    expect(source).toContain('title="Klutch Policy Documents"');
   });
 
   it('removes the separate Klutch Dec Page entry and normalizes every legacy link to the workspace', () => {

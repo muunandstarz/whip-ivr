@@ -12,8 +12,8 @@ describe("Klutch durable identifiers", () => {
   });
 
   it("formats Klutch claim identifiers independently from SnapSheet claim numbers", () => {
-    expect(formatKlutchClaimNumber(1)).toBe("KC-000001");
-    expect(formatKlutchClaimNumber(841)).toBe("KC-000841");
+    expect(formatKlutchClaimNumber("A7M3QZ")).toBe("KC-A7M3QZ");
+    expect(formatKlutchClaimNumber("K9P2XR")).toBe("KC-K9P2XR");
     expect(canonicalizeSnapSheetClaim(" gb-4219- 425292-100426 ")).toBe("GB-4219-425292-100426");
   });
 });

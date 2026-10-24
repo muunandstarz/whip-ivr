@@ -8,7 +8,8 @@ describe("Klutch declarations navigation", () => {
     expect(source).not.toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page"');
     expect(source).not.toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)"');
     expect(source).toContain('{ id: "klutch-policy-documents", label: "Klutch Policy Documents"');
-    expect(source).toContain('case "klutch-policy-documents": return <KlutchPolicyDocumentsWorkspace');
+    expect(source).toContain('case "klutch-policy-documents": return <iframe src="/klutch-policy-documents.html"');
+    expect(source).toContain('title="Klutch Policy Documents"');
     expect(source).toContain('"klutch-policy-declarations"');
     expect(source).toContain('return "klutch-policy-documents"');
   });

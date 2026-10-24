@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { jsPDF } from "jspdf";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
-import KlutchPolicyDocumentsWorkspace from "@/components/KlutchPolicyDocumentsWorkspace";
 import {
   AlertTriangle,
   Brain,
@@ -9201,7 +9200,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} />;
       case "pip-bill-review": return <MedicalReviewWorkspace />;
-      case "klutch-policy-documents": return <KlutchPolicyDocumentsWorkspace initialState={initialMemberState} />;
+      case "klutch-policy-documents": return <iframe src="/klutch-policy-documents.html" title="Klutch Policy Documents" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#f7f8f6]" />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;

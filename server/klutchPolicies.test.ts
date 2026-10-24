@@ -42,7 +42,7 @@ describe("Klutch policy service safeguards", () => {
 
   it("requires server-recorded manager approval for KIC-END-002", () => {
     expect(source).toContain("klutch_endorsement_approvals");
-    expect(source).toContain("carrier request and verified manager approval");
+    expect(source).toContain("A named manager and recorded manager approval are required before creating KIC-END-002.");
     expect(routerSource).toContain("approveEndorsement: adminProcedure");
   });
 

@@ -41,6 +41,7 @@ type PolicyRecord = {
 type PolicyTerms = {
   leaseId: string;
   memberName: string;
+  memberNumber: string;
   memberAddress?: string;
   memberStreet?: string;
   memberCity?: string;
@@ -48,10 +49,12 @@ type PolicyTerms = {
   memberZip?: string;
   memberEmail?: string;
   vehicle: string;
-  vin?: string;
+  vin: string;
   effectiveOn: string;
   expiresOn: string;
   state: KlutchState;
+  termMonths: 6 | 12;
+  transactionType: "new" | "renewal" | "correction";
   coverages: CoverageRow[];
   totalPremium: number;
   weeklyMembershipFee?: number;
@@ -217,12 +220,11 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
   const signer = impersonating?.name || user?.name || user?.email || "Klutch Claims Handler";
   const signerTitle = impersonating ? "Claim Handler" : user?.role === "admin" ? "Claims Administration" : "Claim Handler";
   const expiresOn = addYear(issueForm.effectiveOn);
-  const weeklyMembershipFee = Number(issueForm.weeklyMembershipFee);
+  const weeklyMembershipFee = DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE;
   const premiumCalculation = calculateKlutchPremium({
     state: issueForm.state,
     effectiveOn: issueForm.effectiveOn,
     expiresOn,
-    weeklyMembershipFee,
     pipWaived: issueForm.pipWaived,
     umRejected: issueForm.umRejected,
   });
@@ -252,6 +254,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     terms: {
       leaseId: issueForm.leaseId || "",
       memberName: issueForm.memberName,
+      memberNumber: issueForm.leaseId || "",
       memberStreet: issueForm.memberStreet,
       memberCity: issueForm.memberCity,
       memberState: issueForm.memberState,
@@ -262,6 +265,8 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       effectiveOn: issueForm.effectiveOn,
       expiresOn,
       state: issueForm.state,
+      termMonths: 12,
+      transactionType: "new",
       coverages: issueCoverages,
       totalPremium: premiumCalculation.totalPremium,
       weeklyMembershipFee: premiumCalculation.weeklyMembershipFee,
@@ -281,6 +286,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       const terms: PolicyTerms = {
         leaseId: issueForm.leaseId,
         memberName: issueForm.memberName,
+        memberNumber: issueForm.leaseId,
         memberStreet: issueForm.memberStreet,
         memberCity: issueForm.memberCity,
         memberState: issueForm.memberState,
@@ -291,6 +297,8 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
         effectiveOn: issueForm.effectiveOn,
         expiresOn,
         state: issueForm.state,
+        termMonths: 12,
+        transactionType: "new",
         coverages: issueCoverages,
         totalPremium: premiumCalculation.totalPremium,
         weeklyMembershipFee: premiumCalculation.weeklyMembershipFee,
