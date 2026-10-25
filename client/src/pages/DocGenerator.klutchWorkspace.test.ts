@@ -7,6 +7,7 @@ const app = fs.readFileSync(path.resolve(process.cwd(), "client/src/App.tsx"), "
 const sidebar = fs.readFileSync(path.resolve(process.cwd(), "client/src/components/WhipLayout.tsx"), "utf8");
 const knowledgeBasePage = fs.readFileSync(path.resolve(process.cwd(), "client/src/pages/kb/KlutchPolicyDocuments.tsx"), "utf8");
 const sourcePage = fs.readFileSync(path.resolve(process.cwd(), "client/public/klutch-policy-documents.html"), "utf8");
+const legacyWorkspace = fs.readFileSync(path.resolve(process.cwd(), "client/src/components/KlutchPolicyDocumentsWorkspace.tsx"), "utf8");
 const api = fs.readFileSync(path.resolve(process.cwd(), "server/klutchPolicyApi.ts"), "utf8");
 const contract = fs.readFileSync(path.resolve(process.cwd(), "shared/klutchPolicy.ts"), "utf8");
 
@@ -33,7 +34,8 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('const API = "/api/klutch-policy-documents"');
     expect(sourcePage).toContain("async function durablePrint");
     expect(sourcePage).toContain('window.print()');
-    expect(sourcePage).toContain("Created is not sent");
+    expect(sourcePage).not.toContain("Handler note: Created is not sent to the member.");
+    expect(legacyWorkspace).not.toContain("Created is not sent");
     expect(sourcePage).toContain("shared Klutch register");
   });
 

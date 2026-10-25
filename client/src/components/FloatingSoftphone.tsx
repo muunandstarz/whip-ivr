@@ -91,8 +91,8 @@ function formatDuration(s: number) {
 function callStateColor(state: string) {
   switch (state) {
     case "active": return "bg-green-500";
-    case "ringing": return "bg-yellow-400 animate-pulse";
-    case "incoming": return "bg-blue-500 animate-pulse";
+    case "ringing": return "bg-yellow-400";
+    case "incoming": return "bg-blue-500";
     case "wrap_up": return "bg-orange-500";
     default: return "bg-gray-400";
   }
@@ -264,6 +264,13 @@ export default function FloatingSoftphone() {
   const [onHold, setOnHold] = useState(false);
   const [showDisposition, setShowDisposition] = useState(false);
   const [dockPosition, setDockPosition] = useState<DockPosition>({ right: 16, bottom: 16 });
+  const [launcherDismissed, setLauncherDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem("whip.softphone.launcherDismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
   const dragOrigin = useRef<{ x: number; y: number; right: number; bottom: number } | null>(null);
   const isOnSoftphonePage = location.startsWith("/softphone");
 
@@ -358,8 +365,17 @@ export default function FloatingSoftphone() {
   }, [onHold]);
 
   // ── Floating widget launcher button (shown when widget is closed) ──
-  const showLauncher = !isOnSoftphonePage && widgetOpen === false;
+  const showLauncher = !isOnSoftphonePage && widgetOpen === false && !launcherDismissed;
   const showDockBar = !isOnSoftphonePage && widgetOpen === true;
+
+  const dismissLauncher = useCallback(() => {
+    setLauncherDismissed(true);
+    try {
+      window.localStorage.setItem("whip.softphone.launcherDismissed", "true");
+    } catch {
+      // The launcher can still be dismissed when browser storage is unavailable.
+    }
+  }, []);
 
   // ── Disposition panel content ──
   const DispositionPanel = (
@@ -460,17 +476,32 @@ export default function FloatingSoftphone() {
     <>
       {/* ── Launcher button (when widget is fully closed) ── */}
       {showLauncher && (
-        <button
-          onClick={() => { setWidgetOpen(true); setWidgetExpanded(true); }}
-          className="fixed z-[9999] flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#ff6221] bg-[#171b31] shadow-lg transition-transform hover:scale-110"
+        <div
+          className="fixed z-[9999] h-14 w-14"
           style={{ right: `${dockPosition.right}px`, bottom: `${dockPosition.bottom}px` }}
-          title="Open Softphone"
         >
-          <Phone className="w-6 h-6 text-[#ff6221]" />
-          {(callState === "active" || callState === "ringing" || callState === "incoming") && (
-            <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-green-500 border-2 border-white animate-pulse" />
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => { setWidgetOpen(true); setWidgetExpanded(true); }}
+            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#ff6221] bg-[#171b31] shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6221] focus-visible:ring-offset-2"
+            title="Open Softphone"
+            aria-label="Open Softphone"
+          >
+            <Phone className="w-6 h-6 text-[#ff6221]" />
+            {(callState === "active" || callState === "ringing" || callState === "incoming") && (
+              <span className="absolute top-0 right-0 w-4 h-4 rounded-full border-2 border-white bg-green-500" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={dismissLauncher}
+            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 shadow-sm hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6221] focus-visible:ring-offset-1"
+            title="Dismiss quick phone"
+            aria-label="Dismiss quick phone"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
       )}
 
       {/* ── Dock bar + expanded panel (when widget is open) ── */}

@@ -614,7 +614,6 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
         <div className="grid gap-3 bg-[#F5F8F7] p-4 md:grid-cols-3">
           <div className="flex gap-3 rounded-lg bg-white p-3 shadow-sm"><FileCheck2 className="mt-0.5 h-5 w-5 shrink-0 text-[#0B5458]" /><p className="text-sm text-slate-700"><strong className="block text-slate-900">Start with the Whip claim</strong>Enter the Whip / SnapSheet claim number once. The server assigns the separate Klutch policy number and, for claim documents, creates or reuses the Klutch claim number.</p></div>
           <div className="flex gap-3 rounded-lg bg-white p-3 shadow-sm"><Eye className="mt-0.5 h-5 w-5 shrink-0 text-[#0B5458]" /><p className="text-sm text-slate-700"><strong className="block text-slate-900">Preview before you issue</strong>Inspect and print/save the declaration PDF before creating a policy, document audit record, email, or delivery.</p></div>
-          <div className="flex gap-3 rounded-lg bg-white p-3 shadow-sm"><ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#0B5458]" /><p className="text-sm text-slate-700"><strong className="block text-slate-900">Created is not sent</strong>After issuance, document actions retain a created-not-sent audit only. Verify facts, supporting records, and any separate delivery step before communicating with a member or carrier.</p></div>
         </div>
       </section>
 

@@ -505,11 +505,6 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   const srcDocType = { dec: "declarations", den: "tnc_denial", car: "carrier_position", can: "cancellation_notice", end: "endorsement" };
   let serverPolicies = new Map();
   let draftTimer = null;
-  const memberNotice = document.createElement("div");
-  memberNotice.setAttribute("role", "note");
-  memberNotice.textContent = "Handler note: Created is not sent to the member. Review the PDF, then follow the approved delivery process separately.";
-  memberNotice.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:60;max-width:340px;padding:10px 12px;border:1px solid #c9d9c4;border-radius:10px;background:#f7fbf4;color:#183f42;font:600 12px/1.4 system-ui,sans-serif;box-shadow:0 6px 20px #0002";
-  document.addEventListener("DOMContentLoaded", () => document.body.appendChild(memberNotice), { once: true });
 
   const plain = async (path, options = {}) => {
     const response = await fetch(API + path, {

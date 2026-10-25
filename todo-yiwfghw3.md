@@ -1088,3 +1088,9 @@
 - [x] Move **Klutch Policy Documents** out of Document Generator and into its own standard Whip Knowledge Base page at `/kb/klutch-policy-documents` for both administrators and handlers.
 - [x] Remove the redundant Document Generator Coverage subnavigation group rather than leaving an empty section. Preserve staff bookmarks and historical recent-document links: `/doc-generator?tab=klutch-policy-documents` immediately redirects to the dedicated Knowledge Base page.
 - [x] Browser-validate the dedicated admin page, its visible Knowledge Base sidebar entry, the supplied Klutch workflow inside the standard Whip shell, and the legacy-link redirect. Full validation: 363 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — Quiet Phone Launcher and Klutch Note Removal
+- [x] Remove launcher motion from the floating Aircall quick-phone button: no hover scale, no pulsing call-state status, and no animated status dot.
+- [x] Add an accessible X to the closed quick-phone launcher. Dismissing it persists for that browser via local storage; the normal Softphone page remains available and incoming/live calls still surface the required call UI.
+- [x] Remove the exact `Handler note: Created is not sent to the member…` fixed note from the live supplied Klutch page and remove the matching legacy workspace guidance card so it cannot reappear through an older route.
+- [x] Browser-validate that the launcher’s computed animation is `none`, its X dismisses it through a page refresh, and neither removed Klutch text appears inside the live embedded page. Full validation: 364 passed / 1 skipped, TypeScript, production build, and diff check passed.
