@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,13 +277,6 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "claimant-contact", label: "Claimant Contact", icon: Phone },
       { id: "failed-contact", label: "Failed Contact (PD only)", icon: Phone },
       { id: "storage-mitigation", label: "Storage Mitigation", icon: AlertTriangle },
-    ],
-  },
-  {
-    label: "Coverage",
-    items: [
-
-      { id: "klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText },
     ],
   },
   {
@@ -9080,6 +9073,7 @@ function DVCalculatorTab() {
 
 export default function DocGenerator({ initialTab: directInitialTab }: { initialTab?: DocGenTab }) {
   const search = useSearch();
+  const [, navigate] = useLocation();
   const initialTab = (() => {
     if (directInitialTab) return normalizeDocGeneratorTab(directInitialTab);
     const params = new URLSearchParams(search);
@@ -9092,6 +9086,11 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     return WHIP_STATES.includes(s) ? s : "MD";
   })();
   const [activeTab, setActiveTab] = useState<DocGenTab>(initialTab);
+  useEffect(() => {
+    if (activeTab === "klutch-policy-documents") {
+      navigate("/kb/klutch-policy-documents");
+    }
+  }, [activeTab, navigate]);
   const [louDemandHandoff, setLouDemandHandoff] = useState<LouDemandHandoff | null>(null);
   const [formResetKey, setFormResetKey] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -9200,7 +9199,6 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} />;
       case "pip-bill-review": return <MedicalReviewWorkspace />;
-      case "klutch-policy-documents": return <iframe src="/klutch-policy-documents.html" title="Klutch Policy Documents" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#f7f8f6]" />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;
@@ -9208,6 +9206,19 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       default: return null;
     }
   };
+
+  // Historical Document Generator URLs are retained for staff bookmarks and
+  // recent-document links. They immediately move to the dedicated Knowledge
+  // Base page rather than showing the policy workspace inside Document Gen.
+  if (activeTab === "klutch-policy-documents") {
+    return (
+      <WhipLayout>
+        <div className="flex min-h-full items-center justify-center bg-muted/20 p-6 text-sm text-muted-foreground">
+          Opening Klutch Policy Documents…
+        </div>
+      </WhipLayout>
+    );
+  }
 
   return (
     <WhipLayout>

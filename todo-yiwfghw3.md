@@ -1083,3 +1083,8 @@
 - [x] Enforce fixed premium policy server-side: $35 weekly membership fee × 26/52 weeks depending on a 6/12 month term, reallocated only across elected eligible coverages. The source page’s calculated premium cannot override the server rule.
 - [x] Browser-validate the supplied page with synthetic data: it generated server policy `KIC-MD-100100`, rendered the declaration preview, and invoked the durable created-not-sent print flow with native print intercepted only for safe validation. Remove all synthetic policies, terms, documents, claims, events, VIN rows, and operator draft afterwards; shared counts returned to zero.
 - [x] Update legacy navigation regressions for the source-page iframe. Full validation: 363 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — Klutch Knowledge Base Relocation
+- [x] Move **Klutch Policy Documents** out of Document Generator and into its own standard Whip Knowledge Base page at `/kb/klutch-policy-documents` for both administrators and handlers.
+- [x] Remove the redundant Document Generator Coverage subnavigation group rather than leaving an empty section. Preserve staff bookmarks and historical recent-document links: `/doc-generator?tab=klutch-policy-documents` immediately redirects to the dedicated Knowledge Base page.
+- [x] Browser-validate the dedicated admin page, its visible Knowledge Base sidebar entry, the supplied Klutch workflow inside the standard Whip shell, and the legacy-link redirect. Full validation: 363 passed / 1 skipped, TypeScript, production build, and diff check passed.

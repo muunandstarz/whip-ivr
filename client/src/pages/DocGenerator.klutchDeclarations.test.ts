@@ -2,16 +2,20 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("./DocGenerator.tsx", import.meta.url), "utf8");
+const app = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+const sidebar = readFileSync(new URL("../components/WhipLayout.tsx", import.meta.url), "utf8");
 
 describe("Klutch declarations navigation", () => {
-  it("routes legacy declaration links to the single durable policy workspace", () => {
+  it("moves Klutch policy documents to Knowledge Base and redirects legacy Document Generator links", () => {
     expect(source).not.toContain('{ id: "dec-page-whip", label: "Klutch — Dec Page"');
     expect(source).not.toContain('{ id: "klutch-policy-declarations", label: "Klutch — Policy Declarations (Approved)"');
-    expect(source).toContain('{ id: "klutch-policy-documents", label: "Klutch Policy Documents"');
-    expect(source).toContain('case "klutch-policy-documents": return <iframe src="/klutch-policy-documents.html"');
-    expect(source).toContain('title="Klutch Policy Documents"');
+    expect(source).not.toContain('{ id: "klutch-policy-documents", label: "Klutch Policy Documents"');
+    expect(source).not.toContain('case "klutch-policy-documents": return <iframe');
+    expect(source).toContain('navigate("/kb/klutch-policy-documents")');
     expect(source).toContain('"klutch-policy-declarations"');
     expect(source).toContain('return "klutch-policy-documents"');
+    expect(app).toContain('<Route path="/kb/klutch-policy-documents" component={KlutchPolicyDocuments} />');
+    expect(sidebar).toContain('{ href: "/kb/klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText }');
   });
 
   it("uses one COI date control and one Declarations issue/subscription date for the rental-expiration calculator", () => {

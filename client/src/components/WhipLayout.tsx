@@ -64,6 +64,7 @@ const ADMIN_NAV_ITEMS = [
 // ── Knowledge Base nav items (shown to all authenticated users) ───────────────
 const KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
+  { href: "/kb/klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
   { href: "/medical-bill-review", label: "Medical Bill & PIP Review", icon: FileText },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
@@ -95,6 +96,7 @@ const HANDLER_NAV_ITEMS_BASE = [
 
 const HANDLER_KB_NAV_ITEMS = [
   { href: "/doc-generator", label: "Document Generator", icon: FileText },
+  { href: "/kb/klutch-policy-documents", label: "Klutch Policy Documents", icon: FileText },
   { href: "/pro-rata", label: "Pro-Rata Calculator", icon: Calculator },
   { href: "/medical-bill-review", label: "Medical Bill & PIP Review", icon: FileText },
   { href: "/kb/liability-guide", label: "Liability Guide", icon: Scale },
