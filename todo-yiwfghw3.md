@@ -303,7 +303,7 @@
 - [x] Slice 7: enable mailIngestGmail cron — Gmail OAuth read, parse raw email, store to mail_items
 - [x] Slice 7: enable mailProcess cron — LLM classify, auto-assign handler, urgency scoring
 - [x] Slice 7: enable reminder cron — due-date overdue/urgent notifications
-- [ ] Slice 7: live acceptance test — send test email to claims@, post to #claims-mail Slack, verify ingest + classify + assign + UI resolve
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not send or process live test sources.
 - [x] Slice 7 correction: switch Gmail ingest from service account to standard OAuth (personal inbox)
 - [x] Slice 7 correction: remove is:unread filter — query all mail to:claims@ instead
 - [x] Slice 7 correction: use label-based filter — to:claims@drivewhip.com -label:mailroom-done
@@ -354,8 +354,8 @@
 - [x] Status shows "assigned" but handler shows "Unassigned" — verified active data contains no assigned records without a handler; unassigned records are new or resolved
 - [x] Add sort control to admin Mailroom table with newest-first source-received timestamp as the default
 - [x] Slack ingest: download actual PDF files to S3 (mail_item_files), not just stub rows
-- [ ] Gmail ingest: debug why 40+ emails return 0 inserted; fix query/filter
-- [ ] Label protocol: add mailroom-done Gmail label on assignment (not on ingest); mark Slack reviewed emoji on assignment
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not debug or run live Gmail ingest.
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not alter live labels or Slack reviewed markers.
 - [x] Bulk archive: checkbox column, select-all, archive button in admin Mailroom
 - [x] Summary column in All Mail table showing brief note of what the mail is
 
@@ -367,7 +367,7 @@
 - [x] Dec Page: verified handleDownload matches approved format; states MD/VA/FL/GA/IL/MA/PA/TX only confirmed
 - [x] Slack backfill: attempted recovery of 139 Slack files into production S3; 131 restored and 8 permanently unavailable because their Slack source files were deleted
 - [x] Verify file proxy works after backfill (four recovered Slack PDFs returned HTTP 200 with application/pdf through immutable file-ID proxy URLs)
-- [ ] Trigger Now on deployed site after publishing to ingest Gmail + Slack + classify items
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not run deployed Trigger Now.
 
 ## Session 2026-08-11 Mailroom Repairs
 - [x] Fix Trigger Now parsing when an upstream endpoint returns HTML instead of JSON
@@ -376,13 +376,13 @@
 - [x] Restrict Slack ingest to unreviewed claims-mail files; record reviewed/checkmarked items as resolved only
 - [x] Restore attachment records and proxy access for ingested Slack files
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
-- [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not perform deployed legacy recovery.
 
 ## Session 2026-08-11 Mailroom Legacy Completion
 - [x] Quantify active records missing attachments, extracted content, actionable titles, or AI summaries (638 active email: 283 without file records and 16 without body/summary; 565 active Claims Mail: 0 without file records, 11 without body/summary, 26 placeholder summaries)
-- [ ] Recover source attachments and extract content for all recoverable active legacy records
-- [ ] Populate actionable title and summary text for all recoverable active legacy records
-- [ ] Re-audit Gmail read state and Claims Mail reviewed markers after the legacy completion pass
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not backfill legacy source attachments or content.
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not reclassify legacy records.
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not audit live Gmail or Slack source state.
 
 ## Session 2026-08-11 Default Queue and Priority Routing
 - [x] Keep resolved records out of the default Admin Mailroom view; display them only via the Resolved filter
@@ -413,12 +413,12 @@
 - [x] Verify claim-email data and Gmail sending authorization for controlled Mailroom forwarding
 - [x] Implement forwarding of original Mailroom content and recoverable attachments to a selected claim email with an audit record
 - [x] Add a recipient-confirmed Forward to Claim action in the Mailroom record drawer
-- [ ] Reconnect Gmail from Mailroom Setup to grant the newly requested Gmail send permission before sending live email
-- [ ] Verify one recipient-confirmed live forwarding action after Gmail reauthorization
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not reconnect Gmail or request send permission.
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not send a live forwarding test.
 
 ## Session 2026-08-13 Fresh Fax Attachments
 - [x] Retry fresh Slack file metadata and bounded storage uploads when newly ingested fax attachment persistence fails
-- [ ] Verify a newly received Claims Mail fax displays and forwards its original attachment after deployment
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not ingest or forward a live fax.
 
 ## Session 2026-08-17 Medical Bills Queue
 - [x] Detect medical bill, provider invoice, and medical demand mail from Claims Mail and eFax
@@ -436,7 +436,7 @@
 - [x] Display original email body where present and meaningful fax/document context where source content consists only of page markers
 - [x] Restore original attachment open/download access through immutable file-ID proxy URLs
 - [x] Implement direct Slack source recovery for forwarded attachments and clean forwarded fax body construction
-- [ ] Verify a live recipient-confirmed forwarding action delivers the original attachment and expected body after Gmail send authorization
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not send a live recipient-confirmed forwarding test.
 
 ## Session 2026-08-18 Litigation and Queue Boundaries
 - [x] Add a Litigated Claim action that escalates the item to the administrator and records the action
@@ -483,7 +483,7 @@
 - [x] Make the manual Trigger Now command non-blocking so it cannot be held open by a slow external source or database connection
 - [x] Add a lightweight Mailroom warm-up callback and reduce scheduled Gmail, Slack, and content-processing batches below the callback deadline
 - [x] Display per-job schedule-registration results in Mailroom Setup so failed background jobs are immediately actionable
-- [ ] Run one bounded unread-Gmail and unreviewed-Claims-Mail recovery pass from the proven Mailroom processing callback when source-specific schedules stall
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not run a recovery callback against live sources.
 
 ## Session 2026-08-11 Mailroom Pagination
 - [x] Make the displayed result range update when the rows-per-page selection changes
@@ -521,7 +521,7 @@
 - [x] Restrict Slack ingest to unreviewed claims-mail files; record reviewed/checkmarked items as resolved only
 - [x] Restore attachment records and proxy access for ingested Slack files
 - [x] Persist and render Gmail email bodies in the Mailroom record drawer
-- [ ] Verify the deployed Trigger Now run recovers the remaining four legacy Slack items with no attachment records
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not perform deployed legacy recovery.
 
 ## Document Generator Letter Corrections
 - [x] Remove statute-of-limitations language from every Document Generator letter output
@@ -562,8 +562,8 @@
 - [x] Test June 30 and July 1, 2026 Subscription Start Date boundary selection
 
 ## Project KIM — Owner-Authorized Staging Bootstrap
-- [ ] Create the approved `KIM-GitHubOIDC-Bootstrap-Staging` CloudFormation stack in the owner-controlled AWS account, us-east-1
-- [ ] Verify the staging-only GitHub OIDC trust and deployment role outputs
+- [-] Deferred pending explicit owner resumption, AWS authorization, and the approved `KIM-GitHubOIDC-Bootstrap-Staging` template in the owner-controlled us-east-1 account.
+- [-] Deferred with the staging bootstrap; verify OIDC trust and deployment-role outputs only after the owner resumes and authorizes provisioning.
 - [x] Stop before provisioning application infrastructure or changing any production KIM system
 - Deferred by owner on 2026-10-06. The required AWS authorization and approved CloudFormation template are not attached to this workspace; do not provision KIM resources until the owner explicitly resumes this staging-only task.
 
@@ -591,7 +591,7 @@
 - [x] Restore the original Knowledge Base attorney names and contact information in Denied Claim Escalation
 
 ## September 2026 Document Generator Repairs
-- [ ] Verify the new claims email and Claims Mail thread attachment ingest, classification, and reviewed-marker behavior
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not perform a live claims-email or Claims Mail verification.
 - [x] Trace the user’s prior Gmail test message and correct any claims-only unread eligibility mismatch without requiring a resend (scheduled intake stored Liberty Mutual “RE: Uber claim 510206250” as Mailroom item 2880001)
 - [x] Add a PD-only Failed Contact Letter date-of-loss field and computed statute-of-limitations notice above the footer
 - [x] Replace invalid URL-only estimate parsing inputs with browser-upload compatible document parsing for Subro Demand and Carrier Rebuttal
@@ -627,7 +627,7 @@
 ## September 2026 Data Visibility and Claims Mail Source Marking
 - [x] Determine why the dashboard shows zero intake data and restore verified records or correct the active data view without deleting existing data
 - [x] Wire Mailroom resolution to add the configured reviewed marker to the originating Claims Mail Slack post without blocking the resolution outcome
-- [ ] Verify that resolving a Claims Mail item adds the configured reviewed marker to its originating Slack post and repair the source-marker path if needed
+- [-] Deferred indefinitely under the owner’s Mailroom/Mail Bot suspension; do not resolve live Claims Mail or add a source marker.
 
 ## September 2026 Intake Trend Restoration
 - [x] Restore processing for eligible Aircall voicemails so new intake records and the 7-Day Intake Trend reflect real current inbound work
@@ -1047,7 +1047,7 @@
 ## October 2026 — Loss of Use Carrier-Safe Utilization Format (Reverted; Daily Source Pending)
 - [x] Tested and visually validated an alternate carrier-safe monthly aggregate format without fleet-count fields.
 - [x] Reverted that alternate format at the owner’s direction on October 19, 2026. The current standalone and Subro Demand LOU documents again use the prior monthly-reconciliation format from checkpoint `32b2dab`.
-- [ ] Replace the monthly utilization presentation with a day-by-day utilization source once the owner supplies or authorizes that data. Do not represent monthly snapshots as daily evidence or announce the interim format as team-ready.
+- [-] Pending owner-supplied or owner-authorized day-by-day utilization source. Do not represent monthly snapshots as daily evidence or announce the interim format as team-ready.
 
 ## October 2026 — TNC PIP Denial Carrier Fields
 - [x] Add the missing **TNC Carrier Name** and **TNC Claim Number** inputs to the TNC PIP Denial template. The values now reach the generated denial instead of producing `[TNC Carrier Name]` and `[TNC Claim Number]` placeholders.
