@@ -38,6 +38,16 @@ describe("standalone Loss of Use utilization evidence", () => {
     expect(source).not.toContain('y = addWhipLetterhead(doc, "LOSS OF USE SUPPORTING BASIS"');
   });
 
+  it("reserves the footer band before the standalone total and moves the calculation when needed", () => {
+    expect(source).toContain("const LOU_PAGE_BODY_BOTTOM = H - 20;");
+    expect(source).toContain("const LOU_CALCULATION_AND_TOTAL_HEIGHT = 43;");
+    expect(source).toContain("const calculationNeedsSupportingPage = y + LOU_CALCULATION_AND_TOTAL_HEIGHT > LOU_PAGE_BODY_BOTTOM;");
+    expect(source).toContain("if (!calculationNeedsSupportingPage) renderCalculationAndTotal();");
+    expect(source).toContain("if (calculationNeedsSupportingPage) {");
+    expect(source).toContain("const sourceBlockHeight = methLines.length * 3.5 + 8;");
+    expect(source).toContain("ensureSupportingSpace(sourceBlockHeight + reconciliationBlockHeight);");
+  });
+
   it("does not retain the prior recomputed 10,000% expression or unsupported range claim", () => {
     expect(source).not.toContain("((r.rented / r.fleet) * 100)");
     expect(source).not.toContain("ranging from 95% to 100% across Whip's operating history");

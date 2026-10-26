@@ -6466,6 +6466,11 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+    // The footer rule/text occupies the final 12 mm. Reserve a further 8 mm
+    // so a variable utilization narrative or the total can never enter it.
+    const LOU_PAGE_BODY_BOTTOM = H - 20;
+    const LOU_CALCULATION_AND_TOTAL_HEIGHT = 43;
     let y = addWhipLetterhead(doc, "LOSS OF USE CALCULATION", `Claim #${claimNumber || "[Claim Number]"}`);
 
     // Title
@@ -6587,6 +6592,11 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     // Utilization snapshots, one per actual report month.
     for (let i = 0; i < utilizationSnapshots.length; i++) {
       const snapshot = utilizationSnapshots[i]!;
+      if (y + 6 > LOU_PAGE_BODY_BOTTOM) {
+        addLetterFooter(doc);
+        doc.addPage();
+        y = 24;
+      }
       if (i % 2 === 0) { doc.setFillColor(248, 248, 252); doc.rect(14, y, W - 28, 6, "F"); }
       doc.setTextColor(40, 40, 40);
       doc.setFont("helvetica", "normal");
@@ -6603,97 +6613,120 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
       doc.setTextColor(40, 40, 40);
       doc.setFont("helvetica", "normal");
       y += 6;
-      if (y > 260) { doc.addPage(); y = 20; }
     }
     y += 4;
 
-    // Report provenance belongs with the table so a carrier can identify the
-    // evidence source and distinguish an actual rate from a later projection.
+    // Preserve the source material, but render it on the supporting page so
+    // the first-page total retains a clear fixed-footer exclusion zone.
     const utilizationSourceNote = louUtilizationSourceNote(utilRows);
+    const methLines = doc.splitTextToSize(utilizationSourceNote, W - 30);
+    const reconciliation = louUtilizationReconciliation(utilizationSnapshots);
+    const reconciliationLines = doc.splitTextToSize(reconciliation, W - 28);
+    const calculationNeedsSupportingPage = y + LOU_CALCULATION_AND_TOTAL_HEIGHT > LOU_PAGE_BODY_BOTTOM;
+    const renderCalculationAndTotal = () => {
+      // LOU Breakdown section
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(23, 27, 49);
+      doc.text("LOSS OF USE / RENTAL CALCULATION", 14, y);
+      y += 2;
+      doc.setDrawColor(23, 27, 49);
+      doc.setLineWidth(0.5);
+      doc.line(14, y, W - 14, y);
+      doc.setLineWidth(0.2);
+      y += 6;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text("Loss of Use Breakdown", 14, y);
+      y += 6;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Days Out of Service: ${days} × Daily Rate (Whip Standard Rate): $${effectiveRate.toFixed(2)}`, 14, y);
+      y += 5;
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Rate basis: ${ymm || "Vehicle"} — Whip Standard Rate, ${marketName} market ($${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day)`, 14, y);
+      y += 8;
+      // Total box
+      doc.setFillColor(23, 27, 49);
+      doc.rect(14, y, W - 28, 10, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);
+      doc.setFontSize(11);
+      doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
+      y += 16;
+    };
+    if (!calculationNeedsSupportingPage) renderCalculationAndTotal();
+
+    // Close the factual calculation page before rendering source material and
+    // legal support. The Whip letterhead is intentionally limited to page one.
+    addLetterFooter(doc);
+    const startSupportingPage = (continued = false) => {
+      doc.addPage();
+      y = 24;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(
+        continued
+          ? "Loss of Use / Rental Reimbursement Supporting Basis (continued)"
+          : "Loss of Use / Rental Reimbursement Supporting Basis",
+        14,
+        y
+      );
+      y += 6;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text("Attached to the preceding monthly utilization snapshot and reimbursement calculation.", 14, y);
+      y += 10;
+    };
+    const ensureSupportingSpace = (needed: number) => {
+      if (y + needed <= LOU_PAGE_BODY_BOTTOM) return;
+      addLetterFooter(doc);
+      startSupportingPage(true);
+    };
+    startSupportingPage();
+
+    const sourceBlockHeight = methLines.length * 3.5 + 8;
+    const reconciliationBlockHeight = reconciliationLines.length * 3.5 + 8;
+    ensureSupportingSpace(sourceBlockHeight + reconciliationBlockHeight);
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(80, 80, 80);
     doc.setFillColor(245, 245, 250);
-    const methLines = doc.splitTextToSize(utilizationSourceNote, W - 30);
     doc.rect(14, y, W - 28, methLines.length * 3.5 + 4, "F");
     doc.text(methLines, 16, y + 3.5);
-    y += methLines.length * 3.5 + 8;
-    const reconciliation = louUtilizationReconciliation(utilizationSnapshots);
-    const reconciliationLines = doc.splitTextToSize(reconciliation, W - 28);
+    y += sourceBlockHeight;
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(60, 60, 60);
     doc.text(reconciliationLines, 14, y);
-    y += reconciliationLines.length * 3.5 + 8;
-
-    // LOU Breakdown section
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(23, 27, 49);
-    doc.text("LOSS OF USE / RENTAL CALCULATION", 14, y);
-    y += 2;
-    doc.setDrawColor(23, 27, 49);
-    doc.setLineWidth(0.5);
-    doc.line(14, y, W - 14, y);
-    doc.setLineWidth(0.2);
-    y += 6;
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    doc.text("Loss of Use Breakdown", 14, y);
-    y += 6;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Days Out of Service: ${days} × Daily Rate (Whip Standard Rate): $${effectiveRate.toFixed(2)}`, 14, y);
-    y += 5;
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Rate basis: ${ymm || "Vehicle"} — Whip Standard Rate, ${marketName} market ($${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day)`, 14, y);
-    y += 8;
-
-    // Total box
-    doc.setFillColor(23, 27, 49);
-    doc.rect(14, y, W - 28, 10, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);
-    doc.setFontSize(11);
-    doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
-    y += 16;
-
-    // Keep the factual calculation and its fixed footer on page one. Legal
-    // support and the signature continue on a clean second page so they can
-    // never run beneath the footer band. The Whip letterhead is intentionally
-    // limited to the first page of this standalone request.
-    addLetterFooter(doc);
-    doc.addPage();
-    y = 24;
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    doc.text("Loss of Use / Rental Reimbursement Supporting Basis", 14, y);
-    y += 6;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text("Attached to the preceding monthly utilization snapshot and reimbursement calculation.", 14, y);
-    y += 10;
+    y += reconciliationBlockHeight;
+    if (calculationNeedsSupportingPage) {
+      ensureSupportingSpace(LOU_CALCULATION_AND_TOTAL_HEIGHT);
+      renderCalculationAndTotal();
+    }
 
     // Legal basis section
+    const legalText1 = "Under the common law of negligence and the applicable state tort statutes, a tortfeasor is liable for all economic losses proximately caused by their negligent act, including loss of use of a damaged vehicle. Loss of use damages are recoverable by the owner of a revenue-generating vehicle for each day the vehicle is out of service due to the collision — regardless of whether a substitute vehicle was rented. See, e.g., Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).";
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    const legal1Lines = doc.splitTextToSize(legalText1, W - 28);
+    ensureSupportingSpace(6 + legal1Lines.length * 4 + 4);
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(40, 40, 40);
     doc.text("Legal Basis — Tort / Third-Party Liability:", 14, y);
     y += 6;
 
-    const legalText1 = "Under the common law of negligence and the applicable state tort statutes, a tortfeasor is liable for all economic losses proximately caused by their negligent act, including loss of use of a damaged vehicle. Loss of use damages are recoverable by the owner of a revenue-generating vehicle for each day the vehicle is out of service due to the collision — regardless of whether a substitute vehicle was rented. See, e.g., Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).";
     doc.setFontSize(7.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
-    const legal1Lines = doc.splitTextToSize(legalText1, W - 28);
     doc.text(legal1Lines, 14, y);
     y += legal1Lines.length * 4 + 4;
 
@@ -6701,6 +6734,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     const reportedUtilization = displayedUtilizationRows.find((row) => row.utilization !== "—")?.utilization;
     const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"} and is identified as a revenue-generating fleet asset. It was unavailable for service during the repair period described above. The requested loss of use equals the applicable daily rate multiplied by the documented days out of service. ${reportedUtilization ? `The attached monthly utilization snapshot records ${reportedUtilization} market occupancy in the applicable report month and supports the business basis for this claimed out-of-service period.` : "No reported market-utilization percentage was available for the requested period, so this schedule does not represent one."} This request remains subject to the applicable jurisdiction, policy, liability, repair-period, and claim-specific evidence.`;
     const legal2Lines = doc.splitTextToSize(legalText2, W - 28);
+    ensureSupportingSpace(legal2Lines.length * 4 + 4);
     doc.text(legal2Lines, 14, y);
     y += legal2Lines.length * 4 + 4;
 
@@ -6709,6 +6743,8 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     doc.setFont("helvetica", "italic");
     doc.setTextColor(100, 100, 100);
     const noteLines = doc.splitTextToSize(noteText, W - 28);
+    const signatureHeight = louHandlerName ? 28 : 23;
+    ensureSupportingSpace(noteLines.length * 4 + 8 + signatureHeight);
     doc.text(noteLines, 14, y);
     y += noteLines.length * 4 + 8;
 

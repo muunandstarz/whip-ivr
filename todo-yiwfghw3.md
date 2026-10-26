@@ -1114,3 +1114,4 @@
 - [x] Follow-up: retain **administrator oversight access** to the Liability-only MetroCars COI. The sidebar and route now show/work in normal Admin View as well as for authorized Liability handlers; other handler views remain excluded.
 
 - [x] Follow-up: widen the Klutch **Policy Type** control to a full form row so **New policy**, **Renewal**, and **Correction** stay fully visible at the supported form width.
+- [x] Follow-up: repair standalone **Loss of Use** pagination with a fixed 20 mm footer exclusion zone. When the first-page calculation cannot fully fit, source/reconciliation support moves to page two rather than allowing the total banner to overlap the footer; Whip letterhead remains on page one only. Browser-generated and visually reviewed a populated two-page Baltimore packet with the total cleanly above the footer.
