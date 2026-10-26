@@ -108,9 +108,8 @@ const HANDLER_KB_NAV_ITEMS = [
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
 const LOSS_INTAKE_NAV = { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck };
 // Liability team: Jayla (Injury) and the active/legacy Giovanni/Geovanni PD
-// profiles. Keep the access rule based on the effective profile ID so Admin
-// View does not expose this team-only certificate and handler preview matches
-// the person being previewed.
+// profiles. Admin View retains oversight access; a handler preview must match
+// an authorized Liability profile before the entry is shown.
 const LIABILITY_COI_HANDLER_IDS = new Set([2, 90002, 330001]);
 const METROCARS_COI_NAV = { href: "/kb/metrocars-coi", label: "MetroCars COI · Liability", icon: FileText };
 
@@ -185,7 +184,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     isAdmin ||
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
   const effectiveHandlerId = isImpersonating ? impersonating?.id : user.handlerProfileId;
-  const canAccessMetroCarsCOI = effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId);
+  const canAccessMetroCarsCOI = isAdmin || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
   // Insert Loss Intake after Intake Records when the handler is authorized.
   const handlerNavItems = showLossIntake
     ? [...HANDLER_NAV_ITEMS_BASE.slice(0, 4), LOSS_INTAKE_NAV, ...HANDLER_NAV_ITEMS_BASE.slice(4)]

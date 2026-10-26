@@ -5,15 +5,15 @@ import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { AlertTriangle, FileText, ShieldCheck } from "lucide-react";
 
 // Liability team: Jayla (Injury) and the active/legacy Giovanni/Geovanni PD
-// profiles. This mirrors the sidebar gate and uses the effective preview
-// profile so an administrator cannot access it in Admin View.
+// profiles. Administrators retain oversight access; non-Liability handler
+// views use the effective preview profile and remain blocked.
 const LIABILITY_COI_HANDLER_IDS = new Set([2, 90002, 330001]);
 
 export default function MetroCarsCOI() {
   const { user, loading } = useAuth();
   const { impersonating, isImpersonating } = useImpersonation();
   const effectiveHandlerId = isImpersonating ? impersonating?.id : user?.handlerProfileId;
-  const hasLiabilityAccess = effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId);
+  const hasLiabilityAccess = user?.role === "admin" || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
 
   if (loading) {
     return (
@@ -33,7 +33,7 @@ export default function MetroCarsCOI() {
               <div>
                 <h1 className="text-lg font-semibold text-slate-950">MetroCars COI is restricted to the Liability Team</h1>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  This certificate workspace is available only while viewing as an authorized Liability handler. Select the appropriate Liability handler in the profile menu or return to the Knowledge Base.
+                  This certificate workspace is available to authorized Liability handlers and administrators. Select the appropriate Liability handler in the profile menu or return to the Knowledge Base.
                 </p>
               </div>
             </div>
