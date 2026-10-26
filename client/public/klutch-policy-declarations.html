@@ -1130,13 +1130,13 @@
         showRow("row_um", true);
         showRow("row_uim", true);
         showRow("row_um_header", true);
-        umEl.querySelector("td:nth-child(2)").textContent = "Rejected by operator";
+        umEl.querySelector("td:nth-child(2)").textContent = "REJECTED";
         umEl.querySelector("td:nth-child(2)").classList.add("not-purchased");
         umEl.querySelector("td:nth-child(3)").textContent = "\u2014";
         document.getElementById("prem_um").innerHTML = "\u2014";
         document.getElementById("um_sub").textContent = rules.flUmOptions ? "FL Option C — UM/UIM rejected." : "Rejected by named operator.";
 
-        uimEl.querySelector("td:nth-child(2)").textContent = "Rejected by operator";
+        uimEl.querySelector("td:nth-child(2)").textContent = "REJECTED";
         uimEl.querySelector("td:nth-child(2)").classList.add("not-purchased");
         uimEl.querySelector("td:nth-child(3)").textContent = "\u2014";
         document.getElementById("prem_uim").innerHTML = "\u2014";

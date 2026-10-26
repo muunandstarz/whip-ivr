@@ -5522,6 +5522,7 @@ function UrgentlyInvoiceTab() {
 
   const preview = `${providerName.toUpperCase()}
 TOWING / ROADSIDE INVOICE
+PAYMENT STATUS: PAID IN FULL
 
 Invoice #: ${form.invoiceNumber || "[Invoice Number]"}
 Invoice Date: ${form.invoiceDate || today}
@@ -5546,6 +5547,7 @@ ${lineItemsText}
 ─────────────────────────────────────────────────────────
 SUBTOTAL: $${subtotal.toFixed(2)}
 ─────────────────────────────────────────────────────────
+PAYMENT STATUS: PAID IN FULL
 ${form.notes ? `\nNotes: ${form.notes}\n` : ""}
 Authorized By: ${form.adjusterName || "[Adjuster Name]"}
 Whip Claims Management`;
@@ -5576,7 +5578,17 @@ Whip Claims Management`;
       doc.text(providerAddress, W - 14, 18, { align: "right" });
     }
 
-    let y = 28;
+    // A towing invoice is a payment record, not an open balance statement.
+    // Keep the paid status visible in the final PDF and below the provider header.
+    doc.setFillColor(232, 245, 233);
+    doc.setDrawColor(46, 125, 50);
+    doc.roundedRect(W - 55, 24, 41, 8, 1.5, 1.5, "FD");
+    doc.setTextColor(27, 94, 32);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("PAID IN FULL", W - 34.5, 29.3, { align: "center" });
+
+    let y = 37;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(60, 60, 60);
@@ -5634,6 +5646,10 @@ Whip Claims Management`;
     doc.setFontSize(11);
     doc.setTextColor(rgb[0], rgb[1], rgb[2]);
     doc.text(`TOTAL: $${subtotal.toFixed(2)}`, 14, y); y += 8;
+    doc.setFontSize(8.5);
+    doc.setTextColor(27, 94, 32);
+    doc.setFont("helvetica", "bold");
+    doc.text("PAYMENT STATUS: PAID IN FULL", 14, y); y += 7;
     doc.setFontSize(9);
     doc.setTextColor(60, 60, 60);
     doc.setFont("helvetica", "normal");
@@ -5642,6 +5658,11 @@ Whip Claims Management`;
 
     addSOLNotice(doc);
     addLetterFooter(doc);
+    const nextPreviewUrl = getPDFDataUrl(doc);
+    setPreviewPdfUrl(previous => {
+      if (previous) URL.revokeObjectURL(previous);
+      return nextPreviewUrl;
+    });
     if (shouldDownload) downloadPDF(doc, `${selectedProvider.id === "local" || selectedProvider.id === "other" ? (form.customProviderName || "Towing") : selectedProvider.name}_Invoice_${form.claimNumber || "Draft"}.pdf`);
   };
   const handlePreviewOnly = () => { handleDownload(false); };
@@ -5768,6 +5789,9 @@ Whip Claims Management`;
             </div>
           </Panel>
           <Panel title="Additional Info">
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+              Payment status: PAID IN FULL. Generated towing invoices are payment records and will display this status in the preview and PDF.
+            </div>
             <Field label="Authorized By (Adjuster)" id="ui-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="Adjuster name" />
             <div className="mt-3">
               <TextareaField label="Notes (optional)" id="ui-notes" value={form.notes} onChange={set("notes")} placeholder="Any additional notes..." rows={3} />
@@ -8674,10 +8698,10 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
 
     sectionHeader("Coverage if you're hit by an uninsured or underinsured driver");
     const umPrem = umRejected ? null : calcPremium("um");
-    const umLimits = umRejected ? "Rejected by named insured" : `${rules.umPP} per person / ${rules.umPO} per occurrence`;
+    const umLimits = umRejected ? "REJECTED" : `${rules.umPP} per person / ${rules.umPO} per occurrence`;
     covRow("Uninsured Motorist - Bodily Injury", "Applies per state law", umLimits, "Not applicable", umPrem);
     const uimPrem = umRejected ? null : calcPremium("uim");
-    const uimLimits = umRejected ? "Rejected" : (rules.uimPP ? `${rules.uimPP} per person / ${rules.uimPO} per occurrence` : "Not applicable");
+    const uimLimits = umRejected ? "REJECTED" : (rules.uimPP ? `${rules.uimPP} per person / ${rules.uimPO} per occurrence` : "Not applicable");
     covRow("Underinsured Motorist - Bodily Injury", "Applies per state law", uimLimits, "Not applicable", uimPrem);
 
     // Total

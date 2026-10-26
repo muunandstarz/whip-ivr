@@ -213,7 +213,7 @@ function derive(F){
  const R=RULES[F.st];if(!R)return null;
  const pipOn=!!(R.pip&&F.pip==="a"),umOn=!(R.umReject&&F.um==="r");
  const bi=usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident";
- const cov={bi,pd:usd(R.pd)+" each accident",um:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"Rejected",uim:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"Rejected",comp:"",coll:"",compD:F.compD||"$500",collD:F.collD||"$500"};
+ const cov={bi,pd:usd(R.pd)+" each accident",um:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED",uim:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED",comp:"",coll:"",compD:F.compD||"$500",collD:F.collD||"$500"};
  if(R.pip)cov.pip=pipOn?usd(R.pip.lim)+" each person":"Waived";
  const wk=weeks(F.eff,F.exp),tot=Math.round(WEEKLY*wk*100);
  const act=["bi","pd","coll","comp"].concat(umOn?["um","uim"]:[]).concat(pipOn?["pip"]:[]);

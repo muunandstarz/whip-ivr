@@ -84,6 +84,12 @@ describe("approved Klutch Policy Declarations HTML", () => {
     expect(html).toContain('NAIC 17966');
   });
 
+  it("shows a declined UM and UIM bodily-injury election as REJECTED rather than implying coverage", () => {
+    expect(html).toContain('umEl.querySelector("td:nth-child(2)").textContent = "REJECTED"');
+    expect(html).toContain('uimEl.querySelector("td:nth-child(2)").textContent = "REJECTED"');
+    expect(html).not.toContain('textContent = "Rejected by operator"');
+  });
+
   it("applies the Maryland 30-day and non-Maryland 12-month terms before weekly renewal", () => {
     expect(html).toContain('state === "MD" ? addCalendarDays(issued, 30) : addCalendarMonths(issued, 12)');
     expect(html).toContain('var renewalWeeks = Math.ceil(elapsedDays / 7);');

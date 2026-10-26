@@ -101,4 +101,9 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('RULES[s.st]?.pip?rowv("pip","Personal injury protection"):""');
     expect(sourcePage).toContain('...(z.R.pip ? { "Personal Injury Protection": z.cov.pip } : {})');
   });
+
+  it("shows declined UM and UIM bodily-injury coverage as REJECTED on declarations", () => {
+    expect(sourcePage).toContain('um:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED"');
+    expect(sourcePage).toContain('uim:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED"');
+  });
 });

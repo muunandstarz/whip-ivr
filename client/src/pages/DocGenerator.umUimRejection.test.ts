@@ -24,7 +24,7 @@ describe("Georgia UM/UIM named-insured rejection", () => {
 
   it("continues to preserve the already-coupled UM/UIM rejection on Klutch declarations", () => {
     expect(declarationsSource).toContain('if (umRejected) { weights.um = 0; weights.uim = 0; }');
-    expect(declarationsSource).toContain('const uimLimits = umRejected ? "Rejected"');
+    expect(declarationsSource).toContain('const uimLimits = umRejected ? "REJECTED"');
     expect(declarationsSource).toContain('UM/UIM Rejected by Named Operator');
   });
 });
