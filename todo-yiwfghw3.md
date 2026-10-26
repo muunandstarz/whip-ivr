@@ -1094,3 +1094,8 @@
 - [x] Add an accessible X to the closed quick-phone launcher. Dismissing it persists for that browser via local storage; the normal Softphone page remains available and incoming/live calls still surface the required call UI.
 - [x] Remove the exact `Handler note: Created is not sent to the member…` fixed note from the live supplied Klutch page and remove the matching legacy workspace guidance card so it cannot reappear through an older route.
 - [x] Browser-validate that the launcher’s computed animation is `none`, its X dismisses it through a page refresh, and neither removed Klutch text appears inside the live embedded page. Full validation: 364 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — Klutch Intake Order
+- [x] Make **Garaging state** the first question in the Klutch policy form so state-specific limits, elections, and rules are established before the handler enters policy details.
+- [x] Move the new-policy **Create policy number** action to the final policy step, after member/vehicle details and coverage elections. Renewal and correction policy IDs remain read-only and are loaded through the existing-policy flow.
+- [x] Browser-validate the live embedded form after resetting test values: Garaging state is the first label, Policy number is the final label, and the final action reads Create policy number. Full validation: 365 passed / 1 skipped, TypeScript, production build, and diff check passed.

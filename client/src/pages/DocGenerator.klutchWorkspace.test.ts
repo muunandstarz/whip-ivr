@@ -66,4 +66,18 @@ describe("Klutch policy documents source integration", () => {
     expect(contract).toContain("memberStreet?: string");
     expect(contract).toContain("memberZip?: string");
   });
+
+  it("starts a new policy with garaging state and places policy-number creation last", () => {
+    const formStart = sourcePage.indexOf("function buildForm()");
+    const garagingState = sourcePage.indexOf('h+=fld("st","Garaging state"', formStart);
+    const documentSet = sourcePage.indexOf('Which documents do you need?', formStart);
+    const coverageElections = sourcePage.indexOf('h+=sec("Coverage elections")', formStart);
+    const policyNumber = sourcePage.indexOf('h+=sec("Policy number")', formStart);
+
+    expect(garagingState).toBeGreaterThan(formStart);
+    expect(garagingState).toBeLessThan(documentSet);
+    expect(policyNumber).toBeGreaterThan(coverageElections);
+    expect(sourcePage).toContain('"Create policy number"');
+    expect(sourcePage).toContain("Create the policy number after you have completed the policy details and coverage elections.");
+  });
 });

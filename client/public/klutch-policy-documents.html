@@ -237,6 +237,8 @@ function buildForm(){
  const d=F.sel,R=RULES[F.st];
  const full=(d==="dec"||d==="den"||d==="can");
  let h=`<div class="f">`;
+ h+=fld("st","Garaging state",3,{sel:Object.keys(RULES).map(k=>[k,k+" – "+RULES[k].n])});
+ h+=`<div class="s3 note" style="align-self:end">Start with the state where the vehicle is garaged. It sets the available limits, elections, and policy rules.</div>`;
  h+=`<div class="s6"><label>Which documents do you need?</label>${seg("set",SETS)}<div class="note" style="margin-top:4px">${F.set==="liab"?"Liability team: dec page, plus a cancellation notice if the lease has ended.":"First party team: dec page, denial, carrier letter, cancellation and endorsement."}</div></div>`;
  if(d==="dec"||d==="can"){
   h+=sec("Lease status");
@@ -247,9 +249,7 @@ function buildForm(){
  h+=sec("Policy");
  if(d==="dec")h+=`<div class="s3"><label>Policy type</label>${seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]])}</div><div class="s3"></div>`;
  if(d!=="dec"||F.ptype==="r"||F.ptype==="c")h+=`<div class="s6"><label>${d==="dec"?"Find the existing policy":"Find a saved policy"}</label><input id="rsq" placeholder="Member name, member number or policy number" value="${esc(F.rq||"")}"><div id="rsr" style="margin-top:6px"></div>${d==="dec"&&F.ptype==="r"?`<div class="note" style="margin-top:4px">A renewal keeps the policy number. The new term starts when the last term ends.</div>`:""}${d==="dec"&&F.ptype==="c"?`<div class="note" style="margin-top:4px">A correction keeps the policy number and the same term dates. Fix what was wrong and print the corrected dec page.</div>`:""}</div>`;
- h+=`<div class="s6"><label>Policy number</label><div class="pb"><input data-k="pn" value="${esc(F.pn||"")}" ${d==="dec"&&F.ptype!=="n"?"readonly":""}>${d==="dec"&&F.ptype==="n"?`<button class="b ghost" data-act="genpol">New</button>`:""}</div></div>`;
  if(d==="dec"){
-  h+=fld("st","Garaging state",3,{sel:Object.keys(RULES).map(k=>[k,k+" – "+RULES[k].n])});
   h+=fld("eff","Effective date",3,{t:"date"});
   h+=`<div class="s3"><label>Term</label>${seg("term",[["6","6 months"],["12","12 months"]])}<div class="note" style="margin-top:4px">In the lease more than 6 months: select 12 months. In the lease less than 6 months: select 6 months.</div></div>`;
   h+=`<div class="s3"><label>Expires</label><input id="expv" disabled></div>`;
@@ -267,6 +267,8 @@ function buildForm(){
   h+=`<div class="s3"><label>UM / UIM</label>${seg("um",[["a","Accepted"],["r","Rejected"]],R.umReject?[]:["r"])}</div>`;
   h+=`<div class="s6" id="calc"></div>`;
   h+=`<div class="s6"><details><summary>Adjust deductibles</summary><div class="f" style="margin-top:8px">${fld("compD","Comprehensive deductible",3)+fld("collD","Collision deductible",3)}</div></details></div>`;
+  h+=sec("Policy number");
+  h+=`<div class="s6"><label>Policy number</label><div class="pb"><input data-k="pn" value="${esc(F.pn||"")}" ${F.ptype!=="n"?"readonly":""}>${F.ptype==="n"?`<button class="b ghost" data-act="genpol">${F.pn?"Replace policy number":"Create policy number"}</button>`:""}</div><div class="note" style="margin-top:4px">Create the policy number after you have completed the policy details and coverage elections.</div></div>`;
  }
  if(d==="den"||d==="car"){
   h+=sec("Claim");
