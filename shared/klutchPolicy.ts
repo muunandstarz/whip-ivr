@@ -104,7 +104,7 @@ export function calculateKlutchPremium(input: {
   const raw: Array<Omit<KlutchCoverageAllocation, "premium"> & { weight: number; order: number }> = [
     { label: "Bodily Injury Liability", limit: rule.bi, weight: 30, order: 0 },
     { label: "Property Damage Liability", limit: rule.pd, weight: 12, order: 1 },
-    { label: "Personal Injury Protection", limit: rule.pip ? (pipWaived ? "Waived" : rule.pip.limit) : "Waived", weight: rule.pip && !pipWaived ? 8 : 0, order: 2 },
+    ...(rule.pip ? [{ label: "Personal Injury Protection", limit: pipWaived ? "Waived" : rule.pip.limit, weight: pipWaived ? 0 : 8, order: 2 }] : []),
     { label: "Uninsured Motorist", limit: umRejected ? "Rejected" : rule.bi, weight: umRejected ? 0 : 7, order: 3 },
     { label: "Underinsured Motorist", limit: umRejected ? "Rejected" : rule.bi, weight: umRejected ? 0 : 5, order: 4 },
     { label: "UMPD", limit: "Not included", weight: 0, order: 5 },

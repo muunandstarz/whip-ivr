@@ -1099,3 +1099,8 @@
 - [x] Make **Garaging state** the first question in the Klutch policy form so state-specific limits, elections, and rules are established before the handler enters policy details.
 - [x] Move the new-policy **Create policy number** action to the final policy step, after member/vehicle details and coverage elections. Renewal and correction policy IDs remain read-only and are loaded through the existing-policy flow.
 - [x] Browser-validate the live embedded form after resetting test values: Garaging state is the first label, Policy number is the final label, and the final action reads Create policy number. Full validation: 365 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — Virginia Klutch Declarations: No PIP
+- [x] Remove PIP from the Virginia Klutch policy form: no PIP accepted/waived election appears after Virginia is selected.
+- [x] Exclude PIP entirely from Virginia server-owned policy terms, premium allocation, and generated declarations rather than showing a zero-premium or “waived” PIP row. This applies to all states with no configured Klutch PIP coverage, while retaining PIP where the selected state requires/offers it.
+- [x] Browser-validate the live Virginia form and declaration: only the UM election remains in the election area, and no Personal Injury Protection row prints. Full validation: 367 passed / 1 skipped, TypeScript, production build, and diff check passed.

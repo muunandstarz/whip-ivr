@@ -80,4 +80,11 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('"Create policy number"');
     expect(sourcePage).toContain("Create the policy number after you have completed the policy details and coverage elections.");
   });
+
+  it("does not render PIP controls or declaration rows for Virginia", () => {
+    expect(sourcePage).toContain('VA:{n:"Virginia",bi:[50000,100000],pd:25000,pip:null,umReject:false}');
+    expect(sourcePage).toContain('if(R.pip)h+=`<div class="s3"><label>PIP</label>');
+    expect(sourcePage).toContain('RULES[s.st]?.pip?rowv("pip","Personal injury protection"):""');
+    expect(sourcePage).toContain('...(z.R.pip ? { "Personal Injury Protection": z.cov.pip } : {})');
+  });
 });

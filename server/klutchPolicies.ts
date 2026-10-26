@@ -4,6 +4,7 @@ import {
   addKlutchTermMonths,
   calculateKlutchPremium,
   KLUTCH_CLAIM_ALPHABET,
+  KLUTCH_COVERAGE_RULES,
   KLUTCH_CREATED_NOT_SENT,
   KLUTCH_DOCUMENT_TYPES,
   KLUTCH_FIRST_POLICY_SEQUENCE,
@@ -247,6 +248,7 @@ function normalizedTerms(input: { terms: KlutchPolicyTerms; state: KlutchState; 
     totalPremium: premium.totalPremium,
     weeklyMembershipFee: premium.weeklyMembershipFee,
     coverageWeeks: premium.coverageWeeks,
+    pipWaived: Boolean(KLUTCH_COVERAGE_RULES[input.state].pip?.waivable && input.terms.pipWaived),
   } satisfies KlutchPolicyTerms;
 }
 
