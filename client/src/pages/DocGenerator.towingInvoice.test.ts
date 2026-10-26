@@ -14,7 +14,11 @@ describe("Towing invoice payment status", () => {
     expect(towingInvoice).toContain("PAYMENT STATUS: PAID IN FULL");
     expect(towingInvoice).toContain('doc.text("PAID IN FULL", W - 34.5, 29.3, { align: "center" })');
     expect(towingInvoice).toContain('doc.text("PAYMENT STATUS: PAID IN FULL", 14, y)');
-    expect(towingInvoice).toContain("Generated towing invoices are payment records and will display this status in the preview and PDF.");
+    expect(towingInvoice).toContain("Payment terms: Net 30.");
+    expect(towingInvoice).toContain("Original Due Date: ${net30DueDate}");
+    expect(towingInvoice).toContain('doc.text("Payment terms: Net 30", 14, 27)');
+    expect(towingInvoice).toContain('doc.text(`Original due: ${net30DueDate}`, 14, 31)');
+    expect(towingInvoice).toContain("without inventing a payment-reference number.");
     expect(towingInvoice).toContain("const nextPreviewUrl = getPDFDataUrl(doc);");
     expect(towingInvoice).toContain("setPreviewPdfUrl(previous => {");
   });

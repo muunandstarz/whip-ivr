@@ -5500,6 +5500,19 @@ function UrgentlyInvoiceTab() {
   const today = new Date().toLocaleDateString("en-US", {
     month: "long", day: "numeric", year: "numeric",
   });
+  const formatCalendarDate = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+    });
+  };
+  const invoiceDateDisplay = form.invoiceDate ? formatCalendarDate(form.invoiceDate) : today;
+  const net30DueDate = (() => {
+    const [year, month, day] = (form.invoiceDate || new Date().toISOString().slice(0, 10)).split("-").map(Number);
+    const dueDate = new Date(year, month - 1, day);
+    dueDate.setDate(dueDate.getDate() + 30);
+    return dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  })();
 
   const selectedProvider = TOWING_PROVIDERS.find(p => p.id === provider) || TOWING_PROVIDERS[0];
   const providerName = provider === "local" || provider === "other"
@@ -5525,7 +5538,9 @@ TOWING / ROADSIDE INVOICE
 PAYMENT STATUS: PAID IN FULL
 
 Invoice #: ${form.invoiceNumber || "[Invoice Number]"}
-Invoice Date: ${form.invoiceDate || today}
+Invoice Date: ${invoiceDateDisplay}
+Payment Terms: Net 30
+Original Due Date: ${net30DueDate}
 Claim #: ${form.claimNumber || "[Claim Number]"}
 Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
 
@@ -5572,7 +5587,7 @@ Whip Claims Management`;
     doc.setFont("helvetica", "normal");
     doc.text("TOWING / ROADSIDE INVOICE", 14, 18);
     doc.setFontSize(8);
-    doc.text(`Invoice #: ${form.invoiceNumber || "N/A"}  |  Claim #: ${form.claimNumber || "N/A"}  |  ${form.invoiceDate || today}`, W - 14, 13, { align: "right" });
+    doc.text(`Invoice #: ${form.invoiceNumber || "N/A"}  |  Claim #: ${form.claimNumber || "N/A"}  |  ${invoiceDateDisplay}`, W - 14, 13, { align: "right" });
     if (providerAddress) {
       doc.setFontSize(6.5);
       doc.text(providerAddress, W - 14, 18, { align: "right" });
@@ -5587,6 +5602,10 @@ Whip Claims Management`;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
     doc.text("PAID IN FULL", W - 34.5, 29.3, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text("Payment terms: Net 30", 14, 27);
+    doc.text(`Original due: ${net30DueDate}`, 14, 31);
 
     let y = 37;
     doc.setFontSize(9);
@@ -5790,7 +5809,7 @@ Whip Claims Management`;
           </Panel>
           <Panel title="Additional Info">
             <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-              Payment status: PAID IN FULL. Generated towing invoices are payment records and will display this status in the preview and PDF.
+              Payment terms: Net 30. The original due date is calculated from the invoice date; generated towing invoices show their completed status as PAID IN FULL without inventing a payment-reference number.
             </div>
             <Field label="Authorized By (Adjuster)" id="ui-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="Adjuster name" />
             <div className="mt-3">
