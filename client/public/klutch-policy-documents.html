@@ -224,11 +224,11 @@ function derive(F){
  return{cov,wk,tot:tot/100,R,pipOn,umOn}}
 let F,K;
 function load(){try{F=JSON.parse(localStorage.getItem("klutch_form_v3"))}catch(e){}try{K=JSON.parse(localStorage.getItem("klutch_nums_v3"))}catch(e){}
- F=F||{};F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()},F);if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{},hn:"",ht:""};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100;F.hn=F.hn||K.hn;F.ht=F.ht||K.ht}
+ F=F||{};F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()},F);if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{}};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100}
 function upsert(){if(!F.pn)return;const r=K.pols[F.pn]||(K.pols[F.pn]={pn:F.pn,terms:[]});
  ["st","mno","member","address","city","cst","zip","vehicle","vin","pip","um","lease","cdate","compD","collD"].forEach(k=>r[k]=F[k]||"");
  if(F.eff){const t=r.terms.find(x=>x.eff===F.eff);if(t){t.term=F.term;t.exp=F.exp}else r.terms.push({eff:F.eff,exp:F.exp,term:F.term});r.terms.sort((a,b)=>a.eff<b.eff?-1:1)}r.upd=Date.now()}
-function save(){try{upsert();K.hn=F.hn||"";K.ht=F.ht||"";localStorage.setItem("klutch_form_v3",JSON.stringify(F));localStorage.setItem("klutch_nums_v3",JSON.stringify(K))}catch(e){}}
+function save(){try{upsert();localStorage.setItem("klutch_form_v3",JSON.stringify(F));localStorage.setItem("klutch_nums_v3",JSON.stringify(K))}catch(e){}}
 load();
 const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function newClaim(){const used=Object.values(K.map);let c;do{const b=crypto.getRandomValues(new Uint8Array(6));c="KC-"+[...b].map(x=>A[x%A.length]).join("")}while(used.includes(c));return c}
@@ -454,7 +454,7 @@ async function genpolFlow(){const ex=dupVin();
  if(F.pn&&!await ask("Replace the policy number with a new one?","Replace"))return;
  F.pn="KIC-"+F.st+"-"+String(K.counter).padStart(6,"0");K.counter++;save();buildForm();preview()}
 async function clearFlow(){if(!await ask("Reset the form? This clears everything you entered. Saved policies in the register are not affected.","Reset form"))return;
- F={ptype:"n",set:F.set,sel:F.sel,st:F.st,term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today(),hn:F.hn,ht:F.ht};save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
+ F={ptype:"n",set:F.set,sel:F.sel,st:F.st,term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
 document.addEventListener("click",e=>{
  const sg=e.target.closest("[data-seg]");
  if(sg){const k=sg.dataset.seg;const prevPt=F.ptype;F[k]=sg.dataset.v;save();if(k==="ptype"&&F.ptype==="n"&&(prevPt==="r"||prevPt==="c")){F.pn="";F.rq=""}if(k==="set"&&!setDocs().includes(F.sel))F.sel=setDocs()[0];if(k==="set"||k==="term"||k==="pip"||k==="um"||k==="lease"||k==="ptype"){buildForm();if(k==="ptype")rsearch()}preview();return}
@@ -474,7 +474,7 @@ document.addEventListener("click",e=>{
  else if(a==="import"){$("#imp").click()}
  else if(a==="clear"){clearFlow()}
 });
-document.addEventListener("input",e=>{if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));
+document.addEventListener("input",e=>{if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn")F.handlerNameEntered=true;
  if(k==="filed"&&!F.ddenManual){F.dden=nextBiz(F.filed);const x=document.querySelector('[data-k="dden"]');if(x)x.value=F.dden}
  if(k==="dden"){if(F.dden){F.ddenManual=true}else{F.ddenManual=false;F.dden=nextBiz(F.filed);e.target.value=F.dden}}
  save();preview()});
@@ -561,7 +561,10 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     const { policies, currentUser } = await plain(`/register${search ? `?search=${encodeURIComponent(search)}` : ""}`);
     K.pols = {}; serverPolicies = new Map();
     policies.forEach(p => { const legacy = asLegacy(p); K.pols[legacy.pn] = legacy; serverPolicies.set(legacy.pn, p); });
-    if (!F.hn && currentUser?.name) F.hn = currentUser.name;
+    if (!F.handlerNameEntered && F.hn) {
+      F.hn = ""; F.ht = "";
+      try { localStorage.setItem("klutch_form_v3", JSON.stringify(F)); } catch (_) {}
+    }
     if (typeof regHtml === "function" && document.querySelector("#regb")) document.querySelector("#regb").innerHTML = regHtml("");
     if (typeof rsearch === "function") rsearch();
   }

@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import { AlertTriangle, BadgeCheck, Building2, CheckCircle2, Download, Eye, FileCheck2, FileText, Landmark, Loader2, Printer, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,6 +79,8 @@ type DocForm = {
   adjusterTitle: string;
   carrierClaimNumber: string;
   cancellationDate: string;
+  handlerName: string;
+  handlerTitle: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -166,8 +166,6 @@ function writeMemberMailingAddress(doc: jsPDF, terms: PolicyTerms, y: number) {
 }
 
 export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: { initialState?: string }) {
-  const { user } = useAuth();
-  const { impersonating } = useImpersonation();
   const utils = trpc.useUtils();
   const policiesQuery = trpc.klutchPolicies.list.useQuery({ limit: 100 });
   const issueMutation = trpc.klutchPolicies.issue.useMutation({ onSuccess: () => utils.klutchPolicies.list.invalidate() });
@@ -211,10 +209,12 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     adjusterTitle: "",
     carrierClaimNumber: "",
     cancellationDate: "",
+    handlerName: "",
+    handlerTitle: "",
   });
   const activePolicy = useMemo(() => (policiesQuery.data ?? []).find((policy) => policy.id === selectedPolicyId) as PolicyRecord | undefined, [policiesQuery.data, selectedPolicyId]);
-  const signer = impersonating?.name || user?.name || user?.email || "Klutch Claims Handler";
-  const signerTitle = impersonating ? "Claim Handler" : user?.role === "admin" ? "Claims Administration" : "Claim Handler";
+  const signer = docForm.handlerName;
+  const signerTitle = docForm.handlerTitle;
   const expiresOn = addYear(issueForm.effectiveOn);
   const weeklyMembershipFee = DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE;
   const premiumCalculation = calculateKlutchPremium({
@@ -619,7 +619,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
         <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Step 2</p><h3 className="text-lg font-semibold text-slate-900">Choose a Klutch document</h3><p className="mt-1 text-sm text-slate-600">All five documents are saved as created-not-sent claim-file audit records with the policy and Klutch claim identifiers.</p></div>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">{(Object.keys(KLUTCH_DOCUMENT_LABELS) as KlutchDocumentType[]).map((kind) => <button type="button" key={kind} onClick={() => setDocumentType(kind)} className={`rounded-lg border p-3 text-left transition ${documentType === kind ? "border-[#0B5458] bg-[#EDF7F3] ring-1 ring-[#0B5458]" : "border-slate-200 bg-white hover:border-[#0B5458]/50"}`}><span className="mb-2 flex h-7 w-7 items-center justify-center rounded bg-[#003B40] text-[#CBEA4B]">{kind === "declarations" ? <FileText className="h-4 w-4" /> : kind === "tnc_denial" ? <ShieldAlert className="h-4 w-4" /> : kind === "carrier_position" ? <Building2 className="h-4 w-4" /> : kind === "cancellation_notice" ? <Landmark className="h-4 w-4" /> : <BadgeCheck className="h-4 w-4" />}</span><span className="text-sm font-semibold text-slate-900">{KLUTCH_DOCUMENT_LABELS[kind]}</span></button>)}</div>
         {!activePolicy ? <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />Issue or select a policy before preparing a document.</div> : <div className="mt-5 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="grid gap-4 md:grid-cols-3"><div><Label htmlFor="klutch-claim-number">Whip / SnapSheet claim number</Label><Input id="klutch-claim-number" value={docForm.claimNumber || activePolicy.leaseId} onChange={(event) => setDocument("claimNumber", event.target.value)} placeholder="GB-0000-000000-000000" /><p className="mt-1 text-xs text-slate-500">When entered, the server maps this source claim to a separate Klutch claim number.</p></div><div><Label htmlFor="klutch-loss-date">Date of loss</Label><Input id="klutch-loss-date" type="date" value={docForm.dateOfLoss} onChange={(event) => setDocument("dateOfLoss", event.target.value)} /></div><div className="rounded-md border border-[#0B5458]/20 bg-white px-3 py-2 text-sm"><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Signer</p><p className="font-medium text-slate-900">{signer}</p><p className="text-xs text-slate-600">{signerTitle}</p></div></div>
+          <div className="grid gap-4 md:grid-cols-4"><div><Label htmlFor="klutch-claim-number">Whip / SnapSheet claim number</Label><Input id="klutch-claim-number" value={docForm.claimNumber || activePolicy.leaseId} onChange={(event) => setDocument("claimNumber", event.target.value)} placeholder="GB-0000-000000-000000" /><p className="mt-1 text-xs text-slate-500">When entered, the server maps this source claim to a separate Klutch claim number.</p></div><div><Label htmlFor="klutch-loss-date">Date of loss</Label><Input id="klutch-loss-date" type="date" value={docForm.dateOfLoss} onChange={(event) => setDocument("dateOfLoss", event.target.value)} /></div><div><Label htmlFor="klutch-handler-name">Handler name</Label><Input id="klutch-handler-name" value={docForm.handlerName} onChange={(event) => setDocument("handlerName", event.target.value)} placeholder="Enter the handling adjuster" /></div><div><Label htmlFor="klutch-handler-title">Handler title</Label><Input id="klutch-handler-title" value={docForm.handlerTitle} onChange={(event) => setDocument("handlerTitle", event.target.value)} placeholder="Claims adjuster" /></div></div>
           {(["tnc_denial", "carrier_position"] as KlutchDocumentType[]).includes(documentType) && <>
             <div className="grid gap-4 md:grid-cols-2">
               <div><Label htmlFor="klutch-tnc-name">TNC platform</Label><Input id="klutch-tnc-name" value={docForm.tncName} onChange={(event) => setDocument("tncName", event.target.value)} placeholder="Uber, Lyft, or other platform" /></div>
