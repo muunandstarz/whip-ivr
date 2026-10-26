@@ -107,6 +107,12 @@ const HANDLER_KB_NAV_ITEMS = [
 // Handler IDs authorized for Loss Intake (Carlito=4, Ana=6, Bennet=30003)
 const LOSS_INTAKE_HANDLER_IDS = new Set([4, 6, 30003]);
 const LOSS_INTAKE_NAV = { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck };
+// Liability team: Jayla (Injury) and the active/legacy Giovanni/Geovanni PD
+// profiles. Keep the access rule based on the effective profile ID so Admin
+// View does not expose this team-only certificate and handler preview matches
+// the person being previewed.
+const LIABILITY_COI_HANDLER_IDS = new Set([2, 90002, 330001]);
+const METROCARS_COI_NAV = { href: "/kb/metrocars-coi", label: "MetroCars COI · Liability", icon: FileText };
 
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
@@ -178,6 +184,8 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const showLossIntake =
     isAdmin ||
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
+  const effectiveHandlerId = isImpersonating ? impersonating?.id : user.handlerProfileId;
+  const canAccessMetroCarsCOI = effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId);
   // Insert Loss Intake after Intake Records when the handler is authorized.
   const handlerNavItems = showLossIntake
     ? [...HANDLER_NAV_ITEMS_BASE.slice(0, 4), LOSS_INTAKE_NAV, ...HANDLER_NAV_ITEMS_BASE.slice(4)]
@@ -343,7 +351,14 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 mb-1.5">
               Knowledge Base
             </p>
-            {(isAdmin && !isImpersonating ? KB_NAV_ITEMS : HANDLER_KB_NAV_ITEMS).map(({ href, label, icon: Icon }) => {
+            {(canAccessMetroCarsCOI
+              ? [
+                  ...(isAdmin && !isImpersonating ? KB_NAV_ITEMS : HANDLER_KB_NAV_ITEMS).slice(0, 1),
+                  METROCARS_COI_NAV,
+                  ...(isAdmin && !isImpersonating ? KB_NAV_ITEMS : HANDLER_KB_NAV_ITEMS).slice(1),
+                ]
+              : (isAdmin && !isImpersonating ? KB_NAV_ITEMS : HANDLER_KB_NAV_ITEMS)
+            ).map(({ href, label, icon: Icon }) => {
               const active = location.startsWith(href);
               return (
                 <Link key={href} href={href}>

@@ -39,6 +39,7 @@ import Glossary from "./pages/kb/Glossary";
 import ResourcesLinks from "./pages/kb/ResourcesLinks";
 import VehicleAnatomy from "./pages/kb/VehicleAnatomy";
 import KlutchPolicyDocuments from "./pages/kb/KlutchPolicyDocuments";
+import MetroCarsCOI from "./pages/kb/MetroCarsCOI";
 import ClaimsWorkspace from "./pages/ClaimsWorkspace";
 import Tickets from "./pages/Tickets";
 import { useErrorReporter } from "./hooks/useErrorReporter";
@@ -133,6 +134,7 @@ function Router() {
       <Route path="/kb/resources" component={ResourcesLinks} />
       <Route path="/kb/vehicle-anatomy" component={VehicleAnatomy} />
       <Route path="/kb/klutch-policy-documents" component={KlutchPolicyDocuments} />
+      <Route path="/kb/metrocars-coi" component={MetroCarsCOI} />
       <Route path="/lou-calculator" component={LouCalculatorRedirect} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

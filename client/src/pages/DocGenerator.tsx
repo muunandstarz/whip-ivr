@@ -7601,7 +7601,13 @@ const COI_STATES = ["MD","VA","FL","GA","IL","MA","PA","TX"];
 
 const KLUTCH_SUBSCRIPTION_START_CUTOFF = "2026-07-01";
 
-function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
+export function UnifiedCOITab({
+  initialState = "MD",
+  carrierMode = "auto",
+}: {
+  initialState?: string;
+  carrierMode?: "auto" | "metrocars";
+}) {
   const [state, setState] = React.useState(initialState || "MD");
   const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
   const [umRejected, setUmRejected] = React.useState(false);
@@ -7677,8 +7683,14 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
   };
 
   const rules = COI_STATE_RULES[state] || COI_STATE_RULES["MD"];
-  // Carrier of record is determined by Subscription Start Date: Klutch from July 1, 2026 forward; Metrocars before that date.
-  const insurer: "klutch" | "metrocars" = form.subscriptionStartDate >= KLUTCH_SUBSCRIPTION_START_CUTOFF ? "klutch" : "metrocars";
+  // General COIs determine carrier of record by Subscription Start Date. The
+  // dedicated Liability-only MetroCars page intentionally fixes the carrier to
+  // MetroCars so the handler cannot accidentally issue a Klutch certificate.
+  const insurer: "klutch" | "metrocars" = carrierMode === "metrocars"
+    ? "metrocars"
+    : form.subscriptionStartDate >= KLUTCH_SUBSCRIPTION_START_CUTOFF
+      ? "klutch"
+      : "metrocars";
   const isKlutch = insurer === "klutch";
   // COIs use one Date Issued / Subscription Start Date. Keep every rendered
   // coverage-period field tied to that single source rather than the legacy,
@@ -8122,44 +8134,50 @@ function UnifiedCOITab({ initialState = "MD" }: { initialState?: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Insurer Toggle */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Shield className="w-4 h-4 text-[#ff6221]" />
-          <span className="text-sm font-semibold text-foreground">Issuing Carrier</span>
+      {carrierMode === "metrocars" ? (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <Shield className="h-4 w-4 shrink-0 text-slate-900" aria-hidden="true" />
+          <span><strong className="text-slate-950">Issuing carrier:</strong> MetroCars Leasing Corp. This Liability Team workspace is fixed to MetroCars.</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left ${insurer === "klutch" ? "border-[#171b31] bg-[#171b31]/5" : "border-border"}`}
-          >
-            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "klutch" ? "border-[#171b31]" : "border-border"}`}>
-              {insurer === "klutch" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
+      ) : (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="w-4 h-4 text-[#ff6221]" />
+            <span className="text-sm font-semibold text-foreground">Issuing Carrier</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div
+              className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left ${insurer === "klutch" ? "border-[#171b31] bg-[#171b31]/5" : "border-border"}`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "klutch" ? "border-[#171b31]" : "border-border"}`}>
+                {insurer === "klutch" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-foreground">Klutch Insurance Company</div>
+                <div className="text-xs text-muted-foreground">Subscription Start Date July 1, 2026 or later</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm font-semibold text-foreground">Klutch Insurance Company</div>
-              <div className="text-xs text-muted-foreground">Subscription Start Date July 1, 2026 or later</div>
+            <div
+              className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left ${insurer === "metrocars" ? "border-[#171b31] bg-[#171b31]/5" : "border-border"}`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "metrocars" ? "border-[#171b31]" : "border-border"}`}>
+                {insurer === "metrocars" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-foreground">Metrocars Leasing Corp</div>
+                <div className="text-xs text-muted-foreground">Subscription Start Date before July 1, 2026</div>
+              </div>
             </div>
           </div>
-          <div
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left ${insurer === "metrocars" ? "border-[#171b31] bg-[#171b31]/5" : "border-border"}`}
-          >
-            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${insurer === "metrocars" ? "border-[#171b31]" : "border-border"}`}>
-              {insurer === "metrocars" && <div className="w-2 h-2 rounded-full bg-[#171b31]" />}
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-foreground">Metrocars Leasing Corp</div>
-              <div className="text-xs text-muted-foreground">Subscription Start Date before July 1, 2026</div>
-            </div>
+          <div className={`mt-2 text-xs rounded px-2 py-1 ${isKlutch ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"}`}>
+            {!form.subscriptionStartDate
+              ? "Enter the Subscription Start Date to determine the issuing carrier. Metrocars applies until a qualifying July 1, 2026 or later subscription start date is entered."
+              : isKlutch
+                ? "Klutch Insurance Company — Issuing carrier for Subscription Start Dates on or after July 1, 2026."
+                : "Metrocars Leasing Corp — Issuing carrier for Subscription Start Dates before July 1, 2026."}
           </div>
         </div>
-        <div className={`mt-2 text-xs rounded px-2 py-1 ${isKlutch ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800" : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"}`}>
-          {!form.subscriptionStartDate
-            ? "Enter the Subscription Start Date to determine the issuing carrier. Metrocars applies until a qualifying July 1, 2026 or later subscription start date is entered."
-            : isKlutch
-              ? "Klutch Insurance Company — Issuing carrier for Subscription Start Dates on or after July 1, 2026."
-              : "Metrocars Leasing Corp — Issuing carrier for Subscription Start Dates before July 1, 2026."}
-        </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="space-y-4">

@@ -1104,3 +1104,9 @@
 - [x] Remove PIP from the Virginia Klutch policy form: no PIP accepted/waived election appears after Virginia is selected.
 - [x] Exclude PIP entirely from Virginia server-owned policy terms, premium allocation, and generated declarations rather than showing a zero-premium or “waived” PIP row. This applies to all states with no configured Klutch PIP coverage, while retaining PIP where the selected state requires/offers it.
 - [x] Browser-validate the live Virginia form and declaration: only the UM election remains in the election area, and no Personal Injury Protection row prints. Full validation: 367 passed / 1 skipped, TypeScript, production build, and diff check passed.
+
+## October 2026 — MetroCars COI: Liability Team Only
+- [x] Restore a dedicated **MetroCars COI · Liability** Knowledge Base page at `/kb/metrocars-coi`, visible only to the active Liability handlers (Jayla Bernard and Geovanni/Geovanni Cabrera) and to administrators while impersonating one of those handlers.
+- [x] Keep the certificate workflow permanently fixed to **MetroCars Leasing Corp** in the dedicated view. It no longer presents the general Klutch-versus-MetroCars selection/cutoff explanation; its sole carrier note says the Liability Team workspace is fixed to MetroCars.
+- [x] Preserve the MetroCars certificate fields, state rules, preview, download, VIN decode, coverage-period calculation, and certificate numbering. Admin/non-Liability contexts get an access explanation instead of certificate controls.
+- [x] Browser-validate the page as Jayla Bernard: the Liability-only sidebar entry and fixed MetroCars notice showed, a synthetic Maryland COI preview rendered MetroCars Leasing Corp, and no general carrier toggle/cutoff text appeared. Full validation: 370 passed / 1 skipped, TypeScript, production build, and diff check passed.
