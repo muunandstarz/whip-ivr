@@ -1,8 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router } from "../_core/trpc";
 import {
-  approveKlutchEndorsement,
   cancelKlutchPolicy,
   correctKlutchPolicy,
   findKlutchPoliciesByVin,
@@ -60,10 +59,6 @@ const actorFor = (user: { id: number; name?: string | null; email?: string | nul
   handlerName: handler?.name?.trim(),
   handlerTitle: handler?.title?.trim(),
 });
-
-function requireValue(value: unknown, label: string) {
-  if (!String(value ?? "").trim()) throw new TRPCError({ code: "BAD_REQUEST", message: `${label} is required.` });
-}
 
 function asTrpcError(error: unknown): never {
   if (error instanceof TRPCError) throw error;
@@ -137,17 +132,6 @@ export const klutchPoliciesRouter = router({
   recordDocument: protectedProcedure
     .input(z.object({ policyId: z.number().int().positive(), documentType: z.enum(KLUTCH_DOCUMENT_TYPES), claimNumber: z.string().trim().max(128).optional(), snapshot: snapshotSchema, handler: handlerSchema }))
     .mutation(async ({ input, ctx }) => {
-      const snapshot = input.snapshot;
-      if (input.documentType === "tnc_denial") {
-        requireValue(snapshot.dateOfLoss, "Date of loss");
-        requireValue(snapshot.tncName, "TNC name");
-        requireValue(snapshot.supportingRecords, "Supporting-record reference");
-        if (!['1', '2', '3'].includes(String(snapshot.tncPeriod ?? ""))) throw new TRPCError({ code: "BAD_REQUEST", message: "A TNC denial may be created only for Period 1, 2, or 3. Period 0 personal use cannot be denied by this workflow." });
-      }
-      if (input.documentType === "carrier_position") {
-        for (const [key, label] of Object.entries({ carrierName: "Carrier name", carrierAddress: "Carrier address", adjusterName: "Adjuster", carrierClaimNumber: "Carrier claim number", dateOfLoss: "Date of loss", tncName: "TNC name", tncPeriod: "TNC period", supportingRecords: "Supporting-record reference" })) requireValue(snapshot[key], label);
-        if (!['1', '2', '3'].includes(String(snapshot.tncPeriod))) throw new TRPCError({ code: "BAD_REQUEST", message: "Carrier position letters require a TNC Period 1, 2, or 3." });
-      }
       try { return await recordKlutchDocument(input, actorFor(ctx.user, input.handler)); }
       catch (error) { asTrpcError(error); }
     }),
@@ -156,13 +140,6 @@ export const klutchPoliciesRouter = router({
     .input(z.object({ policyId: z.number().int().positive(), cancelledOn: dateSchema, claimNumber: z.string().trim().max(128).optional(), documentSnapshot: snapshotSchema, handler: handlerSchema }))
     .mutation(async ({ input, ctx }) => {
       try { return await cancelKlutchPolicy(input, actorFor(ctx.user, input.handler)); }
-      catch (error) { asTrpcError(error); }
-    }),
-
-  approveEndorsement: adminProcedure
-    .input(z.object({ policyId: z.number().int().positive(), claimNumber: z.string().trim().max(128).optional(), carrierRequestEvidence: z.string().trim().min(10).max(12000), handler: handlerSchema }))
-    .mutation(async ({ input, ctx }) => {
-      try { return await approveKlutchEndorsement(input.policyId, input.claimNumber, input.carrierRequestEvidence, actorFor(ctx.user, input.handler)); }
       catch (error) { asTrpcError(error); }
     }),
 });

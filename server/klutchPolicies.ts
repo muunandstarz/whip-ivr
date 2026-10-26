@@ -442,27 +442,7 @@ export async function recordKlutchDocument(input: {
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [input.policyId]);
     const policy = policies[0];
     if (!policy) throw new Error("Klutch policy not found.");
-    if (input.documentType === "tnc_denial" && String(input.snapshot.tncPeriod ?? "") === "0") throw new Error("A TNC denial cannot be created for Period 0 personal use.");
-    const claimRequired = ["tnc_denial", "carrier_position", "endorsement"].includes(input.documentType);
-    if (claimRequired && !input.claimNumber?.trim()) throw new Error("A Whip / SnapSheet claim number is required for this claim document.");
     const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
-    if (input.documentType === "carrier_position") {
-      const [enclosures] = await conn.execute<RowDataPacket[]>(
-        `SELECT document_type FROM klutch_policy_documents WHERE policy_id = ? AND claim_id = ? AND document_type IN ('declarations', 'tnc_denial')`,
-        [input.policyId, claim?.id ?? 0],
-      );
-      const types = new Set(enclosures.map((entry) => String(entry.document_type)));
-      if (!types.has("declarations") || !types.has("tnc_denial")) throw new Error("Create the current declarations page and TNC coverage denial for this claim before preparing the carrier position letter.");
-    }
-    if (input.documentType === "endorsement") {
-      const managerName = String(input.snapshot.managerName ?? "").trim();
-      if (!managerName || input.snapshot.managerApproval !== true) throw new Error("A named manager and recorded manager approval are required before creating KIC-END-002.");
-      await conn.execute(
-        `INSERT INTO klutch_endorsement_approvals (policy_id, claim_id, carrier_request_evidence, manager_name, approval_confirmed, approved_by_user_id, approved_by_name)
-         VALUES (?, ?, ?, ?, 1, ?, ?)`,
-        [input.policyId, claim?.id ?? null, String(input.snapshot.carrierRequestEvidence ?? "Manager approval recorded with policy document."), managerName, actor.userId, actor.name],
-      );
-    }
     const term = await latestTerm(conn, input.policyId);
     const handler = handlerFor(actor);
     const transactionType = String(parseTerms(term.terms).transactionType ?? "new");
@@ -480,29 +460,6 @@ export async function recordKlutchDocument(input: {
     );
     await conn.commit();
     return { documentId: Number(result.insertId), klutchClaimNumber: claim?.klutch_claim_number ?? null, deliveryStatus: KLUTCH_CREATED_NOT_SENT };
-  } catch (error) {
-    await conn.rollback();
-    throw error;
-  } finally {
-    await conn.end();
-  }
-}
-
-export async function approveKlutchEndorsement(policyId: number, claimNumber: string | undefined, carrierRequestEvidence: string, actor: KlutchActor) {
-  if (!carrierRequestEvidence.trim()) throw new Error("Carrier-request evidence is required before approving an endorsement.");
-  const conn = await mysql.createConnection(databaseUrl());
-  try {
-    await conn.beginTransaction();
-    const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [policyId]);
-    if (!policies[0]) throw new Error("Klutch policy not found.");
-    const claim = claimNumber?.trim() ? await getClaimForPolicy(conn, policyId, claimNumber, actor) : null;
-    const [result] = await conn.execute<mysql.ResultSetHeader>(
-      `INSERT INTO klutch_endorsement_approvals (policy_id, claim_id, carrier_request_evidence, manager_name, approval_confirmed, approved_by_user_id, approved_by_name)
-       VALUES (?, ?, ?, ?, 1, ?, ?)`,
-      [policyId, claim?.id ?? null, carrierRequestEvidence.trim(), actor.name, actor.userId, actor.name],
-    );
-    await conn.commit();
-    return { approvalId: Number(result.insertId), klutchClaimNumber: claim?.klutch_claim_number ?? null };
   } catch (error) {
     await conn.rollback();
     throw error;

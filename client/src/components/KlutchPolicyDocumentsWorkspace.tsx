@@ -81,7 +81,6 @@ type DocForm = {
   adjusterTitle: string;
   carrierClaimNumber: string;
   cancellationDate: string;
-  carrierRequestEvidence: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -174,14 +173,12 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
   const issueMutation = trpc.klutchPolicies.issue.useMutation({ onSuccess: () => utils.klutchPolicies.list.invalidate() });
   const documentMutation = trpc.klutchPolicies.recordDocument.useMutation();
   const cancellationMutation = trpc.klutchPolicies.cancelAndRecord.useMutation({ onSuccess: () => utils.klutchPolicies.list.invalidate() });
-  const approvalMutation = trpc.klutchPolicies.approveEndorsement.useMutation();
   const [documentType, setDocumentType] = useState<KlutchDocumentType>("declarations");
   const [selectedPolicyId, setSelectedPolicyId] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState("Klutch_Document");
   const [issueKey] = useState(() => crypto.randomUUID());
   const policyDetailQuery = trpc.klutchPolicies.get.useQuery({ policyId: selectedPolicyId ?? 1 }, { enabled: Boolean(selectedPolicyId) });
-  const documentRequiresClaim = (["tnc_denial", "carrier_position", "endorsement"] as KlutchDocumentType[]).includes(documentType);
   const normalizedInitialState = SUPPORTED_STATES.includes(initialState as KlutchState) ? initialState as KlutchState : "MD";
   const [issueForm, setIssueForm] = useState({
     leaseId: "",
@@ -214,7 +211,6 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     adjusterTitle: "",
     carrierClaimNumber: "",
     cancellationDate: "",
-    carrierRequestEvidence: "",
   });
   const activePolicy = useMemo(() => (policiesQuery.data ?? []).find((policy) => policy.id === selectedPolicyId) as PolicyRecord | undefined, [policiesQuery.data, selectedPolicyId]);
   const signer = impersonating?.name || user?.name || user?.email || "Klutch Claims Handler";
@@ -531,22 +527,6 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
 
   function validatePreviewInputs() {
     if (!activePolicy) { toast.error("Issue or select a Klutch policy first."); return false; }
-    if ((documentType === "tnc_denial" || documentType === "carrier_position") && (!docForm.dateOfLoss || !docForm.tncName || !docForm.tncPeriod || !docForm.supportingRecords)) {
-      toast.error("Enter the loss date, TNC name, documented period, and supporting-record reference before previewing this document.");
-      return false;
-    }
-    if ((documentType === "tnc_denial" || documentType === "carrier_position") && docForm.tncPeriod === "0") {
-      toast.error("Period 0 is personal use and cannot generate a TNC coverage denial.");
-      return false;
-    }
-    if (documentType === "carrier_position" && (!docForm.carrierName || !docForm.carrierAddress || !docForm.adjusterName || !docForm.carrierClaimNumber || !docForm.carrierLetterDate)) {
-      toast.error("Enter the carrier, address, adjuster, carrier claim number, and carrier-letter date before previewing the coverage position letter.");
-      return false;
-    }
-    if (documentType === "cancellation_notice" && !docForm.cancellationDate) {
-      toast.error("Enter the lease-termination effective date before previewing the cancellation notice.");
-      return false;
-    }
     return true;
   }
 
@@ -568,7 +548,6 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
   async function createDocument(mode: "download") {
     if (!activePolicy) { toast.error("Issue or select a Klutch policy first."); return; }
     const sourceClaimNumber = docForm.claimNumber || activePolicy.leaseId;
-    if (documentRequiresClaim && !sourceClaimNumber) { toast.error("Enter the Whip / SnapSheet claim number before creating this claim document."); return; }
     if (documentType === "cancellation_notice" && !docForm.cancellationDate) { toast.error("Enter the lease-termination effective date."); return; }
     try {
       let result: { klutchClaimNumber?: string | null; deliveryStatus: string } | undefined;
@@ -576,13 +555,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       if (documentType === "cancellation_notice") {
         result = await cancellationMutation.mutateAsync({ policyId: activePolicy.id, cancelledOn: docForm.cancellationDate, claimNumber: sourceClaimNumber || undefined, documentSnapshot: snapshot });
         activePolicy.status = "cancelled";
-      } else {
-        if (documentType === "endorsement") {
-          if (user?.role !== "admin") { toast.error("Only a verified manager can approve KIC-END-002."); return; }
-          await approvalMutation.mutateAsync({ policyId: activePolicy.id, claimNumber: sourceClaimNumber, carrierRequestEvidence: docForm.carrierRequestEvidence });
-        }
-        result = await documentMutation.mutateAsync({ policyId: activePolicy.id, documentType, claimNumber: sourceClaimNumber || undefined, snapshot });
-      }
+      } else result = await documentMutation.mutateAsync({ policyId: activePolicy.id, documentType, claimNumber: sourceClaimNumber || undefined, snapshot });
       const document = await buildPdf(documentType, activePolicy, result?.klutchClaimNumber);
       const filename = cleanFilename(`Klutch_${KLUTCH_DOCUMENT_LABELS[documentType]}_${activePolicy.policyNumber}_${result?.klutchClaimNumber || sourceClaimNumber || "Policy"}`);
       setPreviewFilename(filename);
@@ -646,20 +619,19 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
         <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Step 2</p><h3 className="text-lg font-semibold text-slate-900">Choose a Klutch document</h3><p className="mt-1 text-sm text-slate-600">All five documents are saved as created-not-sent claim-file audit records with the policy and Klutch claim identifiers.</p></div>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">{(Object.keys(KLUTCH_DOCUMENT_LABELS) as KlutchDocumentType[]).map((kind) => <button type="button" key={kind} onClick={() => setDocumentType(kind)} className={`rounded-lg border p-3 text-left transition ${documentType === kind ? "border-[#0B5458] bg-[#EDF7F3] ring-1 ring-[#0B5458]" : "border-slate-200 bg-white hover:border-[#0B5458]/50"}`}><span className="mb-2 flex h-7 w-7 items-center justify-center rounded bg-[#003B40] text-[#CBEA4B]">{kind === "declarations" ? <FileText className="h-4 w-4" /> : kind === "tnc_denial" ? <ShieldAlert className="h-4 w-4" /> : kind === "carrier_position" ? <Building2 className="h-4 w-4" /> : kind === "cancellation_notice" ? <Landmark className="h-4 w-4" /> : <BadgeCheck className="h-4 w-4" />}</span><span className="text-sm font-semibold text-slate-900">{KLUTCH_DOCUMENT_LABELS[kind]}</span></button>)}</div>
         {!activePolicy ? <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />Issue or select a policy before preparing a document.</div> : <div className="mt-5 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="grid gap-4 md:grid-cols-3"><div><Label htmlFor="klutch-claim-number">Whip / SnapSheet claim number {documentRequiresClaim && <span className="text-rose-600">*</span>}</Label><Input id="klutch-claim-number" value={docForm.claimNumber || activePolicy.leaseId} onChange={(event) => setDocument("claimNumber", event.target.value)} placeholder="GB-0000-000000-000000" /><p className="mt-1 text-xs text-slate-500">The server maps this source claim to a separate Klutch claim number.</p></div><div><Label htmlFor="klutch-loss-date">Date of loss {(["tnc_denial", "carrier_position"] as KlutchDocumentType[]).includes(documentType) && <span className="text-rose-600">*</span>}</Label><Input id="klutch-loss-date" type="date" value={docForm.dateOfLoss} onChange={(event) => setDocument("dateOfLoss", event.target.value)} /></div><div className="rounded-md border border-[#0B5458]/20 bg-white px-3 py-2 text-sm"><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Signer</p><p className="font-medium text-slate-900">{signer}</p><p className="text-xs text-slate-600">{signerTitle}</p></div></div>
+          <div className="grid gap-4 md:grid-cols-3"><div><Label htmlFor="klutch-claim-number">Whip / SnapSheet claim number</Label><Input id="klutch-claim-number" value={docForm.claimNumber || activePolicy.leaseId} onChange={(event) => setDocument("claimNumber", event.target.value)} placeholder="GB-0000-000000-000000" /><p className="mt-1 text-xs text-slate-500">When entered, the server maps this source claim to a separate Klutch claim number.</p></div><div><Label htmlFor="klutch-loss-date">Date of loss</Label><Input id="klutch-loss-date" type="date" value={docForm.dateOfLoss} onChange={(event) => setDocument("dateOfLoss", event.target.value)} /></div><div className="rounded-md border border-[#0B5458]/20 bg-white px-3 py-2 text-sm"><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Signer</p><p className="font-medium text-slate-900">{signer}</p><p className="text-xs text-slate-600">{signerTitle}</p></div></div>
           {(["tnc_denial", "carrier_position"] as KlutchDocumentType[]).includes(documentType) && <>
             <div className="grid gap-4 md:grid-cols-2">
-              <div><Label htmlFor="klutch-tnc-name">TNC platform <span className="text-rose-600">*</span></Label><Input id="klutch-tnc-name" value={docForm.tncName} onChange={(event) => setDocument("tncName", event.target.value)} placeholder="Uber, Lyft, or other platform" /></div>
-              <div><Label htmlFor="klutch-tnc-period">TNC period <span className="text-rose-600">*</span></Label><Select value={docForm.tncPeriod} onValueChange={(value) => setDocument("tncPeriod", value)}><SelectTrigger id="klutch-tnc-period"><SelectValue placeholder="Select the documented period" /></SelectTrigger><SelectContent><SelectItem value="0">0 — Personal use (cannot generate a denial)</SelectItem>{Object.entries(TNC_PERIODS).map(([key, value]) => <SelectItem key={key} value={key}>{key} — {value}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label htmlFor="klutch-tnc-name">TNC platform</Label><Input id="klutch-tnc-name" value={docForm.tncName} onChange={(event) => setDocument("tncName", event.target.value)} placeholder="Uber, Lyft, or other platform" /></div>
+              <div><Label htmlFor="klutch-tnc-period">TNC period</Label><Select value={docForm.tncPeriod} onValueChange={(value) => setDocument("tncPeriod", value)}><SelectTrigger id="klutch-tnc-period"><SelectValue placeholder="Select the documented period" /></SelectTrigger><SelectContent><SelectItem value="0">0 — Personal use</SelectItem>{Object.entries(TNC_PERIODS).map(([key, value]) => <SelectItem key={key} value={key}>{key} — {value}</SelectItem>)}</SelectContent></Select></div>
             </div>
             {documentType === "tnc_denial" && <div className="rounded-lg border border-[#0B5458]/15 bg-white p-3"><p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Optional TNC insurer reference</p><div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="klutch-tnc-carrier">TNC insurer name</Label><Input id="klutch-tnc-carrier" value={docForm.tncCarrierName} onChange={(event) => setDocument("tncCarrierName", event.target.value)} placeholder="Platform insurer, if known" /></div><div><Label htmlFor="klutch-tnc-carrier-claim">TNC insurer claim number</Label><Input id="klutch-tnc-carrier-claim" value={docForm.tncCarrierClaimNumber} onChange={(event) => setDocument("tncCarrierClaimNumber", event.target.value)} placeholder="If known" /></div></div><p className="mt-2 text-xs text-slate-500">These references print only when entered; they do not state or imply a coverage determination by that insurer.</p></div>}
-            <div><Label htmlFor="klutch-supporting-records">Supporting-record reference <span className="text-rose-600">*</span></Label><Textarea id="klutch-supporting-records" rows={2} value={docForm.supportingRecords} onChange={(event) => setDocument("supportingRecords", event.target.value)} placeholder="Identify the trip/activity record, statement, report, or other supporting records reviewed." /></div>
-            {docForm.tncPeriod === "0" && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><ShieldAlert className="mr-2 inline h-4 w-4" />Period 0 is personal use. This workflow blocks TNC denial creation and saves no document or delivery record.</div>}
+            <div><Label htmlFor="klutch-supporting-records">Supporting-record reference</Label><Textarea id="klutch-supporting-records" rows={2} value={docForm.supportingRecords} onChange={(event) => setDocument("supportingRecords", event.target.value)} placeholder="Identify the trip/activity record, statement, report, or other supporting records reviewed." /></div>
           </>}
-          {documentType === "carrier_position" && <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="klutch-carrier-name">Carrier name <span className="text-rose-600">*</span></Label><Input id="klutch-carrier-name" value={docForm.carrierName} onChange={(event) => setDocument("carrierName", event.target.value)} /></div><div><Label htmlFor="klutch-adjuster">Carrier adjuster <span className="text-rose-600">*</span></Label><Input id="klutch-adjuster" value={docForm.adjusterName} onChange={(event) => setDocument("adjusterName", event.target.value)} /></div><div><Label htmlFor="klutch-adjuster-title">Adjuster title</Label><Input id="klutch-adjuster-title" value={docForm.adjusterTitle} onChange={(event) => setDocument("adjusterTitle", event.target.value)} placeholder="Claims adjuster" /></div><div><Label htmlFor="klutch-carrier-letter-date">Date of carrier letter <span className="text-rose-600">*</span></Label><Input id="klutch-carrier-letter-date" type="date" value={docForm.carrierLetterDate} onChange={(event) => setDocument("carrierLetterDate", event.target.value)} /></div><div><Label htmlFor="klutch-carrier-claim">Carrier claim number <span className="text-rose-600">*</span></Label><Input id="klutch-carrier-claim" value={docForm.carrierClaimNumber} onChange={(event) => setDocument("carrierClaimNumber", event.target.value)} /></div><div><Label htmlFor="klutch-carrier-address">Carrier address <span className="text-rose-600">*</span></Label><Textarea id="klutch-carrier-address" rows={2} value={docForm.carrierAddress} onChange={(event) => setDocument("carrierAddress", event.target.value)} /></div><p className="md:col-span-2 text-xs text-slate-500">Preview is available as soon as the fields are complete. Creating the durable carrier-position record requires the linked declarations and TNC denial for this same policy and claim; nothing is sent automatically.</p></div>}
+          {documentType === "carrier_position" && <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="klutch-carrier-name">Carrier name</Label><Input id="klutch-carrier-name" value={docForm.carrierName} onChange={(event) => setDocument("carrierName", event.target.value)} /></div><div><Label htmlFor="klutch-adjuster">Carrier adjuster</Label><Input id="klutch-adjuster" value={docForm.adjusterName} onChange={(event) => setDocument("adjusterName", event.target.value)} /></div><div><Label htmlFor="klutch-adjuster-title">Adjuster title</Label><Input id="klutch-adjuster-title" value={docForm.adjusterTitle} onChange={(event) => setDocument("adjusterTitle", event.target.value)} placeholder="Claims adjuster" /></div><div><Label htmlFor="klutch-carrier-letter-date">Date of carrier letter</Label><Input id="klutch-carrier-letter-date" type="date" value={docForm.carrierLetterDate} onChange={(event) => setDocument("carrierLetterDate", event.target.value)} /></div><div><Label htmlFor="klutch-carrier-claim">Carrier claim number</Label><Input id="klutch-carrier-claim" value={docForm.carrierClaimNumber} onChange={(event) => setDocument("carrierClaimNumber", event.target.value)} /></div><div><Label htmlFor="klutch-carrier-address">Carrier address</Label><Textarea id="klutch-carrier-address" rows={2} value={docForm.carrierAddress} onChange={(event) => setDocument("carrierAddress", event.target.value)} /></div><p className="md:col-span-2 text-xs text-slate-500">Preview and the created-not-sent record are available without a linked declarations or denial document.</p></div>}
           {documentType === "cancellation_notice" && <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="klutch-cancellation-date">Lease terminated — effective date <span className="text-rose-600">*</span></Label><Input id="klutch-cancellation-date" type="date" value={docForm.cancellationDate} onChange={(event) => setDocument("cancellationDate", event.target.value)} /></div><div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Only allowed cancellation reason:</strong> Lease terminated. Creating the notice atomically marks the policy cancelled and stores the effective date.</div></div>}
-          {documentType === "endorsement" && <div className="space-y-3"><div><Label htmlFor="klutch-endorsement-evidence">Carrier-request evidence <span className="text-rose-600">*</span></Label><Textarea id="klutch-endorsement-evidence" rows={3} value={docForm.carrierRequestEvidence} onChange={(event) => setDocument("carrierRequestEvidence", event.target.value)} placeholder="Paste or identify the carrier request. A verified manager approval is recorded server-side before KIC-END-002 can be created." /></div><div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Manager approval required.</strong> The fixed KIC-END-002 form may be created only after a documented carrier request and server-recorded approval. It is never automatically attached to another document.</div></div>}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-600"><CheckCircle2 className="mr-1 inline h-4 w-4 text-emerald-600" />Preview opens an on-page PDF with <strong>Open/Print</strong> and <strong>Download</strong> controls without changing policy or audit records. The separate record action logs <strong>CREATED_NOT_SENT</strong>; it never sends the document.</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewDocument} disabled={documentMutation.isPending || cancellationMutation.isPending || approvalMutation.isPending}><Eye className="mr-2 h-4 w-4" />Preview PDF</Button><Button className="bg-[#003B40] hover:bg-[#0B5458]" onClick={() => createDocument("download")} disabled={documentMutation.isPending || cancellationMutation.isPending || approvalMutation.isPending}><Download className="mr-2 h-4 w-4" />Create record & download</Button></div></div>
+          {documentType === "endorsement" && <div className="rounded-md border border-[#0B5458]/20 bg-white p-3 text-sm text-slate-700">KIC-END-002 is available for preview and created-not-sent recording without a manager-approval or carrier-evidence requirement.</div>}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-600"><CheckCircle2 className="mr-1 inline h-4 w-4 text-emerald-600" />Preview opens an on-page PDF with <strong>Open/Print</strong> and <strong>Download</strong> controls without changing policy or audit records. The separate record action logs <strong>CREATED_NOT_SENT</strong>; it never sends the document.</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewDocument} disabled={documentMutation.isPending || cancellationMutation.isPending}><Eye className="mr-2 h-4 w-4" />Preview PDF</Button><Button className="bg-[#003B40] hover:bg-[#0B5458]" onClick={() => createDocument("download")} disabled={documentMutation.isPending || cancellationMutation.isPending}><Download className="mr-2 h-4 w-4" />Create record & download</Button></div></div>
         </div>}
       </section>
 

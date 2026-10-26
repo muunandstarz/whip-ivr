@@ -49,19 +49,23 @@ describe("Klutch policy documents source integration", () => {
     expect(api).toContain("cancelKlutchPolicy");
   });
 
-  it("requires a Whip claim for claim documents and retains endorsement controls", () => {
-    expect(sourcePage).toContain("Enter the Whip / SnapSheet claim number before creating a claim document.");
-    expect(sourcePage).toContain("Carrier request evidence is required for KIC-END-002.");
-    expect(sourcePage).toContain("Name the approving manager and confirm approval before printing KIC-END-002.");
-    expect(api).toContain('type === "endorsement" && user.role !== "admin"');
-    expect(api).toContain("approveKlutchEndorsement");
+  it("makes every form previewable in All forms without manager or claim-document gates", () => {
+    expect(sourcePage).toContain('const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]]');
+    expect(sourcePage).toContain('return DOCS.map(x=>x[0])');
+    expect(sourcePage).toContain('const denialClaim=claim||{kc:s.kc||"[Klutch claim number]"');
+    expect(sourcePage).toContain('if(d==="end")h+=sec("Endorsement")');
+    expect(sourcePage).toContain('This form is available for preview and creation without a manager-approval or carrier-evidence field.');
+    expect(sourcePage).not.toContain("Manager approval is required.");
+    expect(sourcePage).not.toContain("Carrier request evidence is required for KIC-END-002.");
+    expect(sourcePage).not.toContain("Enter the Whip / SnapSheet claim number before creating a claim document.");
+    expect(api).not.toContain('type === "endorsement" && user.role !== "admin"');
+    expect(api).not.toContain("endorsement-approval");
   });
 
   it("retains structured policy terms and insurer references from the updated source workflow", () => {
     expect(sourcePage).toContain("memberStreet");
     expect(sourcePage).toContain("memberCity");
     expect(sourcePage).toContain("memberZip");
-    expect(sourcePage).toContain("carrierRequestEvidence");
     expect(sourcePage).toContain("weeklyMembershipFee: 35");
     expect(contract).toContain("memberStreet?: string");
     expect(contract).toContain("memberZip?: string");

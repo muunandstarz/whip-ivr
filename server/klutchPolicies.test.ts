@@ -28,22 +28,20 @@ describe("Klutch policy service safeguards", () => {
     expect(routerSource).toContain("memberZip");
   });
 
-  it("blocks Period 0 denial records and preserves created-not-sent lifecycle", () => {
-    expect(source).toContain('input.documentType === "tnc_denial" && String(input.snapshot.tncPeriod ?? "") === "0"');
+  it("keeps the created-not-sent lifecycle without restricting available document forms", () => {
     expect(source).toContain("KLUTCH_CREATED_NOT_SENT");
-    expect(routerSource).toContain("Period 0 personal use cannot be denied by this workflow");
     expect(source).toContain("deliveryStatus");
+    expect(source).not.toContain('input.documentType === "tnc_denial" && String(input.snapshot.tncPeriod ?? "") === "0"');
+    expect(routerSource).not.toContain("Period 0 personal use cannot be denied by this workflow");
   });
 
-  it("requires the paired declaration and denial before carrier position creation", () => {
-    expect(source).toContain("Create the current declarations page and TNC coverage denial");
-    expect(source).toContain("document_type IN ('declarations', 'tnc_denial')");
-  });
-
-  it("requires server-recorded manager approval for KIC-END-002", () => {
-    expect(source).toContain("klutch_endorsement_approvals");
-    expect(source).toContain("A named manager and recorded manager approval are required before creating KIC-END-002.");
-    expect(routerSource).toContain("approveEndorsement: adminProcedure");
+  it("records every document form without cross-document, claim, or manager-approval prerequisites", () => {
+    expect(source).not.toContain("Create the current declarations page and TNC coverage denial");
+    expect(source).not.toContain("A Whip / SnapSheet claim number is required for this claim document.");
+    expect(source).not.toContain("klutch_endorsement_approvals");
+    expect(source).not.toContain("A named manager and recorded manager approval are required before creating KIC-END-002.");
+    expect(routerSource).not.toContain("approveEndorsement");
+    expect(routerSource).not.toContain("adminProcedure");
   });
 
   it("preserves database DATE objects in policy terms and documents", () => {

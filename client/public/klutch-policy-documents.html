@@ -194,7 +194,7 @@ const W={bi:30,pd:12,coll:25,comp:13,um:7,uim:5,pip:8};
 /* -------------------------------------- */
 const COVS=[["bi","Bodily injury liability"],["pd","Property damage liability"],["pip","Personal injury protection"],["um","Uninsured motorist bodily injury"],["uim","Underinsured motorist bodily injury"],["comp","Comprehensive"],["coll","Collision"]];
 const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"]];
-const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Send only if a carrier requests the policy language, and only with manager approval."};
+const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it."};
 const PERIODS={1:"waiting for a ride request",2:"traveling to pick up a passenger",3:"transporting a passenger"};
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -285,7 +285,7 @@ function buildForm(){
   h+=fld("carrier","Carrier name",3)+fld("cclm","Carrier claim number",3)+fld("attn","Adjuster name and title",6)+fld("caddr","Carrier street address",3)+fld("ccity","City, State ZIP",3)+fld("cdt","Date of carrier letter",3,{t:"date"})+fld("rec","Supporting records",3);
  }
  if(d==="can")h+=fld("date","Letter date",3,{t:"date"});
- if(d==="end")h+=sec("Approval")+fld("mgr","Approving manager",6)+`<div class="s6 row2"><input type="checkbox" data-k="mgrok" style="width:auto" ${F.mgrok?"checked":""}><span>Manager approval obtained</span></div>`;
+ if(d==="end")h+=sec("Endorsement")+`<div class="s6 note">This form is available for preview and creation without a manager-approval or carrier-evidence field.</div>`;
  $("#form").innerHTML=h+"</div>";calc();rsearch()}
 function calc(){
  const d=derive(F);if(!d)return;F.exp=addMonths(F.eff,+F.term);const dd=derive(F);
@@ -375,7 +375,6 @@ function buildDoc(d,pol,claim,s){
   return{html:sheet(p1)+sheet(p2),miss:[...new Set(miss)]};
  }
  if(d==="end"){
-  if(!(s.mgrok&&s.mgr))return{err:"Manager approval is required. Enter the approving manager and check the approval box.",html:"",miss};
   const A=(n,t,r)=>`<div class="it">${n}&nbsp; <b>“${t}”</b> ${r}</div>`,I=(n,t)=>`<div class="it">${n}&nbsp; ${t}</div>`;
   const hdr=`<img class="lg" src="${LOGO}" style="height:53px;display:block;margin-bottom:16px"><div style="margin-bottom:5px"><b>ENDORSEMENT NO. KIC-END-002</b></div><div style="margin-bottom:5px">Policy Number: ${pol.number}      Endorsement Effective Date: July 1, 2026</div><div style="border-bottom:1.5px solid #c9c9c9;padding-bottom:5px;margin-bottom:12px"><b>THIS ENDORSEMENT CHANGES THE POLICY. PLEASE READ IT CAREFULLY.</b></div>`;
   const pg=n=>`<div class="foot" style="color:#5f5f5f;font-size:10px">Klutch Insurance Company  |  Form KIC-END-002 (Ed. 07/26)  |  Page ${n} of 2</div>`;
@@ -398,44 +397,41 @@ function buildDoc(d,pol,claim,s){
    ${I("4.","This exclusion applies even if a TNC, another insurer, or any other person provides, denies, or fails to provide coverage for the same loss. This policy is not other insurance available to contribute to that loss.")}
    ${I("5.","If the law of the state governing this policy requires coverage that this exclusion would otherwise remove, this exclusion applies only to the extent the law permits, and coverage is limited to the minimum amount that law requires.")}
    <h4>D.  All Other Terms</h4>${P("All other terms, conditions, and exclusions of the policy remain unchanged.")}${pg(2)}</div>`;
-  return{html:sheet(e1)+sheet(e2),miss,approval:s.mgr};
+  return{html:sheet(e1)+sheet(e2),miss};
  }
  const top=`<img class="lg" src="${LOGO}">${P(dt)}`;
  const mem=L(esc(nm))+L(esc(pol.address))+L(esc(pol.city))+G;
  if(d==="den"){
-  if(!claim)return{err:"Enter the Klutch claim number, date of loss and TNC period.",html:"",miss};
-  if(+claim.period===0)return{err:"Period 0 is personal use. A TNC denial cannot be generated for this claim.",html:"",miss};
-  const tnc=esc(claim.tnc);
-  const html=sheet(`<div class="ltr">${top}${mem}${L("RE:  Coverage Determination – Denial of Claim")}${L("Policy Number:  "+pol.number)}${L("Claim Number:  "+claim.kc)}${L("Date of Loss:  "+ld(claim.dol))}${L("Vehicle:  "+esc(veh))}${G}
+  const denialClaim=claim||{kc:s.kc||"[Klutch claim number]",dol:s.dol||"",tnc:s.tnc||"Uber",period:+s.period||1};
+  const tnc=esc(denialClaim.tnc),activity=PERIODS[denialClaim.period]||"using the platform";
+  const html=sheet(`<div class="ltr">${top}${mem}${L("RE:  Coverage Determination – Denial of Claim")}${L("Policy Number:  "+pol.number)}${L("Claim Number:  "+denialClaim.kc)}${L("Date of Loss:  "+ld(denialClaim.dol))}${L("Vehicle:  "+esc(veh))}${G}
    ${P("Dear "+esc(nm)+":")}
    ${P("We have completed our review of this claim. Based on the circumstances of the loss and the applicable policy exclusion, Klutch Insurance Company denies liability and physical damage coverage for this loss.")}
-   ${P("Our review of the "+tnc+" trip and activity records for the date of loss confirms that, at the time of the loss, you were logged on to the "+tnc+" platform and "+PERIODS[claim.period]+".")}
+   ${P("Our review of the "+tnc+" trip and activity records for the date of loss confirms that, at the time of the loss, you were logged on to the "+tnc+" platform and "+activity+".")}
    ${P("Your policy includes the following exclusion under the Transportation Network Company and Commercial Use Exclusion Endorsement, Form KIC-END-002 (Ed. 07/26), Section B:")}
    <p class="q">“We do not provide coverage under this policy for any loss, damage, injury, or liability, or for any claim, suit, defense, or expense, arising out of or occurring while the covered vehicle is being used, operated, or made available: 1. while the operator is logged on to a transportation network company platform or digital network, whether waiting for a request, en route to a rider or pickup location, or carrying a passenger or property …”</p>
    ${P("Because the loss occurred while you were logged on to the platform, the exclusion applies and coverage is unavailable for this claim.")}
    ${P("This decision concerns coverage under your Klutch policy only. It does not determine whether coverage is available through "+tnc+" or another insurer.")}
    ${P("If you believe our findings are incorrect or have additional information that may affect this decision, please send it to claims@klutchinsurance.com for review. You may also contact Klutch Claims at (855) 906-5949 with any questions.")}
    ${P("Sincerely,")}<div class="gap"></div>${hand()}${G}${L("cc:  Metrocars Leasing Corp")}</div>${FOOT}`);
-  return{html,miss,claim:claim.kc};
+  return{html,miss,claim:denialClaim.kc};
  }
  if(d==="car"){
-  if(!claim)return{err:"Enter the Klutch claim number, date of loss and TNC period.",html:"",miss};
-  if(+claim.period===0)return{err:"Period 0 is personal use. A TNC coverage position cannot be generated for this claim.",html:"",miss};
+  const carrierClaim=claim||{kc:s.kc||"[Klutch claim number]",dol:s.dol||"",tnc:s.tnc||"Uber",period:+s.period||1};
   const need=[["carrier","carrier name"],["attn","adjuster name and title"],["caddr","carrier address"],["ccity","carrier city, state ZIP"],["cclm","carrier claim number"],["cdt","date of carrier letter"],["rec","supporting records"]];
   need.forEach(([k,l])=>{if(!s[k])miss.push(l)});
   const nmShort=esc(s.attn||"").split(",")[0];
-  const html=sheet(`<div class="ltr">${top}${L(esc(s.carrier||"")+" Claims")}${L("Attn: "+esc(s.attn||""))}${L(esc(s.caddr||""))}${L(esc(s.ccity||""))}${G}${L("RE:  Coverage Position")}${L("Your Claim Number:  "+esc(s.cclm||""))}${L("Policy Number:  "+pol.number)}${L("Our Claim Number:  "+claim.kc)}${L("Date of Loss:  "+ld(claim.dol))}${L("Our Insured:  "+esc(nm))}${L("Vehicle:  "+esc(veh))}${G}
+  const html=sheet(`<div class="ltr">${top}${L(esc(s.carrier||"")+" Claims")}${L("Attn: "+esc(s.attn||""))}${L(esc(s.caddr||""))}${L(esc(s.ccity||""))}${G}${L("RE:  Coverage Position")}${L("Your Claim Number:  "+esc(s.cclm||""))}${L("Policy Number:  "+pol.number)}${L("Our Claim Number:  "+carrierClaim.kc)}${L("Date of Loss:  "+ld(carrierClaim.dol))}${L("Our Insured:  "+esc(nm))}${L("Vehicle:  "+esc(veh))}${G}
    ${P("Dear "+nmShort+":")}
    ${P("This responds to your letter of "+ld(s.cdt)+" on the above loss. Klutch Insurance Company insures the above vehicle under a policy issued to "+esc(nm)+". Our coverage position is set out below.")}
    ${P("The Klutch policy includes the Transportation Network Company and Commercial Use Exclusion Endorsement, Form KIC-END-002 (Ed. 07/26). Section B of that endorsement excludes coverage for any loss arising out of or occurring while the operator is logged on to a transportation network company platform, whether waiting for a request, en route to a rider or pickup location, or carrying a passenger or property.")}
-   ${P("Our investigation determined that "+esc(nm)+" was driving in period "+claim.period+" on the "+esc(claim.tnc)+" platform at the time of the loss, based on "+esc(s.rec||"")+". Klutch has denied coverage for this loss to its insured. The Klutch policy is not available as other insurance for this loss, and Klutch will not be contributing to any payment.")}
+   ${P("Our investigation determined that "+esc(nm)+" was driving in period "+carrierClaim.period+" on the "+esc(carrierClaim.tnc)+" platform at the time of the loss, based on "+esc(s.rec||"")+". Klutch has denied coverage for this loss to its insured. The Klutch policy is not available as other insurance for this loss, and Klutch will not be contributing to any payment.")}
    ${P("Please direct all communications about the repair of the vehicle and the payment of any physical damage loss to Whip Claims Management at claims@drivewhip.com or (855) 906-5949, and reference the claim numbers above.")}
    ${P("Copies of the policy declarations and the denial are enclosed. Please contact our office with any questions.")}
    ${P("Sincerely,")}<div class="gap"></div>${hand()}${G}${L("Enclosures:  Policy Declarations; Coverage Denial")}</div>${FOOT}`);
-  return{html,miss:[...new Set(miss)],claim:claim.kc};
+  return{html,miss:[...new Set(miss)],claim:carrierClaim.kc};
  }
  if(d==="can"){
-  if(s.lease!=="t")return{err:"The lease is still active. No cancellation notice is needed.",html:"",miss};
   const cd=s.cdate;
   if(!cd)miss.push("lease termination date");
   const html=sheet(`<div class="ltr">${top}${mem}${L("RE:  Notice of Policy Cancellation")}${L("Policy Number:  "+pol.number)}${L("Vehicle:  "+esc(veh))}${L("Cancellation Effective Date:  "+ld(cd)+" at 11:59 p.m.")}${G}
@@ -559,7 +555,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   const snapshot = () => ({
     ...F, dateOfLoss: F.dol || "", tncName: F.tnc || "", tncPeriod: F.period || "", supportingRecords: F.rec || "TNC trip and activity records reviewed",
     carrierName: F.carrier || "", carrierAddress: [F.caddr, F.ccity].filter(Boolean).join(", "), adjusterName: F.attn || "", carrierClaimNumber: F.cclm || "",
-    dateOfCarrierLetter: F.cdt || "", carrierRequestEvidence: F.creq || "", managerName: F.mgr || "", managerApproval: F.mgrok === true,
+    dateOfCarrierLetter: F.cdt || "",
   });
   async function refreshRegister(search = "") {
     const { policies, currentUser } = await plain(`/register${search ? `?search=${encodeURIComponent(search)}` : ""}`);
@@ -618,10 +614,6 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       if (result.klutchClaimNumber) F.kc = result.klutchClaimNumber;
       return result;
     }
-    if (type === "endorsement") {
-      if (!clean(F.creq)) throw new Error("Carrier request evidence is required for KIC-END-002.");
-      if (!F.mgrok || !clean(F.mgr)) throw new Error("Name the approving manager and confirm approval before printing KIC-END-002.");
-    }
     const { result } = await plain("/document", { method: "POST", body: JSON.stringify({ policyId: policy.id, documentType: type, claimNumber: claimNumber || undefined, snapshot: snap }) });
     if (result.klutchClaimNumber) F.kc = result.klutchClaimNumber;
     return result;
@@ -631,7 +623,6 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       const rs = preview();
       const printable = (all ? setDocs() : [F.sel]).filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
       if (!printable.length) throw new Error("Complete the marked required fields before printing.");
-      if (printable.some(id => ["den", "car", "end"].includes(id)) && !clean(F.snap)) throw new Error("Enter the Whip / SnapSheet claim number before creating a claim document.");
       const policy = await persistTermIfNeeded();
       const ordered = [...printable].sort((a, b) => ["dec", "den", "car", "can", "end"].indexOf(a) - ["dec", "den", "car", "can", "end"].indexOf(b));
       for (const sourceId of ordered) await recordDocumentForSource(sourceId, policy);
@@ -656,19 +647,6 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     if (event.target.closest("#prt")) { event.preventDefault(); event.stopImmediatePropagation(); durablePrint(false); }
     if (event.target.closest("#prtall")) { event.preventDefault(); event.stopImmediatePropagation(); durablePrint(true); }
   }, true);
-  const originalBuild = window.buildForm;
-  window.buildForm = function () {
-    originalBuild();
-    const end = document.querySelector('[data-k="mgr"]');
-    if (end && !document.querySelector('[data-k="creq"]')) {
-      const wrap = document.createElement("div"); wrap.className = "s6";
-      wrap.innerHTML = '<label>Carrier request evidence</label><input data-k="creq" value="" placeholder="Carrier request, file note, or other supporting reference">';
-      end.closest(".s6")?.parentElement?.appendChild(wrap);
-    }
-  };
-  document.addEventListener("input", event => {
-    if (event.target?.dataset?.k === "creq") { F.creq = event.target.value; saveDraft(); }
-  });
   refreshRegister().then(() => { buildForm(); preview(); }).catch(error => say(error.message || "Unable to load the Klutch register."));
 })();
 </script>

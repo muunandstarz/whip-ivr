@@ -1,7 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { sdk } from "./_core/sdk";
 import {
-  approveKlutchEndorsement,
   cancelKlutchPolicy,
   correctKlutchPolicy,
   findKlutchPoliciesByVin,
@@ -192,10 +191,6 @@ export function registerKlutchPolicyApi(app: Express) {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const type = documentTypeFrom(body.documentType);
-      if (type === "endorsement" && user.role !== "admin") {
-        res.status(403).json({ error: "A Klutch endorsement requires administrator approval." });
-        return;
-      }
       const snapshot = body.snapshot;
       if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) throw new Error("Document facts are required.");
       const result = await recordKlutchDocument({
@@ -223,27 +218,6 @@ export function registerKlutchPolicyApi(app: Express) {
         claimNumber: stringValue(body.claimNumber) || undefined,
         documentSnapshot: snapshot as Record<string, unknown>,
       }, actorFor(user));
-      res.json({ result });
-    } catch (error) {
-      res.status(400).json({ error: messageOf(error) });
-    }
-  });
-
-  app.post(`${base}/endorsement-approval`, async (req, res) => {
-    const user = await authenticatedUser(req, res);
-    if (!user) return;
-    if (user.role !== "admin") {
-      res.status(403).json({ error: "Only an administrator can approve a Klutch endorsement." });
-      return;
-    }
-    try {
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      const result = await approveKlutchEndorsement(
-        requiredNumber(body.policyId, "Policy"),
-        stringValue(body.claimNumber) || undefined,
-        stringValue(body.carrierRequestEvidence),
-        actorFor(user),
-      );
       res.json({ result });
     } catch (error) {
       res.status(400).json({ error: messageOf(error) });
