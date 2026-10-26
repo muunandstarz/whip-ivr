@@ -77,14 +77,22 @@ describe("Klutch policy documents source integration", () => {
     expect(garagingState).toBeGreaterThan(formStart);
     expect(garagingState).toBeLessThan(documentSet);
     expect(policyNumber).toBeGreaterThan(coverageElections);
-    expect(sourcePage).toContain('"Create policy number"');
-    expect(sourcePage).toContain("Create the policy number after you have completed the policy details and coverage elections.");
+    expect(sourcePage).toContain('"Create draft policy number"');
+    expect(sourcePage).toContain("Creates a draft number for review only. The final policy number and shared-register entry are assigned when you Print / Save PDF.");
   });
 
   it("gives the Policy Type selector enough room for New policy, Renewal, and Correction", () => {
     expect(sourcePage).toContain('.seg.policy-type{min-width:330px;width:100%}');
     expect(sourcePage).toContain('seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]],undefined,"policy-type")');
     expect(sourcePage).toContain('<div class="s6"><label>Policy type</label>');
+  });
+
+  it("keeps a new-policy number as a draft until Print or Save PDF creates the shared policy", () => {
+    expect(sourcePage).toContain('F.pn = `DRAFT-KIC-${F.st}-${String(Date.now()).slice(-6)}`');
+    expect(sourcePage).toContain('Draft policy number prepared. Print / Save PDF assigns the final shared policy number.');
+    expect(sourcePage).toContain('if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) return issueCurrent();');
+    expect(sourcePage).toContain('if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await prepareDraftPolicyNumber(); }');
+    expect(sourcePage).not.toContain('if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await issueCurrent(); }');
   });
 
   it("does not render PIP controls or declaration rows for Virginia", () => {

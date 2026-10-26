@@ -1115,3 +1115,4 @@
 
 - [x] Follow-up: widen the Klutch **Policy Type** control to a full form row so **New policy**, **Renewal**, and **Correction** stay fully visible at the supported form width.
 - [x] Follow-up: repair standalone **Loss of Use** pagination with a fixed 20 mm footer exclusion zone. When the first-page calculation cannot fully fit, source/reconciliation support moves to page two rather than allowing the total banner to overlap the footer; Whip letterhead remains on page one only. Browser-generated and visually reviewed a populated two-page Baltimore packet with the total cleanly above the footer.
+- [x] Follow-up: make Klutch policy-number creation draft-only. A new-policy form can prepare and preview with a `DRAFT-KIC-…` reference, but no shared policy/register entry or final KIC number is allocated until the handler selects Print / Save PDF. Browser verification confirmed the shared register remained at 2 policies before and after draft preparation.

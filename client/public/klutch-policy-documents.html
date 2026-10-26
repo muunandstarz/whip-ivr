@@ -270,7 +270,7 @@ function buildForm(){
   h+=`<div class="s6" id="calc"></div>`;
   h+=`<div class="s6"><details><summary>Adjust deductibles</summary><div class="f" style="margin-top:8px">${fld("compD","Comprehensive deductible",3)+fld("collD","Collision deductible",3)}</div></details></div>`;
   h+=sec("Policy number");
-  h+=`<div class="s6"><label>Policy number</label><div class="pb"><input data-k="pn" value="${esc(F.pn||"")}" ${F.ptype!=="n"?"readonly":""}>${F.ptype==="n"?`<button class="b ghost" data-act="genpol">${F.pn?"Replace policy number":"Create policy number"}</button>`:""}</div><div class="note" style="margin-top:4px">Create the policy number after you have completed the policy details and coverage elections.</div></div>`;
+  h+=`<div class="s6"><label>Policy number</label><div class="pb"><input data-k="pn" value="${esc(F.pn||"")}" ${F.ptype!=="n"?"readonly":""}>${F.ptype==="n"&&!/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")?`<button class="b ghost" data-act="genpol">${F.pn?"Replace draft policy number":"Create draft policy number"}</button>`:""}</div><div class="note" style="margin-top:4px">${/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")?"Policy number assigned in the shared register.":"Creates a draft number for review only. The final policy number and shared-register entry are assigned when you Print / Save PDF."}</div></div>`;
  }
  if(d==="den"||d==="car"){
   h+=sec("Claim");
@@ -574,6 +574,14 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => plain("/draft", { method: "POST", body: JSON.stringify({ draft: F }) }).catch(() => {}), 800);
   }
+  const isIssuedPolicyNumber = value => /^KIC-[A-Z]{2}-\d{6}$/.test(clean(value));
+  async function prepareDraftPolicyNumber() {
+    if (F.ptype !== "n") throw new Error("Draft policy numbers are available only for a new policy.");
+    if (F.pn && !await ask("Replace the draft policy number? This does not create or save a policy.", "Replace draft")) return;
+    F.pn = `DRAFT-KIC-${F.st}-${String(Date.now()).slice(-6)}`;
+    saveDraft(); buildForm(); preview();
+    say("Draft policy number prepared. Print / Save PDF assigns the final shared policy number.");
+  }
   async function issueCurrent() {
     const terms = policyTerms();
     const existing = (await plain(`/vin/${encodeURIComponent(terms.vin)}`)).policies || [];
@@ -588,8 +596,8 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   }
   async function persistTermIfNeeded() {
     const terms = policyTerms();
-    if (!F.pn) return issueCurrent();
-    const existing = serverPolicies.get(F.pn) || (await plain(`/policy/${encodeURIComponent(K.pols[F.pn]?.id || "")}`)).policy;
+    if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) return issueCurrent();
+    const existing = serverPolicies.get(F.pn) || (await plain(`/vin/${encodeURIComponent(terms.vin)}`)).policies?.find(policy => policy.policyNumber === F.pn);
     if (!existing) return issueCurrent();
     if (F.ptype === "r") {
       const { policy } = await plain("/renew", { method: "POST", body: JSON.stringify({ policyId: existing.id, effectiveOn: terms.effectiveOn, expiresOn: terms.expiresOn, terms }) });
@@ -637,12 +645,12 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   document.addEventListener("click", async event => {
     const target = event.target.closest("[data-act]"); if (!target) return;
     const action = target.dataset.act;
-    if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await issueCurrent(); } catch (error) { say(error.message || "Unable to issue the policy."); } }
+    if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await prepareDraftPolicyNumber(); } catch (error) { say(error.message || "Unable to prepare the draft policy number."); } }
     if (action === "genclm") { event.preventDefault(); event.stopImmediatePropagation(); F.kc = "Assigned when document is created"; saveDraft(); buildForm(); preview(); say("The Klutch claim number is assigned by the shared register when the document is created."); }
     if (action === "export" || action === "import") { event.preventDefault(); event.stopImmediatePropagation(); say("Export and import are disabled. The shared Klutch register is the source of record."); }
   }, true);
   window.doPrint = durablePrint;
-  window.genpolFlow = issueCurrent;
+  window.genpolFlow = prepareDraftPolicyNumber;
   window.save = saveDraft;
   document.addEventListener("click", event => {
     if (event.target.closest("#prt")) { event.preventDefault(); event.stopImmediatePropagation(); durablePrint(false); }
