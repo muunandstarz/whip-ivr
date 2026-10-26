@@ -1112,3 +1112,5 @@
 - [x] Browser-validate the page as Jayla Bernard: the Liability-only sidebar entry and fixed MetroCars notice showed, a synthetic Maryland COI preview rendered MetroCars Leasing Corp, and no general carrier toggle/cutoff text appeared. Full validation: 370 passed / 1 skipped, TypeScript, production build, and diff check passed.
 
 - [x] Follow-up: retain **administrator oversight access** to the Liability-only MetroCars COI. The sidebar and route now show/work in normal Admin View as well as for authorized Liability handlers; other handler views remain excluded.
+
+- [x] Follow-up: widen the Klutch **Policy Type** control to a full form row so **New policy**, **Renewal**, and **Correction** stay fully visible at the supported form width.

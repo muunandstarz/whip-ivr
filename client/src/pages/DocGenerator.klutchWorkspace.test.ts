@@ -81,6 +81,12 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain("Create the policy number after you have completed the policy details and coverage elections.");
   });
 
+  it("gives the Policy Type selector enough room for New policy, Renewal, and Correction", () => {
+    expect(sourcePage).toContain('.seg.policy-type{min-width:330px;width:100%}');
+    expect(sourcePage).toContain('seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]],undefined,"policy-type")');
+    expect(sourcePage).toContain('<div class="s6"><label>Policy type</label>');
+  });
+
   it("does not render PIP controls or declaration rows for Virginia", () => {
     expect(sourcePage).toContain('VA:{n:"Virginia",bi:[50000,100000],pd:25000,pip:null,umReject:false}');
     expect(sourcePage).toContain('if(R.pip)h+=`<div class="s3"><label>PIP</label>');

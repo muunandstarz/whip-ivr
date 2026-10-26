@@ -110,6 +110,7 @@ input:focus,select:focus{outline:2px solid var(--lime);border-color:var(--teal)}
 details summary{cursor:pointer;color:var(--teal);font-weight:600;margin-top:10px}
 .seg{display:flex;border:1px solid #cdd5d2;border-radius:8px;overflow:hidden}
 .seg button{flex:1;border:0;background:#fff;font:inherit;font-weight:600;padding:9px 6px;cursor:pointer;color:var(--mut)}
+.seg.policy-type{min-width:330px;width:100%}.seg.policy-type button{min-width:0;padding-left:12px;padding-right:12px;white-space:nowrap}
 .seg button.on{background:var(--teal);color:#fff}
 .seg button:disabled{opacity:.35;cursor:not-allowed}
 @media print{body.pall .split{display:none!important}body.pall #allroot{display:block!important}body.pall #allroot .sheet{box-shadow:none;margin:0;page-break-after:always;break-after:page}}
@@ -233,7 +234,7 @@ const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function newClaim(){const used=Object.values(K.map);let c;do{const b=crypto.getRandomValues(new Uint8Array(6));c="KC-"+[...b].map(x=>A[x%A.length]).join("")}while(used.includes(c));return c}
 const fld=(k,l,sp,o={})=>`<div class="s${sp||6}"><label>${l}</label>${o.sel?`<select data-k="${k}">${o.sel.map(x=>`<option value="${x[0]}" ${String(F[k])===String(x[0])?"selected":""}>${x[1]}</option>`).join("")}</select>`:`<input data-k="${k}" ${o.t?`type="${o.t}"`:""} value="${esc(F[k]||"")}">`}</div>`;
 const sec=t=>`<div class="s6"><div class="sec" style="margin:12px 0 0">${t}</div></div>`;
-const seg=(k,opts,dis)=>`<div class="seg">${opts.map(([v,l])=>`<button type="button" data-seg="${k}" data-v="${v}" class="${F[k]===v?"on":""}" ${dis&&dis.includes(v)?"disabled":""}>${l}</button>`).join("")}</div>`;
+const seg=(k,opts,dis,variant="")=>`<div class="seg ${variant}">${opts.map(([v,l])=>`<button type="button" data-seg="${k}" data-v="${v}" class="${F[k]===v?"on":""}" ${dis&&dis.includes(v)?"disabled":""}>${l}</button>`).join("")}</div>`;
 function buildForm(){
  const d=F.sel,R=RULES[F.st];
  const full=(d==="dec"||d==="den"||d==="can");
@@ -248,7 +249,7 @@ function buildForm(){
   h+=F.lease==="t"?`<div class="s6 note" style="margin-top:-4px">The policy cancels on this date at 11:59 p.m. This works mid-term or at the end of a term. For a long lease, open the most recent renewal first.</div>`:"";
  }
  h+=sec("Policy");
- if(d==="dec")h+=`<div class="s3"><label>Policy type</label>${seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]])}</div><div class="s3"></div>`;
+ if(d==="dec")h+=`<div class="s6"><label>Policy type</label>${seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]],undefined,"policy-type")}</div>`;
  if(d!=="dec"||F.ptype==="r"||F.ptype==="c")h+=`<div class="s6"><label>${d==="dec"?"Find the existing policy":"Find a saved policy"}</label><input id="rsq" placeholder="Member name, member number or policy number" value="${esc(F.rq||"")}"><div id="rsr" style="margin-top:6px"></div>${d==="dec"&&F.ptype==="r"?`<div class="note" style="margin-top:4px">A renewal keeps the policy number. The new term starts when the last term ends.</div>`:""}${d==="dec"&&F.ptype==="c"?`<div class="note" style="margin-top:4px">A correction keeps the policy number and the same term dates. Fix what was wrong and print the corrected dec page.</div>`:""}</div>`;
  if(d==="dec"){
   h+=fld("eff","Effective date",3,{t:"date"});
