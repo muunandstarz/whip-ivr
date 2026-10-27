@@ -134,7 +134,7 @@ async function addReferenceLogo(doc: jsPDF, x = 15, y = 11, width = 38) {
   doc.setTextColor("#111827");
 }
 
-function addReferenceFooter(doc: jsPDF, text = "Klutch Insurance Company | P.O. Box 10622, Rockville, MD 20850 | (855) 906-5949") {
+function addReferenceFooter(doc: jsPDF, text = "Klutch Insurance Company | 424 Church Street, Suite 800, Nashville, Tennessee 37219") {
   doc.setTextColor("#9CA3AF");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.1);
@@ -337,7 +337,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
 
     if (kind === "declarations") {
       await addReferenceLogo(doc, 145, 11, 38);
-      writeReferenceLines(doc, ["Klutch Insurance Company", "NAIC 17966", "P.O. Box 10622", "Rockville, MD 20850", "claims@klutchinsurance.com", "(855) 906-5949"], 145, 30, 6.5, 4.2);
+      writeReferenceLines(doc, ["Klutch Insurance Company", "NAIC 17966", "424 Church Street, Suite 800", "Nashville, Tennessee 37219", "claims@klutchinsurance.com"], 145, 30, 6.5, 4.2);
       let y = 72;
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.8); doc.text(`Policy number ${policy.policyNumber}`, 15, y);
       y += 11;
@@ -380,7 +380,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       y += 6;
       y = writeReferenceParagraph(doc, "* Coverage does not apply at any time the operator is logged on to a transportation network company platform, whether waiting for a request, en route to a rider, or carrying a passenger or property, or while the vehicle is used for hire, delivery, cargo or other business use, as stated in Endorsement KIC-END-002.", 15, y, 185, 6.7, 4.15);
       doc.setDrawColor("#D1D5DB"); doc.line(15, 275, 200, 275);
-      addReferenceFooter(doc, "Klutch Insurance Company · P.O. Box 10622, Rockville, MD 20850 · (855) 906-5949");
+      addReferenceFooter(doc);
 
       doc.addPage();
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.4); doc.text(`Policy number ${policy.policyNumber}`, 200, 18, { align: "right" }); doc.text(terms.memberName, 200, 23, { align: "right" });
@@ -395,13 +395,10 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       y += 14;
       doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("Policy Documents", 15, y);
       y += 8;
-      y = writeReferenceParagraph(doc, "These declarations summarize your coverage. Refer to your policy and applicable endorsements for complete terms, conditions, limits, and exclusions. Forms and Endorsements: KIC-END-002 (Ed. 07/26), Transportation Network Company and Commercial Use Exclusion Endorsement. For policy documents or to report a claim, call (855) 906-5949 or email claims@klutchinsurance.com.", 15, y, 185, 8, 5.1);
-      y += 18;
-      doc.setDrawColor("#111827"); doc.setLineWidth(0.22); doc.line(15, y, 74, y);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("Bobby Taheri", 15, y + 6); doc.setFont("helvetica", "normal"); doc.setFontSize(7.4); doc.text("President & CEO, Klutch Insurance Company", 15, y + 11);
+      y = writeReferenceParagraph(doc, "These declarations summarize your coverage. Refer to your policy and applicable endorsements for complete terms, conditions, limits, and exclusions. Forms and Endorsements: KIC-END-002 (Ed. 07/26), Transportation Network Company and Commercial Use Exclusion Endorsement. For policy documents or to report a claim, email claims@klutchinsurance.com.", 15, y, 185, 8, 5.1);
       doc.setTextColor("#9CA3AF"); doc.setFontSize(5.8); doc.text("Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms, conditions, and endorsements.", 15, 258, { maxWidth: 180 }); doc.setTextColor("#111827");
       doc.setDrawColor("#D1D5DB"); doc.line(15, 275, 200, 275);
-      addReferenceFooter(doc, "Klutch Insurance Company · P.O. Box 10622, Rockville, MD 20850 · (855) 906-5949");
+      addReferenceFooter(doc);
       return doc;
     }
 
@@ -427,7 +424,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       if (insurerReference.length) {
         y = writeReferenceParagraph(doc, `For reference only, the following TNC insurer information was provided: ${insurerReference.join("; ")}. This information does not state or imply a coverage determination by that insurer.`, 15, y, 180, 8.4, 5) + 5;
       }
-      y = writeReferenceParagraph(doc, "If you believe our findings are incorrect or have additional information that may affect this decision, please send it to claims@klutchinsurance.com for review. You may also contact Klutch Claims at (855) 906-5949 with any questions.", 15, y, 180, 8.8, 5.2) + 9;
+      y = writeReferenceParagraph(doc, "If you believe our findings are incorrect or have additional information that may affect this decision, please send it to claims@klutchinsurance.com for review.", 15, y, 180, 8.8, 5.2) + 9;
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
       addReferenceFooter(doc);
       return doc;
@@ -445,7 +442,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       y = writeReferenceParagraph(doc, `This responds to your letter of ${docForm.carrierLetterDate ? prettyDate(docForm.carrierLetterDate) : "[date of carrier letter]"} on the above loss. Klutch Insurance Company insures the above vehicle under a policy issued to ${terms.memberName}. Our coverage position is set out below.`, 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, "The Klutch policy includes the Transportation Network Company and Commercial Use Exclusion Endorsement, Form KIC-END-002 (Ed. 07/26). Section B of that endorsement excludes coverage for any loss arising out of or occurring while the operator is logged on to a transportation network company platform, whether waiting for a request, en route to a rider or pickup location, or carrying a passenger or property.", 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, `Our investigation determined that ${terms.memberName} was driving in period ${docForm.tncPeriod} on the ${docForm.tncName} platform at the time of the loss, based on ${docForm.supportingRecords}. Klutch has denied coverage for this loss to its insured. The Klutch policy is not available as other insurance for this loss, and Klutch will not be contributing to any payment.`, 15, y, 180, 8.6, 5.05) + 5;
-      y = writeReferenceParagraph(doc, "Please direct all communications about the repair of the vehicle and the payment of any physical damage loss to Whip Claims Management at claims@drivewhip.com or (855) 906-5949, and reference the claim numbers above.", 15, y, 180, 8.6, 5.05) + 5;
+      y = writeReferenceParagraph(doc, "Please direct all communications about the repair of the vehicle and the payment of any physical damage loss to Whip Claims Management at claims@drivewhip.com and reference the claim numbers above.", 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, "Copies of the policy declarations and the denial are enclosed. Please contact our office with any questions.", 15, y, 180, 8.6, 5.05) + 8;
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.6); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "Enclosures: Policy Declarations; Coverage Denial"], 15, y, { lineHeightFactor: 1.33 });
       addReferenceFooter(doc);
@@ -465,7 +462,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       ["All coverage under this policy ends.", "Coverage applied only to the vehicle listed above. No coverage applies to you in any other vehicle.", "No coverage applies to any loss, liability, or claim arising from an occurrence after that date."].forEach((line, index) => { y = writeReferenceParagraph(doc, `${index + 1}.  ${line}`, 25, y, 160, 8.7, 5.1) + 3; });
       y += 2;
       y = writeReferenceParagraph(doc, "This cancellation does not affect coverage for covered losses that occurred before the cancellation effective date.", 15, y, 180, 8.8, 5.2) + 5;
-      y = writeReferenceParagraph(doc, "If you believe this notice is in error, please contact us at claims@klutchinsurance.com or (855) 906-5949.", 15, y, 180, 8.8, 5.2) + 10;
+      y = writeReferenceParagraph(doc, "If you believe this notice is in error, please contact us at claims@klutchinsurance.com.", 15, y, 180, 8.8, 5.2) + 10;
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", "Policy Services", "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
       addReferenceFooter(doc);
       return doc;

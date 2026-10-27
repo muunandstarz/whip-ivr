@@ -122,4 +122,16 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('um:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED"');
     expect(sourcePage).toContain('uim:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED"');
   });
+
+  it("uses the Nashville mailing address and no phone or CEO signature in all active Klutch forms", () => {
+    expect(sourcePage).toContain("424 Church Street, Suite 800");
+    expect(sourcePage).toContain("Nashville, Tennessee 37219");
+    expect(sourcePage).not.toContain("P.O. Box 10622");
+    expect(sourcePage).not.toContain("(855) 906-5949");
+    expect(sourcePage).not.toContain("Bobby Taheri");
+    expect(legacyWorkspace).toContain("424 Church Street, Suite 800");
+    expect(legacyWorkspace).toContain("Nashville, Tennessee 37219");
+    expect(legacyWorkspace).not.toContain("(855) 906-5949");
+    expect(legacyWorkspace).not.toContain("Bobby Taheri");
+  });
 });
