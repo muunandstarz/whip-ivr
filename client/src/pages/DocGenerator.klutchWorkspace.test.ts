@@ -196,4 +196,13 @@ describe("Klutch policy documents source integration", () => {
     expect(dopRenderer).toContain('dop-sign-line');
     expect(dopRenderer).not.toContain('DocuSign');
   });
+
+  it("matches the supplied MetroCars form scale and writes signed values directly on the signature rules", () => {
+    expect(sourcePage).toContain('.dopdoc{font-size:13.3px;line-height:1.48}');
+    expect(sourcePage).toContain('.dopdoc-p2{font-size:12px;line-height:1.45}');
+    expect(sourcePage).toContain('.dop-department{font-size:13.3px;margin-top:-17px}');
+    expect(sourcePage).toContain('.dop-signatures{grid-template-columns:1fr .7fr;gap:16px 34px;margin-top:66px');
+    expect(sourcePage).toContain('.dop-line-value{top:-8px;bottom:auto');
+    expect(sourcePage).toContain('.dop-sign-image{max-height:29px;margin:-7px');
+  });
 });
