@@ -86,6 +86,19 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain("Creates a draft number for review only. The final policy number and shared-register entry are assigned when you Print / Save PDF.");
   });
 
+  it("requires an explicit garaging-state confirmation and invalidates an unissued state-specific draft", () => {
+    expect(sourcePage).toContain('stateConfirmed:false,confirmedState:""');
+    expect(sourcePage).toContain('const isStateConfirmed=()=>F.stateConfirmed===true&&F.confirmedState===F.st&&!!RULES[F.st];');
+    expect(sourcePage).toContain('I confirm that ${esc(R.n)} is the vehicle’s correct garaging state.');
+    expect(sourcePage).toContain("Confirm garaging state to continue.");
+    expect(sourcePage).toContain('F.confirmedState=F.stateConfirmed?F.st:"";save();buildForm();preview();return');
+    expect(sourcePage).toContain('if(F.st!==priorState){F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}');
+    expect(sourcePage).toContain('Confirm the garaging state before preparing a draft policy number.');
+    expect(sourcePage).toContain('Confirm the garaging state before creating or printing a policy document.');
+    expect(sourcePage).toContain('Garaging state is locked after a shared policy number is issued. Start a correction workflow for a verified policy-record issue.');
+    expect(sourcePage).toContain('st:r.st,stateConfirmed:true,confirmedState:r.st');
+  });
+
   it("gives the Policy Type selector enough room for New policy, Renewal, and Correction", () => {
     expect(sourcePage).toContain('.seg.policy-type{min-width:330px;width:100%}');
     expect(sourcePage).toContain('seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]],undefined,"policy-type")');
@@ -106,7 +119,7 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('if (!F.handlerNameEntered && F.hn) {');
     expect(sourcePage).not.toContain('const autoFilledHandlerName = String(currentUser?.name || "").trim();');
     expect(sourcePage).toContain('if(k==="hn")F.handlerNameEntered=true;');
-    expect(sourcePage).toContain('F={ptype:"n",set:F.set,sel:F.sel,st:F.st,term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()}');
+    expect(sourcePage).toContain('F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()}');
     expect(legacyWorkspace).toContain('const signer = docForm.handlerName;');
     expect(legacyWorkspace).toContain('placeholder="Enter the handling adjuster"');
     expect(legacyWorkspace).not.toContain('impersonating?.name || user?.name');

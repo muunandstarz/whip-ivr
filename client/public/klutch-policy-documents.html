@@ -237,15 +237,20 @@ function derive(F){
  return{cov,wk,tot:tot/100,R,pipOn,umOn}}
 let F,K;
 function load(){try{F=JSON.parse(localStorage.getItem("klutch_form_v3"))}catch(e){}try{K=JSON.parse(localStorage.getItem("klutch_nums_v3"))}catch(e){}
- F=F||{};F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()},F);if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{}};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100}
+ F=F||{};
+ F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()},F);
+ if(F.stateConfirmed!==true||F.confirmedState!==F.st){F.stateConfirmed=false;F.confirmedState=""}
+ if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}
+ if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{}};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100}
 function upsert(){if(!F.pn)return;const r=K.pols[F.pn]||(K.pols[F.pn]={pn:F.pn,terms:[]});
  ["st","mno","member","address","city","cst","zip","vehicle","vin","pip","um","lease","cdate","compD","collD"].forEach(k=>r[k]=F[k]||"");
  if(F.eff){const t=r.terms.find(x=>x.eff===F.eff);if(t){t.term=F.term;t.exp=F.exp}else r.terms.push({eff:F.eff,exp:F.exp,term:F.term});r.terms.sort((a,b)=>a.eff<b.eff?-1:1)}r.upd=Date.now()}
 function save(){try{upsert();localStorage.setItem("klutch_form_v3",JSON.stringify(F));localStorage.setItem("klutch_nums_v3",JSON.stringify(K))}catch(e){}}
 load();
+const isStateConfirmed=()=>F.stateConfirmed===true&&F.confirmedState===F.st&&!!RULES[F.st];
 const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function newClaim(){const used=Object.values(K.map);let c;do{const b=crypto.getRandomValues(new Uint8Array(6));c="KC-"+[...b].map(x=>A[x%A.length]).join("")}while(used.includes(c));return c}
-const fld=(k,l,sp,o={})=>`<div class="s${sp||6}"><label>${l}</label>${o.sel?`<select data-k="${k}">${o.sel.map(x=>`<option value="${x[0]}" ${String(F[k])===String(x[0])?"selected":""}>${x[1]}</option>`).join("")}</select>`:`<input data-k="${k}" ${o.t?`type="${o.t}"`:""} value="${esc(F[k]||"")}">`}</div>`;
+const fld=(k,l,sp,o={})=>`<div class="s${sp||6}"><label>${l}</label>${o.sel?`<select data-k="${k}" ${o.dis?"disabled":""}>${o.sel.map(x=>`<option value="${x[0]}" ${String(F[k])===String(x[0])?"selected":""}>${x[1]}</option>`).join("")}</select>`:`<input data-k="${k}" ${o.t?`type="${o.t}"`:""} value="${esc(F[k]||"")}">`}</div>`;
 const chk=(k,l)=>`<label style="display:flex;align-items:center;gap:8px;font-weight:500;text-transform:none;letter-spacing:0;border:1px solid #dbe4e6;border-radius:8px;padding:9px 10px;background:#fff"><input type="checkbox" data-k="${k}" ${F[k]?"checked":""} style="width:15px;height:15px;accent-color:#013339">${l}</label>`;
 const dopSignatureCertificateId=()=>{const stamp=new Date().toISOString().slice(0,10).replaceAll("-","");const bits=crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase().slice(-6);return `MC-DOP-${stamp}-${bits}`};
 function clearDopCertification(){F.dopSignatureAccepted=false;F.dopSignatureCertifiedAt="";F.dopSignatureCertificateId=""}
@@ -266,9 +271,15 @@ const seg=(k,opts,dis,variant="")=>`<div class="seg ${variant}">${opts.map(([v,l
 function buildForm(){
  const d=F.sel,R=RULES[F.st];
  const full=(d==="dec"||d==="den"||d==="can"||d==="dop");
+ const issuedPolicy=/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"");
  let h=`<div class="f">`;
- h+=fld("st","Garaging state",3,{sel:Object.keys(RULES).map(k=>[k,k+" – "+RULES[k].n])});
- h+=`<div class="s3 note" style="align-self:end">Start with the state where the vehicle is garaged. It sets the available limits, elections, and policy rules.</div>`;
+ h+=fld("st","Garaging state",3,{sel:Object.keys(RULES).map(k=>[k,k+" – "+RULES[k].n]),dis:issuedPolicy});
+ h+=`<div class="s3 note" style="align-self:end">Start with the state where the vehicle is garaged. It sets the available limits, elections, and policy rules.${issuedPolicy?" The state is locked after a shared policy number is issued.":" Changing it before issuance clears any unissued draft policy number."}</div>`;
+ if(!issuedPolicy)h+=`<div class="s6">${chk("stateConfirmed",`I confirm that ${esc(R.n)} is the vehicle’s correct garaging state.`)}</div>`;
+ if(!isStateConfirmed()){
+  h+=`<div class="s6" role="status" style="border:1px solid #9b6b20;background:#fff8e8;color:#50370d;border-radius:9px;padding:12px 14px;line-height:1.45"><b>Confirm garaging state to continue.</b> The rest of the policy form, draft-policy number, and Print / Save PDF remain unavailable until you confirm the state above. This prevents a state-specific policy number or coverage package from being prepared for the wrong state.</div>`;
+  $("#form").innerHTML=h+"</div>";return;
+ }
  h+=`<div class="s6"><label>Which documents do you need?</label>${seg("set",SETS)}<div class="note" style="margin-top:4px">${F.set==="liab"?"Liability team: dec page, plus a cancellation notice if the lease has ended.":"First party team: dec page, denial, carrier letter, cancellation and endorsement."}</div></div>`;
  if(d==="dec"||d==="can"){
   h+=sec("Lease status");
@@ -524,7 +535,7 @@ async function genpolFlow(){const ex=dupVin();
  if(F.pn&&!await ask("Replace the policy number with a new one?","Replace"))return;
  F.pn="KIC-"+F.st+"-"+String(K.counter).padStart(6,"0");K.counter++;save();buildForm();preview()}
 async function clearFlow(){if(!await ask("Reset the form? This clears everything you entered. Saved policies in the register are not affected.","Reset form"))return;
- F={ptype:"n",set:F.set,sel:F.sel,st:F.st,term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
+ F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
 document.addEventListener("click",e=>{
  const sg=e.target.closest("[data-seg]");
  if(sg){const k=sg.dataset.seg;const prevPt=F.ptype;F[k]=sg.dataset.v;save();if(k==="ptype"&&F.ptype==="n"&&(prevPt==="r"||prevPt==="c")){F.pn="";F.rq=""}if(k==="set"&&!setDocs().includes(F.sel))F.sel=setDocs()[0];if(k==="set"||k==="term"||k==="pip"||k==="um"||k==="lease"||k==="ptype"||k==="dopSignatureMode"){if(k==="dopSignatureMode"){F.dopSignatureData="";clearDopCertification()}buildForm();if(k==="ptype")rsearch()}preview();return}
@@ -536,23 +547,28 @@ document.addEventListener("click",e=>{
  else if(a==="decode"){decodeVin()}
  else if(a==="reg"){openReg()}
  else if(a==="regtab"){regTab=b.dataset.v;openReg()}
- else if(a==="loadren"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"r",pn:r.pn,st:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:"a",cdate:"",compD:r.compD,collD:r.collD,eff:t.exp||today(),term:t.term||"6",rq:r.member});save();buildForm();preview()}}
+ else if(a==="loadren"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"r",pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:"a",cdate:"",compD:r.compD,collD:r.collD,eff:t.exp||today(),term:t.term||"6",rq:r.member});save();buildForm();preview()}}
  else if(a==="ackdup"){F.ack=(F.vin||"").trim().toUpperCase();save();preview()}
  else if(a==="regx"){$("#reg").classList.add("hide")}
- else if(a==="loadpol"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{pn:r.pn,st:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
- else if(a==="loadcor"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"c",rq:r.member,pn:r.pn,st:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
+ else if(a==="loadpol"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
+ else if(a==="loadcor"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"c",rq:r.member,pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
  else if(a==="export"){const x=new Blob([JSON.stringify(K,null,1)],{type:"application/json"});const l=document.createElement("a");l.href=URL.createObjectURL(x);l.download="klutch-policy-register-"+today()+".json";l.click()}
  else if(a==="import"){$("#imp").click()}
  else if(a==="clear"){clearFlow()}
 });
 document.addEventListener("input",e=>{if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn")F.handlerNameEntered=true;
+ if(k==="stateConfirmed"){F.confirmedState=F.stateConfirmed?F.st:"";save();buildForm();preview();return}
  if(["dopSignerName","dopSignerTitle","dopSignerContact","dopSignerDate"].includes(k)&&F.dopSignatureAccepted)clearDopCertification();
  if(k==="dopSignatureAccepted"){if(F.dopSignatureAccepted){F.dopSignatureCertifiedAt=new Date().toISOString();F.dopSignatureCertificateId=F.dopSignatureCertificateId||dopSignatureCertificateId()}else{F.dopSignatureCertifiedAt="";F.dopSignatureCertificateId=""}}
  if(k==="filed"&&!F.ddenManual){F.dden=nextBiz(F.filed);const x=document.querySelector('[data-k="dden"]');if(x)x.value=F.dden}
  if(k==="dden"){if(F.dden){F.ddenManual=true}else{F.ddenManual=false;F.dden=nextBiz(F.filed);e.target.value=F.dden}}
  save();preview()});
-document.addEventListener("change",e=>{if(e.target.id==="imp"){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.pols)throw 0;K=j;K.clms=K.clms||[];save();$("#regb").innerHTML=regHtml("")}catch(x){say("That file isn't a policy register backup.")}};r.readAsText(f);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;
- if(k==="st"){const R=RULES[F.st];if(!R.pip)F.pip="w";else if(!R.pip.waive)F.pip="a";if(!R.umReject)F.um="a";buildForm()}
+document.addEventListener("change",e=>{if(e.target.id==="imp"){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.pols)throw 0;K=j;K.clms=K.clms||[];save();$("#regb").innerHTML=regHtml("")}catch(x){say("That file isn't a policy register backup.")}};r.readAsText(f);return}const k=e.target.dataset.k;if(!k)return;const priorState=F.st;F[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;
+ if(k==="st"){
+  if(/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.st=priorState;say("Garaging state is locked after a shared policy number is issued. Start a correction workflow for a verified policy-record issue.");buildForm();save();preview();return}
+  if(F.st!==priorState){F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}
+  const R=RULES[F.st];if(!R.pip)F.pip="w";else if(!R.pip.waive)F.pip="a";if(!R.umReject)F.um="a";buildForm()
+ }
  save();preview()});
 function doPrint(all){if(dupVin()&&dupVin().pn!==F.pn&&F.ack!==(F.vin||"").trim().toUpperCase())return;const _rs=setDocs().map(k=>[k,result(k)]).filter(([k,r])=>!r.err&&!r.miss.length);if(all)_rs.forEach(([k,r])=>logDoc(k,r));else logDoc(F.sel,result(F.sel));
  const rs=setDocs().map(k=>[k,result(k)]).filter(([k,r])=>!r.err&&!r.miss.length);
@@ -603,6 +619,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     };
   };
   const policyTerms = () => {
+    if (!isStateConfirmed()) throw new Error("Confirm the garaging state before creating or printing a policy document.");
     const d = derive(F); if (!d) throw new Error("Choose a supported garaging state and complete the policy dates.");
     F.exp = addMonths(F.eff, +(F.term || 6));
     const z = derive(F);
@@ -648,6 +665,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   }
   const isIssuedPolicyNumber = value => /^KIC-[A-Z]{2}-\d{6}$/.test(clean(value));
   async function prepareDraftPolicyNumber() {
+    if (!isStateConfirmed()) throw new Error("Confirm the garaging state before preparing a draft policy number.");
     if (F.ptype !== "n") throw new Error("Draft policy numbers are available only for a new policy.");
     if (F.pn && !await ask("Replace the draft policy number? This does not create or save a policy.", "Replace draft")) return;
     F.pn = `DRAFT-KIC-${F.st}-${String(Date.now()).slice(-6)}`;
