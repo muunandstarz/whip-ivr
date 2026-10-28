@@ -90,6 +90,17 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(subroPdfSource).toContain('nl(9);');
   });
 
+  it("lets the Subro Demand signatory add an optional phone extension and prints it consistently", () => {
+    const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"), clientSource.indexOf("// ─── Tab: Carrier Rebuttal"));
+    expect(subroSource).toContain('const [handlerExtension, setHandlerExtension] = useState("");');
+    expect(subroSource).toContain('const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Email: claims@drivewhip.com`;');
+    expect(subroSource).toContain('label="Handler Phone Extension"');
+    expect(subroSource).toContain('id="sd-handler-extension"');
+    expect(subroSource).toContain('value={handlerExtension} onChange={setHandlerExtension}');
+    expect(subroSource).toContain('${handlerContactLine}`;');
+    expect(subroSource).toContain('doc.text(handlerContactLine, lm, y);');
+  });
+
   it("puts repair-estimate reading before all Subro Demand form fields", () => {
     const uploadMarker = 'aria-label="Repair estimate upload and prefill"';
     const claimInfoMarker = '<Panel title="Claim Information" tag="REQUIRED">';

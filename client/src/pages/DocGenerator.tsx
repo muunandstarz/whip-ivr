@@ -4123,6 +4123,7 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   });
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [handlerName, setHandlerName] = useState("");
+  const [handlerExtension, setHandlerExtension] = useState("");
   const [vinDecoding, setVinDecoding] = useState(false);
   const [louRepairStart, setLouRepairStart] = useState("");
   const [louRepairEnd, setLouRepairEnd] = useState("");
@@ -4342,6 +4343,7 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
     day: "numeric",
     year: "numeric",
   });
+  const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Email: claims@drivewhip.com`;
 
   const preview = `${today}
 
@@ -4388,7 +4390,7 @@ Payment should be made payable to Whip Claims Management and mailed to P.O. Box 
 Respectfully,
 ${handlerName || ""}
 Whip Claims Management
-(855) 906-5949  |  claims@drivewhip.com`;
+${handlerContactLine}`;
 
   const buildSubroDoc = () => {
     const doc = new jsPDF();
@@ -4530,7 +4532,7 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
     if (handlerName) { doc.setFont("helvetica", "bold"); doc.text(handlerName, lm, y); nl(); doc.setFont("helvetica", "normal"); }
     doc.text("Claims Resolution Specialist", lm, y); nl();
     doc.text("Whip Claims Management", lm, y); nl();
-    doc.text("(855) 906-5949  |  claims@drivewhip.com", lm, y);
+    doc.text(handlerContactLine, lm, y);
 
     addSOLNotice(doc);
     addLetterFooter(doc);
@@ -4766,7 +4768,11 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
             </div>
           </div>
           <div className="mt-3">
-            <HandlerSelect value={handlerName} onChange={setHandlerName} label="Handler / Signatory" id="sd-handler" />
+            <Grid2>
+              <HandlerSelect value={handlerName} onChange={setHandlerName} label="Handler / Signatory" id="sd-handler" />
+              <Field label="Handler Phone Extension" id="sd-handler-extension" value={handlerExtension} onChange={setHandlerExtension} placeholder="e.g. 1234" />
+            </Grid2>
+            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Optional. When entered, the signature block prints the Whip claims phone number followed by this extension.</p>
             <Button type="button" variant="outline" size="sm" className="mt-2 h-8 w-full gap-1.5 border-[#ff6221]/50 text-xs text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handlePreview}>
               <Eye className="h-3.5 w-3.5" /> Preview formatted demand PDF
             </Button>
