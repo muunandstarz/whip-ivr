@@ -96,6 +96,9 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(subroSource).toContain('const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Email: claims@drivewhip.com`;');
     expect(subroSource).toContain('onHandlerChange={(handler) => setHandlerExtension(handler.extension ?? "")}');
     expect(subroSource).toContain('automatically fills the extension from the IVR directory');
+    expect(clientSource).toContain('import { getHandlerExtension } from "@shared/handlerExtensions";');
+    expect(clientSource).toContain('extension: handler.extension ?? getHandlerExtension(handler.name)');
+    expect(clientSource).toContain('PRIORITY_HANDLERS.map((name) => ({ name, extension: getHandlerExtension(name) }))');
     expect(subroSource).toContain('label="Handler Phone Extension"');
     expect(subroSource).toContain('id="sd-handler-extension"');
     expect(subroSource).toContain('value={handlerExtension} onChange={setHandlerExtension}');

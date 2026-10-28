@@ -15,6 +15,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { getHandlerExtension } from "@shared/handlerExtensions";
 import { jsPDF } from "jspdf";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
 import {
@@ -1179,11 +1180,14 @@ function HandlerSelect({
   id?: string;
 }) {
   const { data: handlers } = trpc.handlers.list.useQuery(undefined, { staleTime: 60_000 });
-  const sorted = React.useMemo(() => {
-    if (!handlers) return PRIORITY_HANDLERS.map(n => ({ name: n }));
+  const sorted = React.useMemo<Array<{ name: string; extension: string | null }>>(() => {
+    if (!handlers) return PRIORITY_HANDLERS.map((name) => ({ name, extension: getHandlerExtension(name) }));
     const priority = PRIORITY_HANDLERS.map(n => handlers.find(h => h.name === n)).filter(Boolean) as typeof handlers;
     const rest = handlers.filter(h => !PRIORITY_HANDLERS.includes(h.name)).sort((a, b) => a.name.localeCompare(b.name));
-    return [...priority, ...rest];
+    return [...priority, ...rest].map((handler) => ({
+      name: handler.name,
+      extension: handler.extension ?? getHandlerExtension(handler.name),
+    }));
   }, [handlers]);
   return (
     <div className="space-y-1">

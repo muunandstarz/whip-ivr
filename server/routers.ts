@@ -16,7 +16,7 @@ import { claimsQaRouter } from "./routers/claimsQa";
 import { ticketsRouter } from "./routers/tickets";
 import { klutchPoliciesRouter } from "./routers/klutchPolicies";
 import { getCallPerformanceDashboard } from "./callPerformance";
-import { AGENT_EXTENSIONS } from "./aircallExtensions";
+import { AGENT_EXTENSIONS, getHandlerExtension } from "./aircallExtensions";
 import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
 import {
   MAILBOT_FEATURE_SETTING,
@@ -462,7 +462,7 @@ export const appRouter = router({
       // Aircall operation is triggered by this query.
       return activeHandlers.map((handler) => ({
         ...handler,
-        extension: handler.aircallUserId ? AGENT_EXTENSIONS[handler.aircallUserId] ?? null : null,
+        extension: (handler.aircallUserId ? AGENT_EXTENSIONS[handler.aircallUserId] : null) ?? getHandlerExtension(handler.name),
       }));
     }),
   }),

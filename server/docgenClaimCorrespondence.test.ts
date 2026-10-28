@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { docgenRouter } from "./routers/docgen";
-import { AGENT_EXTENSIONS } from "./aircallExtensions";
+import { AGENT_EXTENSIONS, getHandlerExtension } from "../shared/handlerExtensions";
 
 const root = resolve(process.cwd());
 const schemaSource = readFileSync(resolve(root, "drizzle/schema.ts"), "utf8");
@@ -16,8 +16,12 @@ describe("Document Generator claim correspondence and IVR extensions", () => {
     expect(AGENT_EXTENSIONS[1924606]).toBe("048"); // Daniel Giono
     expect(AGENT_EXTENSIONS[1940186]).toBe("028"); // Tim Chan
     expect(AGENT_EXTENSIONS[1947062]).toBe("996"); // Geovanni Cabrera
-    expect(handlerRouterSource).toContain('import { AGENT_EXTENSIONS } from "./aircallExtensions";');
-    expect(handlerRouterSource).toContain("extension: handler.aircallUserId ? AGENT_EXTENSIONS[handler.aircallUserId] ?? null : null");
+    expect(getHandlerExtension("Daniel Giono")).toBe("048");
+    expect(getHandlerExtension("Jayla Bernard")).toBe("309");
+    expect(getHandlerExtension("Giovanni Cabrera")).toBe("996");
+    expect(getHandlerExtension("D'emily")).toBe("011");
+    expect(handlerRouterSource).toContain('import { AGENT_EXTENSIONS, getHandlerExtension } from "./aircallExtensions";');
+    expect(handlerRouterSource).toContain("AGENT_EXTENSIONS[handler.aircallUserId] : null) ?? getHandlerExtension(handler.name)");
   });
 
   it("exposes created-not-sent correspondence procedures with validation for claim, recipient, subject, and body", () => {
