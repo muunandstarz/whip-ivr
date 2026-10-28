@@ -90,15 +90,28 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(subroPdfSource).toContain('nl(9);');
   });
 
-  it("lets the Subro Demand signatory add an optional phone extension and prints it consistently", () => {
+  it("auto-fills the Subro Demand extension from the selected IVR handler while keeping it editable and printable", () => {
     const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"), clientSource.indexOf("// ─── Tab: Carrier Rebuttal"));
     expect(subroSource).toContain('const [handlerExtension, setHandlerExtension] = useState("");');
     expect(subroSource).toContain('const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Email: claims@drivewhip.com`;');
+    expect(subroSource).toContain('onHandlerChange={(handler) => setHandlerExtension(handler.extension ?? "")}');
+    expect(subroSource).toContain('automatically fills the extension from the IVR directory');
     expect(subroSource).toContain('label="Handler Phone Extension"');
     expect(subroSource).toContain('id="sd-handler-extension"');
     expect(subroSource).toContain('value={handlerExtension} onChange={setHandlerExtension}');
     expect(subroSource).toContain('${handlerContactLine}`;');
     expect(subroSource).toContain('doc.text(handlerContactLine, lm, y);');
+  });
+
+  it("adds a claim-specific correspondence record without exposing an outbound email action", () => {
+    const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"), clientSource.indexOf("// ─── Tab: Carrier Rebuttal"));
+    expect(subroSource).toContain('trpc.docgen.getClaimCorrespondence.useQuery');
+    expect(subroSource).toContain('trpc.docgen.createClaimCorrespondence.useMutation');
+    expect(subroSource).toContain('title="Claim-Specific Email"');
+    expect(subroSource).toContain('CREATED, NOT SENT');
+    expect(subroSource).toContain('nothing is sent, forwarded, queued, or added to Mailroom');
+    expect(subroSource).toContain('Add correspondence to claim');
+    expect(subroSource).not.toContain('forwardMailToClaim');
   });
 
   it("puts repair-estimate reading before all Subro Demand form fields", () => {

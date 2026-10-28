@@ -24,6 +24,7 @@ import {
   docgenFavorites,
   docgenRecentDocs,
   docgenSharedTemplates,
+  claimCorrespondence,
 } from "../drizzle/schema";
 import { lossIntakeClaims } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -2357,6 +2358,45 @@ export async function markDocgenTemplateRead(userId: number, templateId: number)
   const db = await getDb();
   if (!db) return;
   await db.update(docgenSharedTemplates).set({ isRead: true }).where(and(eq(docgenSharedTemplates.id, templateId), eq(docgenSharedTemplates.toUserId, userId)));
+}
+
+// ─── Claim Correspondence: Document Generator ─────────────────────────────────
+// Saving correspondence never sends an email. This intentionally stays separate
+// from Mailroom/Mail Bot and records the prepared recipient/message as
+// created-not-sent claim documentation only.
+export async function createClaimCorrespondence(input: {
+  claimNumber: string;
+  recipientName?: string | null;
+  recipientEmail: string;
+  subject: string;
+  bodyText: string;
+  createdByUserId: number;
+  createdByName?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(claimCorrespondence).values({
+    claimNumber: input.claimNumber,
+    recipientName: input.recipientName || null,
+    recipientEmail: input.recipientEmail,
+    subject: input.subject,
+    bodyText: input.bodyText,
+    status: "created_not_sent",
+    createdByUserId: input.createdByUserId,
+    createdByName: input.createdByName || null,
+  });
+  return (result[0] as any).insertId as number;
+}
+
+export async function getClaimCorrespondence(claimNumber: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(claimCorrespondence)
+    .where(eq(claimCorrespondence.claimNumber, claimNumber))
+    .orderBy(desc(claimCorrespondence.createdAt), desc(claimCorrespondence.id))
+    .limit(25);
 }
 
 // ─── Document Generator: Claim Lookup ─────────────────────────────────────────

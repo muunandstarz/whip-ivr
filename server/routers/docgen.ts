@@ -14,7 +14,7 @@ import {
   toggleDocgenFavorite, getDocgenFavorites,
   addDocgenRecentDoc, getDocgenRecentDocs,
   shareDocgenTemplate, getDocgenSharedTemplates, markDocgenTemplateRead,
-  listAllUsers,
+  listAllUsers, createClaimCorrespondence, getClaimCorrespondence,
 } from "../db";
 import { lookupClaimForDocgen } from "../db";
 
@@ -1120,6 +1120,32 @@ Format as JSON: { payments: [{date, provider, amount, serviceType}], totalPaid: 
       await markDocgenTemplateRead(ctx.user.id, input.templateId);
       return { ok: true };
     }),
+
+  // ─── Claim correspondence: created, not sent ────────────────────────────────
+  // This intentionally has no email-provider call. Mailroom/Mail Bot remain
+  // paused and no save from this feature can queue, send, forward, ingest, or
+  // alter mailbox state.
+  createClaimCorrespondence: protectedProcedure
+    .input(z.object({
+      claimNumber: z.string().trim().min(1).max(64),
+      recipientName: z.string().trim().max(256).optional(),
+      recipientEmail: z.string().trim().email().max(320),
+      subject: z.string().trim().min(1).max(512),
+      bodyText: z.string().trim().min(1).max(20_000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const id = await createClaimCorrespondence({
+        ...input,
+        claimNumber: input.claimNumber.toUpperCase(),
+        createdByUserId: ctx.user.id,
+        createdByName: ctx.user.name ?? ctx.user.email ?? null,
+      });
+      return { id, status: "created_not_sent" as const };
+    }),
+
+  getClaimCorrespondence: protectedProcedure
+    .input(z.object({ claimNumber: z.string().trim().min(1).max(64) }))
+    .query(async ({ input }) => getClaimCorrespondence(input.claimNumber.toUpperCase())),
 
   listUsers: protectedProcedure.query(async () => {
     const users = await listAllUsers();

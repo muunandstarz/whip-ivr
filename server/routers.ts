@@ -16,6 +16,7 @@ import { claimsQaRouter } from "./routers/claimsQa";
 import { ticketsRouter } from "./routers/tickets";
 import { klutchPoliciesRouter } from "./routers/klutchPolicies";
 import { getCallPerformanceDashboard } from "./callPerformance";
+import { AGENT_EXTENSIONS } from "./aircallExtensions";
 import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
 import {
   MAILBOT_FEATURE_SETTING,
@@ -455,7 +456,14 @@ export const appRouter = router({
   // ─── Handlers ──────────────────────────────────────────────────────────
   handlers: router({
     list: protectedProcedure.query(async () => {
-      return getHandlers();
+      const activeHandlers = await getHandlers();
+      // The extension is derived from the same Aircall user ID directory that
+      // routes direct calls. It is display/contact metadata only; no phone or
+      // Aircall operation is triggered by this query.
+      return activeHandlers.map((handler) => ({
+        ...handler,
+        extension: handler.aircallUserId ? AGENT_EXTENSIONS[handler.aircallUserId] ?? null : null,
+      }));
     }),
   }),
 

@@ -8,6 +8,12 @@ import { notifyOwner } from "./_core/notification";
 import { matchClaimNumber, resolveClaimFromSnapsheet, reformatRunOnClaimNumber, matchRunOnClaimNumber } from "./claimMatch";
 import { getHandlerByAircallUserId } from "./aircallSync";
 import { normalizeAircallOutcome, shouldCreateMissedCallCallback } from "./aircallStatus";
+import { AGENT_EXTENSIONS } from "./aircallExtensions";
+
+// Retain the existing public export used by Aircall regression coverage while
+// allowing document workflows to derive the same values without importing this
+// Express router module.
+export { AGENT_EXTENSIONS } from "./aircallExtensions";
 
 export const aircallRouter = express.Router();
 
@@ -604,24 +610,6 @@ const CLAIMS_AGENT_USER_IDS = new Set([
   1940186, // Tim Chan
   1947062, // Giovanni Cabrera
 ]);
-
-// Extension map: Aircall user ID → extension number
-export const AGENT_EXTENSIONS: Record<number, string> = {
-  1794311: '012', // Ana Padilla
-  1774596: '175', // Bennet Carlos
-  1756923: '325', // Carlito Legarde
-  1756924: '326', // Natashia Edulan
-  1763684: '011', // Demily Flores
-  1827146: '017', // Daryl Ochate
-  1836484: '018', // Jovel Villa
-  1836944: '019', // Annie Ortiz
-  1871743: '040', // Lorraine Tria
-  1874373: '041', // MJ Badua
-  1881559: '309', // Jayla Bernard
-  1924606: '048', // Daniel Giono
-  1940186: '028', // Tim Chan
-  1947062: '996', // Giovanni Cabrera
-};
 
 export function isClaimsTeamCall(call: any): boolean {
   const numberId = call?.number?.id ? Number(call.number.id) : null;

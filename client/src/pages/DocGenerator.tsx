@@ -1168,11 +1168,13 @@ function ThirdPartyCarrierSelect({
 function HandlerSelect({
   value,
   onChange,
+  onHandlerChange,
   label = "Handler Name",
   id = "handler-select",
 }: {
   value: string;
   onChange: (v: string) => void;
+  onHandlerChange?: (handler: { name: string; extension?: string | null }) => void;
   label?: string;
   id?: string;
 }) {
@@ -1186,7 +1188,14 @@ function HandlerSelect({
   return (
     <div className="space-y-1">
       <Label htmlFor={id} className="text-xs font-semibold text-foreground/80">{label}</Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select
+        value={value}
+        onValueChange={(nextValue) => {
+          onChange(nextValue);
+          const selected = sorted.find((handler) => handler.name === nextValue);
+          if (selected) onHandlerChange?.(selected);
+        }}
+      >
         <SelectTrigger id={id} className="h-8 text-sm"><SelectValue placeholder="Select handler…" /></SelectTrigger>
         <SelectContent>
           {sorted.map((h, i) => (
@@ -4124,6 +4133,12 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [handlerName, setHandlerName] = useState("");
   const [handlerExtension, setHandlerExtension] = useState("");
+  const [claimEmail, setClaimEmail] = useState({
+    recipientName: "",
+    recipientEmail: "",
+    subject: "",
+    bodyText: "",
+  });
   const [vinDecoding, setVinDecoding] = useState(false);
   const [louRepairStart, setLouRepairStart] = useState("");
   const [louRepairEnd, setLouRepairEnd] = useState("");
@@ -4137,6 +4152,19 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   const [estimateFile, setEstimateFile] = useState<File | null>(null);
   const [estimateParsing, setEstimateParsing] = useState(false);
   const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
+  const correspondenceClaimNumber = form.ourClaim.trim().toUpperCase();
+  const claimCorrespondenceQuery = trpc.docgen.getClaimCorrespondence.useQuery(
+    { claimNumber: correspondenceClaimNumber },
+    { enabled: correspondenceClaimNumber.length > 0, retry: false, staleTime: 30_000 },
+  );
+  const createClaimCorrespondenceMutation = trpc.docgen.createClaimCorrespondence.useMutation({
+    onSuccess: () => {
+      void claimCorrespondenceQuery.refetch();
+      setClaimEmail((current) => ({ ...current, subject: "", bodyText: "" }));
+      toast.success("Correspondence added to the claim — created, not sent.");
+    },
+    onError: (error) => toast.error(error.message || "Could not add correspondence to the claim."),
+  });
   const { data: louMarketsData } = trpc.lou.getMarketPricing.useQuery(undefined, { staleTime: 300_000 });
   const louMarkets = Array.isArray(louMarketsData) ? louMarketsData : [];
   const louMarket = louMarkets.find((market) => market.code === louMarketCode) || louMarkets[0];
@@ -4281,6 +4309,27 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (!correspondenceClaimNumber) return;
+    setClaimEmail((current) => current.subject
+      ? current
+      : { ...current, subject: `Whip Claim ${correspondenceClaimNumber} — Subrogation Demand` });
+  }, [correspondenceClaimNumber]);
+
+  const addClaimCorrespondence = () => {
+    if (!correspondenceClaimNumber) {
+      toast.error("Enter the complete Whip Snapsheet claim number before adding correspondence.");
+      return;
+    }
+    createClaimCorrespondenceMutation.mutate({
+      claimNumber: correspondenceClaimNumber,
+      recipientName: claimEmail.recipientName.trim() || undefined,
+      recipientEmail: claimEmail.recipientEmail.trim(),
+      subject: claimEmail.subject.trim(),
+      bodyText: claimEmail.bodyText.trim(),
+    });
+  };
 
   const parseEstimateFile = async (file = estimateFile) => {
     if (!file) { toast.error("Select an estimate first"); return; }
@@ -4655,6 +4704,59 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
             </Select>
           </div>
         </Panel>
+        <Panel title="Claim-Specific Email" tag="CREATED, NOT SENT">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div className="flex items-start gap-2">
+              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-800">Claim {correspondenceClaimNumber || "number required"}</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-slate-600">Save a recipient, subject, and message directly to this claim’s correspondence history. This creates an internal record only—nothing is sent, forwarded, queued, or added to Mailroom.</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="sd-correspondence-recipient" className="text-xs font-semibold text-foreground/80">Recipient name <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input id="sd-correspondence-recipient" className="h-8 text-sm" value={claimEmail.recipientName} onChange={(event) => setClaimEmail((current) => ({ ...current, recipientName: event.target.value }))} placeholder="Carrier adjuster or contact" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="sd-correspondence-email" className="text-xs font-semibold text-foreground/80">Recipient email</Label>
+              <Input id="sd-correspondence-email" type="email" className="h-8 text-sm" value={claimEmail.recipientEmail} onChange={(event) => setClaimEmail((current) => ({ ...current, recipientEmail: event.target.value }))} placeholder="adjuster@carrier.com" />
+            </div>
+          </div>
+          <div className="mt-3 space-y-1">
+            <Label htmlFor="sd-correspondence-subject" className="text-xs font-semibold text-foreground/80">Subject</Label>
+            <Input id="sd-correspondence-subject" className="h-8 text-sm" value={claimEmail.subject} onChange={(event) => setClaimEmail((current) => ({ ...current, subject: event.target.value }))} placeholder="Whip claim correspondence subject" />
+          </div>
+          <div className="mt-3 space-y-1">
+            <Label htmlFor="sd-correspondence-body" className="text-xs font-semibold text-foreground/80">Message</Label>
+            <Textarea id="sd-correspondence-body" className="min-h-[104px] text-sm" value={claimEmail.bodyText} onChange={(event) => setClaimEmail((current) => ({ ...current, bodyText: event.target.value }))} placeholder="Draft the claim-specific correspondence here…" />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3 h-8 w-full gap-1.5 border-slate-400 text-xs text-slate-800 hover:bg-slate-100"
+            onClick={addClaimCorrespondence}
+            disabled={!correspondenceClaimNumber || !claimEmail.recipientEmail.trim() || !claimEmail.subject.trim() || !claimEmail.bodyText.trim() || createClaimCorrespondenceMutation.isPending}
+          >
+            {createClaimCorrespondenceMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+            {createClaimCorrespondenceMutation.isPending ? "Adding…" : "Add correspondence to claim"}
+          </Button>
+          {claimCorrespondenceQuery.data && claimCorrespondenceQuery.data.length > 0 && (
+            <div className="mt-3 border-t border-slate-200 pt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Recent correspondence for this claim</p>
+              <div className="mt-2 space-y-2">
+                {claimCorrespondenceQuery.data.slice(0, 3).map((entry) => (
+                  <div key={entry.id} className="rounded border border-slate-200 bg-white px-2.5 py-2 text-[11px] leading-4 text-slate-700">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><strong>{entry.subject}</strong><span className="text-slate-500">to {entry.recipientEmail}</span></div>
+                    <p className="mt-0.5 text-[10px] text-slate-500">Created, not sent · {entry.createdByName || "Whip team"} · {new Date(entry.createdAt).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Panel>
         <Panel title="Opening Paragraph" tag="EDITABLE">
           <div className="space-y-1">
             <Label className="text-xs font-medium text-foreground/70">Edit the opening paragraph (leave blank to use default language)</Label>
@@ -4769,10 +4871,16 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
           </div>
           <div className="mt-3">
             <Grid2>
-              <HandlerSelect value={handlerName} onChange={setHandlerName} label="Handler / Signatory" id="sd-handler" />
+              <HandlerSelect
+                value={handlerName}
+                onChange={setHandlerName}
+                onHandlerChange={(handler) => setHandlerExtension(handler.extension ?? "")}
+                label="Handler / Signatory"
+                id="sd-handler"
+              />
               <Field label="Handler Phone Extension" id="sd-handler-extension" value={handlerExtension} onChange={setHandlerExtension} placeholder="e.g. 1234" />
             </Grid2>
-            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Optional. When entered, the signature block prints the Whip claims phone number followed by this extension.</p>
+            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Selecting a Whip handler automatically fills the extension from the IVR directory. You may edit it when a claim requires a different contact extension.</p>
             <Button type="button" variant="outline" size="sm" className="mt-2 h-8 w-full gap-1.5 border-[#ff6221]/50 text-xs text-[#ff6221] hover:bg-[#ff6221]/10" onClick={handlePreview}>
               <Eye className="h-3.5 w-3.5" /> Preview formatted demand PDF
             </Button>

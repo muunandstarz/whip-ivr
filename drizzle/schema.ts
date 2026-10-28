@@ -10,6 +10,7 @@ import {
   float,
   json,
   unique,
+  index,
 } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
@@ -852,6 +853,28 @@ export const docgenSharedTemplates = mysqlTable("docgen_shared_templates", {
 });
 export type DocgenSharedTemplate = typeof docgenSharedTemplates.$inferSelect;
 
+// ─── Claim Correspondence: Document Generator ─────────────────────────────────
+// This is a claim-number-scoped internal record for correspondence prepared in
+// Document Generator. It deliberately has no provider message/thread fields and
+// only supports CREATED_NOT_SENT records; it must never activate Mailroom or
+// dispatch email by saving a record here.
+export const claimCorrespondence = mysqlTable("claim_correspondence", {
+  id: int("id").autoincrement().primaryKey(),
+  claimNumber: varchar("claimNumber", { length: 64 }).notNull(),
+  recipientName: varchar("recipientName", { length: 256 }),
+  recipientEmail: varchar("recipientEmail", { length: 320 }).notNull(),
+  subject: varchar("subject", { length: 512 }).notNull(),
+  bodyText: text("bodyText").notNull(),
+  status: mysqlEnum("status", ["created_not_sent"]).default("created_not_sent").notNull(),
+  createdByUserId: int("createdByUserId").notNull(),
+  createdByName: varchar("createdByName", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  index("claim_correspondence_claim_created_idx").on(table.claimNumber, table.createdAt),
+]);
+export type ClaimCorrespondence = typeof claimCorrespondence.$inferSelect;
+export type InsertClaimCorrespondence = typeof claimCorrespondence.$inferInsert;
+
 // ─── Claims Workspace: Personal Adjuster Desk ─────────────────────────────────
 // These records deliberately remain user-scoped working material. They do not
 // represent claim-system-of-record data and never write back to Snapsheet.
@@ -1051,7 +1074,6 @@ import {
   date as drizzleDate,
   datetime,
   uniqueIndex,
-  index,
 } from "drizzle-orm/mysql-core";
 
 const MAIL_CATEGORIES = [
