@@ -232,6 +232,22 @@ describe("Klutch policy documents source integration", () => {
     expect(dopRenderer).toContain('dop-line-value dop-date-value');
   });
 
+  it("turns the carrier communication guide into a focused on-screen call workspace", () => {
+    expect(sourcePage).toContain('guideFocus:"opening"');
+    expect(sourcePage).toContain("function carrierGuideEntries");
+    expect(sourcePage).toContain("function activeCarrierGuideEntry");
+    expect(sourcePage).toContain("function carrierGuideForm");
+    expect(sourcePage).toContain('data-act="guideFocus"');
+    expect(sourcePage).toContain('guide-reference');
+    expect(sourcePage).toContain('guide-script-card');
+    expect(sourcePage).toContain('guide-step-controls');
+    expect(sourcePage).toContain('body.guide-mode .split{grid-template-columns:minmax(292px,350px) minmax(0,1fr)');
+    expect(sourcePage).toContain('@media(max-width:900px){body.guide-mode .split{grid-template-columns:1fr;gap:16px}');
+    expect(sourcePage).toContain('document.body.classList.toggle("guide-mode",F.sel==="carrier_guide")');
+    expect(sourcePage).toContain('if(a==="guideFocus"){F.guideFocus=b.dataset.v;save();buildForm();preview()');
+    expect(sourcePage).toContain('Copy complete guide');
+  });
+
   it("keeps editable carrier coverage email templates and communication scripts out of PDF print packets", () => {
     expect(sourcePage).toContain('["carrier_email","Carrier Coverage Request Email"]');
     expect(sourcePage).toContain('["carrier_guide","Carrier Communication Guide"]');
