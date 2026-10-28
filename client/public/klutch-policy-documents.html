@@ -89,9 +89,9 @@ input:focus,select:focus{outline:2px solid var(--lime);border-color:var(--teal)}
 .dop-cell{min-height:35px;padding:2px 6px}.dop-label{font-size:10px}.dop-value{font-size:13.3px;line-height:1.12;margin-top:1px;min-height:15px}
 .dop-salutation{margin:17px 0 9px}.dopdoc p{margin:0 0 10px}.dop-section-title{margin:16px 0 9px}.dop-check{gap:16px;margin:0 0 7px;line-height:1.35}.dop-check>span:first-child{font-size:14.5px}.dop-footer{font-size:9px}
 .dopdoc-p2{font-size:12px;line-height:1.45}.dop-department{font-size:13.3px;margin-top:-17px}.dop-signatures{grid-template-columns:1fr .7fr;gap:16px 34px;margin-top:66px;font-size:10.2px}
-.dop-signature-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end}.dop-sign-line{height:25px;position:relative;overflow:visible;align-items:flex-start}.dop-sign-image{position:absolute;left:4px;bottom:calc(100% - 1px);max-height:29px;margin:0}.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% - 1px);font-size:24px;margin:0}.dop-sign-placeholder{position:absolute;left:5px;bottom:calc(100% - 1px);margin:0}
-.dop-line{height:20px;padding:0}.dop-line-value{top:-11px;bottom:auto;background:#fff;padding:0 2px;font-size:10.2px;line-height:1.05}.dop-date-value{top:-13px}.dop-line-spaced{margin-top:0}
-.dop-sign-label{margin-top:2px}.dop-cert{margin:0;padding:0;border:0;background:none;min-height:0;font-size:7.2px;line-height:1.1;white-space:nowrap;color:#385b5e}.dop-cert.pending{color:#666}.dop-cert-status{font-size:7.3px}
+.dop-signature-wrap{display:block;position:relative}.dop-sign-line{height:20px;position:relative;overflow:visible;align-items:flex-start}.dop-sign-image{position:absolute;left:4px;bottom:calc(100% - 5px);max-height:29px;margin:0;z-index:1}.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% - 5px);font-size:24px;margin:0;z-index:1}.dop-sign-placeholder{position:absolute;left:5px;bottom:calc(100% - 3px);margin:0}
+.dop-line{height:20px;padding:0}.dop-line-value{top:-8px;bottom:auto;background:#fff;padding:0 2px;font-size:10.2px;line-height:1.05}.dop-date-value{top:-10px}.dop-line-spaced{margin-top:0}
+.dop-sign-label{margin-top:3px;max-width:58%}.dop-cert{position:absolute;right:0;top:calc(100% + 3px);margin:0;padding:0 0 0 4px;border:0;background:#fff;min-height:0;font-size:6.8px;line-height:1.1;white-space:nowrap;color:#385b5e}.dop-cert.pending{color:#666}.dop-cert-status{font-size:7px}
 .end{font-family:Arial,sans-serif;font-size:12.6px;line-height:1.5;color:#000;padding:44px 72px 0}
 .end h4{font-size:12.6px;margin:10px 0 4px}.end p{margin-bottom:6px}
 .end .it{margin:0 0 6px 36px;text-indent:-24px}
@@ -206,10 +206,10 @@ const RULES={
 const W={bi:30,pd:12,coll:25,comp:13,um:7,uim:5,pip:8};
 /* -------------------------------------- */
 const COVS=[["bi","Bodily injury liability"],["pd","Property damage liability"],["pip","Personal injury protection"],["um","Uninsured motorist bodily injury"],["uim","Underinsured motorist bodily injury"],["comp","Comprehensive"],["coll","Collision"]];
-const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["dop","Direction of Pay & Vehicle Ownership Notice"],["carrier_email","Carrier Coverage Request Email"]];
+const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["dop","Direction of Pay & Vehicle Ownership Notice"],["carrier_email","Carrier Coverage Request Email"],["carrier_guide","Carrier Communication Guide"]];
 const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop"];
 const isPrintablePdf=id=>PRINTABLE_PDF_IDS.includes(id);
-const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest.",carrier_email:"Editable non-PDF carrier communication. Copy it into the current claim delivery workflow; email templates and future communication scripts are excluded from PDF print packets."};
+const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest.",carrier_email:"Editable non-PDF carrier communication. Copy it into the current claim delivery workflow; email templates and the Carrier Communication Guide are excluded from PDF print packets.",carrier_guide:"On-screen call scripts and objection handling for carrier conversations. Personalize before use, document the contact in Snapsheet, and escalate when directed. It is not a PDF packet document."};
 const PERIODS={1:"waiting for a ride request",2:"traveling to pick up a passenger",3:"transporting a passenger"};
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -271,10 +271,55 @@ function wireDopSignaturePad(){
 }
 const sec=t=>`<div class="s6"><div class="sec" style="margin:12px 0 0">${t}</div></div>`;
 const seg=(k,opts,dis,variant="")=>`<div class="seg ${variant}">${opts.map(([v,l])=>`<button type="button" data-seg="${k}" data-v="${v}" class="${F[k]===v?"on":""}" ${dis&&dis.includes(v)?"disabled":""}>${l}</button>`).join("")}</div>`;
+function carrierGuideData(s=F){
+ const value=(key,fallback)=>String(s[key]??fallback), handler=String(s.guideHandlerName||s.hn||"[Name]"), adjuster=String(s.guideAdjuster||s.attn||"[Adjuster]"), carrier=String(s.guideCarrier||s.carrier||"[Carrier]"), claim=String(s.guideCarrierClaim||s.cclm||"[Number]"), loss=s.guideDol?ld(s.guideDol):(s.dol?ld(s.dol):"[Date]"), driver=String(s.guideDriver||s.member||"[Driver Name]"), tnc=String(s.guideTnc||s.tnc||"[TNC]");
+ const objection=(id,title,response,instructions)=>({id,title,response:value(`guide${id}`,response),instructions});
+ return {handler,adjuster,carrier,claim,loss,driver,tnc,
+  opening:value("guideOpening",`Hi, this is ${handler} with Whip Claims Management, calling on behalf of Metrocars Leasing Corp. regarding your claim number ${claim}, date of loss ${loss}.\n\nMetrocars is the owner of the vehicle your insured driver was operating. I’m calling to confirm how you’ll be handling the physical damage to that vehicle.`),
+  coverage:value("guideCoverage",`The driver leases the vehicle from Metrocars and maintains a personal auto policy through Klutch Insurance.\n\nKlutch has issued a coverage denial based on the applicable transportation network company exclusion because the vehicle was being used for TNC activity at the time of the loss.\n\nWe’re requesting a review of whether ${tnc}'s physical-damage coverage responds to this loss.`),
+  ask:value("guideAsk",`I’ve sent the declarations page, denial letter, and exclusion endorsement to [Email].\n\nCan you confirm that you’ve received everything needed to make a coverage determination, and when we can expect that decision?`),
+  objections:[
+   objection("CommercialPolicy","Is this a commercial policy? Is the vehicle commercially insured?",`Metrocars owns the vehicle, but the coverage we’re asking you to review is the driver’s separately maintained personal auto policy through Klutch Insurance.\n\nThe declarations page identifies the named insured, policy dates, and applicable comprehensive and collision coverage. I can resend that documentation if needed.`,["Be clear about the distinction between Metrocars’ self-insurance and the driver’s personal policy.","Do not misrepresent either arrangement or omit material information requested by the carrier."]),
+   objection("SelfInsurance","We need proof that the vehicle owner is a registered self-insured entity.",`Metrocars maintains a separate self-insurance arrangement. However, the documentation we’ve submitted concerns the driver’s personal auto coverage and the resulting coverage denial.\n\nCan you clarify why Metrocars’ self-insurance documentation is necessary for your coverage determination?`,["Do not automatically send Maryland self-insurance documentation.","Document the carrier’s request and explanation.","Escalate to leadership for review before responding further."]),
+   objection("NoCollision","There was no personal auto policy with collision coverage in force.",`The declarations page we’ve provided identifies the policy, effective dates, and applicable physical damage coverage.\n\nCan you confirm whether you received that document and identify any discrepancy you’re seeing?`,["Verify the policy effective dates against the date of loss.","Confirm comprehensive and collision coverage actually existed.","Review deductibles and applicable endorsements.","If the records do not support coverage on the date of loss, escalate for correction rather than generating inaccurate replacement documentation."]),
+   objection("TncPeriod","Your driver was in Period 1 or Period 2, and collision does not apply during that period.",`Understood. Can you please provide that determination in writing, including the specific policy provision you’re relying on, so we can review it against our file?`,["Record the TNC period identified by the carrier.","Request the applicable policy language.","Verify the documented trip status and whether the carrier received the personal policy documentation.","Do not dispute an actual contractual coverage limitation without review."]),
+   objection("OwnCarrier","Send us your own carrier’s information or check with your carrier.",`We’ve provided the driver’s Klutch policy information and the associated denial. Metrocars also maintains separate self-insurance.\n\nCan you clarify which coverage information you need and why, so we can make sure we’re addressing the correct issue?`,["Clarify whether the adjuster is requesting personal auto coverage information or Metrocars’ self-insurance details.","Do not state that no other insurance arrangement exists.","Escalate requests involving Metrocars’ self-insurance when necessary."]),
+   objection("DirectionOfPay","We need a signed Direction of Pay or we’ll issue payment to the driver.",`Metrocars Leasing Corp. owns the vehicle, and we’d like to establish the appropriate payment arrangements before payment is issued.\n\nWe can provide our Direction of Pay form and supporting ownership or lease documentation. For repairable vehicles, we’re requesting payment directly to the designated repair facility. For total losses and subrogation recoveries, we’re requesting payment to Metrocars, subject to the applicable payment requirements.`,["Confirm the claim type and intended payment recipient.","Provide the completed Direction of Pay.","Obtain confirmation of the carrier’s accepted payment instructions.","Escalate any disagreement over the payment recipient.","Do not identify Metrocars as a policy-designated loss payee unless the applicable policy establishes that status."]),
+   objection("CoverageDenied","We’re denying coverage.",`I understand. Can you please provide the denial in writing, including the specific policy provision and factual basis supporting that determination?`,["Every denial must have a documented reason.","Request the written coverage position and record the policy provision cited.","Identify any outstanding information and escalate questionable denials for further review."])
+  ]};
+}
+const guideTextEditor=(key,title,text,instructions,open=false)=>`<details class="s6" ${open?"open":""} style="border:1px solid #dbe4e6;border-radius:9px;padding:11px 13px;background:#fff"><summary style="cursor:pointer;font-weight:700">${title}</summary><label style="display:block;margin-top:10px">Recommended response — editable</label><textarea data-k="${key}" style="min-height:132px;width:100%;resize:vertical;line-height:1.45">${esc(text)}</textarea><div class="note" style="margin-top:9px"><b>Handler actions:</b><ul style="margin:5px 0 0 18px;line-height:1.45">${instructions.map(item=>`<li>${esc(item)}</li>`).join("")}</ul></div></details>`;
+function carrierEmailForm(){
+ const defaultSubject=`Coverage verification request — ${F.snap||F.kc||"[Whip claim number]"}`;
+ const defaultBody=`Hello ${F.emailAdjuster||"Claims Team"},
+
+Whip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.
+
+Please confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.
+
+Vehicle: ${F.vehicle||"[Vehicle]"}
+VIN: ${F.vin||"[VIN]"}
+Date of loss: ${F.dol?ld(F.dol):"[Date of loss]"}
+Whip claim number: ${F.snap||F.kc||"[Whip claim number]"}
+
+Please reply to this email or contact Whip Claims Management with the coverage information.
+
+Thank you,
+${F.hn||"[Handler name]"}
+Whip Claims Management`;
+ if(F.emailSubject===undefined)F.emailSubject=defaultSubject;if(F.emailBody===undefined)F.emailBody=defaultBody;
+ return `<div class="f">${sec("Carrier Coverage Request Email")}<div class="s6 note" style="margin-top:-2px">Use this editable communication when requesting the adverse carrier’s comprehensive and collision coverage information. It is a non-PDF working email: Copy Email does not issue a policy, create a document record, or send anything.</div>${fld("emailRecipient","Carrier recipient email",3,{t:"email"})}${fld("emailAdjuster","Carrier adjuster / claims contact",3)}${fld("emailSubject","Subject",6)}<div class="s6"><label>Email body</label><textarea data-k="emailBody" style="min-height:250px;width:100%;resize:vertical">${esc(F.emailBody||defaultBody)}</textarea></div><div class="s6"><details class="note"><summary style="cursor:pointer;font-weight:700">Handler guide — carrier coverage verification</summary><ul style="margin:8px 0 0 18px;line-height:1.5"><li>Identify Whip Claims Management and Metrocars Leasing Corp.’s owner/lessor interest.</li><li>Request confirmation of comprehensive and collision coverage, including conditions, limits, deductible, and required records.</li><li>Review and tailor the recipient, subject, and facts before copying the email into the approved claim delivery workflow.</li><li>Attach only the records appropriate for the claim. This email template and the Carrier Communication Guide are not PDF packet documents.</li></ul></details></div><div class="s6"><button type="button" class="b" data-act="copyCarrierCoverageEmail">Copy Email</button></div></div>`;
+}
 function buildForm(){
  const d=F.sel,R=RULES[F.st];
  const full=(d==="dec"||d==="den"||d==="can"||d==="dop");
  const issuedPolicy=/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"");
+ if(d==="carrier_email"){ $("#form").innerHTML=carrierEmailForm();return; }
+ if(d==="carrier_guide"){
+  const g=carrierGuideData(F), detailFields=fld("guideHandlerName","Your name",3)+fld("guideAdjuster","Carrier adjuster",3)+fld("guideCarrier","Carrier",3)+fld("guideCarrierClaim","Carrier claim number",3)+fld("guideDol","Date of loss",3,{t:"date"})+fld("guideDriver","Driver / insured",3)+fld("guideTnc","TNC",3);
+  let guide=`<div class="f">${sec("Carrier Communication Guide")}<div class="s6 note" style="margin-top:-2px">Use this live reference while speaking with TNC adjusters. Personalize the scripted language, document the carrier response in Snapsheet, and follow each verify or escalate instruction. This guide is on-screen only and never enters a PDF packet.</div>${sec("Conversation details")}${detailFields}${sec("Conversation stages")}${guideTextEditor("guideOpening","Opening",g.opening,["Obtain the adjuster’s name.","Confirm a direct phone number or extension.","Document the conversation in Snapsheet."],true)}${guideTextEditor("guideCoverage","Set up the coverage question",g.coverage,["Verify that the Klutch denial, policy dates, and TNC facts relate to this loss.","Do not state or imply coverage exists unless the policy records support it."],true)}${guideTextEditor("guideAsk","The ask",g.ask,["Establish a specific follow-up date.","Record outstanding documentation requests.","Send only claim-appropriate records through the approved delivery process."],true)}${sec("Common carrier objections and responses")}${g.objections.map(item=>guideTextEditor(`guide${item.id}`,item.title,item.response,item.instructions)).join("")}<div class="s6"><button type="button" class="b" data-act="copyCarrierCommunicationGuide">Copy guide</button></div></div>`;
+  $("#form").innerHTML=guide;return;
+ }
  let h=`<div class="f">`;
  h+=fld("st","Garaging state",3,{sel:Object.keys(RULES).map(k=>[k,k+" – "+RULES[k].n]),dis:issuedPolicy});
  h+=`<div class="s3 note" style="align-self:end">Start with the state where the vehicle is garaged. It sets the available limits, elections, and policy rules.${issuedPolicy?" The state is locked after a shared policy number is issued.":" Changing it before issuance clears any unissued draft policy number."}</div>`;
@@ -326,28 +371,6 @@ function buildForm(){
   h+=sec("Carrier");
   h+=fld("carrier","Carrier name",3)+fld("cclm","Carrier claim number",3)+fld("attn","Adjuster name and title",6)+fld("caddr","Carrier street address",3)+fld("ccity","City, State ZIP",3)+fld("cdt","Date of carrier letter",3,{t:"date"})+fld("rec","Supporting records",3);
  }
- if(d==="carrier_email"){
-  const defaultSubject=`Coverage verification request — ${F.snap||F.kc||"[Whip claim number]"}`;
-  const defaultBody=`Hello ${F.emailAdjuster||"Claims Team"},
-
-Whip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.
-
-Please confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.
-
-Vehicle: ${F.vehicle||"[Vehicle]"}
-VIN: ${F.vin||"[VIN]"}
-Date of loss: ${F.dol?ld(F.dol):"[Date of loss]"}
-Whip claim number: ${F.snap||F.kc||"[Whip claim number]"}
-
-Please reply to this email or contact Whip Claims Management with the coverage information.
-
-Thank you,
-${F.hn||"[Handler name]"}
-Whip Claims Management`;
-  if(F.emailSubject===undefined)F.emailSubject=defaultSubject;if(F.emailBody===undefined)F.emailBody=defaultBody;
-  h=`<div class="f">${sec("Carrier Coverage Request Email")}<div class="s6 note" style="margin-top:-2px">Use this editable communication when requesting the adverse carrier’s comprehensive and collision coverage information. It is a non-PDF working email: Copy Email does not issue a policy, create a document record, or send anything.</div>${fld("emailRecipient","Carrier recipient email",3,{t:"email"})}${fld("emailAdjuster","Carrier adjuster / claims contact",3)}${fld("emailSubject","Subject",6)}<div class="s6"><label>Email body</label><textarea data-k="emailBody" style="min-height:250px;width:100%;resize:vertical">${esc(F.emailBody||defaultBody)}</textarea></div><div class="s6"><details class="note"><summary style="cursor:pointer;font-weight:700">Handler guide — carrier coverage verification</summary><ul style="margin:8px 0 0 18px;line-height:1.5"><li>Identify Whip Claims Management and Metrocars Leasing Corp.’s owner/lessor interest.</li><li>Request confirmation of comprehensive and collision coverage, including conditions, limits, deductible, and required records.</li><li>Review and tailor the recipient, subject, and facts before copying the email into the approved claim delivery workflow.</li><li>Attach only the records appropriate for the claim. This email template and future communication scripts are not PDF packet documents.</li></ul></details></div><div class="s6"><button type="button" class="b" data-act="copyCarrierCoverageEmail">Copy Email</button></div></div>`;
-  $("#form").innerHTML=h;return;
- }
  if(d==="dop"){
   if(!F.dopDate)F.dopDate=today();if(!F.dopSignerDate)F.dopSignerDate=F.dopDate;if(!F.dopSignatureMode)F.dopSignatureMode="draw";
   const dopFld=(k,l,sp,o={})=>`<div class="s${sp||3}"><label>${l}</label><input data-k="${k}" ${o.t?`type="${o.t}"`:""} value="${esc(F[k]||o.v||"")}"></div>`;
@@ -393,7 +416,8 @@ function ctx(){
  return{pol,claim}}
 function result(d){const{pol,claim}=ctx();return buildDoc(d,pol,claim,Object.assign({},F))}
 const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]];
-function setDocs(){const t=F.set||"all";if(t==="liab")return F.lease==="t"?["dec","can"]:["dec"];return DOCS.map(x=>x[0])}
+const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"];
+function setDocs(){const t=F.set||"all";const packet=t==="liab"?(F.lease==="t"?["dec","can"]:["dec"]):DOCS.map(x=>x[0]);return [...new Set([...packet,...NON_PDF_REFERENCE_IDS])]}
 function renderDocs(rs){$("#docs").innerHTML=DOCS.filter(([k])=>setDocs().includes(k)).map(([k,l])=>`<button data-act="doc" data-v="${k}" class="${F.sel===k?"on":""} ${rs&&!rs[k].err&&!rs[k].miss.length?"rdy":""}"><span class="chip"></span>${l}</button>`).join("")}
 function rsearch(){const el=$("#rsr");if(!el)return;const q=(F.rq||"").trim().toLowerCase();if(q.length<2){el.innerHTML="";return}
  const rows=Object.values(K.pols).filter(r=>(r.pn+" "+r.member+" "+(r.mno||"")).toLowerCase().includes(q)).slice(0,6);
@@ -424,7 +448,7 @@ function preview(){
  const dv=dupVin();
  const vk=(F.vin||"").trim().toUpperCase(),dvBlock=!!(dv&&dv.pn!==F.pn&&F.ack!==vk);
  $("#ban").innerHTML=(dv&&dv.pn!==F.pn?(dvBlock?`<div class="warn err">This vehicle already has policy <b>${dv.pn}</b> (${esc(dv.member)}). One policy per lease. Choose one before you can print:<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="b" style="padding:5px 12px" data-act="loadren" data-v="${dv.pn}">Renew that policy</button><button class="b ghost" style="padding:5px 12px" data-act="loadcor" data-v="${dv.pn}">Correct that policy</button><button class="b ghost" style="padding:5px 12px" data-act="ackdup">This is a new lease. Issue a new policy.</button></div></div>`:`<div class="warn">New lease acknowledged. Existing policy on this vehicle: <b>${dv.pn}</b> (${esc(dv.member)}).</div>`):"")+`<div class="note" style="margin-bottom:8px">${DOCNOTE[F.sel]}</div>`+(r.err?`<div class="warn err">${r.err}</div>`:(r.miss.length?`<div class="warn">Still needed: ${[...new Set(r.miss)].join(", ")}.</div>`:""));
- const selectedIsEmail=!isPrintablePdf(F.sel);$("#prt").style.display=selectedIsEmail?"none":"";$("#prt").disabled=selectedIsEmail||!!(r.err||r.miss.length||dvBlock);
+  const selectedIsNonPdf=!isPrintablePdf(F.sel);$("#prt").style.display=selectedIsNonPdf?"none":"";$("#prt").disabled=selectedIsNonPdf||!!(r.err||r.miss.length||dvBlock);
  const sd=setDocs(),packetIds=PRINTABLE_PDF_IDS.filter(id=>sd.includes(id)),n=packetIds.filter(k=>!rs[k].err&&!rs[k].miss.length).length,multi=packetIds.length>1;
  $("#prtall").style.display=multi?"":"none";$("#prtall").disabled=!n||dvBlock;$("#prtall").textContent=F.set==="liab"?`Print dec page + cancellation (${n})`:(n?`Print all ready documents (${n})`:"Print all ready documents");
  $("#pv").innerHTML=r.html||`<div class="empty">Fill in the form to see the document.</div>`;fit();return rs}
@@ -443,6 +467,12 @@ function buildDoc(d,pol,claim,s){
  const hand=()=>{if(!s.hn)miss.push("handler name");if(!s.ht)miss.push("handler title");
   return L(esc(s.hn||"")||"&nbsp;")+L(esc(s.ht||"")||"&nbsp;")+L("Klutch Insurance Company")+L("claims@klutchinsurance.com")};
  const sheet=(inner,cls)=>`<div class="sheet ${cls}">${inner}</div>`;
+ if(d==="carrier_guide"){
+  const g=carrierGuideData(s), previewScript=(title,text,instructions,open=false)=>`<details ${open?"open":""} style="border:1px solid #d4d4d4;border-radius:8px;padding:12px 14px;margin:0 0 10px"><summary style="cursor:pointer;font-weight:700">${esc(title)}</summary><div style="white-space:pre-wrap;line-height:1.55;margin-top:10px">${esc(text)}</div><div style="font-size:12px;line-height:1.45;color:#36454b;margin-top:10px"><b>Handler actions:</b><ul style="margin:5px 0 0 18px">${instructions.map(item=>`<li>${esc(item)}</li>`).join("")}</ul></div></details>`;
+  const stages=[previewScript("Opening",g.opening,["Obtain the adjuster’s name.","Confirm a direct phone number or extension.","Document the conversation in Snapsheet."],true),previewScript("Set up the coverage question",g.coverage,["Verify the Klutch denial, policy dates, and TNC facts relate to this loss.","Do not state or imply coverage exists unless the policy records support it."],true),previewScript("The ask",g.ask,["Establish a specific follow-up date.","Record outstanding documentation requests.","Send only claim-appropriate records through the approved delivery process."],true)];
+  const objections=g.objections.map(item=>previewScript(item.title,item.response,item.instructions));
+  return{html:`<div style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #d4d4d4;padding:28px 32px;font:14px/1.5 Arial,Helvetica,sans-serif;color:#111"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52626a;text-transform:uppercase;margin-bottom:8px">On-screen reference · not a PDF packet document</div><h2 style="margin:0 0 6px;font-size:22px">Carrier Communication Guide</h2><p style="margin:0 0 20px">Live TNC carrier call scripts and objection handling. Tailor the editable text in the form before use, document each carrier response in Snapsheet, and escalate whenever directed.</p><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;margin:0 0 20px;font-size:12px"><div><b>Adjuster:</b> ${esc(g.adjuster)}</div><div><b>Carrier:</b> ${esc(g.carrier)}</div><div><b>Claim:</b> ${esc(g.claim)}</div><div><b>Date of loss:</b> ${esc(g.loss)}</div><div><b>Driver:</b> ${esc(g.driver)}</div><div><b>TNC:</b> ${esc(g.tnc)}</div></div><h3 style="font-size:16px;margin:0 0 9px">Conversation stages</h3>${stages.join("")}<h3 style="font-size:16px;margin:20px 0 9px">Common carrier objections and responses</h3>${objections.join("")}</div>`,miss:[]};
+ }
  if(d==="carrier_email"){
   const subject=s.emailSubject||`Coverage verification request — ${s.snap||s.kc||"[Whip claim number]"}`;
   const body=s.emailBody||`Hello ${s.emailAdjuster||"Claims Team"},\n\nWhip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.\n\nPlease confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.\n\nVehicle: ${s.vehicle||"[Vehicle]"}\nVIN: ${s.vin||"[VIN]"}\nDate of loss: ${s.dol?ld(s.dol):"[Date of loss]"}\nWhip claim number: ${s.snap||s.kc||"[Whip claim number]"}\n\nPlease reply to this email or contact Whip Claims Management with the coverage information.\n\nThank you,\n${s.hn||"[Handler name]"}\nWhip Claims Management`;
@@ -565,6 +595,7 @@ async function copyCarrierCoverageEmail(){const to=String(F.emailRecipient||"").
 Subject: ${subject}
 
 ${body}`;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove()}say("Carrier coverage request email copied. It has not been sent.")}catch(e){say("Could not copy the email. Select the editable text and copy it manually.")}}
+async function copyCarrierCommunicationGuide(){const g=carrierGuideData(F);const text=[`CARRIER COMMUNICATION GUIDE`,"",`Adjuster: ${g.adjuster}`,`Carrier: ${g.carrier}`,`Claim: ${g.claim}`,`Date of loss: ${g.loss}`,`Driver: ${g.driver}`,`TNC: ${g.tnc}`,"",`OPENING\n${g.opening}`,"",`SET UP THE COVERAGE QUESTION\n${g.coverage}`,"",`THE ASK\n${g.ask}`,"",...g.objections.map(item=>`${item.title}\n${item.response}\nHandler actions:\n${item.instructions.map(action=>`- ${action}`).join("\n")}\n`)].join("\n");try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove()}say("Carrier Communication Guide copied. It has not been sent.")}catch(e){say("Could not copy the guide. Select the editable text and copy it manually.")}}
 async function genpolFlow(){const ex=dupVin();
  if(ex&&ex.pn!==F.pn){if(!await ask("This vehicle already has policy "+ex.pn+" ("+ex.member+"). One policy per lease. A renewal or correction keeps that number. Only continue if this is a new lease.","New lease, issue a new number"))return;F.ack=(F.vin||"").trim().toUpperCase()}
  if(F.pn&&!await ask("Replace the policy number with a new one?","Replace"))return;
@@ -580,6 +611,7 @@ document.addEventListener("click",e=>{
  else if(a==="genclm"){const sn=(F.snap||"").trim();if(!sn){say("Enter the Snapsheet claim number first.");return}if(!K.map[sn])K.map[sn]=newClaim();F.kc=K.map[sn];if(!K.clms.some(c=>c.kc===F.kc))K.clms.push({kc:F.kc,snap:sn,pn:F.pn||"",dol:F.dol||""});save();buildForm();preview()}
  else if(a==="dopClearSignature"){F.dopSignatureData="";clearDopCertification();save();buildForm();preview();say("Signature cleared. Draw a new mark and confirm authority before printing.")}
  else if(a==="copyCarrierCoverageEmail"){copyCarrierCoverageEmail()}
+ else if(a==="copyCarrierCommunicationGuide"){copyCarrierCommunicationGuide()}
  else if(a==="decode"){decodeVin()}
  else if(a==="reg"){openReg()}
  else if(a==="regtab"){regTab=b.dataset.v;openReg()}
@@ -756,7 +788,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     try {
       const rs = preview();
       const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];
-      if (!all && !isPrintablePdf(F.sel)) throw new Error("This is an email template. Use Copy Email; it is not a printable PDF.");
+      if (!all && !isPrintablePdf(F.sel)) throw new Error(F.sel === "carrier_guide" ? "This is an on-screen communication guide. Use Copy guide; it is not a printable PDF." : "This is an email template. Use Copy Email; it is not a printable PDF.");
       const printable = candidates.filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
       if (!printable.length) throw new Error(all ? "No completed printable PDFs are ready. Complete the marked required fields; email templates and communication scripts are not included in print packets." : "Complete the marked required fields before printing.");
       const policy = await persistTermIfNeeded();

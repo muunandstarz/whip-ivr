@@ -52,7 +52,8 @@ describe("Klutch policy documents source integration", () => {
 
   it("makes every form previewable in All forms without manager or claim-document gates", () => {
     expect(sourcePage).toContain('const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]]');
-    expect(sourcePage).toContain('return DOCS.map(x=>x[0])');
+    expect(sourcePage).toContain('const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"]');
+    expect(sourcePage).toContain('return [...new Set([...packet,...NON_PDF_REFERENCE_IDS])]');
     expect(sourcePage).toContain('const denialClaim=claim||{kc:s.kc||"[Klutch claim number]"');
     expect(sourcePage).toContain('if(d==="end")h+=sec("Endorsement")');
     expect(sourcePage).toContain('This form is available for preview and creation without a manager-approval or carrier-evidence field.');
@@ -215,35 +216,54 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('const { dopSignerContact: _legacyDopSignerContact, ...documentState } = F;');
   });
 
-  it("matches the supplied MetroCars form scale and positions signatures and dates directly on their rules", () => {
+  it("matches the supplied MetroCars form scale and positions signatures and dates cleanly on their rules", () => {
     expect(sourcePage).toContain('.dopdoc{font-size:13.3px;line-height:1.48}');
     expect(sourcePage).toContain('.dopdoc-p2{font-size:12px;line-height:1.45}');
     expect(sourcePage).toContain('.dop-department{font-size:13.3px;margin-top:-17px}');
     expect(sourcePage).toContain('.dop-signatures{grid-template-columns:1fr .7fr;gap:16px 34px;margin-top:66px');
-    expect(sourcePage).toContain('.dop-signature-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto');
-    expect(sourcePage).toContain('.dop-sign-image{position:absolute;left:4px;bottom:calc(100% - 1px)');
-    expect(sourcePage).toContain('.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% - 1px)');
-    expect(sourcePage).toContain('.dop-date-value{top:-13px}');
+    expect(sourcePage).toContain('.dop-signature-wrap{display:block;position:relative}');
+    expect(sourcePage).toContain('.dop-sign-image{position:absolute;left:4px;bottom:calc(100% - 5px)');
+    expect(sourcePage).toContain('.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% - 5px)');
+    expect(sourcePage).toContain('.dop-date-value{top:-10px}');
+    expect(sourcePage).toContain('.dop-cert{position:absolute;right:0;top:calc(100% + 3px)');
     const buildDocStart = sourcePage.indexOf("function buildDoc(");
     const dopStart = sourcePage.indexOf('if(d==="dop")', buildDocStart);
     const dopRenderer = sourcePage.slice(dopStart, sourcePage.indexOf('if(d==="end")', dopStart));
     expect(dopRenderer).toContain('dop-line-value dop-date-value');
   });
 
-  it("keeps editable carrier coverage email templates and future scripts out of PDF print packets", () => {
+  it("keeps editable carrier coverage email templates and communication scripts out of PDF print packets", () => {
     expect(sourcePage).toContain('["carrier_email","Carrier Coverage Request Email"]');
+    expect(sourcePage).toContain('["carrier_guide","Carrier Communication Guide"]');
     expect(sourcePage).toContain('Carrier Coverage Request Email');
+    expect(sourcePage).toContain('Carrier Communication Guide');
     expect(sourcePage).toContain('Copy Email');
     expect(sourcePage).toContain('copyCarrierCoverageEmail');
+    expect(sourcePage).toContain('Copy guide');
+    expect(sourcePage).toContain('copyCarrierCommunicationGuide');
+    expect(sourcePage).toContain('function carrierGuideData');
+    expect(sourcePage).toContain('Metrocars is the owner of the vehicle your insured driver was operating.');
+    expect(sourcePage).toContain('We’re requesting a review of whether ${tnc}\'s physical-damage coverage responds to this loss.');
+    expect(sourcePage).toContain('Can you confirm that you’ve received everything needed to make a coverage determination');
+    expect(sourcePage).toContain('We need proof that the vehicle owner is a registered self-insured entity.');
+    expect(sourcePage).toContain('We need a signed Direction of Pay or we’ll issue payment to the driver.');
+    expect(sourcePage).toContain('We’re denying coverage.');
+    expect(sourcePage).toContain('document the carrier response in Snapsheet');
+    expect(sourcePage).toContain('Escalate to leadership for review before responding further.');
     expect(sourcePage).toContain('whether your insured’s policy provides comprehensive and/or collision coverage');
     expect(sourcePage).toContain('Handler guide — carrier coverage verification');
     expect(sourcePage).toContain('if(d==="carrier_email")');
+    expect(sourcePage).toContain('if(d==="carrier_guide")');
     expect(sourcePage).toContain('Editable email preview · not a PDF packet document');
+    expect(sourcePage).toContain('On-screen reference · not a PDF packet document');
     expect(sourcePage).toContain('const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop"]');
+    expect(sourcePage).toContain('const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"]');
     expect(sourcePage).toContain('const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];');
     expect(sourcePage).toContain('const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;');
     expect(sourcePage).toContain('This is an email template. Use Copy Email; it is not a printable PDF.');
+    expect(sourcePage).toContain('This is an on-screen communication guide. Use Copy guide; it is not a printable PDF.');
     expect(sourcePage).toContain('email templates and communication scripts are not included in print packets');
     expect(sourcePage).not.toContain('carrier_email: "');
+    expect(sourcePage).not.toContain('carrier_guide: "');
   });
 });
