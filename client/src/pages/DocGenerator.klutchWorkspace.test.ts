@@ -176,4 +176,24 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('chk("dopAttachRegistration"');
     expect(sourcePage).not.toContain('chk("dopAttachPoi"');
   });
+
+  it("captures a Direction of Pay e-signature and prints an honest certification stamp beneath the signature line", () => {
+    const buildDocStart = sourcePage.indexOf("function buildDoc(");
+    const dopStart = sourcePage.indexOf('if(d==="dop")', buildDocStart);
+    const dopRenderer = sourcePage.slice(dopStart, sourcePage.indexOf('if(d==="end")', dopStart));
+
+    expect(sourcePage).toContain('Authorized representative e-signature');
+    expect(sourcePage).toContain('id="dopSignatureCanvas"');
+    expect(sourcePage).toContain('Draw signature');
+    expect(sourcePage).toContain('Use typed signature');
+    expect(sourcePage).toContain('dopSignatureAccepted');
+    expect(sourcePage).toContain('I certify that I am authorized to sign this Direction of Pay for Metrocars Leasing Corp.');
+    expect(sourcePage).toContain('dopSignatureCertificateId');
+    expect(sourcePage).toContain('data:image\\/png;base64');
+    expect(dopRenderer).toContain('ELECTRONIC SIGNATURE CERTIFICATION');
+    expect(dopRenderer).toContain('Authority attested');
+    expect(dopRenderer).toContain('dop-cert');
+    expect(dopRenderer).toContain('dop-sign-line');
+    expect(dopRenderer).not.toContain('DocuSign');
+  });
 });
