@@ -4137,7 +4137,7 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [handlerName, setHandlerName] = useState("");
   const [handlerExtension, setHandlerExtension] = useState("");
-  const [carrierEmail, setCarrierEmail] = useState("");
+  const [claimEmail, setClaimEmail] = useState("");
   const [vinDecoding, setVinDecoding] = useState(false);
   const [louRepairStart, setLouRepairStart] = useState("");
   const [louRepairEnd, setLouRepairEnd] = useState("");
@@ -4357,7 +4357,8 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
     day: "numeric",
     year: "numeric",
   });
-  const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Email: claims@drivewhip.com`;
+  const claimEmailAddress = claimEmail.trim() || "claims@drivewhip.com";
+  const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Claim email: ${claimEmailAddress}`;
 
   const preview = `${today}
 
@@ -4401,6 +4402,7 @@ Please remit payment in full within ${form.deadline || "15"} days of the date of
 This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
 PAYMENT INSTRUCTIONS
 Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.
+For claim-specific correspondence about this demand, please email ${claimEmailAddress}.
 Respectfully,
 ${handlerName || ""}
 Whip Claims Management
@@ -4519,9 +4521,9 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
 
     const demandText = `Please remit payment in full within ${form.deadline || "15"} days of the date of this letter. If we do not receive payment or a substantive response within this timeframe, this office reserves the right to pursue recovery through Arbitration Forums, Inc., the applicable state Department of Insurance, or civil litigation, and to seek recovery of any interest, costs, and fees permitted under applicable law.
 
-This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
+	This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
 
-Please make payment payable to Whip Claims Management and mail it to P.O. Box 10622, Rockville, MD 20849. For EFT instructions, contact the undersigned. Reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.`;
+	Please make payment payable to Whip Claims Management and mail it to P.O. Box 10622, Rockville, MD 20849. For EFT instructions, contact the undersigned. Reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments. For claim-specific correspondence about this demand, please email ${claimEmailAddress}.`;
     const demandLines = doc.splitTextToSize(demandText, tw) as string[];
     const paymentAndSignatureHeight = 6 + demandLines.length * compactLeading + 5 + (handlerName ? 21 : 17);
 
@@ -4669,19 +4671,19 @@ Please make payment payable to Whip Claims Management and mail it to P.O. Box 10
             </Select>
           </div>
         </Panel>
-        <Panel title="Carrier / Adjuster Email" tag="CLAIM CONTACT">
+        <Panel title="Claim-Specific Reply-To Email" tag="PRINTS ON LETTER">
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
             <div className="flex items-start gap-2">
               <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800">Carrier delivery contact for this demand</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-slate-600">Enter the carrier or adjuster’s claim-specific email here. It remains part of this demand form and does not print on the letter. Use the approved claim delivery workflow to add or send the correspondence; this field does not send, forward, queue, or add anything to Mailroom.</p>
+                <p className="text-xs font-semibold text-slate-800">Reply-to address for this claim file</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-slate-600">Enter the claim-specific email address recipients should use for this loss. It prints in the demand letter’s signature contact line as “Claim email” and replaces the general claims inbox for this letter only. This field does not send, forward, queue, or add anything to Mailroom.</p>
               </div>
             </div>
           </div>
           <div className="mt-3 space-y-1">
-            <Label htmlFor="sd-carrier-email" className="text-xs font-semibold text-foreground/80">Carrier / adjuster email</Label>
-            <Input id="sd-carrier-email" type="email" className="h-8 text-sm" value={carrierEmail} onChange={(event) => setCarrierEmail(event.target.value)} placeholder="adjuster@carrier.com" />
+            <Label htmlFor="sd-claim-email" className="text-xs font-semibold text-foreground/80">Claim email address</Label>
+            <Input id="sd-claim-email" type="email" className="h-8 text-sm" value={claimEmail} onChange={(event) => setClaimEmail(event.target.value)} placeholder="claim-specific@example.com" />
           </div>
         </Panel>
         <Panel title="Opening Paragraph" tag="EDITABLE">
