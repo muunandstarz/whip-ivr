@@ -150,14 +150,30 @@ describe("Klutch policy documents source integration", () => {
   });
 
   it("offers a fillable two-page Metrocars Direction of Pay with selectable payment and attachment checkboxes", () => {
+    const buildDocStart = sourcePage.indexOf("function buildDoc(");
+    const dopStart = sourcePage.indexOf('if(d==="dop")', buildDocStart);
+    const dopRenderer = sourcePage.slice(dopStart, sourcePage.indexOf('if(d==="end")', dopStart));
+
     expect(sourcePage).toContain('["dop","Direction of Pay & Vehicle Ownership Notice"]');
-    expect(sourcePage).toContain('if(d==="dop")');
-    expect(sourcePage).toContain('REPAIR PAYMENT — make payment directly to Total Recon — Laurel');
-    expect(sourcePage).toContain('REPAIR PAYMENT — make payment directly to Total Recon — Rockville');
-    expect(sourcePage).toContain('TOTAL LOSS — make payment payable to Metrocars Leasing Corp.');
-    expect(sourcePage).toContain('SUBROGATION RECOVERY — make payment payable to Metrocars Leasing Corp.');
-    expect(sourcePage).toContain('Documents attached or available upon request');
+    expect(sourcePage).toContain('dopFld("dopWhipClaim","Metrocars / Whip claim number"');
+    expect(sourcePage).toContain('dopFld("dopRegistration","Registration / plate"');
+    expect(sourcePage).toContain('dopFld("dopRepairFacility","Repair facility"');
+    expect(dopRenderer).toContain('Metrocars Leasing Corp. | Claims Department');
+    expect(dopRenderer).toContain('DIRECTION OF PAY AND VEHICLE OWNERSHIP NOTICE');
+    expect(dopRenderer).toContain('Physical-damage claim');
+    expect(dopRenderer).toContain('TO (CARRIER AND CLAIMS DEPARTMENT)');
+    expect(dopRenderer).toContain('REPAIR PAYMENT — make payment directly to Total Recon — Laurel, 3521 Whiskey Bottom Rd, Laurel, MD 20724.');
+    expect(dopRenderer).toContain('REPAIR PAYMENT — make payment directly to Total Recon — Rockville, 627 Southlawn Lane, Rockville, MD 20850.');
+    expect(dopRenderer).toContain('TOTAL LOSS — make payment payable to Metrocars Leasing Corp., 14670 Southlawn Lane, Rockville, MD 20850, as owner.');
+    expect(dopRenderer).toContain('SUBROGATION RECOVERY — make payment payable to Metrocars Leasing Corp., 14670 Southlawn Lane, Rockville, MD 20850.');
+    expect(dopRenderer).toContain('Title, electronic-title, or lien/ownership record when available, requested, or necessary to resolve ownership or a total loss');
+    expect(dopRenderer).toContain('This notice is limited to payment administration and protection of the vehicle owner’s documented interest.');
+    expect(dopRenderer).toContain('Authorized representative (signature)');
+    expect(dopRenderer).toContain('Email / direct phone');
+    expect(dopRenderer).not.toContain('<img class="lg" src="${LOGO}"');
+    expect(dopRenderer).not.toContain('Klutch Insurance Company');
     expect(sourcePage).toContain('chk("dopPayLaurel"');
     expect(sourcePage).toContain('chk("dopAttachRegistration"');
+    expect(sourcePage).not.toContain('chk("dopAttachPoi"');
   });
 });
