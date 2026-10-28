@@ -89,9 +89,9 @@ input:focus,select:focus{outline:2px solid var(--lime);border-color:var(--teal)}
 .dop-cell{min-height:35px;padding:2px 6px}.dop-label{font-size:10px}.dop-value{font-size:13.3px;line-height:1.12;margin-top:1px;min-height:15px}
 .dop-salutation{margin:17px 0 9px}.dopdoc p{margin:0 0 10px}.dop-section-title{margin:16px 0 9px}.dop-check{gap:16px;margin:0 0 7px;line-height:1.35}.dop-check>span:first-child{font-size:14.5px}.dop-footer{font-size:9px}
 .dopdoc-p2{font-size:12px;line-height:1.45}.dop-department{font-size:13.3px;margin-top:-17px}.dop-signatures{grid-template-columns:1fr .7fr;gap:16px 34px;margin-top:66px;font-size:10.2px}
-.dop-sign-line{height:25px;align-items:flex-start}.dop-sign-image{max-height:29px;margin:-7px 0 0 4px}.dop-typed-sign{font-size:24px;margin:-7px 0 0 5px}.dop-sign-placeholder{margin:-3px 0 0 5px}
-.dop-line{height:20px;padding:0}.dop-line-value{top:-8px;bottom:auto;background:#fff;padding:0 2px;font-size:10.2px;line-height:1.05}.dop-line-spaced{margin-top:0}
-.dop-sign-label{margin-top:2px}.dop-cert{margin-top:4px;padding:2px 5px;font-size:7.2px;line-height:1.15;min-height:0}.dop-cert-status{font-size:7.3px}
+.dop-signature-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end}.dop-sign-line{height:25px;position:relative;overflow:visible;align-items:flex-start}.dop-sign-image{position:absolute;left:4px;bottom:calc(100% - 1px);max-height:29px;margin:0}.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% - 1px);font-size:24px;margin:0}.dop-sign-placeholder{position:absolute;left:5px;bottom:calc(100% - 1px);margin:0}
+.dop-line{height:20px;padding:0}.dop-line-value{top:-11px;bottom:auto;background:#fff;padding:0 2px;font-size:10.2px;line-height:1.05}.dop-date-value{top:-13px}.dop-line-spaced{margin-top:0}
+.dop-sign-label{margin-top:2px}.dop-cert{margin:0;padding:0;border:0;background:none;min-height:0;font-size:7.2px;line-height:1.1;white-space:nowrap;color:#385b5e}.dop-cert.pending{color:#666}.dop-cert-status{font-size:7.3px}
 .end{font-family:Arial,sans-serif;font-size:12.6px;line-height:1.5;color:#000;padding:44px 72px 0}
 .end h4{font-size:12.6px;margin:10px 0 4px}.end p{margin-bottom:6px}
 .end .it{margin:0 0 6px 36px;text-indent:-24px}
@@ -206,8 +206,10 @@ const RULES={
 const W={bi:30,pd:12,coll:25,comp:13,um:7,uim:5,pip:8};
 /* -------------------------------------- */
 const COVS=[["bi","Bodily injury liability"],["pd","Property damage liability"],["pip","Personal injury protection"],["um","Uninsured motorist bodily injury"],["uim","Underinsured motorist bodily injury"],["comp","Comprehensive"],["coll","Collision"]];
-const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["dop","Direction of Pay & Vehicle Ownership Notice"]];
-const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest."};
+const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["dop","Direction of Pay & Vehicle Ownership Notice"],["carrier_email","Carrier Coverage Request Email"]];
+const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop"];
+const isPrintablePdf=id=>PRINTABLE_PDF_IDS.includes(id);
+const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest.",carrier_email:"Editable non-PDF carrier communication. Copy it into the current claim delivery workflow; email templates and future communication scripts are excluded from PDF print packets."};
 const PERIODS={1:"waiting for a ride request",2:"traveling to pick up a passenger",3:"transporting a passenger"};
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -241,6 +243,7 @@ function load(){try{F=JSON.parse(localStorage.getItem("klutch_form_v3"))}catch(e
  F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()},F);
  if(F.stateConfirmed!==true||F.confirmedState!==F.st){F.stateConfirmed=false;F.confirmedState=""}
  if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}
+ if(Object.prototype.hasOwnProperty.call(F,"dopSignerContact")){delete F.dopSignerContact;try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}
  if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{}};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100}
 function upsert(){if(!F.pn)return;const r=K.pols[F.pn]||(K.pols[F.pn]={pn:F.pn,terms:[]});
  ["st","mno","member","address","city","cst","zip","vehicle","vin","pip","um","lease","cdate","compD","collD"].forEach(k=>r[k]=F[k]||"");
@@ -323,6 +326,28 @@ function buildForm(){
   h+=sec("Carrier");
   h+=fld("carrier","Carrier name",3)+fld("cclm","Carrier claim number",3)+fld("attn","Adjuster name and title",6)+fld("caddr","Carrier street address",3)+fld("ccity","City, State ZIP",3)+fld("cdt","Date of carrier letter",3,{t:"date"})+fld("rec","Supporting records",3);
  }
+ if(d==="carrier_email"){
+  const defaultSubject=`Coverage verification request — ${F.snap||F.kc||"[Whip claim number]"}`;
+  const defaultBody=`Hello ${F.emailAdjuster||"Claims Team"},
+
+Whip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.
+
+Please confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.
+
+Vehicle: ${F.vehicle||"[Vehicle]"}
+VIN: ${F.vin||"[VIN]"}
+Date of loss: ${F.dol?ld(F.dol):"[Date of loss]"}
+Whip claim number: ${F.snap||F.kc||"[Whip claim number]"}
+
+Please reply to this email or contact Whip Claims Management with the coverage information.
+
+Thank you,
+${F.hn||"[Handler name]"}
+Whip Claims Management`;
+  if(F.emailSubject===undefined)F.emailSubject=defaultSubject;if(F.emailBody===undefined)F.emailBody=defaultBody;
+  h=`<div class="f">${sec("Carrier Coverage Request Email")}<div class="s6 note" style="margin-top:-2px">Use this editable communication when requesting the adverse carrier’s comprehensive and collision coverage information. It is a non-PDF working email: Copy Email does not issue a policy, create a document record, or send anything.</div>${fld("emailRecipient","Carrier recipient email",3,{t:"email"})}${fld("emailAdjuster","Carrier adjuster / claims contact",3)}${fld("emailSubject","Subject",6)}<div class="s6"><label>Email body</label><textarea data-k="emailBody" style="min-height:250px;width:100%;resize:vertical">${esc(F.emailBody||defaultBody)}</textarea></div><div class="s6"><details class="note"><summary style="cursor:pointer;font-weight:700">Handler guide — carrier coverage verification</summary><ul style="margin:8px 0 0 18px;line-height:1.5"><li>Identify Whip Claims Management and Metrocars Leasing Corp.’s owner/lessor interest.</li><li>Request confirmation of comprehensive and collision coverage, including conditions, limits, deductible, and required records.</li><li>Review and tailor the recipient, subject, and facts before copying the email into the approved claim delivery workflow.</li><li>Attach only the records appropriate for the claim. This email template and future communication scripts are not PDF packet documents.</li></ul></details></div><div class="s6"><button type="button" class="b" data-act="copyCarrierCoverageEmail">Copy Email</button></div></div>`;
+  $("#form").innerHTML=h;return;
+ }
  if(d==="dop"){
   if(!F.dopDate)F.dopDate=today();if(!F.dopSignerDate)F.dopSignerDate=F.dopDate;if(!F.dopSignatureMode)F.dopSignatureMode="draw";
   const dopFld=(k,l,sp,o={})=>`<div class="s${sp||3}"><label>${l}</label><input data-k="${k}" ${o.t?`type="${o.t}"`:""} value="${esc(F[k]||o.v||"")}"></div>`;
@@ -339,9 +364,9 @@ function buildForm(){
   h+=sec("Documents attached or available upon request");
   h+=`<div class="s6"><div style="display:grid;gap:8px">${chk("dopAttachRegistration","Current vehicle registration")}${chk("dopAttachLease","Lease agreement or other Metrocars ownership-interest confirmation")}${chk("dopAttachTitle","Title, electronic-title, or lien/ownership record when available, requested, or necessary to resolve ownership or a total loss")}${chk("dopAttachEstimate","Repair estimate or final repair invoice, as applicable")}${chk("dopAttachInvoice","Total Recon estimate, repair order, final bill, or other repair-facility payee confirmation, as applicable")}</div></div>`;
   h+=sec("Authorized representative e-signature");
-  h+=`<div class="s6 note" style="margin-top:-2px">The signer’s mark, identity, title, signing date, authority attestation, and electronic-signature certification stamp print on page 2. The signed form state is retained in the document record when you Print / Save as PDF.</div>`;
+  h+=`<div class="s6 note" style="margin-top:-2px">The signer’s mark, identity, title, signing date, authority attestation, and a small e-signature certification indicator print on page 2. The signed form state is retained in the document record when you Print / Save as PDF.</div>`;
   h+=dopFld("dopSignerName","Authorized representative full name",3)+dopFld("dopSignerTitle","Title",3);
-  h+=dopFld("dopSignerContact","Email / direct phone",3)+dopFld("dopSignerDate","Signing date",3,{t:"date"});
+  h+=dopFld("dopSignerDate","Signing date",3,{t:"date"});
   h+=`<div class="s6"><label>Signature method</label>${seg("dopSignatureMode",[["draw","Draw signature"],["typed","Use typed signature"]])}</div>`;
   if(F.dopSignatureMode==="typed"){
     h+=`<div class="s6 note">The signer’s entered full name will be rendered in a signature style on the signature line. Select Draw signature to capture a handwritten mark instead.</div>`;
@@ -399,8 +424,8 @@ function preview(){
  const dv=dupVin();
  const vk=(F.vin||"").trim().toUpperCase(),dvBlock=!!(dv&&dv.pn!==F.pn&&F.ack!==vk);
  $("#ban").innerHTML=(dv&&dv.pn!==F.pn?(dvBlock?`<div class="warn err">This vehicle already has policy <b>${dv.pn}</b> (${esc(dv.member)}). One policy per lease. Choose one before you can print:<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="b" style="padding:5px 12px" data-act="loadren" data-v="${dv.pn}">Renew that policy</button><button class="b ghost" style="padding:5px 12px" data-act="loadcor" data-v="${dv.pn}">Correct that policy</button><button class="b ghost" style="padding:5px 12px" data-act="ackdup">This is a new lease. Issue a new policy.</button></div></div>`:`<div class="warn">New lease acknowledged. Existing policy on this vehicle: <b>${dv.pn}</b> (${esc(dv.member)}).</div>`):"")+`<div class="note" style="margin-bottom:8px">${DOCNOTE[F.sel]}</div>`+(r.err?`<div class="warn err">${r.err}</div>`:(r.miss.length?`<div class="warn">Still needed: ${[...new Set(r.miss)].join(", ")}.</div>`:""));
- $("#prt").disabled=!!(r.err||r.miss.length||dvBlock);
- const sd=setDocs(),n=sd.filter(k=>!rs[k].err&&!rs[k].miss.length).length,multi=sd.length>1;
+ const selectedIsEmail=!isPrintablePdf(F.sel);$("#prt").style.display=selectedIsEmail?"none":"";$("#prt").disabled=selectedIsEmail||!!(r.err||r.miss.length||dvBlock);
+ const sd=setDocs(),packetIds=PRINTABLE_PDF_IDS.filter(id=>sd.includes(id)),n=packetIds.filter(k=>!rs[k].err&&!rs[k].miss.length).length,multi=packetIds.length>1;
  $("#prtall").style.display=multi?"":"none";$("#prtall").disabled=!n||dvBlock;$("#prtall").textContent=F.set==="liab"?`Print dec page + cancellation (${n})`:(n?`Print all ready documents (${n})`:"Print all ready documents");
  $("#pv").innerHTML=r.html||`<div class="empty">Fill in the form to see the document.</div>`;fit();return rs}
 function fit(){const pv=$("#pv");if(!pv)return;const k=Math.min(1,(pv.clientWidth-36)/816);document.querySelectorAll("#pv .sheet").forEach(sh=>{sh.style.transform=k<1?`scale(${k})`:"";sh.style.marginBottom=k<1?`${(1056*k-1056)+18}px`:"18px"})}
@@ -418,6 +443,11 @@ function buildDoc(d,pol,claim,s){
  const hand=()=>{if(!s.hn)miss.push("handler name");if(!s.ht)miss.push("handler title");
   return L(esc(s.hn||"")||"&nbsp;")+L(esc(s.ht||"")||"&nbsp;")+L("Klutch Insurance Company")+L("claims@klutchinsurance.com")};
  const sheet=(inner,cls)=>`<div class="sheet ${cls}">${inner}</div>`;
+ if(d==="carrier_email"){
+  const subject=s.emailSubject||`Coverage verification request — ${s.snap||s.kc||"[Whip claim number]"}`;
+  const body=s.emailBody||`Hello ${s.emailAdjuster||"Claims Team"},\n\nWhip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.\n\nPlease confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.\n\nVehicle: ${s.vehicle||"[Vehicle]"}\nVIN: ${s.vin||"[VIN]"}\nDate of loss: ${s.dol?ld(s.dol):"[Date of loss]"}\nWhip claim number: ${s.snap||s.kc||"[Whip claim number]"}\n\nPlease reply to this email or contact Whip Claims Management with the coverage information.\n\nThank you,\n${s.hn||"[Handler name]"}\nWhip Claims Management`;
+  return{html:`<div style="max-width:710px;margin:0 auto;background:#fff;border:1px solid #d4d4d4;padding:28px 32px;font:14px/1.5 Arial,Helvetica,sans-serif;color:#111"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52626a;text-transform:uppercase;margin-bottom:18px">Editable email preview · not a PDF packet document</div><div style="margin-bottom:8px"><b>To:</b> ${esc(s.emailRecipient||"[Carrier recipient email]")}</div><div style="margin-bottom:18px"><b>Subject:</b> ${esc(subject)}</div><div style="white-space:normal">${esc(body).replace(/\n/g,"<br>")}</div></div>`,miss:[]};
+ }
  if(d==="dec"){
   const c=T.cov;
   const rowv=(k,l)=>{const lim=c[k]||"";const p=parseFloat(c[k+"P"]);if(!lim)miss.push(l+" limit");
@@ -444,15 +474,16 @@ function buildDoc(d,pol,claim,s){
   const checked=(key,label)=>`<div class="dop-check"><span>${s[key]?"☒":"☐"}</span><span>${label}</span></div>`;
   const cell=(label,value)=>`<div class="dop-cell"><div class="dop-label">${label}</div><div class="dop-value">${value}</div></div>`;
   const safeSignature=value=>typeof value==="string"&&/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value)&&value.length<180000?value:"";
-  const signerName=String(s.dopSignerName||"").trim(),signerTitle=String(s.dopSignerTitle||"").trim(),signerContact=String(s.dopSignerContact||"").trim();
+  const signerName=String(s.dopSignerName||"").trim(),signerTitle=String(s.dopSignerTitle||"").trim();
   const signerDate=s.dopSignerDate||s.dopDate||today(),signatureImage=safeSignature(s.dopSignatureData),signatureMode=s.dopSignatureMode==="typed"?"typed":"draw";
   const hasElectronicMark=Boolean(signatureImage||(signatureMode==="typed"&&signerName));
   const signatureComplete=Boolean(signerName&&signerTitle&&hasElectronicMark&&s.dopSignatureAccepted);
-  if(!signerName)miss.push("authorized representative full name");if(!signerTitle)miss.push("authorized representative title");if(!hasElectronicMark)miss.push("electronic signature");if(!s.dopSignatureAccepted)miss.push("authority certification");
+  const signatureCertified=Boolean(signatureComplete&&s.dopSignatureCertificateId&&s.dopSignatureCertifiedAt);
+  if(!signerName)miss.push("authorized representative full name");if(!signerTitle)miss.push("authorized representative title");if(!hasElectronicMark)miss.push("electronic signature");if(!s.dopSignatureAccepted)miss.push("authority certification");if(signatureComplete&&!signatureCertified)miss.push("e-signature certification");
   const signatureVisual=signatureImage?`<img class="dop-sign-image" src="${signatureImage}" alt="Electronic signature">`:signerName&&signatureMode==="typed"?`<div class="dop-typed-sign">${esc(signerName)}</div>`:`<div class="dop-sign-placeholder">[Electronic signature required]</div>`;
-  const certificate=signatureComplete?`<div class="dop-cert"><div class="dop-cert-status">✓ ELECTRONIC SIGNATURE CERTIFICATION</div><div>Signed by ${esc(signerName)}${signerTitle?` · ${esc(signerTitle)}`:""}</div><div>Authority attested · ${esc(ld(signerDate))} · ${esc(s.dopSignatureCertificateId||"MC-DOP-DRAFT")}</div></div>`:`<div class="dop-cert pending"><div class="dop-cert-status">ELECTRONIC SIGNATURE CERTIFICATION PENDING</div><div>Complete the signatory fields, signature mark, and authority certification before printing.</div></div>`;
+  const certificate=signatureCertified?`<span class="dop-cert"><b>E-signature certified</b> · ${esc(s.dopSignatureCertificateId)}</span>`:`<span class="dop-cert pending">E-signature certification pending</span>`;
   const p1=sheet(`<div class="dopdoc"><div class="dop-brand">Metrocars Leasing Corp. | Claims Department</div><div class="dop-title">DIRECTION OF PAY AND VEHICLE OWNERSHIP NOTICE</div><div class="dop-subtitle">Physical-damage claim</div><div class="dop-instruction">Complete the bracketed fields and select one payment instruction before sending</div><div class="dop-grid">${cell("DATE",bracket(s.dopDate?ld(s.dopDate):"","[Month Day, Year]"))}${cell("TO (CARRIER AND CLAIMS DEPARTMENT)",bracket(s.dopCarrier,"[Carrier name and claims department]"))}${cell("CARRIER CLAIM NUMBER",bracket(s.dopCarrierClaim,"[Carrier claim number]"))}${cell("METROCARS / WHIP CLAIM NUMBER",bracket(s.dopWhipClaim,"[Full claim number]"))}${cell("INSURED DRIVER / OPERATOR",bracket(s.dopInsured||nm,"[Full name]"))}${cell("VEHICLE",bracket(s.dopVehicle||pol.vehicle,"[Year make model]"))}${cell("VIN",bracket(s.dopVin||pol.vin,"[17-character VIN]"))}${cell("DATE OF LOSS",bracket(s.dopLoss?ld(s.dopLoss):"","[Month Day, Year]"))}${cell("REGISTRATION / PLATE",bracket(s.dopRegistration,"[State and plate, if useful]"))}${cell("REPAIR FACILITY",bracket(s.dopRepairFacility,"[Facility name and city]"))}</div><div class="dop-salutation">To the Claims Team:</div><p>Metrocars Leasing Corp. is the owner and lessor of the vehicle identified above. Please reflect Metrocars’ documented ownership interest in your claim file and do not issue payment for the vehicle solely to the insured driver or operator before confirming the payment instruction selected below.</p><p>After coverage is confirmed and the payable amount is established, please issue a covered physical-damage repair payment directly to the selected Total Recon location. For a total loss or a subrogation recovery, please issue payment to Metrocars Leasing Corp. at the address shown below. If your policy, claim procedures, or applicable law require a different authorization or payee arrangement, please contact Metrocars before payment is released.</p><div class="dop-section-title">Payment instruction — select one before sending</div>${checked("dopPayLaurel","REPAIR PAYMENT — make payment directly to Total Recon — Laurel, 3521 Whiskey Bottom Rd, Laurel, MD 20724.")}${checked("dopPayRockville","REPAIR PAYMENT — make payment directly to Total Recon — Rockville, 627 Southlawn Lane, Rockville, MD 20850.")}${checked("dopPayTotalLoss","TOTAL LOSS — make payment payable to Metrocars Leasing Corp., 14670 Southlawn Lane, Rockville, MD 20850, as owner.")}${checked("dopPaySubro","SUBROGATION RECOVERY — make payment payable to Metrocars Leasing Corp., 14670 Southlawn Lane, Rockville, MD 20850.")}<div class="dop-section-title">Documents attached or available upon request</div>${checked("dopAttachRegistration","Current vehicle registration")}${checked("dopAttachLease","Lease agreement or other Metrocars ownership-interest confirmation")}${checked("dopAttachTitle","Title, electronic-title, or lien/ownership record when available, requested, or necessary to resolve ownership or a total loss")}${checked("dopAttachEstimate","Repair estimate or final repair invoice, as applicable")}${checked("dopAttachInvoice","Total Recon estimate, repair order, final bill, or other repair-facility payee confirmation, as applicable")}<div class="dop-footer">Metrocars Leasing Corp. | Direction of Pay and Vehicle Ownership Notice</div></div>`,`dop`);
-  const p2=sheet(`<div class="dopdoc dopdoc-p2"><p class="dop-disclaimer">This notice is limited to payment administration and protection of the vehicle owner’s documented interest. It does not create coverage, concede liability, assign any claim, waive any right, settle a claim, or authorize repairs. Coverage, liability, valuation, repair approval, and the final payee remain subject to the applicable policy, claim review, lease/title evidence, and governing law.</p><div class="dop-department">METROCARS LEASING CORP. — Claims Department</div><div class="dop-signatures"><div><div class="dop-sign-line">${signatureVisual}</div>${certificate}<div class="dop-sign-label">Authorized representative (signature)</div></div><div><div class="dop-line">${signerDate?`<span class="dop-line-value">${esc(ld(signerDate))}</span>`:""}</div><div>Date</div></div><div><div class="dop-line dop-line-spaced">${signerName?`<span class="dop-line-value">${esc(signerName)}${signerTitle?` — ${esc(signerTitle)}`:""}</span>`:""}</div><div>Printed name and title</div></div><div><div class="dop-line dop-line-spaced">${signerContact?`<span class="dop-line-value">${esc(signerContact)}</span>`:""}</div><div>Email / direct phone</div></div></div><div class="dop-footer">Metrocars Leasing Corp. | Direction of Pay and Vehicle Ownership Notice</div></div>`,`dop`);
+  const p2=sheet(`<div class="dopdoc dopdoc-p2"><p class="dop-disclaimer">This notice is limited to payment administration and protection of the vehicle owner’s documented interest. It does not create coverage, concede liability, assign any claim, waive any right, settle a claim, or authorize repairs. Coverage, liability, valuation, repair approval, and the final payee remain subject to the applicable policy, claim review, lease/title evidence, and governing law.</p><div class="dop-department">METROCARS LEASING CORP. — Claims Department</div><div class="dop-signatures"><div><div class="dop-signature-wrap"><div class="dop-sign-line">${signatureVisual}</div>${certificate}</div><div class="dop-sign-label">Authorized representative (signature)</div></div><div><div class="dop-line">${signerDate?`<span class="dop-line-value dop-date-value">${esc(ld(signerDate))}</span>`:""}</div><div>Date</div></div><div><div class="dop-line dop-line-spaced">${signerName?`<span class="dop-line-value">${esc(signerName)}${signerTitle?` — ${esc(signerTitle)}`:""}</span>`:""}</div><div>Printed name and title</div></div></div><div class="dop-footer">Metrocars Leasing Corp. | Direction of Pay and Vehicle Ownership Notice</div></div>`,`dop`);
   return{html:p1+p2,miss:[...new Set(miss)]};
  }
  if(d==="end"){
@@ -530,6 +561,10 @@ function ask(msg,ok){return new Promise(res=>{const o=document.createElement("di
  o.innerHTML=`<div style="background:#fff;border-radius:14px;padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:15px;line-height:1.5;margin-bottom:18px">${esc(msg)}</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="b ghost" data-r="0">Cancel</button><button class="b" data-r="1">${esc(ok||"OK")}</button></div></div>`;
  o.addEventListener("click",e=>{const b=e.target.closest("[data-r]");if(!b)return;o.remove();res(b.dataset.r==="1")});document.body.appendChild(o);o.querySelector('[data-r="1"]').focus()})}
 function say(msg){const t=document.createElement("div");t.style.cssText="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#013339;color:#fff;padding:12px 20px;border-radius:10px;z-index:99;font-weight:600";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
+async function copyCarrierCoverageEmail(){const to=String(F.emailRecipient||"").trim(),subject=String(F.emailSubject||"").trim(),body=String(F.emailBody||"").trim();const text=`To: ${to||"[Carrier recipient email]"}
+Subject: ${subject}
+
+${body}`;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove()}say("Carrier coverage request email copied. It has not been sent.")}catch(e){say("Could not copy the email. Select the editable text and copy it manually.")}}
 async function genpolFlow(){const ex=dupVin();
  if(ex&&ex.pn!==F.pn){if(!await ask("This vehicle already has policy "+ex.pn+" ("+ex.member+"). One policy per lease. A renewal or correction keeps that number. Only continue if this is a new lease.","New lease, issue a new number"))return;F.ack=(F.vin||"").trim().toUpperCase()}
  if(F.pn&&!await ask("Replace the policy number with a new one?","Replace"))return;
@@ -544,6 +579,7 @@ document.addEventListener("click",e=>{
  else if(a==="genpol"){genpolFlow()}
  else if(a==="genclm"){const sn=(F.snap||"").trim();if(!sn){say("Enter the Snapsheet claim number first.");return}if(!K.map[sn])K.map[sn]=newClaim();F.kc=K.map[sn];if(!K.clms.some(c=>c.kc===F.kc))K.clms.push({kc:F.kc,snap:sn,pn:F.pn||"",dol:F.dol||""});save();buildForm();preview()}
  else if(a==="dopClearSignature"){F.dopSignatureData="";clearDopCertification();save();buildForm();preview();say("Signature cleared. Draw a new mark and confirm authority before printing.")}
+ else if(a==="copyCarrierCoverageEmail"){copyCarrierCoverageEmail()}
  else if(a==="decode"){decodeVin()}
  else if(a==="reg"){openReg()}
  else if(a==="regtab"){regTab=b.dataset.v;openReg()}
@@ -558,7 +594,7 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("input",e=>{if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn")F.handlerNameEntered=true;
  if(k==="stateConfirmed"){F.confirmedState=F.stateConfirmed?F.st:"";save();buildForm();preview();return}
- if(["dopSignerName","dopSignerTitle","dopSignerContact","dopSignerDate"].includes(k)&&F.dopSignatureAccepted)clearDopCertification();
+ if(["dopSignerName","dopSignerTitle","dopSignerDate"].includes(k)&&F.dopSignatureAccepted)clearDopCertification();
  if(k==="dopSignatureAccepted"){if(F.dopSignatureAccepted){F.dopSignatureCertifiedAt=new Date().toISOString();F.dopSignatureCertificateId=F.dopSignatureCertificateId||dopSignatureCertificateId()}else{F.dopSignatureCertifiedAt="";F.dopSignatureCertificateId=""}}
  if(k==="filed"&&!F.ddenManual){F.dden=nextBiz(F.filed);const x=document.querySelector('[data-k="dden"]');if(x)x.value=F.dden}
  if(k==="dden"){if(F.dden){F.ddenManual=true}else{F.ddenManual=false;F.dden=nextBiz(F.filed);e.target.value=F.dden}}
@@ -642,11 +678,14 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       tncUseNote: clean(F.rec),
     };
   };
-  const snapshot = () => ({
-    ...F, dateOfLoss: F.dol || "", tncName: F.tnc || "", tncPeriod: F.period || "", supportingRecords: F.rec || "TNC trip and activity records reviewed",
-    carrierName: F.carrier || "", carrierAddress: [F.caddr, F.ccity].filter(Boolean).join(", "), adjusterName: F.attn || "", carrierClaimNumber: F.cclm || "",
-    dateOfCarrierLetter: F.cdt || "",
-  });
+  const snapshot = () => {
+    const { dopSignerContact: _legacyDopSignerContact, ...documentState } = F;
+    return {
+      ...documentState, dateOfLoss: F.dol || "", tncName: F.tnc || "", tncPeriod: F.period || "", supportingRecords: F.rec || "TNC trip and activity records reviewed",
+      carrierName: F.carrier || "", carrierAddress: [F.caddr, F.ccity].filter(Boolean).join(", "), adjusterName: F.attn || "", carrierClaimNumber: F.cclm || "",
+      dateOfCarrierLetter: F.cdt || "",
+    };
+  };
   async function refreshRegister(search = "") {
     const { policies, currentUser } = await plain(`/register${search ? `?search=${encodeURIComponent(search)}` : ""}`);
     K.pols = {}; serverPolicies = new Map();
@@ -713,19 +752,22 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     return result;
   }
   async function durablePrint(all) {
+    const label = all ? "document packet" : (DOCS.find(([id]) => id === F.sel)?.[1] || "Klutch document");
     try {
       const rs = preview();
-      const printable = (all ? setDocs() : [F.sel]).filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
-      if (!printable.length) throw new Error("Complete the marked required fields before printing.");
+      const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];
+      if (!all && !isPrintablePdf(F.sel)) throw new Error("This is an email template. Use Copy Email; it is not a printable PDF.");
+      const printable = candidates.filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
+      if (!printable.length) throw new Error(all ? "No completed printable PDFs are ready. Complete the marked required fields; email templates and communication scripts are not included in print packets." : "Complete the marked required fields before printing.");
       const policy = await persistTermIfNeeded();
-      const ordered = [...printable].sort((a, b) => ["dec", "den", "car", "can", "end", "dop"].indexOf(a) - ["dec", "den", "car", "can", "end", "dop"].indexOf(b));
+      const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;
       for (const sourceId of ordered) await recordDocumentForSource(sourceId, policy);
       saveDraft(); buildForm(); const fresh = preview();
       if (all) { $("#allroot").innerHTML = ordered.map(id => fresh[id].html).join(""); document.body.classList.add("pall"); }
       document.querySelectorAll("#pv .sheet").forEach(sh => { sh.style.transform = ""; sh.style.marginBottom = "0"; });
       window.print(); document.body.classList.remove("pall"); setTimeout(fit, 300);
       await refreshRegister(); say("Document created in the shared register. Printing does not send it to the member.");
-    } catch (error) { say(error instanceof Error ? error.message : "Could not prepare the Klutch document."); }
+    } catch (error) { const reason = error instanceof Error ? error.message : "Unexpected error."; say(`Could not prepare ${label}: ${reason}`); }
   }
   document.addEventListener("click", async event => {
     const target = event.target.closest("[data-act]"); if (!target) return;

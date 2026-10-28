@@ -106,14 +106,16 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(subroSource).toContain('doc.text(handlerContactLine, lm, y);');
   });
 
-  it("adds a claim-specific correspondence record without exposing an outbound email action", () => {
+  it("uses one editable carrier claim-email field rather than a separate correspondence log", () => {
     const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"), clientSource.indexOf("// ─── Tab: Carrier Rebuttal"));
-    expect(subroSource).toContain('trpc.docgen.getClaimCorrespondence.useQuery');
-    expect(subroSource).toContain('trpc.docgen.createClaimCorrespondence.useMutation');
-    expect(subroSource).toContain('title="Claim-Specific Email"');
-    expect(subroSource).toContain('CREATED, NOT SENT');
-    expect(subroSource).toContain('nothing is sent, forwarded, queued, or added to Mailroom');
-    expect(subroSource).toContain('Add correspondence to claim');
+    expect(subroSource).toContain('const [carrierEmail, setCarrierEmail] = useState("");');
+    expect(subroSource).toContain('title="Carrier / Adjuster Email"');
+    expect(subroSource).toContain('id="sd-carrier-email"');
+    expect(subroSource).toContain('Carrier / adjuster email');
+    expect(subroSource).toContain('does not print on the letter');
+    expect(subroSource).toContain('does not send, forward, queue, or add anything to Mailroom');
+    expect(subroSource).not.toContain('trpc.docgen.getClaimCorrespondence.useQuery');
+    expect(subroSource).not.toContain('trpc.docgen.createClaimCorrespondence.useMutation');
     expect(subroSource).not.toContain('forwardMailToClaim');
   });
 

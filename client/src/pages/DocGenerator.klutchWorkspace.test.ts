@@ -182,7 +182,8 @@ describe("Klutch policy documents source integration", () => {
     expect(dopRenderer).toContain('Title, electronic-title, or lien/ownership record when available, requested, or necessary to resolve ownership or a total loss');
     expect(dopRenderer).toContain('This notice is limited to payment administration and protection of the vehicle owner’s documented interest.');
     expect(dopRenderer).toContain('Authorized representative (signature)');
-    expect(dopRenderer).toContain('Email / direct phone');
+    expect(dopRenderer).not.toContain('Email / direct phone');
+    expect(dopRenderer).not.toContain('signerContact');
     expect(dopRenderer).not.toContain('<img class="lg" src="${LOGO}"');
     expect(dopRenderer).not.toContain('Klutch Insurance Company');
     expect(sourcePage).toContain('chk("dopPayLaurel"');
@@ -190,7 +191,7 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).not.toContain('chk("dopAttachPoi"');
   });
 
-  it("captures a Direction of Pay e-signature and prints an honest certification stamp beneath the signature line", () => {
+  it("captures a compact internal Direction of Pay e-signature indicator without personal contact data", () => {
     const buildDocStart = sourcePage.indexOf("function buildDoc(");
     const dopStart = sourcePage.indexOf('if(d==="dop")', buildDocStart);
     const dopRenderer = sourcePage.slice(dopStart, sourcePage.indexOf('if(d==="end")', dopStart));
@@ -203,19 +204,46 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('I certify that I am authorized to sign this Direction of Pay for Metrocars Leasing Corp.');
     expect(sourcePage).toContain('dopSignatureCertificateId');
     expect(sourcePage).toContain('data:image\\/png;base64');
-    expect(dopRenderer).toContain('ELECTRONIC SIGNATURE CERTIFICATION');
-    expect(dopRenderer).toContain('Authority attested');
+    expect(dopRenderer).toContain('signatureCertified');
+    expect(dopRenderer).toContain('E-signature certified');
+    expect(dopRenderer).toContain('E-signature certification pending');
     expect(dopRenderer).toContain('dop-cert');
-    expect(dopRenderer).toContain('dop-sign-line');
+    expect(dopRenderer).toContain('dop-signature-wrap');
     expect(dopRenderer).not.toContain('DocuSign');
+    expect(sourcePage).not.toContain('dopFld("dopSignerContact"');
+    expect(sourcePage).not.toContain('["dopSignerName","dopSignerTitle","dopSignerContact","dopSignerDate"]');
+    expect(sourcePage).toContain('const { dopSignerContact: _legacyDopSignerContact, ...documentState } = F;');
   });
 
-  it("matches the supplied MetroCars form scale and writes signed values directly on the signature rules", () => {
+  it("matches the supplied MetroCars form scale and positions signatures and dates directly on their rules", () => {
     expect(sourcePage).toContain('.dopdoc{font-size:13.3px;line-height:1.48}');
     expect(sourcePage).toContain('.dopdoc-p2{font-size:12px;line-height:1.45}');
     expect(sourcePage).toContain('.dop-department{font-size:13.3px;margin-top:-17px}');
     expect(sourcePage).toContain('.dop-signatures{grid-template-columns:1fr .7fr;gap:16px 34px;margin-top:66px');
-    expect(sourcePage).toContain('.dop-line-value{top:-8px;bottom:auto');
-    expect(sourcePage).toContain('.dop-sign-image{max-height:29px;margin:-7px');
+    expect(sourcePage).toContain('.dop-signature-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto');
+    expect(sourcePage).toContain('.dop-sign-image{position:absolute;left:4px;bottom:calc(100% - 1px)');
+    expect(sourcePage).toContain('.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% - 1px)');
+    expect(sourcePage).toContain('.dop-date-value{top:-13px}');
+    const buildDocStart = sourcePage.indexOf("function buildDoc(");
+    const dopStart = sourcePage.indexOf('if(d==="dop")', buildDocStart);
+    const dopRenderer = sourcePage.slice(dopStart, sourcePage.indexOf('if(d==="end")', dopStart));
+    expect(dopRenderer).toContain('dop-line-value dop-date-value');
+  });
+
+  it("keeps editable carrier coverage email templates and future scripts out of PDF print packets", () => {
+    expect(sourcePage).toContain('["carrier_email","Carrier Coverage Request Email"]');
+    expect(sourcePage).toContain('Carrier Coverage Request Email');
+    expect(sourcePage).toContain('Copy Email');
+    expect(sourcePage).toContain('copyCarrierCoverageEmail');
+    expect(sourcePage).toContain('whether your insured’s policy provides comprehensive and/or collision coverage');
+    expect(sourcePage).toContain('Handler guide — carrier coverage verification');
+    expect(sourcePage).toContain('if(d==="carrier_email")');
+    expect(sourcePage).toContain('Editable email preview · not a PDF packet document');
+    expect(sourcePage).toContain('const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop"]');
+    expect(sourcePage).toContain('const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];');
+    expect(sourcePage).toContain('const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;');
+    expect(sourcePage).toContain('This is an email template. Use Copy Email; it is not a printable PDF.');
+    expect(sourcePage).toContain('email templates and communication scripts are not included in print packets');
+    expect(sourcePage).not.toContain('carrier_email: "');
   });
 });
