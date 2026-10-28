@@ -7,6 +7,7 @@ export const KLUTCH_DOCUMENT_TYPES = [
   "carrier_position",
   "cancellation_notice",
   "endorsement",
+  "direction_of_pay",
 ] as const;
 export type KlutchDocumentType = (typeof KLUTCH_DOCUMENT_TYPES)[number];
 
@@ -16,6 +17,7 @@ export const KLUTCH_DOCUMENT_LABELS: Record<KlutchDocumentType, string> = {
   carrier_position: "Carrier Coverage Position",
   cancellation_notice: "Policy Cancellation Notice",
   endorsement: "Endorsement KIC-END-002",
+  direction_of_pay: "Direction of Pay & Vehicle Ownership Notice",
 };
 
 export const KLUTCH_CREATED_NOT_SENT = "CREATED_NOT_SENT" as const;

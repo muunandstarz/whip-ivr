@@ -25,6 +25,7 @@ const DOCUMENT_TYPE_BY_SOURCE_ID: Record<string, KlutchDocumentType> = {
   car: "carrier_position",
   can: "cancellation_notice",
   end: "endorsement",
+  dop: "direction_of_pay",
 };
 
 function isState(value: unknown): value is KlutchState {

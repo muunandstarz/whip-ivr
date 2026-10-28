@@ -5,6 +5,7 @@ import { toDateOnly } from "./klutchPolicies";
 
 const source = fs.readFileSync(path.resolve(process.cwd(), "server/klutchPolicies.ts"), "utf8");
 const routerSource = fs.readFileSync(path.resolve(process.cwd(), "server/routers/klutchPolicies.ts"), "utf8");
+const contractSource = fs.readFileSync(path.resolve(process.cwd(), "shared/klutchPolicy.ts"), "utf8");
 
 describe("Klutch policy service safeguards", () => {
   it("allocates policy and claim sequences under transaction locks", () => {
@@ -42,6 +43,12 @@ describe("Klutch policy service safeguards", () => {
     expect(source).not.toContain("A named manager and recorded manager approval are required before creating KIC-END-002.");
     expect(routerSource).not.toContain("approveEndorsement");
     expect(routerSource).not.toContain("adminProcedure");
+  });
+
+  it("recognizes Direction of Pay as an auditable created-not-sent document form", () => {
+    expect(contractSource).toContain('"direction_of_pay"');
+    expect(contractSource).toContain("Direction of Pay & Vehicle Ownership Notice");
+    expect(source).toContain("KLUTCH_DOCUMENT_TYPES");
   });
 
   it("preserves database DATE objects in policy terms and documents", () => {

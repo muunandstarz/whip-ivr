@@ -26,12 +26,13 @@ describe("Klutch policy documents source integration", () => {
     expect(knowledgeBasePage).toContain('title="Klutch Policy Documents"');
   });
 
-  it("keeps all five document types in the supplied page while routing persistence to Whip", () => {
-    for (const title of ["Policy Declarations", "TNC Coverage Denial", "Carrier Coverage Position", "Policy Cancellation Notice", "Endorsement KIC-END-002"]) {
+  it("keeps all six document types in the supplied page while routing persistence to Whip", () => {
+    for (const title of ["Policy Declarations", "TNC Coverage Denial", "Carrier Coverage Position", "Policy Cancellation Notice", "Endorsement KIC-END-002", "Direction of Pay & Vehicle Ownership Notice"]) {
       expect(contract).toContain(title);
     }
-    for (const sourceId of ["dec", "den", "car", "can", "end"]) expect(sourcePage).toContain(`"${sourceId}"`);
+    for (const sourceId of ["dec", "den", "car", "can", "end", "dop"]) expect(sourcePage).toContain(`"${sourceId}"`);
     expect(sourcePage).toContain('const API = "/api/klutch-policy-documents"');
+    expect(sourcePage).toContain('dop: "direction_of_pay"');
     expect(sourcePage).toContain("async function durablePrint");
     expect(sourcePage).toContain('window.print()');
     expect(sourcePage).not.toContain("Handler note: Created is not sent to the member.");
@@ -133,5 +134,30 @@ describe("Klutch policy documents source integration", () => {
     expect(legacyWorkspace).toContain("Nashville, Tennessee 37219");
     expect(legacyWorkspace).not.toContain("(855) 906-5949");
     expect(legacyWorkspace).not.toContain("Bobby Taheri");
+  });
+
+  it("matches the approved Dec Page without the page-one TNC exclusion or a loss-payee block", () => {
+    const buildDocStart = sourcePage.indexOf("function buildDoc(");
+    const decStart = sourcePage.indexOf('if(d==="dec")', buildDocStart);
+    const decRenderer = sourcePage.slice(decStart, sourcePage.indexOf('if(d==="dop")', decStart));
+    expect(decRenderer).toContain('<h2>Vehicle lessor</h2>');
+    expect(decRenderer).toContain('Metrocars Leasing Corp<br>14670 Southlawn Lane<br>Rockville, MD 20850');
+    expect(decRenderer).not.toContain('Transportation network company use');
+    expect(decRenderer).not.toContain('Lessor / Loss Payee');
+    expect(decRenderer).not.toContain('designated loss payee');
+    expect(legacyWorkspace).toContain('doc.text("Vehicle lessor", 15, y);');
+    expect(legacyWorkspace).not.toContain('doc.text("Transportation network company use", 15, y);');
+  });
+
+  it("offers a fillable two-page Metrocars Direction of Pay with selectable payment and attachment checkboxes", () => {
+    expect(sourcePage).toContain('["dop","Direction of Pay & Vehicle Ownership Notice"]');
+    expect(sourcePage).toContain('if(d==="dop")');
+    expect(sourcePage).toContain('REPAIR PAYMENT — make payment directly to Total Recon — Laurel');
+    expect(sourcePage).toContain('REPAIR PAYMENT — make payment directly to Total Recon — Rockville');
+    expect(sourcePage).toContain('TOTAL LOSS — make payment payable to Metrocars Leasing Corp.');
+    expect(sourcePage).toContain('SUBROGATION RECOVERY — make payment payable to Metrocars Leasing Corp.');
+    expect(sourcePage).toContain('Documents attached or available upon request');
+    expect(sourcePage).toContain('chk("dopPayLaurel"');
+    expect(sourcePage).toContain('chk("dopAttachRegistration"');
   });
 });

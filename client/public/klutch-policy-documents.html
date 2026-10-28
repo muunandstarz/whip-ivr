@@ -193,8 +193,8 @@ const RULES={
 const W={bi:30,pd:12,coll:25,comp:13,um:7,uim:5,pip:8};
 /* -------------------------------------- */
 const COVS=[["bi","Bodily injury liability"],["pd","Property damage liability"],["pip","Personal injury protection"],["um","Uninsured motorist bodily injury"],["uim","Underinsured motorist bodily injury"],["comp","Comprehensive"],["coll","Collision"]];
-const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"]];
-const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it."};
+const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["dop","Direction of Pay & Vehicle Ownership Notice"]];
+const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest."};
 const PERIODS={1:"waiting for a ride request",2:"traveling to pick up a passenger",3:"transporting a passenger"};
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -233,11 +233,12 @@ load();
 const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function newClaim(){const used=Object.values(K.map);let c;do{const b=crypto.getRandomValues(new Uint8Array(6));c="KC-"+[...b].map(x=>A[x%A.length]).join("")}while(used.includes(c));return c}
 const fld=(k,l,sp,o={})=>`<div class="s${sp||6}"><label>${l}</label>${o.sel?`<select data-k="${k}">${o.sel.map(x=>`<option value="${x[0]}" ${String(F[k])===String(x[0])?"selected":""}>${x[1]}</option>`).join("")}</select>`:`<input data-k="${k}" ${o.t?`type="${o.t}"`:""} value="${esc(F[k]||"")}">`}</div>`;
+const chk=(k,l)=>`<label style="display:flex;align-items:center;gap:8px;font-weight:500;text-transform:none;letter-spacing:0;border:1px solid #dbe4e6;border-radius:8px;padding:9px 10px;background:#fff"><input type="checkbox" data-k="${k}" ${F[k]?"checked":""} style="width:15px;height:15px;accent-color:#013339">${l}</label>`;
 const sec=t=>`<div class="s6"><div class="sec" style="margin:12px 0 0">${t}</div></div>`;
 const seg=(k,opts,dis,variant="")=>`<div class="seg ${variant}">${opts.map(([v,l])=>`<button type="button" data-seg="${k}" data-v="${v}" class="${F[k]===v?"on":""}" ${dis&&dis.includes(v)?"disabled":""}>${l}</button>`).join("")}</div>`;
 function buildForm(){
  const d=F.sel,R=RULES[F.st];
- const full=(d==="dec"||d==="den"||d==="can");
+ const full=(d==="dec"||d==="den"||d==="can"||d==="dop");
  let h=`<div class="f">`;
  h+=fld("st","Garaging state",3,{sel:Object.keys(RULES).map(k=>[k,k+" – "+RULES[k].n])});
  h+=`<div class="s3 note" style="align-self:end">Start with the state where the vehicle is garaged. It sets the available limits, elections, and policy rules.</div>`;
@@ -283,6 +284,14 @@ function buildForm(){
  if(d==="car"){
   h+=sec("Carrier");
   h+=fld("carrier","Carrier name",3)+fld("cclm","Carrier claim number",3)+fld("attn","Adjuster name and title",6)+fld("caddr","Carrier street address",3)+fld("ccity","City, State ZIP",3)+fld("cdt","Date of carrier letter",3,{t:"date"})+fld("rec","Supporting records",3);
+ }
+ if(d==="dop"){
+  h+=sec("Carrier and loss");
+  h+=fld("dopDate","Letter date",3,{t:"date"})+fld("dopCarrier","Carrier / claims administrator",3)+fld("dopCarrierClaim","Carrier claim number",3)+fld("dopLoss","Date of loss",3,{t:"date"})+fld("dopLossLocation","Loss location or incident",6)+fld("dopAdjuster","Adjuster name / attention",6)+fld("dopAddress","Carrier street address",3)+fld("dopCityStateZip","City, State ZIP",3);
+  h+=sec("Payment instruction");
+  h+=`<div class="s6"><div class="note" style="margin-bottom:7px">Select every instruction that applies to this submission. Selections are preserved in the saved draft and printed on page one.</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${chk("dopPayLaurel","Repair payment — Total Recon, Laurel")}${chk("dopPayRockville","Repair payment — Total Recon, Rockville")}${chk("dopPayTotalLoss","Total loss — payment payable to Metrocars Leasing Corp.")}${chk("dopPaySubro","Subrogation recovery — payment payable to Metrocars Leasing Corp.")}</div></div>`;
+  h+=sec("Documents");
+  h+=`<div class="s6"><div class="note" style="margin-bottom:7px">Select the documents included or available upon request. These selections print on page two.</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${chk("dopAttachRegistration","Current vehicle registration")}${chk("dopAttachTitle","Title or ownership record")}${chk("dopAttachLease","Lease agreement or lessor confirmation")}${chk("dopAttachEstimate","Repair estimate / supplement")}${chk("dopAttachInvoice","Repair invoice / shop authorization")}${chk("dopAttachPoi","Other proof of interest or supporting records")}</div></div>`;
  }
  if(d==="can")h+=fld("date","Letter date",3,{t:"date"});
  if(d==="end")h+=sec("Endorsement")+`<div class="s6 note">This form is available for preview and creation without a manager-approval or carrier-evidence field.</div>`;
@@ -342,7 +351,7 @@ const FOOT=`<div class="foot">Klutch Insurance Company  |  424 Church Street, Su
 const L=(t)=>`<div class="ln">${t}</div>`,P=t=>`<p>${t}</p>`,G=`<div class="gap"></div>`;
 function buildDoc(d,pol,claim,s){
  const LBL={pn:"policy number",member:"named insured",mno:"member number",address:"street address",city:"city",cst:"state",zip:"ZIP",vehicle:"year, make, model",vin:"VIN"};
- const REQ={dec:["pn","member","mno","address","city","cst","zip","vehicle","vin"],den:["pn","member","mno","address","city","cst","zip","vehicle","vin"],can:["pn","member","mno","address","city","cst","zip","vehicle","vin"],car:["pn","member","mno","vehicle","vin"],end:["pn"]};
+ const REQ={dec:["pn","member","mno","address","city","cst","zip","vehicle","vin"],den:["pn","member","mno","address","city","cst","zip","vehicle","vin"],can:["pn","member","mno","address","city","cst","zip","vehicle","vin"],car:["pn","member","mno","vehicle","vin"],end:["pn"],dop:[]};
  const miss0=(REQ[d]||[]).filter(k=>!String(s[k]||"").trim()).map(k=>LBL[k]);
  const miss=[...miss0];
  const T=pol.terms[0];if(d==="dec"&&!T.eff)miss.push("effective date");
@@ -365,13 +374,19 @@ function buildDoc(d,pol,claim,s){
    <div class="row"><div class="l"><b>Uninsured motorist property damage</b></div><div class="r">Not included</div></div>
    ${ded("comp","Comprehensive")}${ded("coll","Collision")}
    <div class="row last"><div class="l"><b>Total premium for policy period</b></div><div class="r"><b>${money(total(c))}</b></div></div></div>
-   <div class="secx"><h2>Transportation network company use</h2><div class="note">* Coverage does not apply at any time the operator is logged on to a transportation network company platform, whether waiting for a request, en route to a rider, or carrying a passenger or property, or while the vehicle is used for hire, delivery, cargo or other business use, as stated in Endorsement KIC-END-002.</div></div>${FOOT}</div>`;
+   ${FOOT}</div>`;
   const p2=`<div class="dec"><div class="top"><div></div><div style="font-size:12px;font-weight:700">Policy number ${pol.number}<br><span style="font-weight:400">${esc(nm)}</span></div></div>
-   <div class="secx" style="margin-top:34px"><h2>Lessor / Loss Payee</h2><div class="two" style="margin-top:4px"><div>${esc(pol.vehicle)}<br>${esc(pol.vin)}</div><div>Metrocars Leasing Corp<br>14670 Southlawn Lane<br>Rockville, MD 20850</div></div>
-   <div class="fine" style="margin-top:8px">Metrocars Leasing Corp is the vehicle’s lessor and designated loss payee. Covered comprehensive and collision claims are adjusted with Metrocars Leasing Corp, with payment issued according to its financial interest in the vehicle and the applicable policy terms. Repair arrangements are coordinated through Metrocars Leasing Corp.</div></div>
-   <div class="secx"><h2>Policy Documents</h2><div class="fine">These declarations summarize your coverage. Refer to your policy and applicable endorsements for complete terms, conditions, limits, and exclusions. Forms and Endorsements: KIC-END-002 (Ed. 07/26), Transportation Network Company and Commercial Use Exclusion Endorsement. For policy documents or to report a claim, email claims@klutchinsurance.com.</div></div>
-   <div style="margin-top:40px;font-size:9px;line-height:1.5;color:#777">Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms, conditions, and endorsements.</div>${FOOT}</div>`;
+   <div class="secx" style="margin-top:34px"><h2>Vehicle lessor</h2><div class="two" style="margin-top:4px"><div>${esc(pol.vehicle)}<br>${esc(pol.vin)}</div><div>Metrocars Leasing Corp<br>14670 Southlawn Lane<br>Rockville, MD 20850</div></div></div>
+   <div class="secx"><h2>Policy Documents</h2><div class="fine">These declarations summarize your coverage. Refer to your policy for complete terms, conditions, limits, and exclusions. For policy documents or to report a claim, email claims@klutchinsurance.com.</div></div>
+   <div style="margin-top:40px;font-size:9px;line-height:1.5;color:#777">Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms and conditions.</div>${FOOT}</div>`;
   return{html:sheet(p1)+sheet(p2),miss:[...new Set(miss)]};
+ }
+ if(d==="dop"){
+  const show=v=>esc(v||"________________________________________");
+  const box=(key,label)=>`<div style="display:flex;gap:7px;margin:0 0 6px;line-height:1.35"><span style="font-size:14px;line-height:1">${s[key]?"☒":"☐"}</span><span>${label}</span></div>`;
+  const p1=sheet(`<div class="ltr" style="font-size:9px;line-height:1.35"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><img class="lg" src="${LOGO}" style="margin:0"><div style="text-align:right;font-size:8px">Metrocars Leasing Corp<br>14670 Southlawn Lane<br>Rockville, MD 20850</div></div><div style="text-align:center;border-bottom:1.5px solid #111;padding-bottom:8px;margin-bottom:14px"><b style="font-size:14px;letter-spacing:.2px">DIRECTION OF PAY &amp; VEHICLE OWNERSHIP NOTICE</b><div style="font-size:8px;margin-top:3px">PHYSICAL DAMAGE / REPAIR / TOTAL LOSS / SUBROGATION</div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-bottom:13px"><div><b>Date:</b> ${show(s.dopDate?ld(s.dopDate):"")}</div><div><b>Carrier claim no.:</b> ${show(s.dopCarrierClaim)}</div><div><b>Carrier / administrator:</b> ${show(s.dopCarrier)}</div><div><b>Date of loss:</b> ${show(s.dopLoss?ld(s.dopLoss):"")}</div><div><b>Attention:</b> ${show(s.dopAdjuster)}</div><div><b>Member / insured:</b> ${show(nm)}</div><div style="grid-column:1 / -1"><b>Carrier address:</b> ${show(s.dopAddress)} ${esc(s.dopCityStateZip||"")}</div><div style="grid-column:1 / -1"><b>Vehicle:</b> ${show(pol.vehicle)} &nbsp;&nbsp; <b>VIN:</b> ${show(pol.vin)}</div><div style="grid-column:1 / -1"><b>Loss location / incident:</b> ${show(s.dopLossLocation)}</div></div><p>Metrocars Leasing Corp is the owner and lessor of the vehicle identified above. Please protect Metrocars’ ownership interest and follow the selected payment instruction below for the covered physical-damage claim or recovery.</p><div style="border:1px solid #111;padding:10px 12px;margin-top:12px"><b style="display:block;margin-bottom:8px">PAYMENT INSTRUCTION</b>${box("dopPayLaurel","REPAIR PAYMENT — make payment directly to Total Recon — Laurel.")}${box("dopPayRockville","REPAIR PAYMENT — make payment directly to Total Recon — Rockville.")}${box("dopPayTotalLoss","TOTAL LOSS — make payment payable to Metrocars Leasing Corp.")}${box("dopPaySubro","SUBROGATION RECOVERY — make payment payable to Metrocars Leasing Corp.")}</div><p style="margin-top:12px">Please do not issue payment to the listed driver or member for the selected item. Questions about ownership, repair coordination, or payment direction may be sent to claims@drivewhip.com.</p>${FOOT}</div>`,`dop`);
+  const p2=sheet(`<div class="ltr" style="font-size:9px;line-height:1.35"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><img class="lg" src="${LOGO}" style="margin:0"><div style="text-align:right;font-size:8px">Direction of Pay &amp; Vehicle Ownership Notice<br>${show(pol.vin)}</div></div><div style="text-align:center;border-bottom:1.5px solid #111;padding-bottom:8px;margin-bottom:16px"><b style="font-size:13px">SUPPORTING DOCUMENTS &amp; AUTHORIZATION</b></div><p><b>Documents attached or available upon request</b></p><div style="border:1px solid #111;padding:11px 13px;margin:10px 0 18px">${box("dopAttachRegistration","Current vehicle registration")}${box("dopAttachTitle","Title or ownership record")}${box("dopAttachLease","Lease agreement or lessor confirmation")}${box("dopAttachEstimate","Repair estimate / supplement")}${box("dopAttachInvoice","Repair invoice / shop authorization")}${box("dopAttachPoi","Other proof of interest or supporting records")}</div><p>This notice is provided to identify Metrocars Leasing Corp’s ownership interest and payment direction for the above vehicle. It does not waive any rights, defenses, policy terms, deductible obligations, or recovery rights of Metrocars Leasing Corp, Whip Claims Management, or any insurer.</p><p>Please retain this notice with the claim file and confirm the selected payment direction before issuing funds.</p><div style="margin-top:48px"><div style="border-top:1px solid #111;width:260px;padding-top:4px">Authorized representative, Metrocars Leasing Corp</div><div style="border-top:1px solid #111;width:260px;padding-top:4px;margin-top:28px">Date</div></div>${FOOT}</div>`,`dop`);
+  return{html:p1+p2,miss:[...new Set(miss)]};
  }
  if(d==="end"){
   const A=(n,t,r)=>`<div class="it">${n}&nbsp; <b>“${t}”</b> ${r}</div>`,I=(n,t)=>`<div class="it">${n}&nbsp; ${t}</div>`;
@@ -501,7 +516,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
    convenience and is never used as a policy register. */
 (() => {
   const API = "/api/klutch-policy-documents";
-  const srcDocType = { dec: "declarations", den: "tnc_denial", car: "carrier_position", can: "cancellation_notice", end: "endorsement" };
+  const srcDocType = { dec: "declarations", den: "tnc_denial", car: "carrier_position", can: "cancellation_notice", end: "endorsement", dop: "direction_of_pay" };
   let serverPolicies = new Map();
   let draftTimer = null;
 
@@ -626,7 +641,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       const printable = (all ? setDocs() : [F.sel]).filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
       if (!printable.length) throw new Error("Complete the marked required fields before printing.");
       const policy = await persistTermIfNeeded();
-      const ordered = [...printable].sort((a, b) => ["dec", "den", "car", "can", "end"].indexOf(a) - ["dec", "den", "car", "can", "end"].indexOf(b));
+      const ordered = [...printable].sort((a, b) => ["dec", "den", "car", "can", "end", "dop"].indexOf(a) - ["dec", "den", "car", "can", "end", "dop"].indexOf(b));
       for (const sourceId of ordered) await recordDocumentForSource(sourceId, policy);
       saveDraft(); buildForm(); const fresh = preview();
       if (all) { $("#allroot").innerHTML = ordered.map(id => fresh[id].html).join(""); document.body.classList.add("pall"); }
