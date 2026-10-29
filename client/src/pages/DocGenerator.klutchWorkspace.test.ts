@@ -125,6 +125,17 @@ describe("Klutch policy documents source integration", () => {
     expect(api).toContain("referenceOn: stringValue(body.referenceOn)");
   });
 
+  it("prints through the single durable path without a footer toast or a terminal blank page", () => {
+    expect(sourcePage).toContain('t.className="noprint klutch-toast"');
+    expect(sourcePage).toContain('.sheet:last-child{page-break-after:auto;break-after:auto}');
+    expect(sourcePage).toContain('body.pall #allroot .sheet:last-child{page-break-after:auto;break-after:auto}');
+    expect(sourcePage).toContain('if (event.target.closest("#prt")) { event.preventDefault(); event.stopImmediatePropagation(); durablePrint(false); }');
+    expect(sourcePage).toContain('if (event.target.closest("#prtall")) { event.preventDefault(); event.stopImmediatePropagation(); durablePrint(true); }');
+    expect(sourcePage).not.toContain("function doPrint(all)");
+    expect(sourcePage).not.toContain('$("#prt").addEventListener("click",()=>doPrint(false));');
+    expect(sourcePage).not.toContain('$("#prtall").addEventListener("click",()=>doPrint(true));');
+  });
+
   it("does not auto-fill the signed-in user as the Klutch document handler", () => {
     expect(sourcePage).not.toContain('if (!F.hn && currentUser?.name) F.hn = currentUser.name;');
     expect(sourcePage).toContain('if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";');

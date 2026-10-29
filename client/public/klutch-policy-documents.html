@@ -109,6 +109,7 @@ input:focus,select:focus{outline:2px solid var(--lime);border-color:var(--teal)}
  .preview{background:none;padding:0;max-height:none;overflow:visible}
  .split{display:block}.split>*:first-child{display:none}
  .sheet{box-shadow:none;margin:0;page-break-after:always;break-after:page}
+ .sheet:last-child{page-break-after:auto;break-after:auto}
 }
 @media(max-width:900px){.g4{grid-template-columns:1fr 1fr}.split{grid-template-columns:1fr}.f{grid-template-columns:1fr 1fr}.f>div{grid-column:span 2!important}.hw{flex-wrap:wrap;gap:10px}}
 
@@ -131,7 +132,7 @@ details summary{cursor:pointer;color:var(--teal);font-weight:600;margin-top:10px
 .seg.policy-type{min-width:330px;width:100%}.seg.policy-type button{min-width:0;padding-left:12px;padding-right:12px;white-space:nowrap}
 .seg button.on{background:var(--teal);color:#fff}
 .seg button:disabled{opacity:.35;cursor:not-allowed}
-@media print{body.pall .split{display:none!important}body.pall #allroot{display:block!important}body.pall #allroot .sheet{box-shadow:none;margin:0;page-break-after:always;break-after:page}}
+@media print{body.pall .split{display:none!important}body.pall #allroot{display:block!important}body.pall #allroot .sheet{box-shadow:none;margin:0;page-break-after:always;break-after:page}body.pall #allroot .sheet:last-child{page-break-after:auto;break-after:auto}}
 
 
 /* Carrier Communication Guide — screen-first call workspace */
@@ -631,7 +632,7 @@ function buildDoc(d,pol,claim,s){
 function ask(msg,ok){return new Promise(res=>{const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;background:rgba(1,51,57,.55);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px";
  o.innerHTML=`<div style="background:#fff;border-radius:14px;padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:15px;line-height:1.5;margin-bottom:18px">${esc(msg)}</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="b ghost" data-r="0">Cancel</button><button class="b" data-r="1">${esc(ok||"OK")}</button></div></div>`;
  o.addEventListener("click",e=>{const b=e.target.closest("[data-r]");if(!b)return;o.remove();res(b.dataset.r==="1")});document.body.appendChild(o);o.querySelector('[data-r="1"]').focus()})}
-function say(msg){const t=document.createElement("div");t.style.cssText="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#013339;color:#fff;padding:12px 20px;border-radius:10px;z-index:99;font-weight:600";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
+function say(msg){const t=document.createElement("div");t.className="noprint klutch-toast";t.style.cssText="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#013339;color:#fff;padding:12px 20px;border-radius:10px;z-index:99;font-weight:600";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
 async function copyCarrierCoverageEmail(){const to=String(F.emailRecipient||"").trim(),subject=String(F.emailSubject||"").trim(),body=String(F.emailBody||"").trim();const text=`To: ${to||"[Carrier recipient email]"}
 Subject: ${subject}
 
@@ -680,13 +681,6 @@ document.addEventListener("change",e=>{if(e.target.id==="imp"){const f=e.target.
   const R=RULES[F.st];if(!R.pip)F.pip="w";else if(!R.pip.waive)F.pip="a";if(!R.umReject)F.um="a";buildForm()
  }
  save();preview()});
-function doPrint(all){if(dupVin()&&dupVin().pn!==F.pn&&F.ack!==(F.vin||"").trim().toUpperCase())return;const _rs=setDocs().map(k=>[k,result(k)]).filter(([k,r])=>!r.err&&!r.miss.length);if(all)_rs.forEach(([k,r])=>logDoc(k,r));else logDoc(F.sel,result(F.sel));
- const rs=setDocs().map(k=>[k,result(k)]).filter(([k,r])=>!r.err&&!r.miss.length);
- if(all){$("#allroot").innerHTML=rs.map(([k,r])=>r.html).join("");document.body.classList.add("pall")}
- document.querySelectorAll("#pv .sheet").forEach(sh=>{sh.style.transform="";sh.style.marginBottom="0"});
- window.print();document.body.classList.remove("pall");setTimeout(fit,300)}
-$("#prt").addEventListener("click",()=>doPrint(false));
-$("#prtall").addEventListener("click",()=>doPrint(true));
 buildForm();
 function go(h){const form=h==="#coverage";document.body.classList.toggle("home",!form);try{if(location.hash!==h)history.replaceState(null,"",h)}catch(e){}
  if(form){preview();window.scrollTo(0,0)}else if(h==="#fleets"||h==="#claims"){const e=document.querySelector(h);if(e)e.scrollIntoView({behavior:"smooth",block:"center"})}else window.scrollTo(0,0)}
