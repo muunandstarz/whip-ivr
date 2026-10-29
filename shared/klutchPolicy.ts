@@ -76,6 +76,42 @@ export function addKlutchTermMonths(effectiveOn: string, months: 6 | 12) {
   return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(Number(day), lastDay)).padStart(2, "0")}`;
 }
 
+export type KlutchTermPlanEntry = {
+  termNumber: number;
+  transactionType: "new" | "renewal";
+  effectiveOn: string;
+  expiresOn: string;
+};
+
+/**
+ * Plans consecutive calendar-date terms through the supplied as-of date. The
+ * original term is always term 1; every later term is a renewal under the
+ * same policy number. A term beginning on the as-of date is included because
+ * coverage starts at 12:01 a.m. on that calendar date.
+ */
+export function planKlutchTermsThrough(effectiveOn: string, throughOn: string, termMonths: 6 | 12): KlutchTermPlanEntry[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveOn) || !/^\d{4}-\d{2}-\d{2}$/.test(throughOn) || throughOn < effectiveOn) {
+    return [];
+  }
+
+  const terms: KlutchTermPlanEntry[] = [];
+  let termStart = effectiveOn;
+  let termNumber = 1;
+  while (termStart <= throughOn) {
+    const expiresOn = addKlutchTermMonths(termStart, termMonths);
+    if (!expiresOn || expiresOn <= termStart) return [];
+    terms.push({
+      termNumber,
+      transactionType: termNumber === 1 ? "new" : "renewal",
+      effectiveOn: termStart,
+      expiresOn,
+    });
+    termStart = expiresOn;
+    termNumber += 1;
+  }
+  return terms;
+}
+
 /** Whole nearest weeks used by the supplied final Klutch declarations page. */
 export function calculateKlutchCoverageWeeks(effectiveOn: string, expiresOn: string) {
   const start = new Date(`${effectiveOn}T00:00:00Z`).getTime();

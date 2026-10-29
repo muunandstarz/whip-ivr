@@ -303,9 +303,9 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
         umRejected: issueForm.umRejected,
         tncUseNote: "This policy applies during permitted Transportation Network Company use, subject to its terms, conditions, and endorsements.",
       };
-      const policy = await issueMutation.mutateAsync({ issueRequestKey: issueKey, leaseId: issueForm.leaseId, state: issueForm.state, effectiveOn: issueForm.effectiveOn, expiresOn, terms });
-      setSelectedPolicyId(policy.id);
-      toast.success(`Policy ${policy.policyNumber} issued and saved. No document was sent.`);
+      const issued = await issueMutation.mutateAsync({ issueRequestKey: issueKey, leaseId: issueForm.leaseId, state: issueForm.state, effectiveOn: issueForm.effectiveOn, expiresOn, referenceOn: new Date().toISOString().slice(0, 10), terms });
+      setSelectedPolicyId(issued.policy.id);
+      toast.success(`Policy ${issued.policy.policyNumber} issued and saved. No document was sent.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to issue policy.");
     }

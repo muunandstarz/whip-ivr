@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { toDateOnly } from "./klutchPolicies";
+import { planKlutchTermsThrough } from "@shared/klutchPolicy";
 
 const source = fs.readFileSync(path.resolve(process.cwd(), "server/klutchPolicies.ts"), "utf8");
 const routerSource = fs.readFileSync(path.resolve(process.cwd(), "server/routers/klutchPolicies.ts"), "utf8");
@@ -27,6 +28,25 @@ describe("Klutch policy service safeguards", () => {
     expect(routerSource).toContain("memberStreet");
     expect(routerSource).toContain("memberCity");
     expect(routerSource).toContain("memberZip");
+  });
+
+  it("creates calendar-contiguous original and automatic renewal terms through the issuance reference date", () => {
+    expect(planKlutchTermsThrough("2025-08-01", "2026-10-29", 12)).toEqual([
+      { termNumber: 1, transactionType: "new", effectiveOn: "2025-08-01", expiresOn: "2026-08-01" },
+      { termNumber: 2, transactionType: "renewal", effectiveOn: "2026-08-01", expiresOn: "2027-08-01" },
+    ]);
+    expect(source).toContain("planKlutchTermsThrough(input.effectiveOn, referenceOn, input.terms.termMonths)");
+    expect(source).toContain("initial_issue_fingerprint");
+    expect(source).toContain("initial_issue_term_count");
+    expect(source).toContain("automaticAtInitialIssuance");
+    expect(source).toContain("A renewal must begin on the immediately prior term's expiration date.");
+    expect(routerSource).toContain("referenceOn: dateSchema.optional()");
+  });
+
+  it("records automatic declarations against their own issued policy term", () => {
+    expect(source).toContain("termId?: number");
+    expect(source).toContain("WHERE id = ? AND policy_id = ? FOR UPDATE");
+    expect(routerSource).toContain("termId: z.number().int().positive().optional()");
   });
 
   it("keeps the created-not-sent lifecycle without restricting available document forms", () => {

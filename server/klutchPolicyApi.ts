@@ -141,16 +141,17 @@ export function registerKlutchPolicyApi(app: Express) {
       const state = body.state;
       if (!isState(state)) throw new Error("Choose a supported Klutch policy state.");
       const terms = termsFrom(body);
-      const policy = await issueKlutchPolicy({
+      const issued = await issueKlutchPolicy({
         issueRequestKey: stringValue(body.issueRequestKey),
         leaseId: stringValue(body.leaseId),
         state,
         effectiveOn: stringValue(body.effectiveOn),
         expiresOn: stringValue(body.expiresOn),
+        referenceOn: stringValue(body.referenceOn),
         terms,
         newLeaseConfirmed: body.newLeaseConfirmed === true,
       }, actorFor(user));
-      res.json({ policy });
+      res.json(issued);
     } catch (error) {
       res.status(400).json({ error: messageOf(error) });
     }

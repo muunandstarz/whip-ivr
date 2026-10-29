@@ -114,6 +114,17 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).not.toContain('if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await issueCurrent(); }');
   });
 
+  it("creates a single-policy original-plus-renewal declaration packet for long leases", () => {
+    expect(sourcePage).toContain("original declaration plus each needed contiguous renewal declaration under the same policy number");
+    expect(sourcePage).toContain('referenceOn: today()');
+    expect(sourcePage).toContain('let automaticDeclarationTerms = [];');
+    expect(sourcePage).toContain('function declarationResultForIssuedTerm(entry)');
+    expect(sourcePage).toContain('issued.declarationTerms.slice().sort((a, b) => a.termNumber - b.termNumber || a.revisionNumber - b.revisionNumber)');
+    expect(sourcePage).toContain('recordDocumentForSource(item.sourceId, policy, item.term?.termId)');
+    expect(sourcePage).toContain("automatic renewal declaration");
+    expect(api).toContain("referenceOn: stringValue(body.referenceOn)");
+  });
+
   it("does not auto-fill the signed-in user as the Klutch document handler", () => {
     expect(sourcePage).not.toContain('if (!F.hn && currentUser?.name) F.hn = currentUser.name;');
     expect(sourcePage).toContain('if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";');

@@ -371,6 +371,7 @@ function buildForm(){
  if(d==="dec"){
   h+=fld("eff","Effective date",3,{t:"date"});
   h+=`<div class="s3"><label>Term</label>${seg("term",[["6","6 months"],["12","12 months"]])}<div class="note" style="margin-top:4px">In the lease more than 6 months: select 12 months. In the lease less than 6 months: select 6 months.</div></div>`;
+  if(F.ptype==="n")h+=`<div class="s6 note" style="margin-top:-4px">If today falls after the original term ends, Print / Save PDF automatically creates the original declaration plus each needed contiguous renewal declaration under the same policy number. No separate renewal form is required.</div>`;
   h+=`<div class="s3"><label>Expires</label><input id="expv" disabled></div>`;
  }
  if(d!=="end"){
@@ -444,7 +445,15 @@ function ctx(){
  const pol={number:F.pn||"",member:F.member||"",address:F.address||"",city:[F.city,F.cst?", "+String(F.cst).toUpperCase():"",F.zip?" "+F.zip:""].join("").replace(/^, /,""),vehicle:F.vehicle||"",vin:F.vin||"",terms:[{eff:F.eff,exp:F.exp,cov:d2?d2.cov:{}}]};
  const claim=(F.kc&&F.dol&&F.tnc&&F.period!=null&&F.period!=="")?{kc:F.kc,dol:F.dol,tnc:F.tnc,period:+F.period}:null;
  return{pol,claim}}
-function result(d){const{pol,claim}=ctx();return buildDoc(d,pol,claim,Object.assign({},F))}
+  function result(d){const{pol,claim}=ctx();return buildDoc(d,pol,claim,Object.assign({},F))}
+  function declarationResultForIssuedTerm(entry){
+    const t=entry.terms||{}, cov={}, keyByLabel={"Bodily Injury Liability":"bi","Property Damage Liability":"pd","Personal Injury Protection":"pip","Uninsured Motorist":"um","Underinsured Motorist":"uim","UMPD":"umpd","Comprehensive":"comp","Collision":"coll"};
+    (t.coverages||[]).forEach(coverage=>{const key=keyByLabel[coverage.label];if(!key)return;cov[key]=coverage.limit||"";cov[key+"P"]=Number(coverage.premium||0);if(coverage.deductible)cov[key+"D"]=coverage.deductible});
+    const memberState=t.memberState||t.state||F.cst||F.st, memberCity=[t.memberCity,memberState?", "+String(memberState).toUpperCase():"",t.memberZip?" "+t.memberZip:""].filter(Boolean).join("").replace(/^, /,"");
+    const pol={number:entry.policyNumber,member:t.memberName||F.member||"",address:t.memberStreet||t.memberAddress||F.address||"",city:memberCity,vehicle:t.vehicle||F.vehicle||"",vin:t.vin||F.vin||"",terms:[{eff:entry.effectiveOn,exp:entry.expiresOn,cov}]};
+    const state=Object.assign({},F,{pn:entry.policyNumber,ptype:entry.transactionType==="renewal"?"r":"n",member:t.memberName||F.member,mno:t.memberNumber||F.mno,address:t.memberStreet||t.memberAddress||F.address,city:t.memberCity||F.city,cst:memberState,zip:t.memberZip||F.zip,vehicle:t.vehicle||F.vehicle,vin:t.vin||F.vin});
+    return buildDoc("dec",pol,null,state);
+  }
 const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]];
 const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"];
 function setDocs(){const t=F.set||"all";const packet=t==="liab"?(F.lease==="t"?["dec","can"]:["dec"]):DOCS.map(x=>x[0]);return [...new Set([...packet,...NON_PDF_REFERENCE_IDS])]}
@@ -694,6 +703,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   const API = "/api/klutch-policy-documents";
   const srcDocType = { dec: "declarations", den: "tnc_denial", car: "carrier_position", can: "cancellation_notice", end: "endorsement", dop: "direction_of_pay" };
   let serverPolicies = new Map();
+  let automaticDeclarationTerms = [];
   let draftTimer = null;
 
   const plain = async (path, options = {}) => {
@@ -784,9 +794,13 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       newLeaseConfirmed = await ask("This VIN already has an active policy. Continue only if this is a verified new lease.", "Verified new lease");
       if (!newLeaseConfirmed) throw new Error("Policy issuance was not completed.");
     }
-    const { policy } = await plain("/issue", { method: "POST", body: JSON.stringify({ issueRequestKey: key(), leaseId: terms.leaseId, state: terms.state, effectiveOn: terms.effectiveOn, expiresOn: terms.expiresOn, terms, newLeaseConfirmed }) });
+    const issueRequestKey = F.annualIssueRequestKey || key();
+    F.annualIssueRequestKey = issueRequestKey;
+    const issued = await plain("/issue", { method: "POST", body: JSON.stringify({ issueRequestKey, leaseId: terms.leaseId, state: terms.state, effectiveOn: terms.effectiveOn, expiresOn: terms.expiresOn, referenceOn: today(), terms, newLeaseConfirmed }) });
+    const policy = issued.policy;
+    automaticDeclarationTerms = Array.isArray(issued.declarationTerms) ? issued.declarationTerms : [];
     F.pn = policy.policyNumber; F.ptype = "n"; K.pols[F.pn] = asLegacy(policy); serverPolicies.set(F.pn, policy); saveDraft(); buildForm(); preview();
-    await refreshRegister(); say(`Policy ${F.pn} issued in the shared register.`); return policy;
+    await refreshRegister(); say(`Policy ${F.pn} issued in the shared register${automaticDeclarationTerms.length > 1 ? ` with ${automaticDeclarationTerms.length - 1} automatic renewal declaration${automaticDeclarationTerms.length > 2 ? "s" : ""}` : ""}.`); return { policy, declarationTerms: automaticDeclarationTerms, replayed: Boolean(issued.replayed) };
   }
   async function persistTermIfNeeded() {
     const terms = policyTerms();
@@ -795,15 +809,15 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     if (!existing) return issueCurrent();
     if (F.ptype === "r") {
       const { policy } = await plain("/renew", { method: "POST", body: JSON.stringify({ policyId: existing.id, effectiveOn: terms.effectiveOn, expiresOn: terms.expiresOn, terms }) });
-      K.pols[policy.policyNumber] = asLegacy(policy); serverPolicies.set(policy.policyNumber, policy); return policy;
+      K.pols[policy.policyNumber] = asLegacy(policy); serverPolicies.set(policy.policyNumber, policy); automaticDeclarationTerms = []; return { policy, declarationTerms: [], replayed: false };
     }
     if (F.ptype === "c") {
       const { policy } = await plain("/correct", { method: "POST", body: JSON.stringify({ policyId: existing.id, terms }) });
-      K.pols[policy.policyNumber] = asLegacy(policy); serverPolicies.set(policy.policyNumber, policy); return policy;
+      K.pols[policy.policyNumber] = asLegacy(policy); serverPolicies.set(policy.policyNumber, policy); automaticDeclarationTerms = []; return { policy, declarationTerms: [], replayed: false };
     }
-    return existing;
+    return { policy: existing, declarationTerms: automaticDeclarationTerms, replayed: false };
   }
-  async function recordDocumentForSource(sourceId, policy) {
+  async function recordDocumentForSource(sourceId, policy, termId) {
     const type = srcDocType[sourceId];
     const snap = snapshot();
     const claimNumber = clean(F.snap);
@@ -812,7 +826,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       if (result.klutchClaimNumber) F.kc = result.klutchClaimNumber;
       return result;
     }
-    const { result } = await plain("/document", { method: "POST", body: JSON.stringify({ policyId: policy.id, documentType: type, claimNumber: claimNumber || undefined, snapshot: snap }) });
+    const { result } = await plain("/document", { method: "POST", body: JSON.stringify({ policyId: policy.id, documentType: type, termId: termId || undefined, claimNumber: claimNumber || undefined, snapshot: snap }) });
     if (result.klutchClaimNumber) F.kc = result.klutchClaimNumber;
     return result;
   }
@@ -824,14 +838,26 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       if (!all && !isPrintablePdf(F.sel)) throw new Error(F.sel === "carrier_guide" ? "This is an on-screen communication guide. Use Copy guide; it is not a printable PDF." : "This is an email template. Use Copy Email; it is not a printable PDF.");
       const printable = candidates.filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
       if (!printable.length) throw new Error(all ? "No completed printable PDFs are ready. Complete the marked required fields; email templates and communication scripts are not included in print packets." : "Complete the marked required fields before printing.");
-      const policy = await persistTermIfNeeded();
+      const issued = await persistTermIfNeeded();
+      const policy = issued.policy;
       const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;
-      for (const sourceId of ordered) await recordDocumentForSource(sourceId, policy);
-      saveDraft(); buildForm(); const fresh = preview();
-      if (all) { $("#allroot").innerHTML = ordered.map(id => fresh[id].html).join(""); document.body.classList.add("pall"); }
+      const printItems = [];
+      ordered.forEach(sourceId => {
+        if (sourceId === "dec" && issued.declarationTerms.length) {
+          issued.declarationTerms.slice().sort((a, b) => a.termNumber - b.termNumber || a.revisionNumber - b.revisionNumber).forEach(term => printItems.push({ sourceId, term, rendered: declarationResultForIssuedTerm(term) }));
+        } else {
+          printItems.push({ sourceId, term: null, rendered: rs[sourceId] });
+        }
+      });
+      for (const item of printItems) await recordDocumentForSource(item.sourceId, policy, item.term?.termId);
+      saveDraft(); buildForm(); preview();
+      const printHtml = printItems.map(item => item.rendered.html).join("");
+      const originalPreviewHtml = $("#pv").innerHTML;
+      if (all) { $("#allroot").innerHTML = printHtml; document.body.classList.add("pall"); }
+      else { $("#pv").innerHTML = printHtml; fit(); }
       document.querySelectorAll("#pv .sheet").forEach(sh => { sh.style.transform = ""; sh.style.marginBottom = "0"; });
-      window.print(); document.body.classList.remove("pall"); setTimeout(fit, 300);
-      await refreshRegister(); say("Document created in the shared register. Printing does not send it to the member.");
+      window.print(); document.body.classList.remove("pall"); if (!all) $("#pv").innerHTML = originalPreviewHtml; setTimeout(fit, 300);
+      await refreshRegister(); say(`${printItems.length} document${printItems.length === 1 ? "" : "s"} created in the shared register. Printing does not send anything to the member.`);
     } catch (error) { const reason = error instanceof Error ? error.message : "Unexpected error."; say(`Could not prepare ${label}: ${reason}`); }
   }
   document.addEventListener("click", async event => {

@@ -105,7 +105,7 @@ export const klutchPoliciesRouter = router({
     }),
 
   issue: protectedProcedure
-    .input(z.object({ issueRequestKey: z.string().trim().min(12).max(96), leaseId: requiredText.max(128), state: z.enum(KLUTCH_STATES), effectiveOn: dateSchema, expiresOn: dateSchema, terms: termsSchema, newLeaseConfirmed: z.boolean().optional(), handler: handlerSchema }))
+    .input(z.object({ issueRequestKey: z.string().trim().min(12).max(96), leaseId: requiredText.max(128), state: z.enum(KLUTCH_STATES), effectiveOn: dateSchema, expiresOn: dateSchema, referenceOn: dateSchema.optional(), terms: termsSchema, newLeaseConfirmed: z.boolean().optional(), handler: handlerSchema }))
     .mutation(async ({ input, ctx }) => {
       if (input.terms.transactionType !== "new") throw new TRPCError({ code: "BAD_REQUEST", message: "Use renewal or correction for an existing policy." });
       if (input.terms.state !== input.state || input.terms.leaseId !== input.leaseId || input.terms.effectiveOn !== input.effectiveOn || input.terms.expiresOn !== input.expiresOn) throw new TRPCError({ code: "BAD_REQUEST", message: "Issued policy terms must match the policy state, lease, and term dates." });
@@ -130,7 +130,7 @@ export const klutchPoliciesRouter = router({
     }),
 
   recordDocument: protectedProcedure
-    .input(z.object({ policyId: z.number().int().positive(), documentType: z.enum(KLUTCH_DOCUMENT_TYPES), claimNumber: z.string().trim().max(128).optional(), snapshot: snapshotSchema, handler: handlerSchema }))
+    .input(z.object({ policyId: z.number().int().positive(), documentType: z.enum(KLUTCH_DOCUMENT_TYPES), termId: z.number().int().positive().optional(), claimNumber: z.string().trim().max(128).optional(), snapshot: snapshotSchema, handler: handlerSchema }))
     .mutation(async ({ input, ctx }) => {
       try { return await recordKlutchDocument(input, actorFor(ctx.user, input.handler)); }
       catch (error) { asTrpcError(error); }

@@ -13,6 +13,7 @@ import {
   formatKlutchClaimNumber,
   formatKlutchPolicyNumber,
   normalizeKlutchVin,
+  planKlutchTermsThrough,
   type KlutchDocumentType,
   type KlutchPolicyTerms,
   type KlutchPolicyTransactionType,
@@ -31,6 +32,7 @@ type DbPolicy = RowDataPacket & {
   policy_number: string;
   policy_sequence: number;
   issue_request_key: string;
+  initial_issue_fingerprint: string;
   lease_id: string;
   member_name: string;
   member_number: string;
@@ -41,6 +43,8 @@ type DbPolicy = RowDataPacket & {
   state: KlutchState;
   effective_on: string | Date;
   expires_on: string | Date;
+  initial_issue_reference_on: string | Date | null;
+  initial_issue_term_count: number;
   status: "active" | "cancelled" | "expired";
   cancelled_on: string | Date | null;
   cancellation_reason: string | null;
@@ -70,6 +74,17 @@ type DbTerm = RowDataPacket & {
   expires_on: string | Date;
   terms: string | KlutchPolicyTerms;
   created_at: string;
+};
+
+export type KlutchIssuedDeclarationTerm = {
+  termId: number;
+  termNumber: number;
+  revisionNumber: number;
+  policyNumber: string;
+  transactionType: KlutchPolicyTransactionType;
+  effectiveOn: string;
+  expiresOn: string;
+  terms: KlutchPolicyTerms;
 };
 
 const POLICY_DOCUMENT_VERSION = "KIC-2026.10";
@@ -121,6 +136,31 @@ function publicPolicy(row: DbPolicy) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function declarationTerm(policyNumber: string, row: DbTerm): KlutchIssuedDeclarationTerm {
+  return {
+    termId: Number(row.id),
+    termNumber: Number(row.term_number),
+    revisionNumber: Number(row.revision_number),
+    policyNumber,
+    transactionType: row.transaction_type,
+    effectiveOn: toDateOnly(row.effective_on),
+    expiresOn: toDateOnly(row.expires_on),
+    terms: parseTerms(row.terms),
+  };
+}
+
+function issueFingerprint(input: { leaseId: string; state: string; effectiveOn: string; expiresOn: string; referenceOn: string; terms: KlutchPolicyTerms }) {
+  const payload = JSON.stringify({
+    leaseId: input.leaseId.trim(),
+    state: input.state,
+    effectiveOn: input.effectiveOn,
+    expiresOn: input.expiresOn,
+    referenceOn: input.referenceOn,
+    terms: input.terms,
+  });
+  return crypto.createHash("sha256").update(payload).digest("hex");
 }
 
 function assertState(state: string): asserts state is KlutchState {
@@ -258,20 +298,29 @@ export async function issueKlutchPolicy(input: {
   state: string;
   effectiveOn: string;
   expiresOn: string;
+  referenceOn?: string;
   terms: KlutchPolicyTerms;
   newLeaseConfirmed?: boolean;
 }, actor: KlutchActor) {
   assertState(input.state);
+  const state = input.state as KlutchState;
   assertTerm(input.effectiveOn, input.expiresOn);
   assertPolicyTerms(input.terms);
   if (!input.issueRequestKey.trim()) throw new Error("An idempotency key is required to issue a policy.");
+  const referenceOn = toDateOnly(input.referenceOn || input.effectiveOn);
+  if (!referenceOn || referenceOn < input.effectiveOn) throw new Error("The issuance reference date must be on or after the policy effective date.");
+  const annualPlan = planKlutchTermsThrough(input.effectiveOn, referenceOn, input.terms.termMonths);
+  if (!annualPlan.length || annualPlan[0].expiresOn !== input.expiresOn) throw new Error("The original declaration must use its selected calendar term before automatic renewals can be planned.");
+  const fingerprint = issueFingerprint({ ...input, referenceOn, state });
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
     const [replayed] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE issue_request_key = ? FOR UPDATE", [input.issueRequestKey]);
     if (replayed[0]) {
+      if (replayed[0].initial_issue_fingerprint && replayed[0].initial_issue_fingerprint !== fingerprint) throw new Error("This issuance request was already used with different policy inputs.");
+      const replayTerms = await latestTermsForPolicy(conn, Number(replayed[0].id));
       await conn.commit();
-      return publicPolicy(replayed[0]);
+      return { policy: publicPolicy(replayed[0]), declarationTerms: replayTerms.map(term => declarationTerm(replayed[0].policy_number, term)), replayed: true };
     }
     const vin = normalizeKlutchVin(input.terms.vin);
     const activeForVin = await lockVinRegister(conn, vin);
@@ -279,32 +328,40 @@ export async function issueKlutchPolicy(input: {
       throw new Error(`VIN ${vin} already has active policy ${activeForVin[0].policy_number}. Use Renewal or Correction, or confirm a new lease.`);
     }
     const sequence = await allocatePolicySequence(conn);
-    const policyNumber = formatKlutchPolicyNumber(input.state, sequence);
-    const terms = normalizedTerms({ terms: input.terms, state: input.state, effectiveOn: input.effectiveOn, expiresOn: input.expiresOn, leaseId: input.leaseId, type: "new" });
+    const policyNumber = formatKlutchPolicyNumber(state, sequence);
+    const plannedTerms = annualPlan.map(plan => normalizedTerms({ terms: input.terms, state, effectiveOn: plan.effectiveOn, expiresOn: plan.expiresOn, leaseId: input.leaseId, type: plan.transactionType }));
+    const currentTerms = plannedTerms[plannedTerms.length - 1];
     const [result] = await conn.execute<mysql.ResultSetHeader>(
       `INSERT INTO klutch_policies
-        (policy_number, policy_sequence, issue_request_key, lease_id, member_name, member_number, vin_normalized, vehicle, previous_policy_id, new_lease_confirmed,
-         state, effective_on, expires_on, terms, created_by_user_id, created_by_name, updated_by_user_id, updated_by_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [policyNumber, sequence, input.issueRequestKey.trim(), input.leaseId.trim(), terms.memberName.trim(), terms.memberNumber.trim(), vin, terms.vehicle.trim(),
-       activeForVin[0]?.id ?? null, input.newLeaseConfirmed ? 1 : 0, input.state, input.effectiveOn, input.expiresOn, JSON.stringify(terms),
+        (policy_number, policy_sequence, issue_request_key, initial_issue_fingerprint, lease_id, member_name, member_number, vin_normalized, vehicle, previous_policy_id, new_lease_confirmed,
+         state, effective_on, expires_on, initial_issue_reference_on, initial_issue_term_count, terms, created_by_user_id, created_by_name, updated_by_user_id, updated_by_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [policyNumber, sequence, input.issueRequestKey.trim(), fingerprint, input.leaseId.trim(), currentTerms.memberName.trim(), currentTerms.memberNumber.trim(), vin, currentTerms.vehicle.trim(),
+       activeForVin[0]?.id ?? null, input.newLeaseConfirmed ? 1 : 0, state, currentTerms.effectiveOn, currentTerms.expiresOn, referenceOn, plannedTerms.length, JSON.stringify(currentTerms),
        actor.userId, actor.name, actor.userId, actor.name],
     );
     const policyId = Number(result.insertId);
-    const [termResult] = await conn.execute<mysql.ResultSetHeader>(
-      `INSERT INTO klutch_policy_terms (policy_id, term_number, revision_number, term_months, transaction_type, effective_on, expires_on, terms, created_by_user_id, created_by_name)
-       VALUES (?, 1, 1, ?, 'new', ?, ?, ?, ?, ?)`,
-      [policyId, terms.termMonths, input.effectiveOn, input.expiresOn, JSON.stringify(terms), actor.userId, actor.name],
-    );
+    const termIds: number[] = [];
+    for (let index = 0; index < plannedTerms.length; index += 1) {
+      const term = plannedTerms[index];
+      const plan = annualPlan[index];
+      const [termResult] = await conn.execute<mysql.ResultSetHeader>(
+        `INSERT INTO klutch_policy_terms (policy_id, term_number, revision_number, term_months, transaction_type, effective_on, expires_on, terms, created_by_user_id, created_by_name)
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+        [policyId, plan.termNumber, term.termMonths, plan.transactionType, term.effectiveOn, term.expiresOn, JSON.stringify(term), actor.userId, actor.name],
+      );
+      termIds.push(Number(termResult.insertId));
+      await conn.execute(
+        `INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata)
+         VALUES (?, ?, ?, ?, ?)`,
+        [policyId, plan.transactionType === "new" ? "issued" : "renewed", actor.userId, actor.name, JSON.stringify({ policyNumber, policySequence: sequence, termId: Number(termResult.insertId), termNumber: plan.termNumber, transactionType: plan.transactionType, automaticAtInitialIssuance: plan.termNumber > 1, handler: handlerFor(actor) })],
+      );
+    }
     await conn.execute("UPDATE klutch_vin_register SET latest_policy_id = ? WHERE vin_normalized = ?", [policyId, vin]);
-    await conn.execute(
-      `INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata)
-       VALUES (?, 'issued', ?, ?, ?)`,
-      [policyId, actor.userId, actor.name, JSON.stringify({ policyNumber, policySequence: sequence, termId: Number(termResult.insertId), transactionType: "new", handler: handlerFor(actor) })],
-    );
     const [created] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ?", [policyId]);
+    const createdTerms = await latestTermsForPolicy(conn, policyId);
     await conn.commit();
-    return publicPolicy(created[0]);
+    return { policy: publicPolicy(created[0]), declarationTerms: createdTerms.map(term => declarationTerm(policyNumber, term)), replayed: false };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -324,6 +381,7 @@ export async function renewKlutchPolicy(policyId: number, effectiveOn: string, e
     if (!policy || policy.status !== "active") throw new Error("Only an active Klutch policy can be renewed.");
     if (normalizeKlutchVin(termsInput.vin) !== policy.vin_normalized) throw new Error("A renewal must keep the same VIN. Use New for a new lease.");
     const prior = await latestTerm(conn, policyId);
+    if (effectiveOn !== toDateOnly(prior.expires_on)) throw new Error("A renewal must begin on the immediately prior term's expiration date.");
     const terms = normalizedTerms({ terms: termsInput, state: policy.state, effectiveOn, expiresOn, leaseId: policy.lease_id, type: "renewal" });
     const [term] = await conn.execute<mysql.ResultSetHeader>(
       `INSERT INTO klutch_policy_terms (policy_id, term_number, revision_number, term_months, transaction_type, effective_on, expires_on, terms, created_by_user_id, created_by_name)
@@ -432,6 +490,7 @@ export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn:
 export async function recordKlutchDocument(input: {
   policyId: number;
   documentType: KlutchDocumentType;
+  termId?: number;
   claimNumber?: string;
   snapshot: Record<string, unknown>;
 }, actor: KlutchActor) {
@@ -443,7 +502,10 @@ export async function recordKlutchDocument(input: {
     const policy = policies[0];
     if (!policy) throw new Error("Klutch policy not found.");
     const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
-    const term = await latestTerm(conn, input.policyId);
+    const term = input.termId
+      ? (await conn.execute<DbTerm[]>("SELECT * FROM klutch_policy_terms WHERE id = ? AND policy_id = ? FOR UPDATE", [input.termId, input.policyId]))[0][0]
+      : await latestTerm(conn, input.policyId);
+    if (!term) throw new Error("The selected Klutch policy term was not found.");
     const handler = handlerFor(actor);
     const transactionType = String(parseTerms(term.terms).transactionType ?? "new");
     const [result] = await conn.execute<mysql.ResultSetHeader>(
