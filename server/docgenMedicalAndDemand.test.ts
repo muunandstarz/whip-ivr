@@ -93,7 +93,7 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
   it("auto-fills the Subro Demand extension from the selected IVR handler while keeping it editable and printable", () => {
     const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"), clientSource.indexOf("// ─── Tab: Carrier Rebuttal"));
     expect(subroSource).toContain('const [handlerExtension, setHandlerExtension] = useState("");');
-    expect(subroSource).toContain('const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Claim email: ${claimEmailAddress}`;');
+    expect(subroSource).toContain('const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  claims@drivewhip.com`;');
     expect(subroSource).toContain('onHandlerChange={(handler) => setHandlerExtension(handler.extension ?? "")}');
     expect(subroSource).toContain('automatically fills the extension from the IVR directory');
     expect(clientSource).toContain('import { getHandlerExtension } from "@shared/handlerExtensions";');
@@ -106,15 +106,16 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(subroSource).toContain('doc.text(handlerContactLine, lm, y);');
   });
 
-  it("prints one editable claim-specific reply-to email rather than a separate correspondence log", () => {
+  it("prints one editable claim-specific reply-to instruction in the demand body while keeping the general inbox in the signature contact", () => {
     const subroSource = clientSource.slice(clientSource.indexOf("function SubroDemandTab"), clientSource.indexOf("// ─── Tab: Carrier Rebuttal"));
     expect(subroSource).toContain('const [claimEmail, setClaimEmail] = useState("");');
-    expect(subroSource).toContain('const claimEmailAddress = claimEmail.trim() || "claims@drivewhip.com";');
-    expect(subroSource).toContain('Claim email: ${claimEmailAddress}');
+    expect(subroSource).toContain('const claimEmailAddress = claimEmail.trim();');
+    expect(subroSource).toContain('const claimEmailInstruction = claimEmailAddress');
+    expect(subroSource).toContain('|  claims@drivewhip.com`');
     expect(subroSource).toContain('title="Claim-Specific Reply-To Email"');
     expect(subroSource).toContain('id="sd-claim-email"');
     expect(subroSource).toContain('Claim email address');
-    expect(subroSource).toContain('It prints in the demand letter’s signature contact line');
+    expect(subroSource).toContain('It prints as a clear correspondence instruction in the demand body');
     expect(subroSource).toContain('does not send, forward, queue, or add anything to Mailroom');
     expect(subroSource).toContain('For claim-specific correspondence about this demand, please email ${claimEmailAddress}.');
     expect(subroSource).toContain('doc.text(handlerContactLine, lm, y);');

@@ -216,23 +216,27 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('const { dopSignerContact: _legacyDopSignerContact, ...documentState } = F;');
   });
 
-  it("matches the supplied MetroCars form scale and positions signatures and dates cleanly on their rules", () => {
+  it("matches the supplied MetroCars form scale and keeps certification, signatures, dates, and printed names in distinct lanes", () => {
     expect(sourcePage).toContain('.dopdoc{font-size:13.3px;line-height:1.48}');
     expect(sourcePage).toContain('.dopdoc-p2{font-size:12px;line-height:1.45}');
     expect(sourcePage).toContain('.dop-department{font-size:13.3px;margin-top:24px;margin-bottom:0}');
-    expect(sourcePage).toContain('.dop-signatures{grid-template-columns:1fr .7fr;gap:16px 34px;margin-top:52px');
-    expect(sourcePage).toContain('.dop-signature-wrap{display:block;position:relative;height:38px}');
-    expect(sourcePage).toContain('.dop-signature-ink{position:relative;height:20px}');
+    expect(sourcePage).toContain('grid-template-areas:"signature date" "printed ."');
+    expect(sourcePage).toContain('.dop-print-block{grid-area:printed;margin-top:24px}');
+    expect(sourcePage).toContain('.dop-signature-wrap{height:22px}');
+    expect(sourcePage).toContain('.dop-signature-ink{height:20px}');
     expect(sourcePage).toContain('.dop-sign-image{position:absolute;left:4px;bottom:calc(100% + 1px)');
     expect(sourcePage).toContain('.dop-typed-sign{position:absolute;left:5px;bottom:calc(100% + 1px)');
     expect(sourcePage).toContain('.dop-date-value{top:auto;bottom:calc(100% + 2px)}');
-    expect(sourcePage).toContain('.dop-date-block{min-height:38px}.dop-date-label{margin-top:18px}');
-    expect(sourcePage).toContain('.dop-cert{position:absolute;left:0;right:auto;top:calc(100% + 3px)');
+    expect(sourcePage).toContain('.dop-sign-label,.dop-date-label{margin-top:3px}');
+    expect(sourcePage).toContain('.dop-cert{left:auto;right:0;top:auto;bottom:calc(100% + 2px)');
     const buildDocStart = sourcePage.indexOf("function buildDoc(");
     const dopStart = sourcePage.indexOf('if(d==="dop")', buildDocStart);
     const dopRenderer = sourcePage.slice(dopStart, sourcePage.indexOf('if(d==="end")', dopStart));
     expect(dopRenderer).toContain('dop-line-value dop-date-value');
-    expect(dopRenderer).toContain('dop-signature-wrap"><div class="dop-signature-ink"');
+    expect(dopRenderer).toContain('const certifiedAtLabel=');
+    expect(dopRenderer).toContain('E-signature certified</b> · ${esc(certifiedAtLabel)}');
+    expect(dopRenderer).toContain('class="dop-signature-block"');
+    expect(dopRenderer).toContain('class="dop-print-block"');
     expect(dopRenderer).toContain('class="dop-date-block"');
   });
 

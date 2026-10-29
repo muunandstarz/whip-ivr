@@ -4357,8 +4357,11 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
     day: "numeric",
     year: "numeric",
   });
-  const claimEmailAddress = claimEmail.trim() || "claims@drivewhip.com";
-  const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  Claim email: ${claimEmailAddress}`;
+  const claimEmailAddress = claimEmail.trim();
+  const claimEmailInstruction = claimEmailAddress
+    ? `For claim-specific correspondence about this demand, please email ${claimEmailAddress}.`
+    : "";
+  const handlerContactLine = `Phone: (855) 906-5949${handlerExtension.trim() ? ` ext. ${handlerExtension.trim()}` : ""}  |  claims@drivewhip.com`;
 
   const preview = `${today}
 
@@ -4402,7 +4405,7 @@ Please remit payment in full within ${form.deadline || "15"} days of the date of
 This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
 PAYMENT INSTRUCTIONS
 Payment should be made payable to Whip Claims Management and mailed to P.O. Box 10622, Rockville, MD 20849. If paying by EFT, please contact the undersigned for wire instructions. Please reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.
-For claim-specific correspondence about this demand, please email ${claimEmailAddress}.
+${claimEmailInstruction}
 Respectfully,
 ${handlerName || ""}
 Whip Claims Management
@@ -4523,7 +4526,7 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
 
 	This demand is made without waiver of any rights or remedies available to Metrocars Leasing Corp. or Whip Claims Management, all of which are expressly reserved.
 
-	Please make payment payable to Whip Claims Management and mail it to P.O. Box 10622, Rockville, MD 20849. For EFT instructions, contact the undersigned. Reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments. For claim-specific correspondence about this demand, please email ${claimEmailAddress}.`;
+	Please make payment payable to Whip Claims Management and mail it to P.O. Box 10622, Rockville, MD 20849. For EFT instructions, contact the undersigned. Reference Whip Claim No. ${form.ourClaim || "[Our Claim #]"} on all correspondence and payments.${claimEmailInstruction ? ` ${claimEmailInstruction}` : ""}`;
     const demandLines = doc.splitTextToSize(demandText, tw) as string[];
     const paymentAndSignatureHeight = 6 + demandLines.length * compactLeading + 5 + (handlerName ? 21 : 17);
 
@@ -4677,7 +4680,7 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
               <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-800">Reply-to address for this claim file</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-slate-600">Enter the claim-specific email address recipients should use for this loss. It prints in the demand letter’s signature contact line as “Claim email” and replaces the general claims inbox for this letter only. This field does not send, forward, queue, or add anything to Mailroom.</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-slate-600">Enter the claim-specific email address recipients should use for this loss. It prints as a clear correspondence instruction in the demand body; the signature contact line remains claims@drivewhip.com. This field does not send, forward, queue, or add anything to Mailroom.</p>
               </div>
             </div>
           </div>
