@@ -74,6 +74,16 @@ describe('estimate workflow fields and previews', () => {
     expect(pageSource).not.toContain('Dear Mr./Ms. ${lastName}:');
   });
 
+  it('paginates long Carrier Rebuttals above the shared footer instead of clipping the body', () => {
+    expect(pageSource).toContain('const footerSafeY = H - 20;');
+    expect(pageSource).toContain('const addContinuationPage = () => {');
+    expect(pageSource).toContain('addLetterFooter(doc);\n      doc.addPage();');
+    expect(pageSource).toContain('const writeRebuttalText = (text: string) => {');
+    expect(pageSource).toContain('text.replace(/\\r\\n/g, "\\n").split(/\\n{2,}/)');
+    expect(pageSource).toContain('if (cursor < lines.length) addContinuationPage();');
+    expect(pageSource).toContain('writeRebuttalText(previewDraft);');
+  });
+
   it('removes persisted LOU state before remounting the calculator on a global Clear Form action', () => {
     expect(pageSource).toContain('if (activeTab === "lou-calculator")');
     expect(pageSource).toContain('sessionStorage.removeItem("lou_calc_state")');

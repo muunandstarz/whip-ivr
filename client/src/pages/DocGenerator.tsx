@@ -5075,6 +5075,7 @@ function CarrierRebuttalTab() {
   const handleDownload = (shouldDownload = true) => {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
     let y = addWhipLetterhead(doc);
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
@@ -5090,7 +5091,41 @@ Vehicle: ${form.vehicle || "[Vehicle]"}${form.claimantName ? `
 Claimant / Driver: ${form.claimantName}` : ""}
 
 This preview uses the current claim details and disputed line items. Generate or enter a draft to preview the complete rebuttal language.`;
-    y = wrapLetterText(doc, previewDraft, 14, y, W - 28, 6.5);
+    // The shared footer rule sits at H - 12.  Keep a meaningful buffer above it
+    // and continue long rebuttals rather than clipping the body under the footer.
+    const footerSafeY = H - 20;
+    const lineHeight = 9.75;
+    const bodyWidth = W - 28;
+    const addContinuationPage = () => {
+      addLetterFooter(doc);
+      doc.addPage();
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      y = 20;
+    };
+    const writeRebuttalText = (text: string) => {
+      const sections = text.replace(/\r\n/g, "\n").split(/\n{2,}/);
+      sections.forEach((section, sectionIndex) => {
+        const lines = doc.splitTextToSize(section, bodyWidth) as string[];
+        let cursor = 0;
+        while (cursor < lines.length) {
+          const availableLines = Math.floor((footerSafeY - y) / lineHeight);
+          if (availableLines < 1) addContinuationPage();
+          const writableLines = Math.max(1, Math.floor((footerSafeY - y) / lineHeight));
+          const nextCursor = Math.min(lines.length, cursor + writableLines);
+          doc.text(lines.slice(cursor, nextCursor), 14, y, { lineHeightFactor: 1.5 });
+          y += (nextCursor - cursor) * lineHeight;
+          cursor = nextCursor;
+          if (cursor < lines.length) addContinuationPage();
+        }
+        if (sectionIndex < sections.length - 1) {
+          y += lineHeight;
+          if (y > footerSafeY - lineHeight) addContinuationPage();
+        }
+      });
+    };
+    writeRebuttalText(previewDraft);
     addSOLNotice(doc);
     addLetterFooter(doc);
     setPreviewPdfUrl(getPDFDataUrl(doc));
