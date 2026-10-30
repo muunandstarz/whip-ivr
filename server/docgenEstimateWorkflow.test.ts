@@ -6,6 +6,7 @@ const routerSource = fs.readFileSync(path.resolve(process.cwd(), 'server/routers
 const pageSource = fs.readFileSync(path.resolve(process.cwd(), 'client/src/pages/DocGenerator.tsx'), 'utf8');
 const carrierAnalyzerSource = fs.readFileSync(path.resolve(process.cwd(), 'server/carrierRebuttalAnalysis.ts'), 'utf8');
 const schemaSource = fs.readFileSync(path.resolve(process.cwd(), 'drizzle/schema.ts'), 'utf8');
+const dbSource = fs.readFileSync(path.resolve(process.cwd(), 'server/db.ts'), 'utf8');
 
 describe('estimate workflow fields and previews', () => {
   it('extracts insurer, claimant, and adjuster names through the shared estimate contract', () => {
@@ -81,6 +82,36 @@ describe('estimate workflow fields and previews', () => {
     expect(claudeReviewSegment).toContain('maxTokens: 2_200');
     expect(claudeReviewSegment).not.toContain('model: "gpt');
     expect(claudeReviewSegment).not.toContain('model: "gemini');
+  });
+
+  it('automatically re-enables guarded Claude review when the live catalog again supports the selected Claude model', () => {
+    expect(routerSource).toContain('async function carrierRebuttalClaudeAvailability()');
+    expect(routerSource).toContain('Claude is currently listed as unsupported by the live project catalog. This page will automatically re-enable review when the catalog changes');
+    expect(pageSource).toContain('carrierRebuttalClaudeAvailability.useQuery');
+    expect(pageSource).toContain('refetchInterval: 60_000');
+    expect(pageSource).toContain('Claude review auto-enables');
+    expect(pageSource).toContain('disabled={claudeReviewMutation.isPending || !claudeAvailabilityQuery.data?.available}');
+  });
+
+  it('uses authorized existing claim exhibits and correspondence only in request memory without exposing file keys or copying source content', () => {
+    expect(routerSource).toContain('carrierRebuttalClaimSources: protectedProcedure');
+    expect(routerSource).toContain('analyzeCarrierRebuttalClaimSource: protectedProcedure');
+    expect(routerSource).toContain('getCarrierRebuttalClaimSourceMaterial');
+    expect(routerSource).toContain('bytes?.fill(0);');
+    expect(routerSource).toContain('selectedClaimSourceIds: z.array');
+    expect(routerSource).toContain('SELECTED CLAIM EXHIBIT / SOURCE-MATERIAL METADATA');
+    expect(dbSource).toContain('listCarrierRebuttalClaimSources');
+    expect(dbSource).toContain('getCarrierRebuttalClaimSourceMaterial');
+    expect(dbSource).toContain('if (!input.isAdmin)');
+    expect(dbSource).toContain('eq(mailItems.assignedHandlerId, input.handlerProfileId)');
+    expect(dbSource).toContain('reads existing claim correspondence only');
+    expect(schemaSource).toContain('selectedClaimSourceIds: json("selected_claim_source_ids")');
+    expect(schemaSource).not.toContain('selectedClaimSourceText');
+    expect(schemaSource).not.toContain('selectedClaimSourceStorageKey');
+    expect(pageSource).toContain('Existing claim exhibits &amp; source material');
+    expect(pageSource).toContain('Read as Whip estimate');
+    expect(pageSource).toContain('Read as carrier response');
+    expect(pageSource).toContain('Read as support');
   });
 
   it('requires accepted or not-disputed liability and reconciles the full estimate totals to the line variance', () => {

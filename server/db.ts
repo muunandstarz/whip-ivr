@@ -27,6 +27,8 @@ import {
   claimCorrespondence,
   oemProcedureSources,
   carrierRebuttalAiReviews,
+  mailItems,
+  mailItemFiles,
 } from "../drizzle/schema";
 import { lossIntakeClaims } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -2380,6 +2382,120 @@ export async function getOemProcedureSourcesByKeys(sourceKeys: string[]) {
   return db.select().from(oemProcedureSources).where(inArray(oemProcedureSources.sourceKey, uniqueKeys));
 }
 
+export type CarrierRebuttalClaimSource = {
+  sourceId: string;
+  claimNumber: string;
+  itemId: number;
+  fileId: number | null;
+  kind: "mail_body" | "attachment";
+  title: string;
+  sourceLabel: string;
+  receivedAt: Date;
+  summary: string;
+  hasReadableText: boolean;
+  fileName: string | null;
+  contentType: string | null;
+};
+
+export type CarrierRebuttalClaimSourceMaterial = CarrierRebuttalClaimSource & {
+  text: string | null;
+  storageKey: string | null;
+};
+
+function claimSourceLabel(source: "email" | "mail" | "fax" | "manual") {
+  if (source === "email") return "Claim correspondence email";
+  if (source === "mail") return "Claim correspondence mail";
+  if (source === "fax") return "Claim correspondence fax";
+  return "Claim correspondence record";
+}
+
+// This claim-source bridge reads existing claim correspondence only. It does not
+// enable Mailroom jobs, expose a storage key to the browser, or create a duplicate
+// copy of any claim attachment/body in DocGen tables.
+export async function listCarrierRebuttalClaimSources(input: {
+  claimNumber: string;
+  handlerProfileId?: number | null;
+  isAdmin: boolean;
+}): Promise<CarrierRebuttalClaimSource[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(mailItems.claimNumber, input.claimNumber)];
+  if (!input.isAdmin) {
+    if (!input.handlerProfileId) return [];
+    conditions.push(eq(mailItems.assignedHandlerId, input.handlerProfileId));
+  }
+  const rows = await db.select({ item: mailItems, file: mailItemFiles })
+    .from(mailItems)
+    .leftJoin(mailItemFiles, eq(mailItemFiles.itemId, mailItems.id))
+    .where(and(...conditions))
+    .orderBy(desc(mailItems.receivedAt))
+    .limit(100);
+  const sources: CarrierRebuttalClaimSource[] = [];
+  for (const row of rows) {
+    const item = row.item;
+    const baseTitle = item.subject?.trim() || item.summaryNote?.trim() || claimSourceLabel(item.source);
+    if (item.bodyText?.trim()) {
+      sources.push({
+        sourceId: `mail:${item.id}:body`, claimNumber: item.claimNumber ?? input.claimNumber, itemId: item.id, fileId: null,
+        kind: "mail_body", title: baseTitle.slice(0, 255), sourceLabel: claimSourceLabel(item.source), receivedAt: item.receivedAt,
+        summary: (item.summaryNote || item.requestedAction || "Claim correspondence message body").slice(0, 600), hasReadableText: true,
+        fileName: null, contentType: null,
+      });
+    }
+    if (row.file) {
+      sources.push({
+        sourceId: `mail:${item.id}:file:${row.file.id}`, claimNumber: item.claimNumber ?? input.claimNumber, itemId: item.id, fileId: row.file.id,
+        kind: "attachment", title: (row.file.filename || baseTitle).slice(0, 255), sourceLabel: claimSourceLabel(item.source), receivedAt: item.receivedAt,
+        summary: (item.summaryNote || item.requestedAction || "Claim correspondence attachment").slice(0, 600), hasReadableText: false,
+        fileName: row.file.filename, contentType: row.file.contentType,
+      });
+    }
+  }
+  return sources.slice(0, 48);
+}
+
+export async function getCarrierRebuttalClaimSourceMaterial(input: {
+  claimNumber: string;
+  sourceId: string;
+  handlerProfileId?: number | null;
+  isAdmin: boolean;
+}): Promise<CarrierRebuttalClaimSourceMaterial | null> {
+  const match = /^mail:(\d+):(body|file:(\d+))$/.exec(input.sourceId);
+  if (!match) return null;
+  const itemId = Number(match[1]);
+  const expectedFileId = match[3] ? Number(match[3]) : null;
+  const db = await getDb();
+  if (!db) return null;
+  const conditions = [eq(mailItems.id, itemId), eq(mailItems.claimNumber, input.claimNumber)];
+  if (!input.isAdmin) {
+    if (!input.handlerProfileId) return null;
+    conditions.push(eq(mailItems.assignedHandlerId, input.handlerProfileId));
+  }
+  const itemRows = await db.select().from(mailItems).where(and(...conditions)).limit(1);
+  const item = itemRows[0];
+  if (!item) return null;
+  const baseTitle = item.subject?.trim() || item.summaryNote?.trim() || claimSourceLabel(item.source);
+  if (match[2] === "body") {
+    if (!item.bodyText?.trim()) return null;
+    return {
+      sourceId: input.sourceId, claimNumber: item.claimNumber ?? input.claimNumber, itemId: item.id, fileId: null,
+      kind: "mail_body", title: baseTitle.slice(0, 255), sourceLabel: claimSourceLabel(item.source), receivedAt: item.receivedAt,
+      summary: (item.summaryNote || item.requestedAction || "Claim correspondence message body").slice(0, 600), hasReadableText: true,
+      fileName: null, contentType: null, text: item.bodyText, storageKey: null,
+    };
+  }
+  const fileRows = await db.select().from(mailItemFiles)
+    .where(and(eq(mailItemFiles.itemId, item.id), eq(mailItemFiles.id, expectedFileId!))).limit(1);
+  const file = fileRows[0];
+  if (!file) return null;
+  return {
+    sourceId: input.sourceId, claimNumber: item.claimNumber ?? input.claimNumber, itemId: item.id, fileId: file.id,
+    kind: "attachment", title: (file.filename || baseTitle).slice(0, 255), sourceLabel: claimSourceLabel(item.source), receivedAt: item.receivedAt,
+    summary: (item.summaryNote || item.requestedAction || "Claim correspondence attachment").slice(0, 600), hasReadableText: false,
+    fileName: file.filename, contentType: file.contentType, text: null, storageKey: file.storageKey,
+  };
+}
+
 export type CreateCarrierRebuttalAiReviewInput = {
   claimNumber: string;
   vehicleYear: number;
@@ -2387,6 +2503,7 @@ export type CreateCarrierRebuttalAiReviewInput = {
   vehicleModel: string;
   vin?: string | null;
   selectedSourceKeys: string[];
+  selectedClaimSourceIds: string[];
   inputFingerprint: string;
   modelId: string;
   status: "claude_completed" | "claude_unavailable" | "claude_malformed" | "manual_review_required";

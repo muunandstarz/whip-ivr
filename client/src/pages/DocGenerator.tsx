@@ -4939,11 +4939,13 @@ function CarrierRebuttalTab() {
   const [carrierResponse, setCarrierResponse] = useState<File | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
+  const [selectedClaimSourceIds, setSelectedClaimSourceIds] = useState<string[]>([]);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [polishLoading, setPolishLoading] = useState(false);
   const [claudeReview, setClaudeReview] = useState<{ reviewId: number; status: string; modelId: string; output: { factGaps?: Array<{ field: string; message: string }>; citationApplicabilityWarnings?: string[]; neutralDisputeRows?: Array<{ lineId: string; wording: string }>; draftNarrative?: string; handlerVerificationRequired?: boolean } } | null>(null);
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
   const claudeReviewMutation = trpc.docgen.reviewCarrierRebuttalWithClaude.useMutation();
+  const claimSourceAnalysisMutation = trpc.docgen.analyzeCarrierRebuttalClaimSource.useMutation();
   const vehicleYearNumber = Number(form.vehicleYear);
   const sourceQueryInput = useMemo(() => ({
     vehicleYear: Number.isInteger(vehicleYearNumber) ? vehicleYearNumber : 1900,
@@ -4954,19 +4956,29 @@ function CarrierRebuttalTab() {
     enabled: form.oem === "tesla" && Number.isInteger(vehicleYearNumber) && vehicleYearNumber >= 2017 && Boolean(form.vehicleMake.trim()) && Boolean(form.vehicleModel.trim()),
     staleTime: 5 * 60_000,
   });
+  const claimSourcesQuery = trpc.docgen.carrierRebuttalClaimSources.useQuery({ claimNumber: form.claimNumber.trim() }, {
+    enabled: Boolean(form.claimNumber.trim()),
+    staleTime: 30_000,
+  });
+  const claudeAvailabilityQuery = trpc.docgen.carrierRebuttalClaudeAvailability.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+  });
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(CARRIER_REBUTTAL_STORAGE_KEY) || "{}") as Partial<{ form: CarrierRebuttalForm; lineItems: CarrierRebuttalLine[]; exhibits: CarrierRebuttalExhibit[]; narrative: string }>;
+      const saved = JSON.parse(localStorage.getItem(CARRIER_REBUTTAL_STORAGE_KEY) || "{}") as Partial<{ form: CarrierRebuttalForm; lineItems: CarrierRebuttalLine[]; exhibits: CarrierRebuttalExhibit[]; narrative: string; selectedClaimSourceIds: string[] }>;
       if (saved.form) setForm({ ...initialCarrierForm(), ...saved.form, oem: "tesla" });
       if (Array.isArray(saved.lineItems) && saved.lineItems.length) setLineItems(saved.lineItems.map((line) => ({ ...emptyCarrierLine(), ...line })));
       if (Array.isArray(saved.exhibits)) setExhibits(saved.exhibits);
       if (typeof saved.narrative === "string") setNarrative(saved.narrative);
+      if (Array.isArray(saved.selectedClaimSourceIds)) setSelectedClaimSourceIds(saved.selectedClaimSourceIds.filter((id) => /^mail:\d+:(body|file:\d+)$/.test(id)).slice(0, 12));
     } catch { /* malformed local draft is safely ignored */ }
   }, []);
   useEffect(() => {
-    localStorage.setItem(CARRIER_REBUTTAL_STORAGE_KEY, JSON.stringify({ form, lineItems, exhibits, narrative }));
-  }, [form, lineItems, exhibits, narrative]);
+    localStorage.setItem(CARRIER_REBUTTAL_STORAGE_KEY, JSON.stringify({ form, lineItems, exhibits, narrative, selectedClaimSourceIds }));
+  }, [form, lineItems, exhibits, narrative, selectedClaimSourceIds]);
 
   const set = <K extends keyof CarrierRebuttalForm>(key: K) => (value: CarrierRebuttalForm[K]) => setForm((current) => ({ ...current, [key]: value }));
   const updateLine = <K extends keyof CarrierRebuttalLine>(id: string, key: K, value: CarrierRebuttalLine[K]) => setLineItems((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line));
@@ -5047,6 +5059,7 @@ function CarrierRebuttalTab() {
         adjuster: form.adjuster,
         dateOfLoss: form.dateOfLoss,
         selectedSourceKeys: Array.from(new Set(disputedLines.map((line) => line.sourceKey))),
+        selectedClaimSourceIds,
         disputedLines: disputedLines.map((line) => ({
           id: line.id,
           item: line.item,
@@ -5068,6 +5081,49 @@ function CarrierRebuttalTab() {
     }
   };
 
+  const applyCarrierAnalysis = (data: {
+    estimate?: { repairTotal?: string; vehicle?: string; vin?: string; claimNumber?: string; claimNumberRole?: string; dateOfLoss?: string; repairFacility?: string; repairFacilityLocation?: string; roNumber?: string; estimateDate?: string; claimantName?: string; lineItems?: Array<{ description: string; amount: string; estimateLine: string }> };
+    carrier?: { carrierName?: string; carrierClaimNumber?: string; adjusterName?: string; estimateDate?: string; offerTotal?: string; denialReasons?: string; lineItems?: Array<{ description: string; offer: string; reason: string; estimateLine: string }> };
+    evidenceSuggestions?: Array<{ title: string; source: string; revisionDate: string; markedPage: string; note: string }>;
+    warnings?: string[];
+  }) => {
+    setAnalysisWarnings(data.warnings || []);
+    const detectedVehicle = (data.estimate?.vehicle || "").match(/\b(20\d{2}|19\d{2})\s+(Tesla)\s+(Model\s*[3Y])\b/i);
+    setForm((current) => ({
+      ...current,
+      vehicle: data.estimate?.vehicle || current.vehicle,
+      vehicleYear: detectedVehicle?.[1] || current.vehicleYear,
+      vehicleMake: detectedVehicle?.[2] || current.vehicleMake,
+      vehicleModel: detectedVehicle?.[3]?.replace(/\s+/g, " ") || current.vehicleModel,
+      vin: data.estimate?.vin || current.vin,
+      claimNumber: data.estimate?.claimNumberRole === "our" ? (data.estimate.claimNumber || current.claimNumber) : current.claimNumber,
+      dateOfLoss: data.estimate?.dateOfLoss || current.dateOfLoss,
+      repairFacility: data.estimate?.repairFacility || current.repairFacility,
+      repairFacilityLocation: data.estimate?.repairFacilityLocation || current.repairFacilityLocation,
+      roNumber: data.estimate?.roNumber || current.roNumber,
+      ourEstimateDate: data.estimate?.estimateDate || current.ourEstimateDate,
+      insuredName: data.estimate?.claimantName || current.insuredName,
+      carrier: data.carrier?.carrierName || current.carrier,
+      theirClaimNumber: data.carrier?.carrierClaimNumber || current.theirClaimNumber,
+      adjuster: data.carrier?.adjusterName || current.adjuster,
+      carrierEstimateDate: data.carrier?.estimateDate || current.carrierEstimateDate,
+      whipEstimateTotal: data.estimate?.repairTotal || current.whipEstimateTotal,
+      carrierEstimateTotal: data.carrier?.offerTotal || current.carrierEstimateTotal,
+    }));
+    const ourLines = data.estimate?.lineItems || [];
+    const carrierLines = data.carrier?.lineItems || [];
+    if (ourLines.length || carrierLines.length) {
+      const rows = ourLines.length ? ourLines.map((line, index) => {
+        const match = carrierLines.find((carrier) => carrier.description.toLowerCase() === line.description.toLowerCase()) || carrierLines[index];
+        return { ...emptyCarrierLine(), item: line.description, ours: line.amount, theirs: match?.offer || "", carrierReason: match?.reason || data.carrier?.denialReasons || "", ourLine: line.estimateLine, carrierLine: match?.estimateLine || "" };
+      }) : carrierLines.map((line) => ({ ...emptyCarrierLine(), item: line.description, theirs: line.offer, carrierReason: line.reason, carrierLine: line.estimateLine }));
+      setLineItems(rows.length ? rows : [emptyCarrierLine()]);
+    }
+    if (data.evidenceSuggestions?.length) {
+      setExhibits((current) => [...current, ...data.evidenceSuggestions!.map((item, index) => ({ ...emptyCarrierExhibit(), letter: String.fromCharCode(65 + Math.min(25, current.length + index)), title: item.title, source: item.source, revisionDate: item.revisionDate, markedPage: item.markedPage }))]);
+    }
+  };
+
   const analyzeSources = async () => {
     if (!ourEstimate && !supportingEvidence && !carrierResponse) { toast.error("Add at least one supported source document first."); return; }
     setAnalysisLoading(true); setAnalysisWarnings([]);
@@ -5084,44 +5140,23 @@ function CarrierRebuttalTab() {
         warnings?: string[]; error?: string;
       };
       if (!response.ok) throw new Error(data.error || "Could not analyze sources.");
-      setAnalysisWarnings(data.warnings || []);
-      const detectedVehicle = (data.estimate?.vehicle || "").match(/\b(20\d{2}|19\d{2})\s+(Tesla)\s+(Model\s*[3Y])\b/i);
-      setForm((current) => ({
-        ...current,
-        vehicle: data.estimate?.vehicle || current.vehicle,
-        vehicleYear: detectedVehicle?.[1] || current.vehicleYear,
-        vehicleMake: detectedVehicle?.[2] || current.vehicleMake,
-        vehicleModel: detectedVehicle?.[3]?.replace(/\s+/g, " ") || current.vehicleModel,
-        vin: data.estimate?.vin || current.vin,
-        claimNumber: data.estimate?.claimNumberRole === "our" ? (data.estimate.claimNumber || current.claimNumber) : current.claimNumber,
-        dateOfLoss: data.estimate?.dateOfLoss || current.dateOfLoss,
-        repairFacility: data.estimate?.repairFacility || current.repairFacility,
-        repairFacilityLocation: data.estimate?.repairFacilityLocation || current.repairFacilityLocation,
-        roNumber: data.estimate?.roNumber || current.roNumber,
-        ourEstimateDate: data.estimate?.estimateDate || current.ourEstimateDate,
-        insuredName: data.estimate?.claimantName || current.insuredName,
-        carrier: data.carrier?.carrierName || current.carrier,
-        theirClaimNumber: data.carrier?.carrierClaimNumber || current.theirClaimNumber,
-        adjuster: data.carrier?.adjusterName || current.adjuster,
-        carrierEstimateDate: data.carrier?.estimateDate || current.carrierEstimateDate,
-        whipEstimateTotal: data.estimate?.repairTotal || current.whipEstimateTotal,
-        carrierEstimateTotal: data.carrier?.offerTotal || current.carrierEstimateTotal,
-      }));
-      const ourLines = data.estimate?.lineItems || [];
-      const carrierLines = data.carrier?.lineItems || [];
-      if (ourLines.length || carrierLines.length) {
-        const rows = ourLines.length ? ourLines.map((line, index) => {
-          const match = carrierLines.find((carrier) => carrier.description.toLowerCase() === line.description.toLowerCase()) || carrierLines[index];
-          return { ...emptyCarrierLine(), item: line.description, ours: line.amount, theirs: match?.offer || "", carrierReason: match?.reason || data.carrier?.denialReasons || "", ourLine: line.estimateLine, carrierLine: match?.estimateLine || "" };
-        }) : carrierLines.map((line) => ({ ...emptyCarrierLine(), item: line.description, theirs: line.offer, carrierReason: line.reason, carrierLine: line.estimateLine }));
-        setLineItems(rows.length ? rows : [emptyCarrierLine()]);
-      }
-      if (data.evidenceSuggestions?.length) {
-        setExhibits((current) => [...current, ...data.evidenceSuggestions!.map((item, index) => ({ ...emptyCarrierExhibit(), letter: String.fromCharCode(65 + Math.min(25, current.length + index)), title: item.title, source: item.source, revisionDate: item.revisionDate, markedPage: item.markedPage }))]);
-      }
+      applyCarrierAnalysis(data);
       toast.success("Source facts were read in memory. Verify every field, line reference, exhibit, and marked page before generating.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not analyze the source documents.");
+    } finally { setAnalysisLoading(false); }
+  };
+
+  const analyzeClaimSource = async (sourceId: string, kind: "ourEstimate" | "supportingEvidence" | "carrierResponse") => {
+    if (!form.claimNumber.trim()) { toast.error("Enter the Whip claim number before selecting claim source material."); return; }
+    setAnalysisLoading(true); setAnalysisWarnings([]);
+    try {
+      const data = await claimSourceAnalysisMutation.mutateAsync({ claimNumber: form.claimNumber.trim(), sourceId, kind });
+      applyCarrierAnalysis(data);
+      setSelectedClaimSourceIds((current) => current.includes(sourceId) ? current : [...current, sourceId].slice(0, 12));
+      toast.success("Selected claim source was read in request memory. Verify every field, line reference, exhibit, and marked page before generating.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not analyze the selected claim source.");
     } finally { setAnalysisLoading(false); }
   };
 
@@ -5342,7 +5377,7 @@ function CarrierRebuttalTab() {
   };
 
   const clearAll = () => {
-    setForm(initialCarrierForm()); setLineItems([emptyCarrierLine()]); setExhibits([]); setNarrative(""); setOurEstimate(null); setSupportingEvidence(null); setCarrierResponse(null); setPreviewPdfUrl(null); setAnalysisWarnings([]); setClaudeReview(null); localStorage.removeItem(CARRIER_REBUTTAL_STORAGE_KEY); toast.success("Carrier Rebuttal inputs cleared. Uploaded source files were never retained.");
+    setForm(initialCarrierForm()); setLineItems([emptyCarrierLine()]); setExhibits([]); setNarrative(""); setOurEstimate(null); setSupportingEvidence(null); setCarrierResponse(null); setSelectedClaimSourceIds([]); setPreviewPdfUrl(null); setAnalysisWarnings([]); setClaudeReview(null); localStorage.removeItem(CARRIER_REBUTTAL_STORAGE_KEY); toast.success("Carrier Rebuttal inputs cleared. Uploaded source files were never retained.");
   };
   const uploadCard = (label: string, id: string, file: File | null, setter: (file: File | null) => void, required?: boolean) => (
     <label htmlFor={id} className="block rounded-lg border border-dashed border-border bg-muted/20 p-3 cursor-pointer hover:border-primary/50 transition-colors">
@@ -5376,6 +5411,10 @@ function CarrierRebuttalTab() {
     <Panel title="2. Transient source analysis" tag="VERIFY EVERY FIELD">
       <p className="mb-3 text-xs leading-5 text-muted-foreground">Add the repair estimate, optional marked support, and the carrier response. This action reads source bytes in memory; no source file, storage key, or uploaded document is retained.</p>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">{uploadCard("Our repair estimate", "rb-our-estimate", ourEstimate, setOurEstimate, true)}{uploadCard("Marked supporting evidence", "rb-support", supportingEvidence, setSupportingEvidence)}{uploadCard("Carrier estimate / response", "rb-carrier-response", carrierResponse, setCarrierResponse, true)}</div>
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold text-slate-900">Existing claim exhibits &amp; source material</p><p className="mt-1 max-w-3xl text-[11px] leading-4 text-slate-600">For the Whip claim number above, select only the existing correspondence or attachment you are using. The selected source is read in request memory only; this workflow retains only its opaque claim-record ID in the team review audit, never its bytes, body, URL, or storage key.</p></div><span className="rounded bg-white px-2 py-1 text-[10px] font-semibold text-slate-600">{selectedClaimSourceIds.length}/12 selected</span></div>
+        {!form.claimNumber.trim() ? <p className="mt-3 text-xs text-slate-600">Enter the Whip claim number to load claim-linked source material available to you.</p> : claimSourcesQuery.isFetching ? <p className="mt-3 text-xs text-slate-600">Loading claim-linked source material…</p> : claimSourcesQuery.data?.length ? <div className="mt-3 space-y-2">{claimSourcesQuery.data.map((source) => <div key={source.sourceId} className="rounded border border-slate-200 bg-white p-2.5"><div className="flex flex-wrap items-start justify-between gap-2"><label className="flex min-w-0 flex-1 items-start gap-2 text-xs"><Checkbox checked={selectedClaimSourceIds.includes(source.sourceId)} onCheckedChange={(checked) => setSelectedClaimSourceIds((current) => checked ? (current.includes(source.sourceId) ? current : [...current, source.sourceId].slice(0, 12)) : current.filter((id) => id !== source.sourceId))} aria-label={`Select ${source.title} as claim source material`} /><span><span className="font-semibold text-slate-900">{source.title}</span><span className="mt-0.5 block text-[11px] text-slate-600">{source.sourceLabel} · {source.kind === "attachment" ? source.fileName || "Attachment" : "Message body"} · {new Date(source.receivedAt).toLocaleDateString()}</span></span></label><div className="flex shrink-0 flex-wrap gap-1"><Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[10px]" disabled={analysisLoading || claimSourceAnalysisMutation.isPending} onClick={() => void analyzeClaimSource(source.sourceId, "ourEstimate")}>Read as Whip estimate</Button><Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[10px]" disabled={analysisLoading || claimSourceAnalysisMutation.isPending} onClick={() => void analyzeClaimSource(source.sourceId, "carrierResponse")}>Read as carrier response</Button><Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[10px]" disabled={analysisLoading || claimSourceAnalysisMutation.isPending} onClick={() => void analyzeClaimSource(source.sourceId, "supportingEvidence")}>Read as support</Button></div></div><p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-slate-600">{source.summary || "No summary is available. Confirm the source and marked page manually."}</p></div>)}</div> : <p className="mt-3 text-xs text-slate-600">No claim-linked source material available to your profile was found for this exact claim number. You may use the transient upload controls above.</p>}
+      </div>
       <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => void analyzeSources()} disabled={analysisLoading} className="bg-slate-900 text-white hover:bg-slate-800">{analysisLoading ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}{analysisLoading ? "Reading in memory…" : "Read sources & pre-fill facts"}</Button><span className="self-center text-[11px] text-muted-foreground">Always verify ownership of claim numbers, estimate lines, exhibit titles, and marked pages.</span></div>
       {analysisWarnings.length > 0 && <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{analysisWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
     </Panel>
@@ -5395,7 +5434,7 @@ function CarrierRebuttalTab() {
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><Button type="button" variant="outline" size="sm" onClick={() => setLineItems((current) => [...current, emptyCarrierLine()])}><Plus className="mr-1 h-3.5 w-3.5" />Add operation</Button><div className="flex flex-wrap gap-4 text-xs"><span>Line total — Whip <strong>{carrierMoney(lineWhipTotal.toFixed(2))}</strong></span><span>Line total — carrier <strong>{carrierMoney(lineCarrierTotal.toFixed(2))}</strong></span><span>Full Whip estimate <strong>{carrierMoney(whipTotal.toFixed(2))}</strong></span><span>Full carrier estimate <strong>{carrierMoney(carrierTotal.toFixed(2))}</strong></span><span className={Math.abs(lineGap - gap) > 0.01 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>{Math.abs(lineGap - gap) > 0.01 ? "Reconciliation required" : `Reconciled difference ${carrierMoney(gap.toFixed(2))}`}</span></div></div>
     </Panel>
     <Panel title="6. Claude evidence review" tag="DRAFT ONLY · HANDLER VERIFICATION REQUIRED">
-      <div className="flex flex-wrap items-start justify-between gap-3"><p className="max-w-3xl text-xs leading-5 text-muted-foreground">Claude receives only the entered case facts, selected source metadata/links, and handler-marked evidence fields. It cannot create citations, sections, pages, repair methods, legal authority, coverage conclusions, or final facts. Every review is saved for the team; user-uploaded files and owner-manual content are never sent or retained here.</p><Button type="button" size="sm" variant="outline" onClick={() => void requestClaudeReview()} disabled={claudeReviewMutation.isPending}>{claudeReviewMutation.isPending ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}{claudeReviewMutation.isPending ? "Reviewing…" : "Run Claude evidence review"}</Button></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div className="max-w-3xl"><p className="text-xs leading-5 text-muted-foreground">Claude receives only the entered case facts, selected official-source metadata/links, handler-marked evidence fields, and selected claim-record descriptors. It cannot create citations, sections, pages, repair methods, legal authority, coverage conclusions, or final facts. Existing claim-source attachments/bodies are analyzed only in request memory; user uploads and owner-manual content are never sent or retained here.</p><p className={`mt-2 text-[11px] leading-4 ${claudeAvailabilityQuery.data?.available ? "text-emerald-700" : "text-amber-800"}`}>{claudeAvailabilityQuery.isFetching && !claudeAvailabilityQuery.data ? "Checking live Claude availability…" : claudeAvailabilityQuery.data?.detail || "Claude availability has not yet been verified."}</p></div><Button type="button" size="sm" variant="outline" onClick={() => void requestClaudeReview()} disabled={claudeReviewMutation.isPending || !claudeAvailabilityQuery.data?.available}>{claudeReviewMutation.isPending ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}{claudeReviewMutation.isPending ? "Reviewing…" : claudeAvailabilityQuery.data?.available ? "Run Claude evidence review" : "Claude review auto-enables"}</Button></div>
       {claudeReview && <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold text-slate-900">Review #{claudeReview.reviewId} · {claudeReview.modelId}</p><span className={claudeReview.status === "claude_completed" ? "rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800" : "rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900"}>{claudeReview.status === "claude_completed" ? "Claude draft saved" : "Manual review fallback"}</span></div>{claudeReview.output.citationApplicabilityWarnings?.length ? <div className="mt-3"><p className="font-semibold text-slate-800">Citation / availability warnings</p><ul className="mt-1 list-disc space-y-1 pl-4 text-slate-700">{claudeReview.output.citationApplicabilityWarnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div> : null}{claudeReview.output.factGaps?.length ? <div className="mt-3"><p className="font-semibold text-slate-800">Fact gaps</p><ul className="mt-1 list-disc space-y-1 pl-4 text-slate-700">{claudeReview.output.factGaps.map((gap, index) => <li key={`${gap.field}-${index}`}><strong>{gap.field}:</strong> {gap.message}</li>)}</ul></div> : null}{claudeReview.output.neutralDisputeRows?.length ? <div className="mt-3"><p className="font-semibold text-slate-800">Suggested neutral row wording</p><ul className="mt-1 space-y-1 text-slate-700">{claudeReview.output.neutralDisputeRows.map((row) => <li key={row.lineId}><strong>Line:</strong> {row.wording}</li>)}</ul></div> : null}{claudeReview.output.draftNarrative ? <div className="mt-3 rounded border border-slate-200 bg-white p-2"><p className="font-semibold text-slate-800">Suggested draft — review before use</p><p className="mt-1 whitespace-pre-wrap leading-5 text-slate-700">{claudeReview.output.draftNarrative}</p><Button type="button" size="sm" variant="outline" className="mt-2" disabled={Boolean(narrative.trim())} onClick={() => { if (!narrative.trim()) { setNarrative(claudeReview.output.draftNarrative || ""); toast.success("Suggested draft copied into the empty notes field. Review and edit before generating."); } }}>Use in empty notes field</Button>{narrative.trim() ? <p className="mt-2 text-[11px] text-slate-500">Existing handler notes are preserved and cannot be overwritten by this review.</p> : null}</div> : null}</div>}
     </Panel>
     <Panel title="7. Exhibit schedule" tag="ATTACH ONLY WHAT YOU CAN IDENTIFY">

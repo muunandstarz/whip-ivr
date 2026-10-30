@@ -897,6 +897,9 @@ export const carrierRebuttalAiReviews = mysqlTable("carrier_rebuttal_ai_reviews"
   vehicleModel: varchar("vehicle_model", { length: 128 }).notNull(),
   vin: varchar("vin", { length: 40 }),
   selectedSourceKeys: json("selected_source_keys").notNull(),
+  // Opaque IDs point to the originating claim record only; no source body, URL,
+  // file name, or storage key is copied into the Carrier Rebuttal audit.
+  selectedClaimSourceIds: json("selected_claim_source_ids").notNull(),
   inputFingerprint: varchar("input_fingerprint", { length: 96 }).notNull(),
   modelId: varchar("model_id", { length: 96 }).notNull(),
   status: mysqlEnum("status", ["claude_completed", "claude_unavailable", "claude_malformed", "manual_review_required"]).notNull(),

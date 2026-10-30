@@ -358,3 +358,38 @@ export async function analyzeCarrierRebuttalUpload(upload: RebuttalUpload): Prom
     upload.bytes.fill(0);
   }
 }
+
+// Existing claim correspondence can include a stored mail body without an attached
+// file. This function reads that source only for the active request and returns the
+// same normalized, handler-verifiable facts as an upload. It does not write the
+// body, a transcript, or any derived source text to Carrier Rebuttal history.
+export async function analyzeCarrierRebuttalClaimTextMaterial(input: {
+  text: string;
+  kind: UploadKind;
+}): Promise<{
+  estimate?: RebuttalEstimateAnalysis;
+  carrier?: RebuttalCarrierAnalysis;
+  evidenceSuggestions: RebuttalEvidenceSuggestion[];
+  warning?: string;
+}> {
+  let workingText = input.text.slice(0, 120_000);
+  try {
+    if (!workingText.trim()) {
+      return { evidenceSuggestions: [], warning: "This selected claim source has no readable message text. Select a supported attachment or enter the marked exhibit details manually." };
+    }
+    const parsed = await analyzeWithText(input.kind, workingText);
+    if (!parsed) {
+      return { evidenceSuggestions: [], warning: "The selected claim source could not be read automatically. Enter the document facts and marked exhibit details manually." };
+    }
+    if (input.kind === "ourEstimate") return { estimate: normalizeEstimate(parsed), evidenceSuggestions: [] };
+    if (input.kind === "carrierResponse") return { carrier: normalizeCarrier(parsed), evidenceSuggestions: [] };
+    return { evidenceSuggestions: normalizeEvidence(parsed) };
+  } catch (error) {
+    console.warn("[CarrierRebuttal] transient claim text analysis failed", error instanceof Error ? error.message : "unknown error");
+    return { evidenceSuggestions: [], warning: "The selected claim source could not be read automatically. Enter the document facts and marked exhibit details manually." };
+  } finally {
+    // Strings cannot be securely zeroed in JavaScript; dropping this reference
+    // prevents this request-only text from being carried into retained state.
+    workingText = "";
+  }
+}

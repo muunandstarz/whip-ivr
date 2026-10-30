@@ -18,9 +18,11 @@ import {
   listAllUsers, createClaimCorrespondence, getClaimCorrespondence,
   listOemProcedureSources, getOemProcedureSourcesByKeys,
   createCarrierRebuttalAiReview, listCarrierRebuttalAiReviews,
+  listCarrierRebuttalClaimSources, getCarrierRebuttalClaimSourceMaterial,
 } from "../db";
 import { lookupClaimForDocgen } from "../db";
 import { describeTeslaCoverageGap, sourceMatchesTeslaVehicle } from "../oemEvidenceLibrary";
+import { analyzeCarrierRebuttalClaimTextMaterial, analyzeCarrierRebuttalUpload } from "../carrierRebuttalAnalysis";
 
 function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   const message = result.choices?.[0]?.message as (Awaited<ReturnType<typeof invokeLLM>>["choices"][number]["message"] & {
@@ -231,6 +233,7 @@ const carrierRebuttalClaudeInput = z.object({
     basis: z.string().trim().min(1).max(1_200),
     evidenceConfirmed: z.literal(true),
   }).strict()).min(1).max(40),
+  selectedClaimSourceIds: z.array(z.string().regex(/^mail:\d+:(body|file:\d+)$/)).max(12).default([]),
   existingNarrative: z.string().max(8_000).optional(),
 });
 
@@ -251,12 +254,44 @@ function claudeModelIsSupported(models: Array<{ id: string; description?: string
   return !description.includes("unsupported") && !description.includes("superseded") && !description.includes("retired");
 }
 
+async function carrierRebuttalClaudeAvailability() {
+  try {
+    const models = (await listLLMModels()).data;
+    const model = models.find((entry) => entry.id === CARRIER_REBUTTAL_CLAUDE_MODEL);
+    const available = claudeModelIsSupported(models);
+    return {
+      modelId: CARRIER_REBUTTAL_CLAUDE_MODEL,
+      available,
+      status: available ? "available" as const : "unavailable" as const,
+      detail: available
+        ? "Claude evidence review is available and will use the selected model on the next request."
+        : model
+          ? "Claude is currently listed as unsupported by the live project catalog. This page will automatically re-enable review when the catalog changes; no settings change is required."
+          : "The selected Claude model is not currently present in the live project catalog. This page will automatically re-enable review when it returns.",
+    };
+  } catch {
+    return {
+      modelId: CARRIER_REBUTTAL_CLAUDE_MODEL,
+      available: false,
+      status: "unavailable" as const,
+      detail: "Claude availability could not be verified. This page will retry automatically; no substitute model is used.",
+    };
+  }
+}
+
 function carrierRebuttalReviewPrompt(input: z.infer<typeof carrierRebuttalClaudeInput>, sources: Array<{
   sourceKey: string;
   title: string;
   sourceUrl: string | null;
   revisionDisplay: string;
   relevanceNote: string;
+}>, claimSources: Array<{
+  sourceId: string;
+  title: string;
+  sourceLabel: string;
+  receivedAt: Date;
+  summary: string;
+  kind: "mail_body" | "attachment";
 }>) {
   return `You are a drafting and gap-review assistant for a Whip Claims Management carrier repair-estimate reconsideration letter. Return only the required JSON schema.
 
@@ -284,7 +319,17 @@ HANDLER-VERIFIED DISPUTED LINES:
 ${JSON.stringify(input.disputedLines, null, 2)}
 
 SELECTED SOURCE METADATA (links/titles only; no source text was provided):
-${JSON.stringify(sources, null, 2)}`;
+${JSON.stringify(sources, null, 2)}
+
+SELECTED CLAIM EXHIBIT / SOURCE-MATERIAL METADATA (existing claim-record descriptors only; no attachment bytes, body text, original URL, or storage key was provided):
+${JSON.stringify(claimSources.map((source) => ({
+  sourceId: source.sourceId,
+  title: source.title,
+  sourceLabel: source.sourceLabel,
+  receivedAt: source.receivedAt.toISOString(),
+  kind: source.kind,
+  summary: source.summary,
+})), null, 2)}`;
 }
 
 async function downloadUploadedEstimate(storageKey: string): Promise<Buffer> {
@@ -406,6 +451,63 @@ function getStateCoverageInfo(state: string): string {
 
 
 export const docgenRouter = router({
+  carrierRebuttalClaudeAvailability: protectedProcedure
+    .query(async () => carrierRebuttalClaudeAvailability()),
+
+  carrierRebuttalClaimSources: protectedProcedure
+    .input(z.object({ claimNumber: z.string().trim().min(1).max(96) }))
+    .query(async ({ ctx, input }) => {
+      return listCarrierRebuttalClaimSources({
+        claimNumber: input.claimNumber,
+        handlerProfileId: ctx.user.handlerProfileId,
+        isAdmin: ctx.user.role === "admin",
+      });
+    }),
+
+  analyzeCarrierRebuttalClaimSource: protectedProcedure
+    .input(z.object({
+      claimNumber: z.string().trim().min(1).max(96),
+      sourceId: z.string().regex(/^mail:\d+:(body|file:\d+)$/),
+      kind: z.enum(["ourEstimate", "supportingEvidence", "carrierResponse"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const source = await getCarrierRebuttalClaimSourceMaterial({
+        claimNumber: input.claimNumber,
+        sourceId: input.sourceId,
+        handlerProfileId: ctx.user.handlerProfileId,
+        isAdmin: ctx.user.role === "admin",
+      });
+      if (!source) throw new Error("The selected claim source was not found for this claim or is not available to your handler profile.");
+
+      if (source.kind === "mail_body") {
+        const result = await analyzeCarrierRebuttalClaimTextMaterial({ text: source.text || "", kind: input.kind });
+        return { source: { sourceId: source.sourceId, title: source.title, kind: source.kind }, ...result };
+      }
+
+      let bytes: Buffer | null = null;
+      try {
+        if (!source.storageKey) throw new Error("The selected claim attachment has no storage reference.");
+        const signedUrl = await storageGetSignedUrl(source.storageKey);
+        const response = await fetch(signedUrl, { signal: AbortSignal.timeout(30_000) });
+        const contentType = response.headers.get("content-type")?.toLowerCase() || source.contentType || "";
+        if (!response.ok || contentType.includes("xml") || contentType.includes("text/html")) {
+          throw new Error("The selected claim attachment could not be read from source storage.");
+        }
+        bytes = Buffer.from(await response.arrayBuffer());
+        const result = await analyzeCarrierRebuttalUpload({
+          bytes,
+          fileName: source.fileName || source.title,
+          mimeType: source.contentType || contentType,
+          kind: input.kind,
+        });
+        return { source: { sourceId: source.sourceId, title: source.title, kind: source.kind }, ...result };
+      } finally {
+        // The originating key is never returned or retained by Carrier Rebuttal;
+        // all attachment bytes are request-memory-only and cleared on every path.
+        bytes?.fill(0);
+      }
+    }),
+
   carrierRebuttalOemSources: protectedProcedure
     .input(z.object({
       vehicleYear: z.number().int().min(1900).max(2100),
@@ -466,6 +568,24 @@ export const docgenRouter = router({
         revisionDisplay: source.revisionDisplay,
         relevanceNote: source.relevanceNote,
       }));
+      const selectedClaimSourceIds = Array.from(new Set(input.selectedClaimSourceIds));
+      const selectedClaimSources = await Promise.all(selectedClaimSourceIds.map((sourceId) => getCarrierRebuttalClaimSourceMaterial({
+        claimNumber: input.claimNumber,
+        sourceId,
+        handlerProfileId: ctx.user.handlerProfileId,
+        isAdmin: ctx.user.role === "admin",
+      })));
+      if (selectedClaimSources.some((source) => !source)) {
+        throw new Error("A selected claim exhibit/source record is not available for this claim or handler profile. Refresh the claim source list and select it again.");
+      }
+      const claimSourceMetadata = selectedClaimSources.filter((source): source is NonNullable<typeof source> => Boolean(source)).map((source) => ({
+        sourceId: source.sourceId,
+        title: source.title,
+        sourceLabel: source.sourceLabel,
+        receivedAt: source.receivedAt,
+        summary: source.summary,
+        kind: source.kind,
+      }));
       const inputFingerprint = createHash("sha256").update(JSON.stringify({
         claimNumber: input.claimNumber,
         vehicleYear: input.vehicleYear,
@@ -476,6 +596,7 @@ export const docgenRouter = router({
         adjuster: input.adjuster,
         dateOfLoss: input.dateOfLoss,
         selectedSourceKeys,
+        selectedClaimSourceIds,
         disputedLines: input.disputedLines,
         existingNarrative: input.existingNarrative || "",
       })).digest("hex");
@@ -491,6 +612,7 @@ export const docgenRouter = router({
           vehicleModel: input.vehicleModel,
           vin: input.vin || null,
           selectedSourceKeys,
+          selectedClaimSourceIds,
           inputFingerprint,
           modelId: CARRIER_REBUTTAL_CLAUDE_MODEL,
           status,
@@ -501,14 +623,9 @@ export const docgenRouter = router({
         return { reviewId, status, modelId: CARRIER_REBUTTAL_CLAUDE_MODEL, output: reviewOutput };
       };
 
-      let models: Awaited<ReturnType<typeof listLLMModels>>["data"];
-      try {
-        models = (await listLLMModels()).data;
-      } catch {
-        return saveReview("claude_unavailable", carrierRebuttalManualReviewOutput("Claude availability could not be verified. No substitute model was used; complete a manual evidence review."));
-      }
-      if (!claudeModelIsSupported(models)) {
-        return saveReview("claude_unavailable", carrierRebuttalManualReviewOutput("Claude is listed but not currently supported by the live project catalog. No substitute model was used; complete a manual evidence review."));
+      const claudeAvailability = await carrierRebuttalClaudeAvailability();
+      if (!claudeAvailability.available) {
+        return saveReview("claude_unavailable", carrierRebuttalManualReviewOutput(`${claudeAvailability.detail} No substitute model was used; complete a manual evidence review.`));
       }
 
       try {
@@ -516,7 +633,7 @@ export const docgenRouter = router({
           model: CARRIER_REBUTTAL_CLAUDE_MODEL,
           messages: [
             { role: "system", content: "Return only valid JSON matching the response schema. Do not use external tools or sources." },
-            { role: "user", content: carrierRebuttalReviewPrompt(input, sourceMetadata) },
+            { role: "user", content: carrierRebuttalReviewPrompt(input, sourceMetadata, claimSourceMetadata) },
           ],
           maxTokens: 2_200,
           thinking: { type: "enabled", budget_tokens: 1_024 },
