@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
 import { jsPDF } from "jspdf";
+import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
 import {
   AlertTriangle,
@@ -4839,489 +4840,380 @@ interface RebuttalLineItem {
   reason: string;
 }
 
+type CarrierRebuttalCategory = "scan" | "structure" | "calibration" | "parts" | "other";
+type CarrierRebuttalLine = {
+  id: string;
+  category: CarrierRebuttalCategory;
+  item: string;
+  ours: string;
+  theirs: string;
+  carrierReason: string;
+  ourLine: string;
+  carrierLine: string;
+  exhibitLetter: string;
+  exhibitMarkedPage: string;
+  basis: string;
+};
+type CarrierRebuttalExhibit = {
+  id: string;
+  letter: string;
+  title: string;
+  source: string;
+  revisionDate: string;
+  markedPage: string;
+};
+
+type CarrierRebuttalForm = {
+  letterDate: string;
+  claimNumber: string;
+  theirClaimNumber: string;
+  dateOfLoss: string;
+  vehicle: string;
+  vin: string;
+  carrier: string;
+  adjuster: string;
+  insuredName: string;
+  liabilityStatus: "accepted" | "not_disputed";
+  oem: "tesla" | "toyota" | "lexus" | "other";
+  repairFacility: string;
+  repairFacilityLocation: string;
+  roNumber: string;
+  ourEstimateDate: string;
+  carrierEstimateDate: string;
+  whipEstimateTotal: string;
+  carrierEstimateTotal: string;
+  responseDays: string;
+  dopAttached: boolean;
+  handlerName: string;
+  handlerTitle: string;
+  handlerEmail: string;
+  handlerExt: string;
+  stateRuleCitation: string;
+  stateRuleText: string;
+  stateRuleVerified: boolean;
+};
+
+const CARRIER_REBUTTAL_STORAGE_KEY = "whip_carrier_rebuttal_v2";
+const carrierCategories: Array<{ value: CarrierRebuttalCategory; label: string }> = [
+  { value: "scan", label: "Scan / diagnostic" },
+  { value: "structure", label: "Structure / restraint" },
+  { value: "calibration", label: "Calibration" },
+  { value: "parts", label: "Parts / corrosion" },
+  { value: "other", label: "Other operation" },
+];
+const emptyCarrierLine = (): CarrierRebuttalLine => ({
+  id: crypto.randomUUID(), category: "other", item: "", ours: "", theirs: "", carrierReason: "", ourLine: "", carrierLine: "", exhibitLetter: "", exhibitMarkedPage: "", basis: "",
+});
+const emptyCarrierExhibit = (): CarrierRebuttalExhibit => ({
+  id: crypto.randomUUID(), letter: "", title: "", source: "", revisionDate: "", markedPage: "",
+});
+const initialCarrierForm = (): CarrierRebuttalForm => ({
+  letterDate: new Date().toISOString().slice(0, 10), claimNumber: "", theirClaimNumber: "", dateOfLoss: "", vehicle: "", vin: "", carrier: "", adjuster: "", insuredName: "",
+  liabilityStatus: "accepted", oem: "other", repairFacility: "Total Recon", repairFacilityLocation: "", roNumber: "", ourEstimateDate: "", carrierEstimateDate: "", whipEstimateTotal: "", carrierEstimateTotal: "",
+  responseDays: "10", dopAttached: true, handlerName: "", handlerTitle: "Claims Representative", handlerEmail: "claims@drivewhip.com", handlerExt: "",
+  stateRuleCitation: "", stateRuleText: "", stateRuleVerified: false,
+});
+const carrierMoney = (value: string) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toLocaleString("en-US", { style: "currency", currency: "USD" }) : "$0.00";
+};
+const carrierDate = (value: string) => {
+  if (!value) return "[Date]";
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+};
+
 function CarrierRebuttalTab() {
-  const [form, setForm] = useState({
-    claimNumber: "",
-    theirClaimNumber: "",
-    vehicle: "",
-    dateOfLoss: "",
-    carrier: "",
-    adjuster: "",
-    claimantName: "",
-    carrierOfferTotal: "",
-    carrierReason: "",
-    accidentType: "",
-  });
+  const [form, setForm] = useState<CarrierRebuttalForm>(initialCarrierForm);
+  const [lineItems, setLineItems] = useState<CarrierRebuttalLine[]>([emptyCarrierLine()]);
+  const [exhibits, setExhibits] = useState<CarrierRebuttalExhibit[]>([]);
+  const [narrative, setNarrative] = useState("");
+  const [ourEstimate, setOurEstimate] = useState<File | null>(null);
+  const [supportingEvidence, setSupportingEvidence] = useState<File | null>(null);
+  const [carrierResponse, setCarrierResponse] = useState<File | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-  const [lineItems, setLineItems] = useState<RebuttalLineItem[]>([
-    { item: "", ours: "", theirs: "", reason: "" },
-  ]);
-  const [draft, setDraft] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
   const [polishLoading, setPolishLoading] = useState(false);
-  const [carrierDoc, setCarrierDoc] = useState<File | null>(null);
-  const [docUploading, setDocUploading] = useState(false);
-  const [ourEstimateDoc, setOurEstimateDoc] = useState<File | null>(null);
-  const [ourImageReportDoc, setOurImageReportDoc] = useState<File | null>(null);
-  const [estimateParsing, setEstimateParsing] = useState(false);
-  const generateMutation = trpc.docgen.generateRebuttal.useMutation();
-  const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
-  const parseCarrierResponseMutation = trpc.docgen.parseCarrierResponse.useMutation();
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
 
-  const set = (k: keyof typeof form) => (v: string) =>
-    setForm((p) => ({ ...p, [k]: v }));
-
-  const setItem = (i: number, k: keyof RebuttalLineItem) => (v: string) =>
-    setLineItems((prev) =>
-      prev.map((row, idx) => (idx === i ? { ...row, [k]: v } : row))
-    );
-
-  const addItem = () =>
-    setLineItems((prev) => [...prev, { item: "", ours: "", theirs: "", reason: "" }]);
-
-  const removeItem = (i: number) =>
-    setLineItems((prev) => prev.filter((_, idx) => idx !== i));
-
-  const totalOurs = lineItems.reduce((s, r) => s + (parseFloat(r.ours) || 0), 0);
-  const totalTheirs = lineItems.reduce((s, r) => s + (parseFloat(r.theirs) || 0), 0);
-  const totalGap = totalOurs - totalTheirs;
-
-  const parseOurEstimate = async () => {
-    if (!ourEstimateDoc) { toast.error("Upload our estimate first"); return; }
-    setEstimateParsing(true);
+  useEffect(() => {
     try {
-      const fd = new FormData();
-      fd.append("file", ourEstimateDoc);
-      const upload = await fetch("/api/upload/document", { method: "POST", body: fd });
-      if (!upload.ok) throw new Error(`Upload failed: ${ourEstimateDoc.name}`);
-      const payload = await upload.json() as { url?: string; signedUrl?: string; key?: string };
-      const fileUrl = payload.signedUrl || payload.url;
-      if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) throw new Error("Upload did not return a readable document URL");
-      const parsed = await parseEstimateMutation.mutateAsync({ fileUrl, fileName: ourEstimateDoc.name, storageKey: payload.key, mimeType: ourEstimateDoc.type || undefined });
-      setForm(p => ({
-        ...p,
-        claimNumber: parsed.claimNumberRole !== "adverse" ? (parsed.claimNumber || p.claimNumber) : p.claimNumber,
-        vehicle: parsed.vehicle || p.vehicle,
-        dateOfLoss: parsed.dateOfLoss || p.dateOfLoss,
-        claimantName: parsed.claimantName || p.claimantName,
-      }));
-      if (parsed.lineItems.length) {
-        setLineItems(parsed.lineItems.map(item => ({ item: item.description, ours: item.amount, theirs: "", reason: "" })));
-      } else if (parsed.repairTotal) {
-        setLineItems([{ item: "Repair estimate", ours: parsed.repairTotal, theirs: "", reason: "" }]);
-      }
-      toast.success("Estimate read — claim details and our line items were pre-filled");
-    } catch (error: unknown) {
-      toast.error((error as Error).message || "Could not read the estimate");
-    } finally {
-      setEstimateParsing(false);
-    }
-  };
+      const saved = JSON.parse(localStorage.getItem(CARRIER_REBUTTAL_STORAGE_KEY) || "{}") as Partial<{ form: CarrierRebuttalForm; lineItems: CarrierRebuttalLine[]; exhibits: CarrierRebuttalExhibit[]; narrative: string }>;
+      if (saved.form) setForm({ ...initialCarrierForm(), ...saved.form });
+      if (Array.isArray(saved.lineItems) && saved.lineItems.length) setLineItems(saved.lineItems);
+      if (Array.isArray(saved.exhibits)) setExhibits(saved.exhibits);
+      if (typeof saved.narrative === "string") setNarrative(saved.narrative);
+    } catch { /* malformed local draft is safely ignored */ }
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(CARRIER_REBUTTAL_STORAGE_KEY, JSON.stringify({ form, lineItems, exhibits, narrative }));
+  }, [form, lineItems, exhibits, narrative]);
 
-  const uploadDocument = async (file: File): Promise<{ url: string; key?: string; fileName: string; mimeType?: string }> => {
-    const fd = new FormData();
-    fd.append("file", file);
-    const response = await fetch("/api/upload/document", { method: "POST", body: fd });
-    if (!response.ok) throw new Error(`Upload failed: ${file.name}`);
-    const payload = await response.json() as { url?: string; signedUrl?: string; key?: string };
-    const url = payload.signedUrl || payload.url;
-    if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Upload did not return a readable document URL for ${file.name}`);
-    return { url, key: payload.key, fileName: file.name, mimeType: file.type || undefined };
-  };
+  const set = <K extends keyof CarrierRebuttalForm>(key: K) => (value: CarrierRebuttalForm[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const updateLine = (id: string, key: keyof CarrierRebuttalLine, value: string) => setLineItems((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line));
+  const updateExhibit = (id: string, key: keyof CarrierRebuttalExhibit, value: string) => setExhibits((current) => current.map((exhibit) => exhibit.id === id ? { ...exhibit, [key]: value } : exhibit));
+  const disputedLines = lineItems.filter((line) => Number(line.ours) > Number(line.theirs));
+  const lineWhipTotal = disputedLines.reduce((sum, line) => sum + (Number(line.ours) || 0), 0);
+  const lineCarrierTotal = disputedLines.reduce((sum, line) => sum + (Number(line.theirs) || 0), 0);
+  const lineGap = lineWhipTotal - lineCarrierTotal;
+  const whipTotal = Number(form.whipEstimateTotal);
+  const carrierTotal = Number(form.carrierEstimateTotal);
+  const gap = whipTotal - carrierTotal;
+  const estimateTotalsValid = Number.isFinite(whipTotal) && Number.isFinite(carrierTotal) && whipTotal > 0 && carrierTotal >= 0;
 
-  const mergeCarrierResponseRows = (
-    current: RebuttalLineItem[],
-    response: { lineItems: Array<{ description: string; offer: string; reason: string }>; offerTotal: string; denialReasons: string },
-  ) => {
-    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const merged = current.map((row) => {
-      const matched = response.lineItems.find((item) => {
-        const rowKey = normalize(row.item);
-        const itemKey = normalize(item.description);
-        return rowKey && itemKey && (rowKey.includes(itemKey) || itemKey.includes(rowKey));
-      });
-      return matched ? { ...row, theirs: matched.offer || row.theirs, reason: matched.reason || row.reason } : row;
+  const validationErrors = () => {
+    const missing: string[] = [];
+    (["letterDate", "claimNumber", "theirClaimNumber", "dateOfLoss", "vehicle", "vin", "carrier", "adjuster", "insuredName", "repairFacility", "roNumber", "ourEstimateDate", "carrierEstimateDate", "whipEstimateTotal", "carrierEstimateTotal", "handlerName", "handlerTitle", "handlerEmail"] as Array<keyof CarrierRebuttalForm>).forEach((key) => {
+      if (!String(form[key] || "").trim()) missing.push(key);
     });
-    const unmatched = response.lineItems.filter((item) => !merged.some((row) => {
-      const rowKey = normalize(row.item);
-      const itemKey = normalize(item.description);
-      return rowKey && itemKey && (rowKey.includes(itemKey) || itemKey.includes(rowKey));
-    }));
-    const responseRows = unmatched.map((item) => ({ item: item.description || "Carrier response", ours: "", theirs: item.offer, reason: item.reason }));
-    if (!responseRows.length && (response.offerTotal || response.denialReasons)) {
-      responseRows.push({ item: "Carrier total offer / position", ours: "", theirs: response.offerTotal, reason: response.denialReasons });
-    }
-    return [...merged.filter((row) => row.item || row.ours || row.theirs || row.reason), ...responseRows];
+    if (missing.length) return ["Complete all required case, repair, estimate-total, carrier, and handler fields before generating."];
+    if (form.liabilityStatus !== "accepted" && form.liabilityStatus !== "not_disputed") return ["This letter is available only when liability is accepted or not disputed. Route all other liability positions to the liability desk."];
+    if (!estimateTotalsValid) return ["Enter valid full carrier and Whip repair-estimate totals."];
+    if (!disputedLines.length) return ["Add at least one disputed operation with our amount greater than the carrier allowance."];
+    const lineGaps = disputedLines.filter((line) => !line.item || !line.ourLine || !line.carrierLine || !line.exhibitLetter || !line.exhibitMarkedPage || !line.basis);
+    if (lineGaps.length) return ["Each disputed operation needs both estimate-line references, an exhibit letter/marked page, and a factual basis."];
+    const unlisted = disputedLines.filter((line) => !exhibits.some((exhibit) => exhibit.letter.toUpperCase() === line.exhibitLetter.toUpperCase() && exhibit.markedPage === line.exhibitMarkedPage));
+    if (unlisted.length) return ["Each disputed operation must point to an Exhibit Schedule entry with the same letter and marked page."];
+    if (Math.abs(lineGap - gap) > 0.01) return [`The disputed-line difference (${carrierMoney(lineGap.toFixed(2))}) does not equal Whip total minus carrier total (${carrierMoney(gap.toFixed(2))}). Explain the gap outside this letter or correct the lines/totals.`];
+    const anyStateRule = Boolean(form.stateRuleCitation || form.stateRuleText || form.stateRuleVerified);
+    if (anyStateRule && (!form.stateRuleCitation || !form.stateRuleText || !form.stateRuleVerified)) return ["A state-rule paragraph requires a verified citation, the exact rule text, and the confirmation checkbox."];
+    return [];
   };
 
-  const handleGenerate = async () => {
-    if (!form.claimNumber || !form.vehicle || !form.carrier) {
-      toast.error("Fill in Claim #, Vehicle, and Carrier first");
-      return;
-    }
-    setAiLoading(true);
-    try {
-      const result = await generateMutation.mutateAsync({
-        ...form,
-        lineItems: lineItems.map((r) => ({
-          item: r.item,
-          ours: parseFloat(r.ours) || 0,
-          theirs: parseFloat(r.theirs) || 0,
-          reason: r.reason,
-        })),
-      });
-      setDraft(result.letter);
-      toast.success("Rebuttal generated");
-    } catch (e: unknown) {
-      toast.error((e as Error).message || "AI error");
-    } finally {
-      setAiLoading(false);
-    }
+  const buildNarrative = () => {
+    const errors = validationErrors();
+    if (errors.length) { toast.error(errors[0]); return; }
+    setNarrative(`The marked exhibits identify the line-specific support for this request: ${disputedLines.map((line) => `${line.item} (Whip line ${line.ourLine}; carrier line ${line.carrierLine}; Exhibit ${line.exhibitLetter}, marked page ${line.exhibitMarkedPage})`).join("; ")}.`);
+    toast.success("Verified line-specific notes prepared — review before previewing.");
   };
 
-  const handleAnalyzeAndGenerate = async () => {
-    if (!ourEstimateDoc && !ourImageReportDoc && !carrierDoc) {
-      toast.error("Upload at least one document first");
-      return;
-    }
-    setDocUploading(true);
-    try {
-      const [ourEstimateUpload, , carrierDocUpload] = await Promise.all([
-        ourEstimateDoc ? uploadDocument(ourEstimateDoc) : Promise.resolve(undefined),
-        ourImageReportDoc ? uploadDocument(ourImageReportDoc) : Promise.resolve(undefined),
-        carrierDoc ? uploadDocument(carrierDoc) : Promise.resolve(undefined),
-      ]);
-      setDocUploading(false);
-      setAiLoading(true);
-      let nextForm = { ...form };
-      let nextLineItems = [...lineItems];
-      if (ourEstimateUpload) {
-        const parsed = await parseEstimateMutation.mutateAsync({
-          fileUrl: ourEstimateUpload.url,
-          fileName: ourEstimateUpload.fileName,
-          storageKey: ourEstimateUpload.key,
-          mimeType: ourEstimateUpload.mimeType,
-        });
-        nextForm = {
-          ...nextForm,
-          claimNumber: parsed.claimNumber || nextForm.claimNumber,
-          vehicle: parsed.vehicle || nextForm.vehicle,
-          dateOfLoss: parsed.dateOfLoss || nextForm.dateOfLoss,
-          claimantName: parsed.claimantName || nextForm.claimantName,
-        };
-        if (parsed.lineItems.length) {
-          nextLineItems = parsed.lineItems.map((item) => ({ item: item.description, ours: item.amount, theirs: "", reason: "" }));
-        } else if (parsed.repairTotal) {
-          nextLineItems = [{ item: "Repair estimate", ours: parsed.repairTotal, theirs: "", reason: "" }];
-        }
-      }
-      if (carrierDocUpload) {
-        const response = await parseCarrierResponseMutation.mutateAsync({
-          fileUrl: carrierDocUpload.url,
-          fileName: carrierDocUpload.fileName,
-          storageKey: carrierDocUpload.key,
-          mimeType: carrierDocUpload.mimeType,
-        });
-        nextForm = {
-          ...nextForm,
-          carrier: response.carrierName || nextForm.carrier,
-          theirClaimNumber: response.carrierClaimNumber || nextForm.theirClaimNumber,
-          adjuster: response.adjusterName || nextForm.adjuster,
-          carrierOfferTotal: response.offerTotal || nextForm.carrierOfferTotal,
-          carrierReason: response.denialReasons || nextForm.carrierReason,
-        };
-        nextLineItems = mergeCarrierResponseRows(nextLineItems, response);
-      }
-      if (!nextForm.claimNumber || !nextForm.vehicle || !nextForm.carrier) {
-        throw new Error("Review the pre-filled Claim #, Vehicle, and Adverse Carrier before generating the rebuttal");
-      }
-      setForm(nextForm);
-      setLineItems(nextLineItems);
-      const result = await generateMutation.mutateAsync({
-        ...nextForm,
-        lineItems: nextLineItems.map((row) => ({ item: row.item, ours: parseFloat(row.ours) || 0, theirs: parseFloat(row.theirs) || 0, reason: row.reason })),
-      });
-      setDraft(result.letter);
-      toast.success("Documents analyzed — review and edit the rebuttal draft before downloading");
-    } catch (error: unknown) {
-      toast.error((error as Error).message || "Could not analyze the uploaded documents");
-    } finally {
-      setDocUploading(false);
-      setAiLoading(false);
-    }
-  };
-
-  const handlePolish = async () => {
-    if (!draft.trim()) {
-      toast.error("Generate or enter a draft first");
-      return;
-    }
+  const polishNarrative = async () => {
+    if (!narrative.trim()) { toast.error("Generate or enter a claim-specific narrative first."); return; }
     setPolishLoading(true);
     try {
-      const result = await polishMutation.mutateAsync({
-        draft,
-        ...form,
-      });
-      setDraft(result.polished);
-      toast.success("Draft polished");
-    } catch (e: unknown) {
-      toast.error((e as Error).message || "AI error");
-    } finally {
-      setPolishLoading(false);
-    }
+      const result = await polishMutation.mutateAsync({ draft: narrative, claimNumber: form.claimNumber, vehicle: form.vehicle, carrier: form.carrier, adjuster: form.adjuster, dateOfLoss: form.dateOfLoss });
+      setNarrative(result.polished);
+      toast.success("Narrative polished without adding unsupported authority.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not polish the narrative. Keep or edit it manually.");
+    } finally { setPolishLoading(false); }
   };
 
-  const handleDownload = (shouldDownload = true) => {
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    const H = doc.internal.pageSize.getHeight();
-    let y = addWhipLetterhead(doc);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    const previewDraft = draft || `${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+  const analyzeSources = async () => {
+    if (!ourEstimate && !supportingEvidence && !carrierResponse) { toast.error("Add at least one supported source document first."); return; }
+    setAnalysisLoading(true); setAnalysisWarnings([]);
+    try {
+      const payload = new FormData();
+      if (ourEstimate) payload.append("ourEstimate", ourEstimate);
+      if (supportingEvidence) payload.append("supportingEvidence", supportingEvidence);
+      if (carrierResponse) payload.append("carrierResponse", carrierResponse);
+      const response = await fetch("/api/carrier-rebuttal/analyze", { method: "POST", body: payload });
+      const data = await response.json() as {
+        estimate?: { repairTotal?: string; vehicle?: string; vin?: string; claimNumber?: string; claimNumberRole?: string; dateOfLoss?: string; repairFacility?: string; repairFacilityLocation?: string; roNumber?: string; estimateDate?: string; claimantName?: string; lineItems?: Array<{ description: string; amount: string; estimateLine: string }> };
+        carrier?: { carrierName?: string; carrierClaimNumber?: string; adjusterName?: string; estimateDate?: string; offerTotal?: string; denialReasons?: string; lineItems?: Array<{ description: string; offer: string; reason: string; estimateLine: string }> };
+        evidenceSuggestions?: Array<{ title: string; source: string; revisionDate: string; markedPage: string; note: string }>;
+        warnings?: string[]; error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "Could not analyze sources.");
+      setAnalysisWarnings(data.warnings || []);
+      setForm((current) => ({
+        ...current,
+        vehicle: data.estimate?.vehicle || current.vehicle,
+        vin: data.estimate?.vin || current.vin,
+        claimNumber: data.estimate?.claimNumberRole === "our" ? (data.estimate.claimNumber || current.claimNumber) : current.claimNumber,
+        dateOfLoss: data.estimate?.dateOfLoss || current.dateOfLoss,
+        repairFacility: data.estimate?.repairFacility || current.repairFacility,
+        repairFacilityLocation: data.estimate?.repairFacilityLocation || current.repairFacilityLocation,
+        roNumber: data.estimate?.roNumber || current.roNumber,
+        ourEstimateDate: data.estimate?.estimateDate || current.ourEstimateDate,
+        insuredName: data.estimate?.claimantName || current.insuredName,
+        carrier: data.carrier?.carrierName || current.carrier,
+        theirClaimNumber: data.carrier?.carrierClaimNumber || current.theirClaimNumber,
+        adjuster: data.carrier?.adjusterName || current.adjuster,
+        carrierEstimateDate: data.carrier?.estimateDate || current.carrierEstimateDate,
+        whipEstimateTotal: data.estimate?.repairTotal || current.whipEstimateTotal,
+        carrierEstimateTotal: data.carrier?.offerTotal || current.carrierEstimateTotal,
+      }));
+      const ourLines = data.estimate?.lineItems || [];
+      const carrierLines = data.carrier?.lineItems || [];
+      if (ourLines.length || carrierLines.length) {
+        const rows = ourLines.length ? ourLines.map((line, index) => {
+          const match = carrierLines.find((carrier) => carrier.description.toLowerCase() === line.description.toLowerCase()) || carrierLines[index];
+          return { ...emptyCarrierLine(), item: line.description, ours: line.amount, theirs: match?.offer || "", carrierReason: match?.reason || data.carrier?.denialReasons || "", ourLine: line.estimateLine, carrierLine: match?.estimateLine || "" };
+        }) : carrierLines.map((line) => ({ ...emptyCarrierLine(), item: line.description, theirs: line.offer, carrierReason: line.reason, carrierLine: line.estimateLine }));
+        setLineItems(rows.length ? rows : [emptyCarrierLine()]);
+      }
+      if (data.evidenceSuggestions?.length) {
+        setExhibits((current) => [...current, ...data.evidenceSuggestions!.map((item, index) => ({ ...emptyCarrierExhibit(), letter: String.fromCharCode(65 + Math.min(25, current.length + index)), title: item.title, source: item.source, revisionDate: item.revisionDate, markedPage: item.markedPage }))]);
+      }
+      toast.success("Source facts were read in memory. Verify every field, line reference, exhibit, and marked page before generating.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not analyze the source documents.");
+    } finally { setAnalysisLoading(false); }
+  };
 
-${form.carrier || "[Adverse Carrier]"}
-Attn: ${form.adjuster || "[Adjuster Name]"}
+  const oemStandard = (): string => ({
+    tesla: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published through Tesla service information and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+    toyota: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published through Toyota Technical Information System repair manuals and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+    lexus: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published through Lexus Technical Information System repair manuals and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+    other: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by the manufacturer and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+  }[form.oem]);
+  const liabilityText = form.liabilityStatus === "accepted" ? "Liability is accepted." : "Liability is not disputed.";
+  const openingParagraph = () => `Your insured’s vehicle struck our vehicle on ${carrierDate(form.dateOfLoss)}. ${liabilityText} Your estimate totals ${carrierMoney(carrierTotal.toFixed(2))}. The estimate prepared by ${form.repairFacility} after inspecting the vehicle totals ${carrierMoney(whipTotal.toFixed(2))}. The difference is ${carrierMoney(gap.toFixed(2))} across ${disputedLines.length} line${disputedLines.length === 1 ? "" : "s"}. Each line is listed below with the support for it.`;
+  const revisedPayment = () => `Revise your estimate to ${carrierMoney(whipTotal.toFixed(2))}, the total of ours, and pay the difference of ${carrierMoney(gap.toFixed(2))}. If you maintain a reduction on any line, send the written basis for that line, naming the procedure, document or fact you rely on. A general statement that the estimate is not supported does not answer a line-item dispute. Please respond within ${form.responseDays || "10"} days of receipt.`;
+  const paymentParagraph = () => "Metrocars Leasing Corp. owns the vehicle. Issue payment as directed in the attached Direction of Pay and Vehicle Ownership Notice.";
+  const reservationParagraph = () => "Please reference both claim numbers on all correspondence and send it to claims@drivewhip.com. This letter does not waive any right or remedy of Metrocars Leasing Corp. or Whip Claims Management, and does not concede any position on coverage, liability or the amount of loss.";
+  const sortedLines = () => [...disputedLines].sort((a, b) => carrierCategories.findIndex((category) => category.value === a.category) - carrierCategories.findIndex((category) => category.value === b.category));
+  const cleanSource = (source: string) => source.replace(/\?utm_[^\s]*/gi, "").trim();
+  const enclosureText = () => [
+    ...exhibits.filter((exhibit) => exhibit.letter && exhibit.title).map((exhibit) => `Exhibit ${exhibit.letter}: ${exhibit.title}`),
+    `${form.repairFacility} repair estimate`,
+    "Photos",
+    ...(form.dopAttached ? ["Direction of Pay and Vehicle Ownership Notice"] : []),
+  ].join("; ");
 
-RE: Carrier Rebuttal — Whip Claim No. ${form.claimNumber || "[Whip Claim #]"}${form.theirClaimNumber ? ` / Their Claim No. ${form.theirClaimNumber}` : ""}
-Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-Vehicle: ${form.vehicle || "[Vehicle]"}${form.claimantName ? `
-Claimant / Driver: ${form.claimantName}` : ""}
-
-This preview uses the current claim details and disputed line items. Generate or enter a draft to preview the complete rebuttal language.`;
-    // The shared footer rule sits at H - 12.  Keep a meaningful buffer above it
-    // and continue long rebuttals rather than clipping the body under the footer.
-    const footerSafeY = H - 20;
-    const lineHeight = 9.75;
-    const bodyWidth = W - 28;
-    const addContinuationPage = () => {
-      addLetterFooter(doc);
-      doc.addPage();
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(60, 60, 60);
-      y = 20;
+  const createLetterPdf = () => {
+    const errors = validationErrors();
+    if (errors.length) { toast.error(errors[0]); return null; }
+    const doc = new jsPDF({ unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth(); const H = doc.internal.pageSize.getHeight();
+    const left = 25.4; const right = W - 25.4; const textWidth = right - left; const safeBottom = H - 31;
+    let y = 40; let page = 1;
+    const header = () => {
+      try { doc.addImage("data:image/png;base64," + WHIP_LOGO_B64, "PNG", left, 11, 23, 8); } catch { doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...WHIP_ORANGE); doc.text("whip", left, 18); }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(25, 25, 25); doc.text("Whip Claims Management", right, 12, { align: "right" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90); doc.text("P.O. Box 10622  Rockville, MD 20849-0622", right, 16.4, { align: "right" }); doc.text("(855) 906-5949  |  claims@drivewhip.com", right, 20.4, { align: "right" });
+      doc.setDrawColor(190, 190, 190); doc.setLineWidth(.25); doc.line(left, 24, right, 24);
     };
-    const writeRebuttalText = (text: string) => {
-      const sections = text.replace(/\r\n/g, "\n").split(/\n{2,}/);
-      sections.forEach((section, sectionIndex) => {
-        const lines = doc.splitTextToSize(section, bodyWidth) as string[];
-        let cursor = 0;
-        while (cursor < lines.length) {
-          const availableLines = Math.floor((footerSafeY - y) / lineHeight);
-          if (availableLines < 1) addContinuationPage();
-          const writableLines = Math.max(1, Math.floor((footerSafeY - y) / lineHeight));
-          const nextCursor = Math.min(lines.length, cursor + writableLines);
-          doc.text(lines.slice(cursor, nextCursor), 14, y, { lineHeightFactor: 1.5 });
-          y += (nextCursor - cursor) * lineHeight;
-          cursor = nextCursor;
-          if (cursor < lines.length) addContinuationPage();
-        }
-        if (sectionIndex < sections.length - 1) {
-          y += lineHeight;
-          if (y > footerSafeY - lineHeight) addContinuationPage();
-        }
-      });
+    const footer = () => {
+      doc.setDrawColor(190, 190, 190); doc.setLineWidth(.25); doc.line(left, H - 21, right, H - 21); doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 100, 100);
+      doc.text(`Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949${page > 1 ? `  |  Page ${page}` : ""}`, W / 2, H - 16.5, { align: "center" });
     };
-    writeRebuttalText(previewDraft);
-    addSOLNotice(doc);
-    addLetterFooter(doc);
+    const addPage = () => { footer(); doc.addPage(); page += 1; header(); y = 32; };
+    const ensure = (height: number) => { if (y + height > safeBottom) addPage(); };
+    const prose = (text: string, options: { bold?: boolean; keep?: boolean } = {}) => {
+      const lines = doc.splitTextToSize(text, textWidth) as string[]; const lineHeight = 5.25;
+      if (options.keep && y + lines.length * lineHeight + 3 > safeBottom) addPage();
+      let offset = 0;
+      while (offset < lines.length) {
+        const count = Math.max(1, Math.floor((safeBottom - y) / lineHeight)); const part = lines.slice(offset, offset + count);
+        doc.setFont("helvetica", options.bold ? "bold" : "normal"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(part, left, y, { lineHeightFactor: 1.5 });
+        y += part.length * lineHeight; offset += part.length; if (offset < lines.length) addPage();
+      }
+      y += 3;
+    };
+    const idRow = (label: string, value: string) => { ensure(5); doc.setFont("helvetica", "bold"); doc.setFontSize(9.3); doc.setTextColor(25, 25, 25); doc.text(`${label}:`, left, y); const width = doc.getTextWidth(`${label}: `); doc.setFont("helvetica", "normal"); doc.text(value, left + width, y); y += 4.4; };
+    const runIn = (label: string, value: string) => { ensure(8); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(`${label}.`, left, y); const labelWidth = doc.getTextWidth(`${label}. `); const lines = doc.splitTextToSize(value, textWidth - labelWidth) as string[]; doc.setFont("helvetica", "normal"); doc.text(lines[0], left + labelWidth, y); y += 5.25; if (lines.length > 1) { doc.text(lines.slice(1), left, y, { lineHeightFactor: 1.5 }); y += (lines.length - 1) * 5.25; } y += 3; };
+    header();
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(carrierDate(form.letterDate), left, y); y += 8;
+    prose(`Re: Claim #${form.claimNumber} — Carrier Claim No. ${form.theirClaimNumber} — Date of Loss: ${carrierDate(form.dateOfLoss)}`, { keep: true });
+    prose(`To:  ${form.adjuster}, ${form.carrier}`, { keep: true });
+    ensure(9); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(18, 18, 18); doc.text("Request for Reconsideration of Repair Estimate", left, y); y += 7;
+    idRow("Your insured", form.insuredName); idRow("Vehicle owner", "Metrocars Leasing Corp."); idRow("Vehicle", `${form.vehicle} | VIN ${form.vin}`); idRow("Repair facility", `${form.repairFacility}${form.repairFacilityLocation ? `, ${form.repairFacilityLocation}` : ""} | RO ${form.roNumber}`);
+    prose(openingParagraph(), { keep: true }); prose(oemStandard());
+    if (narrative.trim()) prose(narrative.trim());
+    if (form.stateRuleCitation && form.stateRuleText) prose(`${form.stateRuleCitation}: ${form.stateRuleText}`);
+    const col = [left, left + 46, left + 62, left + 78, left + 108, right];
+    const tableHeader = () => { ensure(9); doc.setFillColor(238, 238, 238); doc.rect(left, y - 3.7, textWidth, 7.5, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); doc.setTextColor(25, 25, 25); ["Operation", "Whip", "Carrier", "Estimate lines", "Exhibit"].forEach((label, index) => doc.text(label, col[index] + 1.2, y)); y += 5.2; };
+    tableHeader();
+    sortedLines().forEach((line) => {
+      const main = doc.splitTextToSize(line.item, col[1] - col[0] - 2.4) as string[]; const refs = doc.splitTextToSize(`Whip ${line.ourLine}; carrier ${line.carrierLine}`, col[4] - col[3] - 2.4) as string[]; const basis = doc.splitTextToSize(`Support: ${line.basis}`, textWidth - 2.4) as string[]; const h = Math.max(7, main.length * 3.4 + 3, refs.length * 3.4 + 3) + basis.length * 3.4 + 4;
+      if (y + h > safeBottom) { addPage(); tableHeader(); }
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(24, 24, 24); doc.text(main, col[0] + 1.2, y, { lineHeightFactor: 1.2 }); doc.text(carrierMoney(line.ours), col[1] + 1.2, y); doc.text(carrierMoney(line.theirs), col[2] + 1.2, y); doc.text(refs, col[3] + 1.2, y, { lineHeightFactor: 1.2 }); doc.text(`${line.exhibitLetter}, p. ${line.exhibitMarkedPage}`, col[4] + 1.2, y);
+      const baseY = y + Math.max(main.length * 3.4, refs.length * 3.4, 4) + 2; doc.setFontSize(8.2); doc.text(basis, left + 1.2, baseY, { lineHeightFactor: 1.18 }); y += h; doc.setDrawColor(215, 215, 215); doc.line(left, y - 2.2, right, y - 2.2);
+    });
+    y += 3; runIn("Revised payment", revisedPayment()); if (form.dopAttached) runIn("Payment", paymentParagraph()); prose(reservationParagraph());
+    ensure(34); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Sincerely,", left, y); y += 12; doc.setFont("helvetica", "bold"); doc.text(form.handlerName, left, y); y += 4.6; doc.setFont("helvetica", "normal"); doc.text(form.handlerTitle, left, y); y += 4.6; doc.text("Whip Claims Management", left, y); y += 4.6; doc.text("P.O. Box 10622, Rockville, MD 20849", left, y); y += 4.6; doc.text(`Phone: (855) 906-5949${form.handlerExt ? ` ext. ${form.handlerExt}` : ""} | ${form.handlerEmail}`, left, y); y += 7;
+    prose(`Enclosures: ${enclosureText()}`, { keep: true }); footer();
+    if (page > 3) { toast.error("This rebuttal would exceed the three-page limit. Reduce optional notes or resolve the unsupported items before generating."); return null; }
+    return doc;
+  };
+
+  const writePdf = (download: boolean) => {
+    const doc = createLetterPdf(); if (!doc) return;
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    if (shouldDownload) downloadPDF(doc, `Whip_Rebuttal_${form.claimNumber || "Draft"}.pdf`);
+    if (download) downloadPDF(doc, `Whip Carrier Reconsideration - ${form.claimNumber} - ${form.carrier || "Carrier"}.pdf`);
   };
-  const handlePreviewOnly = () => { handleDownload(false); };
 
-  return (
-    <div className="space-y-4">
-      <Panel title="Claim Details" tag="REQUIRED">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Field label="Our Claim #" id="rb-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" required />
-          <Field label="Their Claim #" id="rb-theirclaim" value={form.theirClaimNumber} onChange={set("theirClaimNumber")} placeholder="Carrier's claim number" />
-          <Field label="Date of Loss" id="rb-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
-          <Field label="Vehicle" id="rb-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="e.g. 2024 Toyota Camry" required />
-          <InsuranceCompanySelect label="Adverse Carrier" id="rb-carrier" value={form.carrier} onChange={set("carrier")} />
-          <Field label="Adjuster Name" id="rb-adjuster" value={form.adjuster} onChange={set("adjuster")} placeholder="e.g. Jane Smith" />
-        </div>
-        <div className="mt-3 space-y-3">
-          <Grid2 children={<>
-            <Field label="Claimant / Driver Name" id="rb-claimant" value={form.claimantName} onChange={set("claimantName")} placeholder="First Last" />
-            <Field label="Accident Type (optional)" id="rb-type" value={form.accidentType} onChange={set("accidentType")} placeholder="e.g. Rear-end, T-bone, Sideswipe" />
-          </>} />
-          <Grid2 children={<>
-            <Field label="Carrier Offer / Allowed Amount" id="rb-offer" value={form.carrierOfferTotal} onChange={set("carrierOfferTotal")} placeholder="0.00" type="number" />
-            <TextareaField label="Carrier's Stated Reason" id="rb-carrier-reason" value={form.carrierReason} onChange={set("carrierReason")} placeholder="Reason stated in the carrier response or denial" rows={2} />
-          </>} />
-        </div>
-      </Panel>
+  const downloadWord = async () => {
+    const errors = validationErrors(); if (errors.length) { toast.error(errors[0]); return; }
+    const run = (text: string, bold = false) => new TextRun({ text, bold, font: "Arial", size: 20, color: "1A1A1A" });
+    const paragraph = (text: string, bold = false, spacing = 180, pageBreakBefore = false) => new Paragraph({ children: [run(text, bold)], spacing: { after: spacing }, alignment: AlignmentType.LEFT, pageBreakBefore });
+    const cell = (text: string, bold = false) => new TableCell({ children: [new Paragraph({ children: [run(text, bold)] })] });
+    const rows = sortedLines().flatMap((line) => [
+      new TableRow({ children: [cell(line.item), cell(carrierMoney(line.ours)), cell(carrierMoney(line.theirs)), cell(`Whip ${line.ourLine}; carrier ${line.carrierLine}`), cell(`${line.exhibitLetter}, p. ${line.exhibitMarkedPage}`)] }),
+      new TableRow({ children: [new TableCell({ columnSpan: 5, children: [new Paragraph({ children: [run(`Support: ${line.basis}`)] })] })] }),
+    ]);
+    const word = new WordDocument({ sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, headers: { default: new Header({ children: [new Paragraph({ children: [new TextRun({ text: "whip", bold: true, color: "FF6221", size: 30 }), new TextRun({ text: "                                      Whip Claims Management", bold: true, size: 18 })] }), new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "P.O. Box 10622  Rockville, MD 20849-0622  |  (855) 906-5949  |  claims@drivewhip.com", size: 15, color: "666666" })] })] }) }, footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949", size: 14, color: "666666" })] })] }) }, children: [
+      paragraph(carrierDate(form.letterDate)), paragraph(`Re: Claim #${form.claimNumber} — Carrier Claim No. ${form.theirClaimNumber} — Date of Loss: ${carrierDate(form.dateOfLoss)}`), paragraph(`To:  ${form.adjuster}, ${form.carrier}`), paragraph("Request for Reconsideration of Repair Estimate", true, 220),
+      paragraph(`Your insured: ${form.insuredName}`), paragraph("Vehicle owner: Metrocars Leasing Corp."), paragraph(`Vehicle: ${form.vehicle} | VIN ${form.vin}`), paragraph(`Repair facility: ${form.repairFacility}${form.repairFacilityLocation ? `, ${form.repairFacilityLocation}` : ""} | RO ${form.roNumber}`),
+      paragraph(openingParagraph(), false, 220), paragraph(oemStandard(), false, 220), ...(narrative.trim() ? [paragraph(narrative.trim(), false, 220)] : []), ...(form.stateRuleCitation && form.stateRuleText ? [paragraph(`${form.stateRuleCitation}: ${form.stateRuleText}`, false, 220)] : []),
+      new Table({ width: { size: 9360, type: WidthType.DXA }, rows: [new TableRow({ children: [cell("Operation", true), cell("Whip", true), cell("Carrier", true), cell("Estimate lines", true), cell("Exhibit", true)] }), ...rows], borders: { top: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, bottom: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, left: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, right: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" }, insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" } } }),
+      paragraph(`Revised payment. ${revisedPayment()}`, false, 220, true), ...(form.dopAttached ? [paragraph(`Payment. ${paymentParagraph()}`, false, 220)] : []), paragraph(reservationParagraph(), false, 220), paragraph("Sincerely,"), paragraph(form.handlerName, true, 80), paragraph(form.handlerTitle, false, 80), paragraph("Whip Claims Management", false, 80), paragraph("P.O. Box 10622, Rockville, MD 20849", false, 80), paragraph(`Phone: (855) 906-5949${form.handlerExt ? ` ext. ${form.handlerExt}` : ""} | ${form.handlerEmail}`, false, 220), paragraph(`Enclosures: ${enclosureText()}`),
+    ] }] });
+    const blob = await Packer.toBlob(word); const href = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = href; anchor.download = `Whip Carrier Reconsideration - ${form.claimNumber} - ${form.carrier || "Carrier"}.docx`; anchor.click(); URL.revokeObjectURL(href); toast.success("Word letter downloaded.");
+  };
 
-      <Panel title="Carrier Document Upload (Optional)">
-        <p className="text-xs text-muted-foreground mb-3">Use step 1 only to read our estimate into the left-side loss fields. Use step 2 to analyze all uploads—especially the carrier response—then create an editable rebuttal draft.</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Our Estimate */}
-          {[
-            { label: "Our Estimate", id: "cr-our-estimate", file: ourEstimateDoc, setFile: setOurEstimateDoc, color: "#22c55e" },
-            { label: "Our Image Report", id: "cr-our-images", file: ourImageReportDoc, setFile: setOurImageReportDoc, color: "#3b82f6" },
-            { label: "Carrier's Rebuttal / Denial", id: "cr-carrier-doc", file: carrierDoc, setFile: setCarrierDoc, color: "#ff6221" },
-          ].map(({ label, id, file, setFile, color }) => (
-            <div key={id} className="border-2 border-dashed border-border rounded-lg p-3 text-center hover:border-[#ff6221]/40 transition-colors">
-              <input
-                type="file"
-                id={id}
-                accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-              <label htmlFor={id} className="cursor-pointer">
-                {file ? (
-                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color }} />
-                    <span className="text-xs font-medium truncate max-w-[120px]" style={{ color }}>{file.name}</span>
-                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground" onClick={(e) => { e.preventDefault(); setFile(null); }}>
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div>
-                    <Upload className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
-                    <p className="text-[11px] font-semibold text-foreground/70">{label}</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">PDF, DOCX, PNG, JPG</p>
-                  </div>
-                )}
-              </label>
-            </div>
-          ))}
-        </div>
-        {ourEstimateDoc && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mt-3 h-7 w-full gap-1.5 border-[#22c55e]/40 text-xs text-[#16803c] hover:bg-[#22c55e]/10"
-            disabled={estimateParsing || docUploading || aiLoading}
-            onClick={() => void parseOurEstimate()}
-          >
-            {estimateParsing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            {estimateParsing ? "Reading estimate…" : "1. Read our estimate & pre-fill our loss"}
-          </Button>
-        )}
-        {(ourEstimateDoc || ourImageReportDoc || carrierDoc) && (
-          <Button
-            size="sm"
-            className="mt-3 gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white w-full"
-            disabled={docUploading || aiLoading}
-            onClick={() => void handleAnalyzeAndGenerate()}
-          >
-            {(docUploading || aiLoading) ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {docUploading ? "Uploading documents..." : aiLoading ? "Analyzing & generating..." : "2. Analyze uploads & generate editable rebuttal"}
-          </Button>
-        )}
-      </Panel>
-
-      <Panel title="Disputed Line Items">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-1.5 pr-2 font-semibold text-foreground/70 w-[30%]">Line Item</th>
-                <th className="text-left py-1.5 pr-2 font-semibold text-foreground/70 w-[15%]">Our Amount</th>
-                <th className="text-left py-1.5 pr-2 font-semibold text-foreground/70 w-[15%]">Their Offer</th>
-                <th className="text-left py-1.5 pr-2 font-semibold text-foreground/70 w-[30%]">Carrier Reason</th>
-                <th className="w-[10%]"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((row, i) => (
-                <tr key={i} className="border-b border-border/50">
-                  <td className="py-1 pr-2">
-                    <Input value={row.item} onChange={(e) => setItem(i, "item")(e.target.value)} placeholder="e.g. Labor — Frame" className="h-7 text-xs" />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <Input value={row.ours} onChange={(e) => setItem(i, "ours")(e.target.value)} placeholder="0.00" type="number" className="h-7 text-xs" />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <Input value={row.theirs} onChange={(e) => setItem(i, "theirs")(e.target.value)} placeholder="0.00" type="number" className="h-7 text-xs" />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <Input value={row.reason} onChange={(e) => setItem(i, "reason")(e.target.value)} placeholder="e.g. Betterment applied" className="h-7 text-xs" />
-                  </td>
-                  <td className="py-1">
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removeItem(i)}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-3 flex items-center justify-between">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7" onClick={addItem}>
-            <Plus className="w-3 h-3" /> Add Line Item
-          </Button>
-          <div className="text-xs text-foreground/60 space-x-4">
-            <span>Our total: <strong className="text-foreground">${totalOurs.toFixed(2)}</strong></span>
-            <span>Their offer: <strong className="text-foreground">${totalTheirs.toFixed(2)}</strong></span>
-            <span>Gap: <strong className="text-[#ff6221]">${totalGap.toFixed(2)}</strong></span>
-          </div>
-        </div>
-      </Panel>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div>
-          <Panel title="Editable Rebuttal Draft" tag="AI">
-            <p className="mb-2 text-xs text-muted-foreground">Review and edit this letter before previewing or downloading. The carrier offer and stated reason above are used to build the response.</p>
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="AI-generated rebuttal will appear here. You can also type or paste a draft to polish."
-              rows={14}
-              className="text-xs font-mono resize-y"
-            />
-            <div className="mt-3 flex gap-2 flex-wrap">
-              <Button
-                size="sm"
-                className="gap-1.5 text-xs h-7 bg-[#ff6221] hover:bg-[#e5541a] text-white"
-                onClick={handleGenerate}
-                disabled={aiLoading}
-              >
-                {aiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                {aiLoading ? "Generating..." : "AI Generate"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-7 border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"
-                onClick={handlePolish}
-                disabled={polishLoading}
-              >
-                {polishLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                {polishLoading ? "Polishing..." : "AI Polish Draft"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-7 border-[#ff6221]/50 text-[#ff6221] hover:bg-[#ff6221]/10"
-                onClick={handlePreviewOnly}
-              >
-                <Eye className="w-3.5 h-3.5" /> Preview formatted PDF
-              </Button>
-            </div>
-          </Panel>
-        </div>
-        <PreviewPanel
-          text={draft}
-          onCopy={() => { navigator.clipboard.writeText(draft); toast.success("Copied"); }}
-          onDownload={handleDownload}
-        
-        pdfUrl={previewPdfUrl}
-      
-        onPreview={handlePreviewOnly}/>
-      </div>
-    </div>
+  const clearAll = () => {
+    setForm(initialCarrierForm()); setLineItems([emptyCarrierLine()]); setExhibits([]); setNarrative(""); setOurEstimate(null); setSupportingEvidence(null); setCarrierResponse(null); setPreviewPdfUrl(null); setAnalysisWarnings([]); localStorage.removeItem(CARRIER_REBUTTAL_STORAGE_KEY); toast.success("Carrier Rebuttal inputs cleared. Uploaded source files were never retained.");
+  };
+  const uploadCard = (label: string, id: string, file: File | null, setter: (file: File | null) => void, required?: boolean) => (
+    <label htmlFor={id} className="block rounded-lg border border-dashed border-border bg-muted/20 p-3 cursor-pointer hover:border-primary/50 transition-colors">
+      <input id={id} className="hidden" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(event) => setter(event.target.files?.[0] || null)} />
+      <div className="flex items-start gap-2"><Upload className="mt-0.5 h-4 w-4 text-muted-foreground" /><div className="min-w-0"><p className="text-xs font-semibold text-foreground">{label}{required ? " *" : ""}</p><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{file ? file.name : "PDF, PNG, JPG, or WEBP — analyzed in memory only"}</p></div></div>
+      {file && <Button type="button" variant="ghost" size="sm" className="mt-1 h-6 px-1.5 text-[11px]" onClick={(event) => { event.preventDefault(); setter(null); }}><X className="mr-1 h-3 w-3" />Remove</Button>}
+    </label>
   );
+
+  return <div className="space-y-5">
+    <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-bold text-slate-900">Carrier Rebuttal — Evidence-First Repair Estimate Reconsideration</h2><p className="mt-1 max-w-4xl text-xs leading-5 text-slate-700">Use only verified claim facts, estimate lines, marked exhibits, and vehicle-specific procedure support. This workflow does not make blanket OEM, legal, or coverage claims. Uploaded source files are analyzed transiently and are never saved.</p></div><Button type="button" variant="outline" size="sm" onClick={clearAll}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Clear rebuttal</Button></div>
+    </div>
+    <Panel title="1. Case identity and liability position" tag="REQUIRED">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Field label="Letter Date" id="rb-letter-date" value={form.letterDate} onChange={set("letterDate")} type="date" required />
+        <Field label="Whip Claim #" id="rb-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="GB-9269-626462-884829" required />
+        <Field label="Carrier Claim #" id="rb-theirclaim" value={form.theirClaimNumber} onChange={set("theirClaimNumber")} placeholder="Carrier claim number" required />
+        <Field label="Date of Loss" id="rb-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" required />
+        <Field label="Vehicle" id="rb-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="2026 Toyota Corolla Hybrid LE" required />
+        <Field label="VIN" id="rb-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" required />
+        <Field label="Insured Driver" id="rb-insured" value={form.insuredName} onChange={set("insuredName")} placeholder="First Last" required />
+        <InsuranceCompanySelect label="Adverse Carrier" id="rb-carrier" value={form.carrier} onChange={set("carrier")} />
+        <Field label="Adjuster Name" id="rb-adjuster" value={form.adjuster} onChange={set("adjuster")} placeholder="First Last" required />
+        <div><Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Liability position *</Label><Select value={form.liabilityStatus} onValueChange={(value) => set("liabilityStatus")(value as CarrierRebuttalForm["liabilityStatus"])}><SelectTrigger id="rb-liability" className="h-9 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="accepted">Liability accepted</SelectItem><SelectItem value="not_disputed">Liability not disputed</SelectItem></SelectContent></Select><p className="mt-1 text-[11px] text-muted-foreground">Any other position is routed to the liability desk; this letter is blocked.</p></div>
+      </div>
+    </Panel>
+    <Panel title="2. Transient source analysis" tag="VERIFY EVERY FIELD">
+      <p className="mb-3 text-xs leading-5 text-muted-foreground">Add the repair estimate, optional marked support, and the carrier response. This action reads source bytes in memory; no source file, storage key, or uploaded document is retained.</p>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">{uploadCard("Our repair estimate", "rb-our-estimate", ourEstimate, setOurEstimate, true)}{uploadCard("Marked supporting evidence", "rb-support", supportingEvidence, setSupportingEvidence)}{uploadCard("Carrier estimate / response", "rb-carrier-response", carrierResponse, setCarrierResponse, true)}</div>
+      <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => void analyzeSources()} disabled={analysisLoading} className="bg-slate-900 text-white hover:bg-slate-800">{analysisLoading ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}{analysisLoading ? "Reading in memory…" : "Read sources & pre-fill facts"}</Button><span className="self-center text-[11px] text-muted-foreground">Always verify ownership of claim numbers, estimate lines, exhibit titles, and marked pages.</span></div>
+      {analysisWarnings.length > 0 && <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{analysisWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
+    </Panel>
+    <Panel title="3. Repair estimate and carrier response" tag="REQUIRED">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3"><Field label="Repair Facility" id="rb-facility" value={form.repairFacility} onChange={set("repairFacility")} placeholder="Repair facility" required /><Field label="Facility Location" id="rb-facility-location" value={form.repairFacilityLocation} onChange={set("repairFacilityLocation")} placeholder="City, State" /><Field label="RO #" id="rb-ro" value={form.roNumber} onChange={set("roNumber")} placeholder="Repair order number" required /><Field label="Whip Estimate Date" id="rb-our-est-date" value={form.ourEstimateDate} onChange={set("ourEstimateDate")} type="date" required /><Field label="Carrier Estimate / Response Date" id="rb-carrier-est-date" value={form.carrierEstimateDate} onChange={set("carrierEstimateDate")} type="date" required /><Field label="Whip Estimate Total" id="rb-whip-total" value={form.whipEstimateTotal} onChange={set("whipEstimateTotal")} placeholder="0.00" type="number" required /><Field label="Carrier Estimate Total" id="rb-carrier-total" value={form.carrierEstimateTotal} onChange={set("carrierEstimateTotal")} placeholder="0.00" type="number" required /><div><Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vehicle procedure source *</Label><Select value={form.oem} onValueChange={(value) => set("oem")(value as CarrierRebuttalForm["oem"])}><SelectTrigger id="rb-oem" className="h-9 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tesla">Tesla procedure support</SelectItem><SelectItem value="toyota">Toyota TIS support</SelectItem><SelectItem value="lexus">Lexus TIS support</SelectItem><SelectItem value="other">Other manufacturer support</SelectItem></SelectContent></Select></div></div>
+    </Panel>
+    <Panel title="4. Disputed operations matrix" tag="ESTIMATE LINES + EXHIBIT REQUIRED">
+      <p className="mb-3 text-xs text-muted-foreground">Only operations with a difference are requested. Every row must cite the printed line on both estimates plus a matching exhibit letter and marked page.</p>
+      <div className="overflow-x-auto"><table className="min-w-[1140px] w-full text-xs"><thead><tr className="border-b border-border text-left text-muted-foreground"><th className="pb-2 pr-2">Operation</th><th className="pb-2 pr-2">Category</th><th className="pb-2 pr-2">Our $</th><th className="pb-2 pr-2">Carrier $</th><th className="pb-2 pr-2">Carrier reason</th><th className="pb-2 pr-2">Our line</th><th className="pb-2 pr-2">Carrier line</th><th className="pb-2 pr-2">Exhibit / p.</th><th className="pb-2 pr-2">Factual basis</th><th /></tr></thead><tbody>{lineItems.map((line) => <tr key={line.id} className="border-b border-border/60 align-top"><td className="py-2 pr-2"><Input value={line.item} onChange={(event) => updateLine(line.id, "item", event.target.value)} className="h-8 min-w-[150px] text-xs" /></td><td className="py-2 pr-2"><Select value={line.category} onValueChange={(value) => updateLine(line.id, "category", value)}><SelectTrigger className="h-8 w-[125px] text-xs"><SelectValue /></SelectTrigger><SelectContent>{carrierCategories.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}</SelectContent></Select></td><td className="py-2 pr-2"><Input value={line.ours} onChange={(event) => updateLine(line.id, "ours", event.target.value)} type="number" className="h-8 w-[78px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.theirs} onChange={(event) => updateLine(line.id, "theirs", event.target.value)} type="number" className="h-8 w-[78px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.carrierReason} onChange={(event) => updateLine(line.id, "carrierReason", event.target.value)} className="h-8 min-w-[145px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.ourLine} onChange={(event) => updateLine(line.id, "ourLine", event.target.value)} className="h-8 w-[75px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.carrierLine} onChange={(event) => updateLine(line.id, "carrierLine", event.target.value)} className="h-8 w-[75px] text-xs" /></td><td className="py-2 pr-2"><div className="flex gap-1"><Input value={line.exhibitLetter} onChange={(event) => updateLine(line.id, "exhibitLetter", event.target.value.toUpperCase().slice(0, 1))} placeholder="A" className="h-8 w-10 text-xs" /><Input value={line.exhibitMarkedPage} onChange={(event) => updateLine(line.id, "exhibitMarkedPage", event.target.value)} placeholder="p. 1" className="h-8 w-[56px] text-xs" /></div></td><td className="py-2 pr-2"><Input value={line.basis} onChange={(event) => updateLine(line.id, "basis", event.target.value)} placeholder="Specific fact supported by the marked exhibit" className="h-8 min-w-[220px] text-xs" /></td><td className="py-2"><Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => setLineItems((current) => current.length > 1 ? current.filter((row) => row.id !== line.id) : current)}><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody></table></div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><Button type="button" variant="outline" size="sm" onClick={() => setLineItems((current) => [...current, emptyCarrierLine()])}><Plus className="mr-1 h-3.5 w-3.5" />Add operation</Button><div className="flex flex-wrap gap-4 text-xs"><span>Line total — Whip <strong>{carrierMoney(lineWhipTotal.toFixed(2))}</strong></span><span>Line total — carrier <strong>{carrierMoney(lineCarrierTotal.toFixed(2))}</strong></span><span>Full Whip estimate <strong>{carrierMoney(whipTotal.toFixed(2))}</strong></span><span>Full carrier estimate <strong>{carrierMoney(carrierTotal.toFixed(2))}</strong></span><span className={Math.abs(lineGap - gap) > 0.01 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>{Math.abs(lineGap - gap) > 0.01 ? "Reconciliation required" : `Reconciled difference ${carrierMoney(gap.toFixed(2))}`}</span></div></div>
+    </Panel>
+    <Panel title="5. Exhibit schedule" tag="ATTACH ONLY WHAT YOU CAN IDENTIFY">
+      <div className="space-y-2">{exhibits.map((exhibit) => <div key={exhibit.id} className="grid grid-cols-1 gap-2 rounded-md border border-border/70 p-2 md:grid-cols-[52px_1.4fr_1fr_100px_90px_34px]"><Input value={exhibit.letter} onChange={(event) => updateExhibit(exhibit.id, "letter", event.target.value.toUpperCase().slice(0, 1))} placeholder="A" className="h-8 text-xs" /><Input value={exhibit.title} onChange={(event) => updateExhibit(exhibit.id, "title", event.target.value)} placeholder="Document title" className="h-8 text-xs" /><Input value={exhibit.source} onChange={(event) => updateExhibit(exhibit.id, "source", event.target.value)} placeholder="Source / publisher" className="h-8 text-xs" /><Input value={exhibit.revisionDate} onChange={(event) => updateExhibit(exhibit.id, "revisionDate", event.target.value)} placeholder="Revision/date" className="h-8 text-xs" /><Input value={exhibit.markedPage} onChange={(event) => updateExhibit(exhibit.id, "markedPage", event.target.value)} placeholder="Marked p." className="h-8 text-xs" /><Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => setExhibits((current) => current.filter((row) => row.id !== exhibit.id))}><Trash2 className="h-3.5 w-3.5" /></Button></div>)}</div>
+      <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setExhibits((current) => [...current, emptyCarrierExhibit()])}><Plus className="mr-1 h-3.5 w-3.5" />Add exhibit</Button>
+    </Panel>
+    <Panel title="6. Optional state-rule paragraph" tag="THIRD-PARTY VERIFICATION REQUIRED">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2"><Field label="Verified state-rule citation" id="rb-state-citation" value={form.stateRuleCitation} onChange={set("stateRuleCitation")} placeholder="e.g. State regulation / section" /><TextareaField label="Exact verified rule text" id="rb-state-text" value={form.stateRuleText} onChange={set("stateRuleText")} placeholder="Paste only the text independently confirmed for the state of loss." rows={3} /></div>
+      <label className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"><Checkbox checked={form.stateRuleVerified} onCheckedChange={(value) => set("stateRuleVerified")(Boolean(value))} /><span>I independently confirmed this citation and exact text against an authoritative third-party source for the state of loss. Leave the fields blank if not verified.</span></label>
+    </Panel>
+    <Panel title="7. Response, payment direction, and signature" tag="REQUIRED">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3"><Field label="Requested response days" id="rb-response-days" value={form.responseDays} onChange={set("responseDays")} type="number" /><Field label="Handler name" id="rb-handler" value={form.handlerName} onChange={set("handlerName")} required /><Field label="Handler title" id="rb-handler-title" value={form.handlerTitle} onChange={set("handlerTitle")} required /><Field label="Handler email" id="rb-handler-email" value={form.handlerEmail} onChange={set("handlerEmail")} type="email" required /><Field label="Phone extension" id="rb-handler-extension" value={form.handlerExt} onChange={set("handlerExt")} placeholder="Optional" /></div>
+      <label className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"><Checkbox checked={form.dopAttached} onCheckedChange={(value) => set("dopAttached")(Boolean(value))} /><span>Direction of Pay is attached. The letter will direct payment according to the enclosed direction and documented vehicle-owner interest.</span></label>
+    </Panel>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2"><Panel title="Optional verified case-specific notes" tag="SEPARATE FROM FIXED LETTER LANGUAGE"><p className="mb-2 text-xs text-muted-foreground">The required thesis, repair standard, table, revised-payment, payment, reservation, signature, and enclosures sections are generated in their required order. Use this optional field only for verified facts that are not already captured elsewhere.</p><Textarea value={narrative} onChange={(event) => setNarrative(event.target.value)} rows={12} className="font-mono text-xs leading-5" placeholder="Optional verified claim-specific facts only. Do not add legal conclusions, unverified procedures, or URLs." /><div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={buildNarrative} className="bg-slate-900 text-white hover:bg-slate-800"><FileCheck className="mr-1.5 h-3.5 w-3.5" />Prepare verified notes</Button><Button type="button" size="sm" variant="outline" onClick={() => void polishNarrative()} disabled={polishLoading || !narrative.trim()}>{polishLoading ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}{polishLoading ? "Polishing…" : "AI polish without new authority"}</Button><Button type="button" size="sm" variant="outline" onClick={() => writePdf(false)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview formatted PDF</Button><Button type="button" size="sm" variant="outline" onClick={() => void downloadWord()}><Download className="mr-1.5 h-3.5 w-3.5" />Download Word</Button></div></Panel>
+      <PreviewPanel text={narrative || "Complete verified case facts, the line-by-line evidence matrix, and exhibits to prepare the Carrier Rebuttal."} onCopy={() => { navigator.clipboard.writeText(narrative); toast.success("Narrative copied"); }} onDownload={() => writePdf(true)} onPreview={() => writePdf(false)} pdfUrl={previewPdfUrl} />
+    </div>
+  </div>;
 }
 
 // ─── Tab: Payment Receipt ─────────────────────────────────────────────────────

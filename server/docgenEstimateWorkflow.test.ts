@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const routerSource = fs.readFileSync(path.resolve(process.cwd(), 'server/routers/docgen.ts'), 'utf8');
 const pageSource = fs.readFileSync(path.resolve(process.cwd(), 'client/src/pages/DocGenerator.tsx'), 'utf8');
+const carrierAnalyzerSource = fs.readFileSync(path.resolve(process.cwd(), 'server/carrierRebuttalAnalysis.ts'), 'utf8');
 
 describe('estimate workflow fields and previews', () => {
   it('extracts insurer, claimant, and adjuster names through the shared estimate contract', () => {
@@ -36,35 +37,38 @@ describe('estimate workflow fields and previews', () => {
     expect(routerSource).toContain('claimNumberRole');
     expect(routerSource).toContain('Never classify an adverse carrier claim number as our claim number');
     expect(pageSource).toContain('ourClaim: parsed.claimNumberRole !== "adverse"');
-    expect(pageSource).toContain('claimNumber: parsed.claimNumberRole !== "adverse"');
+    expect(pageSource).toContain('claimNumber: data.estimate?.claimNumberRole === "our"');
     expect(pageSource).toContain('Carrier Mailing Address');
     expect(pageSource).toContain('form.carrierAddress || "[Carrier Mailing Address]"');
   });
 
-  it('uses retained extraction before external document retries and generates rebuttals from verified fields', () => {
-    expect(routerSource).toContain('if (!input.storageKey) await parseFileUrl();');
-    expect(routerSource).toContain('if (!parsed && input.storageKey) await parseFileUrl();');
-    expect(routerSource).toContain('Sending all original PDFs through a second');
-    expect(routerSource).not.toContain('ourImageReportUrl: ourImageReportUpload?.url');
+  it('uses transient source analysis without saving original rebuttal uploads', () => {
+    expect(pageSource).toContain('fetch("/api/carrier-rebuttal/analyze"');
+    expect(pageSource).toContain('analyzed transiently and are never saved');
+    expect(pageSource).toContain('no source file, storage key, or uploaded document is retained');
+    expect(carrierAnalyzerSource).toContain('finally {\n    upload.bytes.fill(0);');
+    expect(carrierAnalyzerSource.indexOf('try {\n    if (!isPdf && !isImage)')).toBeGreaterThan(-1);
   });
 
-  it('extracts carrier-response offer, reason, and reference fields for an editable rebuttal', () => {
-    expect(routerSource).toContain('parseCarrierResponse: protectedProcedure');
-    expect(routerSource).toContain('carrierClaimNumber: { type: "string" }');
-    expect(routerSource).toContain('offerTotal: { type: "string" }');
-    expect(routerSource).toContain('denialReasons: { type: "string" }');
-    expect(routerSource).toContain('carrierOfferTotal: z.string().optional()');
-    expect(routerSource).toContain("Carrier's stated position");
+  it('requires accepted or not-disputed liability and reconciles the full estimate totals to the line variance', () => {
+    expect(pageSource).toContain('whipEstimateTotal: string');
+    expect(pageSource).toContain('carrierEstimateTotal: string');
+    expect(pageSource).toContain('form.liabilityStatus !== "accepted" && form.liabilityStatus !== "not_disputed"');
+    expect(pageSource).toContain('Math.abs(lineGap - gap) > 0.01');
+    expect(pageSource).toContain('both estimate-line references, an exhibit letter/marked page, and a factual basis');
   });
 
-  it('uses the carrier document to prefill the opposing claim details before generating an editable rebuttal', () => {
-    expect(pageSource).toContain('const handleAnalyzeAndGenerate = async () =>');
-    expect(pageSource).toContain('parseCarrierResponseMutation.mutateAsync');
-    expect(pageSource).toContain('theirClaimNumber: response.carrierClaimNumber || nextForm.theirClaimNumber');
-    expect(pageSource).toContain('carrierOfferTotal: response.offerTotal || nextForm.carrierOfferTotal');
-    expect(pageSource).toContain('carrierReason: response.denialReasons || nextForm.carrierReason');
-    expect(pageSource).toContain('2. Analyze uploads & generate editable rebuttal');
-    expect(pageSource).toContain('Editable Rebuttal Draft');
+  it('renders the specified evidence-centered letter order and dual PDF/Word output', () => {
+    expect(pageSource).toContain('const createLetterPdf = () =>');
+    expect(pageSource).toContain('Request for Reconsideration of Repair Estimate');
+    expect(pageSource).toContain('const revisedPayment = () =>');
+    expect(pageSource).toContain('const paymentParagraph = () =>');
+    expect(pageSource).toContain('const reservationParagraph = () =>');
+    expect(pageSource).toContain('const downloadWord = async () =>');
+    expect(pageSource).toContain('Packer.toBlob(word)');
+    expect(pageSource).toContain('paragraph(`Revised payment. ${revisedPayment()}`, false, 220, true)');
+    expect(pageSource).toContain('size: { width: 12240, height: 15840 }');
+    expect(pageSource).toContain('Whip Carrier Reconsideration - ${form.claimNumber}');
   });
 
   it('keeps the Subro RE label distinct from the subject and removes honorifics from the salutation', () => {
@@ -74,14 +78,13 @@ describe('estimate workflow fields and previews', () => {
     expect(pageSource).not.toContain('Dear Mr./Ms. ${lastName}:');
   });
 
-  it('paginates long Carrier Rebuttals above the shared footer instead of clipping the body', () => {
-    expect(pageSource).toContain('const footerSafeY = H - 20;');
-    expect(pageSource).toContain('const addContinuationPage = () => {');
-    expect(pageSource).toContain('addLetterFooter(doc);\n      doc.addPage();');
-    expect(pageSource).toContain('const writeRebuttalText = (text: string) => {');
-    expect(pageSource).toContain('text.replace(/\\r\\n/g, "\\n").split(/\\n{2,}/)');
-    expect(pageSource).toContain('if (cursor < lines.length) addContinuationPage();');
-    expect(pageSource).toContain('writeRebuttalText(previewDraft);');
+  it('paginates rebuilt Carrier Rebuttals above a reserved footer and blocks packets over three pages', () => {
+    expect(pageSource).toContain('const safeBottom = H - 31;');
+    expect(pageSource).toContain('const addPage = () => { footer(); doc.addPage();');
+    expect(pageSource).toContain('if (page > 3)');
+    expect(pageSource).toContain('would exceed the three-page limit');
+    expect(pageSource).toContain('const tableHeader = () =>');
+    expect(pageSource).toContain('if (y + h > safeBottom) { addPage(); tableHeader(); }');
   });
 
   it('removes persisted LOU state before remounting the calculator on a global Clear Form action', () => {

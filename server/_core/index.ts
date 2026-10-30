@@ -28,6 +28,7 @@ import {
 import { storagePut } from "../storage";
 import { storageGetSignedUrl } from "../storage";
 import { extractPipBillLinesFromUpload } from "../pipBillExtraction";
+import { analyzeCarrierRebuttalUpload } from "../carrierRebuttalAnalysis";
 import { registerKlutchPolicyApi } from "../klutchPolicyApi";
 import { sdk } from "./sdk";
 import {
@@ -159,6 +160,51 @@ async function startServer() {
     } catch (error) {
       console.error("[PIP bill extraction]", error);
       res.status(500).json({ error: "Could not extract bill lines. Add or correct bill lines manually." });
+    }
+  });
+
+  // Carrier Rebuttal sources are intentionally analyzed only in request memory.
+  // Do not route these uploads through /api/upload/document or object storage.
+  // The handler receives normalized facts/exhibit suggestions only; source bytes
+  // and source metadata are discarded once the response is constructed.
+  app.post("/api/carrier-rebuttal/analyze", upload.fields([
+    { name: "ourEstimate", maxCount: 1 },
+    { name: "supportingEvidence", maxCount: 1 },
+    { name: "carrierResponse", maxCount: 1 },
+  ]), async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) {
+        res.status(401).json({ error: "Sign in to analyze Carrier Rebuttal sources." });
+        return;
+      }
+      const uploaded = (req.files ?? {}) as Record<string, Express.Multer.File[]>;
+      const files = (["ourEstimate", "supportingEvidence", "carrierResponse"] as const)
+        .flatMap((kind) => (uploaded[kind] ?? []).slice(0, 1).map((file) => ({ kind, file })));
+      if (!files.length) {
+        res.status(400).json({ error: "Add at least one PDF, PNG, JPG, or WEBP source document." });
+        return;
+      }
+      const analyses = await Promise.all(files.map(async ({ kind, file }) => ({
+        kind,
+        result: await analyzeCarrierRebuttalUpload({
+          bytes: Buffer.from(file.buffer),
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+          kind,
+        }),
+      })));
+      const estimate = analyses.find((analysis) => analysis.kind === "ourEstimate")?.result.estimate;
+      const carrier = analyses.find((analysis) => analysis.kind === "carrierResponse")?.result.carrier;
+      const evidenceSuggestions = analyses.flatMap((analysis) => analysis.result.evidenceSuggestions);
+      const warnings = analyses.flatMap((analysis) => analysis.result.warning ? [analysis.result.warning] : []);
+      res.json({ estimate, carrier, evidenceSuggestions, warnings });
+    } catch (error) {
+      console.error("[CarrierRebuttal] transient analyzer error", error);
+      res.status(500).json({ error: "Could not analyze the source documents. Enter the required facts and marked exhibit details manually." });
+    } finally {
+      const uploaded = (req.files ?? {}) as Record<string, Express.Multer.File[]>;
+      for (const file of Object.values(uploaded).flat()) file.buffer.fill(0);
     }
   });
 
