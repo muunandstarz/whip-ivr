@@ -853,6 +853,63 @@ export const docgenSharedTemplates = mysqlTable("docgen_shared_templates", {
 });
 export type DocgenSharedTemplate = typeof docgenSharedTemplates.$inferSelect;
 
+// ─── Carrier Rebuttal OEM Evidence Library ─────────────────────────────────────
+// Metadata and outbound links only. This catalog must never retain source PDFs,
+// owner-manual text, screenshots, source excerpts, object-storage keys, or case
+// upload bytes. Handlers supply their own marked case evidence at use time.
+export const oemProcedureSources = mysqlTable("oem_procedure_sources", {
+  id: int("id").autoincrement().primaryKey(),
+  sourceKey: varchar("source_key", { length: 160 }).notNull().unique(),
+  manufacturer: varchar("manufacturer", { length: 96 }).notNull(),
+  make: varchar("make", { length: 96 }).notNull(),
+  modelKey: varchar("model_key", { length: 96 }),
+  modelLabel: varchar("model_label", { length: 160 }).notNull(),
+  modelYearStart: int("model_year_start"),
+  modelYearEnd: int("model_year_end"),
+  sourceKind: mysqlEnum("source_kind", ["official_collision_procedure", "owner_manual_reference", "pending"]).notNull(),
+  title: varchar("title", { length: 512 }).notNull(),
+  publisher: varchar("publisher", { length: 256 }).notNull(),
+  sourceUrl: text("source_url"),
+  revisionDisplay: varchar("revision_display", { length: 512 }).notNull(),
+  accessedOn: varchar("accessed_on", { length: 32 }).notNull(),
+  topic: varchar("topic", { length: 256 }).notNull(),
+  relevanceNote: text("relevance_note").notNull(),
+  status: mysqlEnum("status", ["active", "reference_only", "pending", "retired"]).default("active").notNull(),
+  exportAllowed: boolean("export_allowed").default(false).notNull(),
+  termsUrl: text("terms_url"),
+  termsNote: text("terms_note").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  index("oem_procedure_sources_vehicle_idx").on(table.make, table.modelKey, table.modelYearStart, table.modelYearEnd),
+  index("oem_procedure_sources_status_idx").on(table.status, table.sourceKind),
+]);
+export type OemProcedureSource = typeof oemProcedureSources.$inferSelect;
+
+// Team-visible AI review audit. It contains only structured case facts and
+// metadata source keys selected by the handler; it deliberately has no raw source
+// document, upload text, image, storage key, or manual-content field.
+export const carrierRebuttalAiReviews = mysqlTable("carrier_rebuttal_ai_reviews", {
+  id: int("id").autoincrement().primaryKey(),
+  claimNumber: varchar("claim_number", { length: 96 }).notNull(),
+  vehicleYear: int("vehicle_year").notNull(),
+  vehicleMake: varchar("vehicle_make", { length: 96 }).notNull(),
+  vehicleModel: varchar("vehicle_model", { length: 128 }).notNull(),
+  vin: varchar("vin", { length: 40 }),
+  selectedSourceKeys: json("selected_source_keys").notNull(),
+  inputFingerprint: varchar("input_fingerprint", { length: 96 }).notNull(),
+  modelId: varchar("model_id", { length: 96 }).notNull(),
+  status: mysqlEnum("status", ["claude_completed", "claude_unavailable", "claude_malformed", "manual_review_required"]).notNull(),
+  reviewOutput: json("review_output").notNull(),
+  createdByUserId: int("created_by_user_id").notNull(),
+  createdByName: varchar("created_by_name", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("carrier_rebuttal_ai_reviews_claim_created_idx").on(table.claimNumber, table.createdAt),
+  index("carrier_rebuttal_ai_reviews_created_idx").on(table.createdAt),
+]);
+export type CarrierRebuttalAiReview = typeof carrierRebuttalAiReviews.$inferSelect;
+
 // ─── Claim Correspondence: Document Generator ─────────────────────────────────
 // This is a claim-number-scoped internal record for correspondence prepared in
 // Document Generator. It deliberately has no provider message/thread fields and

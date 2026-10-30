@@ -19,4 +19,12 @@ describe("Handler Productivity Dashboard navigation", () => {
     expect(source).toContain("canAccessMetroCarsCOI");
     expect(source).toContain("impersonating?.id");
   });
+
+  it("adds the universally visible Training group as a new-window Claude artifact link", () => {
+    expect(source).toContain('const TRAINING_NAV_ITEMS');
+    expect(source).toContain('href: "https://claude.ai/artifact/HB6kQcvrK6H1KA2Xw2xcTJ"');
+    expect(source).toContain('label: "Loss of Use & DV Training"');
+    expect(source).toContain('Training');
+    expect(source).toContain('GraduationCap');
+  });
 });

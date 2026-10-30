@@ -25,6 +25,8 @@ import {
   docgenRecentDocs,
   docgenSharedTemplates,
   claimCorrespondence,
+  oemProcedureSources,
+  carrierRebuttalAiReviews,
 } from "../drizzle/schema";
 import { lossIntakeClaims } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -2358,6 +2360,59 @@ export async function markDocgenTemplateRead(userId: number, templateId: number)
   const db = await getDb();
   if (!db) return;
   await db.update(docgenSharedTemplates).set({ isRead: true }).where(and(eq(docgenSharedTemplates.id, templateId), eq(docgenSharedTemplates.toUserId, userId)));
+}
+
+// ─── Carrier Rebuttal OEM Evidence Library ───────────────────────────────────
+// These helpers operate on citation metadata only. No raw source document,
+// extracted manual text, screenshot, storage key, or case-upload content belongs
+// in either of these tables.
+export async function listOemProcedureSources() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(oemProcedureSources).orderBy(oemProcedureSources.make, oemProcedureSources.modelKey, oemProcedureSources.modelYearStart, oemProcedureSources.title);
+}
+
+export async function getOemProcedureSourcesByKeys(sourceKeys: string[]) {
+  const uniqueKeys = Array.from(new Set(sourceKeys.filter(Boolean)));
+  if (!uniqueKeys.length) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(oemProcedureSources).where(inArray(oemProcedureSources.sourceKey, uniqueKeys));
+}
+
+export type CreateCarrierRebuttalAiReviewInput = {
+  claimNumber: string;
+  vehicleYear: number;
+  vehicleMake: string;
+  vehicleModel: string;
+  vin?: string | null;
+  selectedSourceKeys: string[];
+  inputFingerprint: string;
+  modelId: string;
+  status: "claude_completed" | "claude_unavailable" | "claude_malformed" | "manual_review_required";
+  reviewOutput: Record<string, unknown>;
+  createdByUserId: number;
+  createdByName?: string | null;
+};
+
+export async function createCarrierRebuttalAiReview(input: CreateCarrierRebuttalAiReviewInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(carrierRebuttalAiReviews).values({
+    ...input,
+    vin: input.vin || null,
+    createdByName: input.createdByName || null,
+  });
+  return (result[0] as { insertId: number }).insertId;
+}
+
+export async function listCarrierRebuttalAiReviews(claimNumber?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const query = db.select().from(carrierRebuttalAiReviews);
+  return claimNumber
+    ? query.where(eq(carrierRebuttalAiReviews.claimNumber, claimNumber)).orderBy(desc(carrierRebuttalAiReviews.createdAt)).limit(25)
+    : query.orderBy(desc(carrierRebuttalAiReviews.createdAt)).limit(100);
 }
 
 // ─── Claim Correspondence: Document Generator ─────────────────────────────────

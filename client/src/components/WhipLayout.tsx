@@ -35,7 +35,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { FileText } from "lucide-react";
-import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen, Ticket, Wrench } from "lucide-react";
+import { Bot, Calculator, Scale, GitFork, AlertTriangle, MapPin, BookOpen, Car, Inbox, NotebookPen, Ticket, Wrench, GraduationCap } from "lucide-react";
 import { Database, Library, Link2 } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -78,6 +78,12 @@ const KB_NAV_EXTRA = [
   { href: "/kb/glossary", label: "Glossary", icon: Library },
   { href: "/kb/resources", label: "Resources & Links", icon: Link2 },
   { href: "/kb/vehicle-anatomy", label: "Vehicle Anatomy", icon: Car },
+];
+
+// Claude artifacts cannot be safely framed here. Open the owner-managed training
+// source independently so its own schedule and access controls remain intact.
+const TRAINING_NAV_ITEMS = [
+  { href: "https://claude.ai/artifact/HB6kQcvrK6H1KA2Xw2xcTJ", label: "Loss of Use & DV Training", icon: GraduationCap, external: true },
 ];
 
 // ── Nav items for handler view (own or impersonated) ─────────────────────────
@@ -393,6 +399,26 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 </Link>
               );
             })}
+          </div>
+          {/* ── Training section ── */}
+          <div className="pt-3 mt-1 border-t border-white/10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 mb-1.5">
+              Training
+            </p>
+            {TRAINING_NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setMobileOpen(false)}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-white/60 hover:bg-background/8 hover:text-white"
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="text-left flex-1">{label}</span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-70" aria-hidden="true" />
+              </a>
+            ))}
           </div>
         </nav>
 

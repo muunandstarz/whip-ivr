@@ -5,6 +5,7 @@ import path from 'node:path';
 const routerSource = fs.readFileSync(path.resolve(process.cwd(), 'server/routers/docgen.ts'), 'utf8');
 const pageSource = fs.readFileSync(path.resolve(process.cwd(), 'client/src/pages/DocGenerator.tsx'), 'utf8');
 const carrierAnalyzerSource = fs.readFileSync(path.resolve(process.cwd(), 'server/carrierRebuttalAnalysis.ts'), 'utf8');
+const schemaSource = fs.readFileSync(path.resolve(process.cwd(), 'drizzle/schema.ts'), 'utf8');
 
 describe('estimate workflow fields and previews', () => {
   it('extracts insurer, claimant, and adjuster names through the shared estimate contract', () => {
@@ -48,6 +49,38 @@ describe('estimate workflow fields and previews', () => {
     expect(pageSource).toContain('no source file, storage key, or uploaded document is retained');
     expect(carrierAnalyzerSource).toContain('finally {\n    upload.bytes.fill(0);');
     expect(carrierAnalyzerSource.indexOf('try {\n    if (!isPdf && !isImage)')).toBeGreaterThan(-1);
+  });
+
+  it('requires exact Tesla year/model selection, an official source key, and handler verification per disputed operation', () => {
+    expect(pageSource).toContain('Confirmed model year');
+    expect(pageSource).toContain('Confirmed make');
+    expect(pageSource).toContain('Confirmed model');
+    expect(pageSource).toContain('Tesla source');
+    expect(pageSource).toContain('evidenceConfirmed');
+    expect(pageSource).toContain('Do not use a generic Tesla citation');
+    expect(pageSource).toContain('Owner-manual reference status');
+    expect(pageSource).toContain('cannot be selected as repair-operation support');
+  });
+
+  it('keeps source records and team review audit entries metadata-only while retaining no raw manuals or analyzer uploads', () => {
+    expect(schemaSource).toContain('export const oemProcedureSources');
+    expect(schemaSource).toContain('export const carrierRebuttalAiReviews');
+    expect(schemaSource).toContain('selectedSourceKeys: json("selected_source_keys")');
+    expect(schemaSource).not.toContain('manualPdf');
+    expect(schemaSource).not.toContain('manualText');
+    expect(routerSource).toContain('Only an active, official collision-procedure citation');
+    expect(routerSource).toContain('Owner manuals remain reference-only');
+  });
+
+  it('uses only the exact Claude model when live-supported and records a manual fallback without substituting another model', () => {
+    const claudeReviewSegment = routerSource.slice(routerSource.indexOf('reviewCarrierRebuttalWithClaude'), routerSource.indexOf('parseCccValuation: protectedProcedure'));
+    expect(claudeReviewSegment).toContain('CARRIER_REBUTTAL_CLAUDE_MODEL');
+    expect(claudeReviewSegment).toContain('claude_unavailable');
+    expect(claudeReviewSegment).toContain('No substitute model was used');
+    expect(claudeReviewSegment).toContain('thinking: { type: "enabled", budget_tokens: 1_024 }');
+    expect(claudeReviewSegment).toContain('maxTokens: 2_200');
+    expect(claudeReviewSegment).not.toContain('model: "gpt');
+    expect(claudeReviewSegment).not.toContain('model: "gemini');
   });
 
   it('requires accepted or not-disputed liability and reconciles the full estimate totals to the line variance', () => {

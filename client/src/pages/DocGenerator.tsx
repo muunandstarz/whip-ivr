@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
   Copy,
   Download,
   Eye,
+  ExternalLink,
   FileCheck,
   FileText,
   FolderOpen,
@@ -4853,6 +4854,8 @@ type CarrierRebuttalLine = {
   exhibitLetter: string;
   exhibitMarkedPage: string;
   basis: string;
+  sourceKey: string;
+  evidenceConfirmed: boolean;
 };
 type CarrierRebuttalExhibit = {
   id: string;
@@ -4869,6 +4872,9 @@ type CarrierRebuttalForm = {
   theirClaimNumber: string;
   dateOfLoss: string;
   vehicle: string;
+  vehicleYear: string;
+  vehicleMake: string;
+  vehicleModel: string;
   vin: string;
   carrier: string;
   adjuster: string;
@@ -4902,14 +4908,14 @@ const carrierCategories: Array<{ value: CarrierRebuttalCategory; label: string }
   { value: "other", label: "Other operation" },
 ];
 const emptyCarrierLine = (): CarrierRebuttalLine => ({
-  id: crypto.randomUUID(), category: "other", item: "", ours: "", theirs: "", carrierReason: "", ourLine: "", carrierLine: "", exhibitLetter: "", exhibitMarkedPage: "", basis: "",
+  id: crypto.randomUUID(), category: "other", item: "", ours: "", theirs: "", carrierReason: "", ourLine: "", carrierLine: "", exhibitLetter: "", exhibitMarkedPage: "", basis: "", sourceKey: "", evidenceConfirmed: false,
 });
 const emptyCarrierExhibit = (): CarrierRebuttalExhibit => ({
   id: crypto.randomUUID(), letter: "", title: "", source: "", revisionDate: "", markedPage: "",
 });
 const initialCarrierForm = (): CarrierRebuttalForm => ({
-  letterDate: new Date().toISOString().slice(0, 10), claimNumber: "", theirClaimNumber: "", dateOfLoss: "", vehicle: "", vin: "", carrier: "", adjuster: "", insuredName: "",
-  liabilityStatus: "accepted", oem: "other", repairFacility: "Total Recon", repairFacilityLocation: "", roNumber: "", ourEstimateDate: "", carrierEstimateDate: "", whipEstimateTotal: "", carrierEstimateTotal: "",
+  letterDate: new Date().toISOString().slice(0, 10), claimNumber: "", theirClaimNumber: "", dateOfLoss: "", vehicle: "", vehicleYear: "", vehicleMake: "", vehicleModel: "", vin: "", carrier: "", adjuster: "", insuredName: "",
+  liabilityStatus: "accepted", oem: "tesla", repairFacility: "Total Recon", repairFacilityLocation: "", roNumber: "", ourEstimateDate: "", carrierEstimateDate: "", whipEstimateTotal: "", carrierEstimateTotal: "",
   responseDays: "10", dopAttached: true, handlerName: "", handlerTitle: "Claims Representative", handlerEmail: "claims@drivewhip.com", handlerExt: "",
   stateRuleCitation: "", stateRuleText: "", stateRuleVerified: false,
 });
@@ -4935,13 +4941,25 @@ function CarrierRebuttalTab() {
   const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [polishLoading, setPolishLoading] = useState(false);
+  const [claudeReview, setClaudeReview] = useState<{ reviewId: number; status: string; modelId: string; output: { factGaps?: Array<{ field: string; message: string }>; citationApplicabilityWarnings?: string[]; neutralDisputeRows?: Array<{ lineId: string; wording: string }>; draftNarrative?: string; handlerVerificationRequired?: boolean } } | null>(null);
   const polishMutation = trpc.docgen.polishRebuttal.useMutation();
+  const claudeReviewMutation = trpc.docgen.reviewCarrierRebuttalWithClaude.useMutation();
+  const vehicleYearNumber = Number(form.vehicleYear);
+  const sourceQueryInput = useMemo(() => ({
+    vehicleYear: Number.isInteger(vehicleYearNumber) ? vehicleYearNumber : 1900,
+    vehicleMake: form.vehicleMake.trim() || "Tesla",
+    vehicleModel: form.vehicleModel.trim() || "Model 3",
+  }), [vehicleYearNumber, form.vehicleMake, form.vehicleModel]);
+  const oemSourcesQuery = trpc.docgen.carrierRebuttalOemSources.useQuery(sourceQueryInput, {
+    enabled: form.oem === "tesla" && Number.isInteger(vehicleYearNumber) && vehicleYearNumber >= 2017 && Boolean(form.vehicleMake.trim()) && Boolean(form.vehicleModel.trim()),
+    staleTime: 5 * 60_000,
+  });
 
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(CARRIER_REBUTTAL_STORAGE_KEY) || "{}") as Partial<{ form: CarrierRebuttalForm; lineItems: CarrierRebuttalLine[]; exhibits: CarrierRebuttalExhibit[]; narrative: string }>;
-      if (saved.form) setForm({ ...initialCarrierForm(), ...saved.form });
-      if (Array.isArray(saved.lineItems) && saved.lineItems.length) setLineItems(saved.lineItems);
+      if (saved.form) setForm({ ...initialCarrierForm(), ...saved.form, oem: "tesla" });
+      if (Array.isArray(saved.lineItems) && saved.lineItems.length) setLineItems(saved.lineItems.map((line) => ({ ...emptyCarrierLine(), ...line })));
       if (Array.isArray(saved.exhibits)) setExhibits(saved.exhibits);
       if (typeof saved.narrative === "string") setNarrative(saved.narrative);
     } catch { /* malformed local draft is safely ignored */ }
@@ -4951,7 +4969,7 @@ function CarrierRebuttalTab() {
   }, [form, lineItems, exhibits, narrative]);
 
   const set = <K extends keyof CarrierRebuttalForm>(key: K) => (value: CarrierRebuttalForm[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const updateLine = (id: string, key: keyof CarrierRebuttalLine, value: string) => setLineItems((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line));
+  const updateLine = <K extends keyof CarrierRebuttalLine>(id: string, key: K, value: CarrierRebuttalLine[K]) => setLineItems((current) => current.map((line) => line.id === id ? { ...line, [key]: value } : line));
   const updateExhibit = (id: string, key: keyof CarrierRebuttalExhibit, value: string) => setExhibits((current) => current.map((exhibit) => exhibit.id === id ? { ...exhibit, [key]: value } : exhibit));
   const disputedLines = lineItems.filter((line) => Number(line.ours) > Number(line.theirs));
   const lineWhipTotal = disputedLines.reduce((sum, line) => sum + (Number(line.ours) || 0), 0);
@@ -4969,6 +4987,7 @@ function CarrierRebuttalTab() {
     });
     if (missing.length) return ["Complete all required case, repair, estimate-total, carrier, and handler fields before generating."];
     if (form.liabilityStatus !== "accepted" && form.liabilityStatus !== "not_disputed") return ["This letter is available only when liability is accepted or not disputed. Route all other liability positions to the liability desk."];
+    if (form.oem !== "tesla") return ["The current source-aware Carrier Rebuttal library is limited to Tesla Model 3 and Model Y. Toyota/TIS remains pending authorized source material."];
     if (!estimateTotalsValid) return ["Enter valid full carrier and Whip repair-estimate totals."];
     if (!disputedLines.length) return ["Add at least one disputed operation with our amount greater than the carrier allowance."];
     const lineGaps = disputedLines.filter((line) => !line.item || !line.ourLine || !line.carrierLine || !line.exhibitLetter || !line.exhibitMarkedPage || !line.basis);
@@ -4978,6 +4997,14 @@ function CarrierRebuttalTab() {
     if (Math.abs(lineGap - gap) > 0.01) return [`The disputed-line difference (${carrierMoney(lineGap.toFixed(2))}) does not equal Whip total minus carrier total (${carrierMoney(gap.toFixed(2))}). Explain the gap outside this letter or correct the lines/totals.`];
     const anyStateRule = Boolean(form.stateRuleCitation || form.stateRuleText || form.stateRuleVerified);
     if (anyStateRule && (!form.stateRuleCitation || !form.stateRuleText || !form.stateRuleVerified)) return ["A state-rule paragraph requires a verified citation, the exact rule text, and the confirmation checkbox."];
+    if (form.oem === "tesla") {
+      if (!Number.isInteger(vehicleYearNumber) || !form.vehicleMake.trim() || !form.vehicleModel.trim()) return ["Confirm the Tesla year, make, and model before selecting procedure support."];
+      if (oemSourcesQuery.data?.coverageGap) return [oemSourcesQuery.data.coverageGap];
+      if (!oemSourcesQuery.data?.applicableSources?.length) return ["No exact active Tesla collision-procedure family is available for this confirmed vehicle. Do not use a generic Tesla citation."];
+      if (disputedLines.some((line) => !line.sourceKey || !line.evidenceConfirmed)) return ["Each disputed Tesla operation requires an exact official procedure source and the handler verification checkbox."];
+      const applicableKeys = new Set(oemSourcesQuery.data.applicableSources.map((source) => source.sourceKey));
+      if (disputedLines.some((line) => !applicableKeys.has(line.sourceKey))) return ["A selected procedure source no longer matches the confirmed vehicle. Re-select the exact year/model family source and verify the marked evidence again."];
+    }
     return [];
   };
 
@@ -5000,6 +5027,47 @@ function CarrierRebuttalTab() {
     } finally { setPolishLoading(false); }
   };
 
+  const setVehicleSourceField = (key: "vehicleYear" | "vehicleMake" | "vehicleModel") => (value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setLineItems((current) => current.map((line) => ({ ...line, sourceKey: "", evidenceConfirmed: false })));
+    setClaudeReview(null);
+  };
+
+  const requestClaudeReview = async () => {
+    const errors = validationErrors();
+    if (errors.length) { toast.error(errors[0]); return; }
+    try {
+      const result = await claudeReviewMutation.mutateAsync({
+        claimNumber: form.claimNumber,
+        vehicleYear: vehicleYearNumber,
+        vehicleMake: form.vehicleMake,
+        vehicleModel: form.vehicleModel,
+        vin: form.vin,
+        carrier: form.carrier,
+        adjuster: form.adjuster,
+        dateOfLoss: form.dateOfLoss,
+        selectedSourceKeys: Array.from(new Set(disputedLines.map((line) => line.sourceKey))),
+        disputedLines: disputedLines.map((line) => ({
+          id: line.id,
+          item: line.item,
+          carrierReason: line.carrierReason,
+          ourLine: line.ourLine,
+          carrierLine: line.carrierLine,
+          sourceKey: line.sourceKey,
+          exhibitLetter: line.exhibitLetter,
+          exhibitMarkedPage: line.exhibitMarkedPage,
+          basis: line.basis,
+          evidenceConfirmed: line.evidenceConfirmed as true,
+        })),
+        existingNarrative: narrative,
+      });
+      setClaudeReview(result);
+      toast.success(result.status === "claude_completed" ? "Claude review saved for team verification." : "Manual-review fallback saved; no substitute model was used.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the source-aware review.");
+    }
+  };
+
   const analyzeSources = async () => {
     if (!ourEstimate && !supportingEvidence && !carrierResponse) { toast.error("Add at least one supported source document first."); return; }
     setAnalysisLoading(true); setAnalysisWarnings([]);
@@ -5017,9 +5085,13 @@ function CarrierRebuttalTab() {
       };
       if (!response.ok) throw new Error(data.error || "Could not analyze sources.");
       setAnalysisWarnings(data.warnings || []);
+      const detectedVehicle = (data.estimate?.vehicle || "").match(/\b(20\d{2}|19\d{2})\s+(Tesla)\s+(Model\s*[3Y])\b/i);
       setForm((current) => ({
         ...current,
         vehicle: data.estimate?.vehicle || current.vehicle,
+        vehicleYear: detectedVehicle?.[1] || current.vehicleYear,
+        vehicleMake: detectedVehicle?.[2] || current.vehicleMake,
+        vehicleModel: detectedVehicle?.[3]?.replace(/\s+/g, " ") || current.vehicleModel,
         vin: data.estimate?.vin || current.vin,
         claimNumber: data.estimate?.claimNumberRole === "our" ? (data.estimate.claimNumber || current.claimNumber) : current.claimNumber,
         dateOfLoss: data.estimate?.dateOfLoss || current.dateOfLoss,
@@ -5053,12 +5125,7 @@ function CarrierRebuttalTab() {
     } finally { setAnalysisLoading(false); }
   };
 
-  const oemStandard = (): string => ({
-    tesla: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by Tesla at service.tesla.com and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
-    toyota: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by Toyota through its Technical Information System and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
-    lexus: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by Lexus through its Technical Information System and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
-    other: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by the manufacturer and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
-  }[form.oem]);
+  const oemStandard = (): string => "The disputed lines below identify the handler-selected, vehicle-matched Tesla procedure-family source and the marked case exhibit supporting the stated factual basis. This request is limited to those identified lines and exhibits; please address each line in writing if a reduction is maintained.";
   const liabilityText = form.liabilityStatus === "accepted" ? "Liability is accepted." : "Liability is not disputed.";
   const openingParagraph = () => `Your insured’s vehicle struck our vehicle on ${carrierDate(form.dateOfLoss)}. ${liabilityText} Your estimate dated ${carrierDate(form.carrierEstimateDate)} totals ${carrierMoney(carrierTotal.toFixed(2))}. The estimate prepared by ${form.repairFacility} after inspecting the vehicle, dated ${carrierDate(form.ourEstimateDate)}, totals ${carrierMoney(whipTotal.toFixed(2))}. The difference is ${carrierMoney(gap.toFixed(2))} across ${disputedLines.length} line${disputedLines.length === 1 ? "" : "s"}. Each line is listed below with the support for it.`;
   const revisedPayment = () => `Revise your estimate to ${carrierMoney(whipTotal.toFixed(2))}, the total of ours, and pay the difference of ${carrierMoney(gap.toFixed(2))}. If you maintain a reduction on any line, send the written basis for that line, naming the procedure, document or fact you rely on. A general statement that the estimate is not supported does not answer a line-item dispute. Please respond within ${form.responseDays || "10"} days of receipt.`;
@@ -5275,7 +5342,7 @@ function CarrierRebuttalTab() {
   };
 
   const clearAll = () => {
-    setForm(initialCarrierForm()); setLineItems([emptyCarrierLine()]); setExhibits([]); setNarrative(""); setOurEstimate(null); setSupportingEvidence(null); setCarrierResponse(null); setPreviewPdfUrl(null); setAnalysisWarnings([]); localStorage.removeItem(CARRIER_REBUTTAL_STORAGE_KEY); toast.success("Carrier Rebuttal inputs cleared. Uploaded source files were never retained.");
+    setForm(initialCarrierForm()); setLineItems([emptyCarrierLine()]); setExhibits([]); setNarrative(""); setOurEstimate(null); setSupportingEvidence(null); setCarrierResponse(null); setPreviewPdfUrl(null); setAnalysisWarnings([]); setClaudeReview(null); localStorage.removeItem(CARRIER_REBUTTAL_STORAGE_KEY); toast.success("Carrier Rebuttal inputs cleared. Uploaded source files were never retained.");
   };
   const uploadCard = (label: string, id: string, file: File | null, setter: (file: File | null) => void, required?: boolean) => (
     <label htmlFor={id} className="block rounded-lg border border-dashed border-border bg-muted/20 p-3 cursor-pointer hover:border-primary/50 transition-colors">
@@ -5295,7 +5362,10 @@ function CarrierRebuttalTab() {
         <Field label="Whip Claim #" id="rb-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="GB-9269-626462-884829" required />
         <Field label="Carrier Claim #" id="rb-theirclaim" value={form.theirClaimNumber} onChange={set("theirClaimNumber")} placeholder="Carrier claim number" required />
         <Field label="Date of Loss" id="rb-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" required />
-        <Field label="Vehicle" id="rb-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="2026 Toyota Corolla Hybrid LE" required />
+        <Field label="Vehicle description" id="rb-vehicle" value={form.vehicle} onChange={set("vehicle")} placeholder="2025 Tesla Model Y Long Range" required />
+        <Field label="Confirmed model year" id="rb-vehicle-year" value={form.vehicleYear} onChange={setVehicleSourceField("vehicleYear")} placeholder="2025" type="number" required />
+        <Field label="Confirmed make" id="rb-vehicle-make" value={form.vehicleMake} onChange={setVehicleSourceField("vehicleMake")} placeholder="Tesla" required />
+        <Field label="Confirmed model" id="rb-vehicle-model" value={form.vehicleModel} onChange={setVehicleSourceField("vehicleModel")} placeholder="Model 3 or Model Y" required />
         <Field label="VIN" id="rb-vin" value={form.vin} onChange={set("vin")} placeholder="17-character VIN" required />
         <Field label="Insured Driver" id="rb-insured" value={form.insuredName} onChange={set("insuredName")} placeholder="First Last" required />
         <InsuranceCompanySelect label="Adverse Carrier" id="rb-carrier" value={form.carrier} onChange={set("carrier")} />
@@ -5310,14 +5380,25 @@ function CarrierRebuttalTab() {
       {analysisWarnings.length > 0 && <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{analysisWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
     </Panel>
     <Panel title="3. Repair estimate and carrier response" tag="REQUIRED">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3"><Field label="Repair Facility" id="rb-facility" value={form.repairFacility} onChange={set("repairFacility")} placeholder="Repair facility" required /><Field label="Facility Location" id="rb-facility-location" value={form.repairFacilityLocation} onChange={set("repairFacilityLocation")} placeholder="City, State" /><Field label="RO #" id="rb-ro" value={form.roNumber} onChange={set("roNumber")} placeholder="Repair order number" required /><Field label="Whip Estimate Date" id="rb-our-est-date" value={form.ourEstimateDate} onChange={set("ourEstimateDate")} type="date" required /><Field label="Carrier Estimate / Response Date" id="rb-carrier-est-date" value={form.carrierEstimateDate} onChange={set("carrierEstimateDate")} type="date" required /><Field label="Whip Estimate Total" id="rb-whip-total" value={form.whipEstimateTotal} onChange={set("whipEstimateTotal")} placeholder="0.00" type="number" required /><Field label="Carrier Estimate Total" id="rb-carrier-total" value={form.carrierEstimateTotal} onChange={set("carrierEstimateTotal")} placeholder="0.00" type="number" required /><div><Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vehicle procedure source *</Label><Select value={form.oem} onValueChange={(value) => set("oem")(value as CarrierRebuttalForm["oem"])}><SelectTrigger id="rb-oem" className="h-9 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tesla">Tesla procedure support</SelectItem><SelectItem value="toyota">Toyota TIS support</SelectItem><SelectItem value="lexus">Lexus TIS support</SelectItem><SelectItem value="other">Other manufacturer support</SelectItem></SelectContent></Select></div></div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3"><Field label="Repair Facility" id="rb-facility" value={form.repairFacility} onChange={set("repairFacility")} placeholder="Repair facility" required /><Field label="Facility Location" id="rb-facility-location" value={form.repairFacilityLocation} onChange={set("repairFacilityLocation")} placeholder="City, State" /><Field label="RO #" id="rb-ro" value={form.roNumber} onChange={set("roNumber")} placeholder="Repair order number" required /><Field label="Whip Estimate Date" id="rb-our-est-date" value={form.ourEstimateDate} onChange={set("ourEstimateDate")} type="date" required /><Field label="Carrier Estimate / Response Date" id="rb-carrier-est-date" value={form.carrierEstimateDate} onChange={set("carrierEstimateDate")} type="date" required /><Field label="Whip Estimate Total" id="rb-whip-total" value={form.whipEstimateTotal} onChange={set("whipEstimateTotal")} placeholder="0.00" type="number" required /><Field label="Carrier Estimate Total" id="rb-carrier-total" value={form.carrierEstimateTotal} onChange={set("carrierEstimateTotal")} placeholder="0.00" type="number" required /><div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"><p className="text-xs font-semibold text-slate-800">Tesla procedure support</p><p className="mt-1 text-[11px] leading-4 text-slate-600">Current safe scope: confirmed Model 3 or Model Y only. Toyota/TIS stays unavailable until authorized materials are supplied.</p></div></div>
     </Panel>
-    <Panel title="4. Disputed operations matrix" tag="ESTIMATE LINES + EXHIBIT REQUIRED">
+    <Panel title="4. Vehicle-matched Tesla procedure library" tag="OUTBOUND LINKS · NO SOURCE CONTENT STORED">
+      <p className="mb-3 text-xs leading-5 text-muted-foreground">Confirm the exact year, make, and model above. The library provides live Tesla links and catalog metadata only — it does not store or reproduce Tesla manuals. Select a source only after reviewing the current live page and marking the case-specific evidence.</p>
+      {oemSourcesQuery.isFetching && <p className="text-xs text-muted-foreground">Checking the vehicle-matched source family…</p>}
+      {oemSourcesQuery.data?.coverageGap && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">{oemSourcesQuery.data.coverageGap}</div>}
+      {oemSourcesQuery.data?.applicableSources?.length ? <div className="space-y-2">{oemSourcesQuery.data.applicableSources.map((source) => <div key={source.sourceKey} className="rounded-md border border-slate-200 bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold text-slate-900">{source.title}</p><p className="mt-1 text-[11px] text-slate-600">{source.revisionDisplay} · {source.topic}</p></div>{source.sourceUrl && <a href={source.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 hover:bg-slate-50"><ExternalLink className="h-3 w-3" />Open live Tesla source</a>}</div><p className="mt-2 text-[11px] leading-4 text-slate-600">{source.relevanceNote}</p></div>)}</div> : !oemSourcesQuery.isFetching && <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">Enter a confirmed Tesla year, make, and model to view a matching source family.</p>}
+      {oemSourcesQuery.data?.referenceSources?.length ? <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-800">Owner-manual reference status</p><p className="mt-1 text-[11px] leading-4 text-slate-600">The supplied owner manual for this year/model bucket is reference-only and non-exportable. It is not a collision-repair procedure and cannot be selected as repair-operation support.</p></div> : null}
+    </Panel>
+    <Panel title="5. Disputed operations matrix" tag="ESTIMATE LINES + MATCHED SOURCE + EXHIBIT REQUIRED">
       <p className="mb-3 text-xs text-muted-foreground">Only operations with a difference are requested. Every row must cite the printed line on both estimates plus a matching exhibit letter and marked page.</p>
-      <div className="overflow-x-auto"><table className="min-w-[1140px] w-full text-xs"><thead><tr className="border-b border-border text-left text-muted-foreground"><th className="pb-2 pr-2">Operation</th><th className="pb-2 pr-2">Category</th><th className="pb-2 pr-2">Our $</th><th className="pb-2 pr-2">Carrier $</th><th className="pb-2 pr-2">Carrier reason</th><th className="pb-2 pr-2">Our line</th><th className="pb-2 pr-2">Carrier line</th><th className="pb-2 pr-2">Exhibit / p.</th><th className="pb-2 pr-2">Factual basis</th><th /></tr></thead><tbody>{lineItems.map((line) => <tr key={line.id} className="border-b border-border/60 align-top"><td className="py-2 pr-2"><Input value={line.item} onChange={(event) => updateLine(line.id, "item", event.target.value)} className="h-8 min-w-[150px] text-xs" /></td><td className="py-2 pr-2"><Select value={line.category} onValueChange={(value) => updateLine(line.id, "category", value)}><SelectTrigger className="h-8 w-[125px] text-xs"><SelectValue /></SelectTrigger><SelectContent>{carrierCategories.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}</SelectContent></Select></td><td className="py-2 pr-2"><Input value={line.ours} onChange={(event) => updateLine(line.id, "ours", event.target.value)} type="number" className="h-8 w-[78px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.theirs} onChange={(event) => updateLine(line.id, "theirs", event.target.value)} type="number" className="h-8 w-[78px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.carrierReason} onChange={(event) => updateLine(line.id, "carrierReason", event.target.value)} className="h-8 min-w-[145px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.ourLine} onChange={(event) => updateLine(line.id, "ourLine", event.target.value)} className="h-8 w-[75px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.carrierLine} onChange={(event) => updateLine(line.id, "carrierLine", event.target.value)} className="h-8 w-[75px] text-xs" /></td><td className="py-2 pr-2"><div className="flex gap-1"><Input value={line.exhibitLetter} onChange={(event) => updateLine(line.id, "exhibitLetter", event.target.value.toUpperCase().slice(0, 1))} placeholder="A" className="h-8 w-10 text-xs" /><Input value={line.exhibitMarkedPage} onChange={(event) => updateLine(line.id, "exhibitMarkedPage", event.target.value)} placeholder="p. 1" className="h-8 w-[56px] text-xs" /></div></td><td className="py-2 pr-2"><Input value={line.basis} onChange={(event) => updateLine(line.id, "basis", event.target.value)} placeholder="Specific fact supported by the marked exhibit" className="h-8 min-w-[220px] text-xs" /></td><td className="py-2"><Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => setLineItems((current) => current.length > 1 ? current.filter((row) => row.id !== line.id) : current)}><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="min-w-[1450px] w-full text-xs"><thead><tr className="border-b border-border text-left text-muted-foreground"><th className="pb-2 pr-2">Operation</th><th className="pb-2 pr-2">Category</th><th className="pb-2 pr-2">Our $</th><th className="pb-2 pr-2">Carrier $</th><th className="pb-2 pr-2">Carrier reason</th><th className="pb-2 pr-2">Our line</th><th className="pb-2 pr-2">Carrier line</th><th className="pb-2 pr-2">Exhibit / p.</th><th className="pb-2 pr-2">Tesla source</th><th className="pb-2 pr-2">Checked</th><th className="pb-2 pr-2">Factual basis</th><th /></tr></thead><tbody>{lineItems.map((line) => <tr key={line.id} className="border-b border-border/60 align-top"><td className="py-2 pr-2"><Input value={line.item} onChange={(event) => updateLine(line.id, "item", event.target.value)} className="h-8 min-w-[150px] text-xs" /></td><td className="py-2 pr-2"><Select value={line.category} onValueChange={(value) => updateLine(line.id, "category", value as CarrierRebuttalCategory)}><SelectTrigger className="h-8 w-[125px] text-xs"><SelectValue /></SelectTrigger><SelectContent>{carrierCategories.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}</SelectContent></Select></td><td className="py-2 pr-2"><Input value={line.ours} onChange={(event) => updateLine(line.id, "ours", event.target.value)} type="number" className="h-8 w-[78px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.theirs} onChange={(event) => updateLine(line.id, "theirs", event.target.value)} type="number" className="h-8 w-[78px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.carrierReason} onChange={(event) => updateLine(line.id, "carrierReason", event.target.value)} className="h-8 min-w-[145px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.ourLine} onChange={(event) => updateLine(line.id, "ourLine", event.target.value)} className="h-8 w-[75px] text-xs" /></td><td className="py-2 pr-2"><Input value={line.carrierLine} onChange={(event) => updateLine(line.id, "carrierLine", event.target.value)} className="h-8 w-[75px] text-xs" /></td><td className="py-2 pr-2"><div className="flex gap-1"><Input value={line.exhibitLetter} onChange={(event) => updateLine(line.id, "exhibitLetter", event.target.value.toUpperCase().slice(0, 1))} placeholder="A" className="h-8 w-10 text-xs" /><Input value={line.exhibitMarkedPage} onChange={(event) => updateLine(line.id, "exhibitMarkedPage", event.target.value)} placeholder="p. 1" className="h-8 w-[56px] text-xs" /></div></td><td className="py-2 pr-2"><Select value={line.sourceKey || "__unselected"} onValueChange={(value) => updateLine(line.id, "sourceKey", value === "__unselected" ? "" : value)}><SelectTrigger className="h-8 w-[180px] text-xs"><SelectValue placeholder="Select source" /></SelectTrigger><SelectContent><SelectItem value="__unselected">Select exact source</SelectItem>{(oemSourcesQuery.data?.applicableSources || []).map((source) => <SelectItem key={source.sourceKey} value={source.sourceKey}>{source.title}</SelectItem>)}</SelectContent></Select></td><td className="py-2 pr-2"><label className="flex w-[100px] items-center gap-1.5 text-[10px] leading-3 text-muted-foreground"><Checkbox checked={line.evidenceConfirmed} onCheckedChange={(value) => updateLine(line.id, "evidenceConfirmed", Boolean(value))} aria-label={`I verified the marked evidence for ${line.item || "this operation"}`} />I verified</label></td><td className="py-2 pr-2"><Input value={line.basis} onChange={(event) => updateLine(line.id, "basis", event.target.value)} placeholder="Specific fact supported by the marked exhibit" className="h-8 min-w-[220px] text-xs" /></td><td className="py-2"><Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => setLineItems((current) => current.length > 1 ? current.filter((row) => row.id !== line.id) : current)}><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody></table></div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><Button type="button" variant="outline" size="sm" onClick={() => setLineItems((current) => [...current, emptyCarrierLine()])}><Plus className="mr-1 h-3.5 w-3.5" />Add operation</Button><div className="flex flex-wrap gap-4 text-xs"><span>Line total — Whip <strong>{carrierMoney(lineWhipTotal.toFixed(2))}</strong></span><span>Line total — carrier <strong>{carrierMoney(lineCarrierTotal.toFixed(2))}</strong></span><span>Full Whip estimate <strong>{carrierMoney(whipTotal.toFixed(2))}</strong></span><span>Full carrier estimate <strong>{carrierMoney(carrierTotal.toFixed(2))}</strong></span><span className={Math.abs(lineGap - gap) > 0.01 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>{Math.abs(lineGap - gap) > 0.01 ? "Reconciliation required" : `Reconciled difference ${carrierMoney(gap.toFixed(2))}`}</span></div></div>
     </Panel>
-    <Panel title="5. Exhibit schedule" tag="ATTACH ONLY WHAT YOU CAN IDENTIFY">
+    <Panel title="6. Claude evidence review" tag="DRAFT ONLY · HANDLER VERIFICATION REQUIRED">
+      <div className="flex flex-wrap items-start justify-between gap-3"><p className="max-w-3xl text-xs leading-5 text-muted-foreground">Claude receives only the entered case facts, selected source metadata/links, and handler-marked evidence fields. It cannot create citations, sections, pages, repair methods, legal authority, coverage conclusions, or final facts. Every review is saved for the team; user-uploaded files and owner-manual content are never sent or retained here.</p><Button type="button" size="sm" variant="outline" onClick={() => void requestClaudeReview()} disabled={claudeReviewMutation.isPending}>{claudeReviewMutation.isPending ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}{claudeReviewMutation.isPending ? "Reviewing…" : "Run Claude evidence review"}</Button></div>
+      {claudeReview && <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold text-slate-900">Review #{claudeReview.reviewId} · {claudeReview.modelId}</p><span className={claudeReview.status === "claude_completed" ? "rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800" : "rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900"}>{claudeReview.status === "claude_completed" ? "Claude draft saved" : "Manual review fallback"}</span></div>{claudeReview.output.citationApplicabilityWarnings?.length ? <div className="mt-3"><p className="font-semibold text-slate-800">Citation / availability warnings</p><ul className="mt-1 list-disc space-y-1 pl-4 text-slate-700">{claudeReview.output.citationApplicabilityWarnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div> : null}{claudeReview.output.factGaps?.length ? <div className="mt-3"><p className="font-semibold text-slate-800">Fact gaps</p><ul className="mt-1 list-disc space-y-1 pl-4 text-slate-700">{claudeReview.output.factGaps.map((gap, index) => <li key={`${gap.field}-${index}`}><strong>{gap.field}:</strong> {gap.message}</li>)}</ul></div> : null}{claudeReview.output.neutralDisputeRows?.length ? <div className="mt-3"><p className="font-semibold text-slate-800">Suggested neutral row wording</p><ul className="mt-1 space-y-1 text-slate-700">{claudeReview.output.neutralDisputeRows.map((row) => <li key={row.lineId}><strong>Line:</strong> {row.wording}</li>)}</ul></div> : null}{claudeReview.output.draftNarrative ? <div className="mt-3 rounded border border-slate-200 bg-white p-2"><p className="font-semibold text-slate-800">Suggested draft — review before use</p><p className="mt-1 whitespace-pre-wrap leading-5 text-slate-700">{claudeReview.output.draftNarrative}</p><Button type="button" size="sm" variant="outline" className="mt-2" disabled={Boolean(narrative.trim())} onClick={() => { if (!narrative.trim()) { setNarrative(claudeReview.output.draftNarrative || ""); toast.success("Suggested draft copied into the empty notes field. Review and edit before generating."); } }}>Use in empty notes field</Button>{narrative.trim() ? <p className="mt-2 text-[11px] text-slate-500">Existing handler notes are preserved and cannot be overwritten by this review.</p> : null}</div> : null}</div>}
+    </Panel>
+    <Panel title="7. Exhibit schedule" tag="ATTACH ONLY WHAT YOU CAN IDENTIFY">
       <div className="space-y-2">{exhibits.map((exhibit) => <div key={exhibit.id} className="grid grid-cols-1 gap-2 rounded-md border border-border/70 p-2 md:grid-cols-[52px_1.4fr_1fr_100px_90px_34px]"><Input value={exhibit.letter} onChange={(event) => updateExhibit(exhibit.id, "letter", event.target.value.toUpperCase().slice(0, 1))} placeholder="A" className="h-8 text-xs" /><Input value={exhibit.title} onChange={(event) => updateExhibit(exhibit.id, "title", event.target.value)} placeholder="Document title" className="h-8 text-xs" /><Input value={exhibit.source} onChange={(event) => updateExhibit(exhibit.id, "source", event.target.value)} placeholder="Source / publisher" className="h-8 text-xs" /><Input value={exhibit.revisionDate} onChange={(event) => updateExhibit(exhibit.id, "revisionDate", event.target.value)} placeholder="Revision/date" className="h-8 text-xs" /><Input value={exhibit.markedPage} onChange={(event) => updateExhibit(exhibit.id, "markedPage", event.target.value)} placeholder="Marked p." className="h-8 text-xs" /><Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => setExhibits((current) => current.filter((row) => row.id !== exhibit.id))}><Trash2 className="h-3.5 w-3.5" /></Button></div>)}</div>
       <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setExhibits((current) => [...current, emptyCarrierExhibit()])}><Plus className="mr-1 h-3.5 w-3.5" />Add exhibit</Button>
     </Panel>

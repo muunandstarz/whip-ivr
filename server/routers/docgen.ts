@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { invokeLLM } from "../_core/llm";
+import { createHash } from "node:crypto";
+import { invokeLLM, listLLMModels } from "../_core/llm";
 import { storageGetSignedUrl } from "../storage";
 import { PDFParse } from "pdf-parse";
 import { execFile } from "node:child_process";
@@ -15,8 +16,11 @@ import {
   addDocgenRecentDoc, getDocgenRecentDocs,
   shareDocgenTemplate, getDocgenSharedTemplates, markDocgenTemplateRead,
   listAllUsers, createClaimCorrespondence, getClaimCorrespondence,
+  listOemProcedureSources, getOemProcedureSourcesByKeys,
+  createCarrierRebuttalAiReview, listCarrierRebuttalAiReviews,
 } from "../db";
 import { lookupClaimForDocgen } from "../db";
+import { describeTeslaCoverageGap, sourceMatchesTeslaVehicle } from "../oemEvidenceLibrary";
 
 function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   const message = result.choices?.[0]?.message as (Awaited<ReturnType<typeof invokeLLM>>["choices"][number]["message"] & {
@@ -165,6 +169,124 @@ function hasCarrierResponseEvidence(parsed: Record<string, unknown>): boolean {
     || (Array.isArray(parsed.lineItems) && parsed.lineItems.length > 0);
 }
 
+// Carrier Rebuttal review is deliberately Claude-only. The user selected this
+// provider; do not silently fall back to another model when Claude is not live.
+const CARRIER_REBUTTAL_CLAUDE_MODEL = "claude-sonnet-4-6";
+const CARRIER_REBUTTAL_CLAUDE_REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    factGaps: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { field: { type: "string" }, message: { type: "string" } },
+        required: ["field", "message"],
+        additionalProperties: false,
+      },
+    },
+    citationApplicabilityWarnings: { type: "array", items: { type: "string" } },
+    neutralDisputeRows: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { lineId: { type: "string" }, wording: { type: "string" } },
+        required: ["lineId", "wording"],
+        additionalProperties: false,
+      },
+    },
+    draftNarrative: { type: "string" },
+    handlerVerificationRequired: { type: "boolean" },
+  },
+  required: ["factGaps", "citationApplicabilityWarnings", "neutralDisputeRows", "draftNarrative", "handlerVerificationRequired"],
+  additionalProperties: false,
+} as const;
+
+const carrierRebuttalClaudeOutput = z.object({
+  factGaps: z.array(z.object({ field: z.string().max(120), message: z.string().max(600) }).strict()).max(30),
+  citationApplicabilityWarnings: z.array(z.string().max(600)).max(30),
+  neutralDisputeRows: z.array(z.object({ lineId: z.string().max(128), wording: z.string().max(1_000) }).strict()).max(40),
+  draftNarrative: z.string().max(8_000),
+  handlerVerificationRequired: z.boolean(),
+}).strict();
+
+const carrierRebuttalClaudeInput = z.object({
+  claimNumber: z.string().trim().min(1).max(96),
+  vehicleYear: z.number().int().min(1900).max(2100),
+  vehicleMake: z.string().trim().min(1).max(96),
+  vehicleModel: z.string().trim().min(1).max(128),
+  vin: z.string().trim().max(40).optional(),
+  carrier: z.string().trim().max(180),
+  adjuster: z.string().trim().max(180),
+  dateOfLoss: z.string().trim().max(40),
+  selectedSourceKeys: z.array(z.string().trim().min(1).max(160)).min(1).max(12),
+  disputedLines: z.array(z.object({
+    id: z.string().trim().min(1).max(128),
+    item: z.string().trim().min(1).max(220),
+    carrierReason: z.string().trim().max(500),
+    ourLine: z.string().trim().min(1).max(80),
+    carrierLine: z.string().trim().min(1).max(80),
+    sourceKey: z.string().trim().min(1).max(160),
+    exhibitLetter: z.string().trim().min(1).max(8),
+    exhibitMarkedPage: z.string().trim().min(1).max(80),
+    basis: z.string().trim().min(1).max(1_200),
+    evidenceConfirmed: z.literal(true),
+  }).strict()).min(1).max(40),
+  existingNarrative: z.string().max(8_000).optional(),
+});
+
+function carrierRebuttalManualReviewOutput(message: string) {
+  return {
+    factGaps: [],
+    citationApplicabilityWarnings: [message],
+    neutralDisputeRows: [],
+    draftNarrative: "",
+    handlerVerificationRequired: true,
+  };
+}
+
+function claudeModelIsSupported(models: Array<{ id: string; description?: string | null }>) {
+  const model = models.find((entry) => entry.id === CARRIER_REBUTTAL_CLAUDE_MODEL);
+  if (!model) return false;
+  const description = (model.description || "").toLowerCase();
+  return !description.includes("unsupported") && !description.includes("superseded") && !description.includes("retired");
+}
+
+function carrierRebuttalReviewPrompt(input: z.infer<typeof carrierRebuttalClaudeInput>, sources: Array<{
+  sourceKey: string;
+  title: string;
+  sourceUrl: string | null;
+  revisionDisplay: string;
+  relevanceNote: string;
+}>) {
+  return `You are a drafting and gap-review assistant for a Whip Claims Management carrier repair-estimate reconsideration letter. Return only the required JSON schema.
+
+Hard limits:
+- Use only the structured claim facts, disputed-line facts, and source metadata supplied below.
+- Do not invent or complete an OEM procedure, section, page, revision, marked exhibit, repair operation, legal authority, coverage conclusion, vehicle applicability, carrier fact, claim fact, or payment fact.
+- Do not treat a source title or index as proof of a repair operation. The handler's marked exhibit and factual basis remain required.
+- Do not create threats, litigation language, regulator language, generic industry standards, I-CAR language, or blanket OEM statements.
+- Do not claim a source is current. The handler must verify the live source before sending.
+- Keep suggested dispute wording neutral, factual, and tied to the existing marked exhibit/estimate lines.
+- The draft is advisory only; it must preserve the explicit verification requirement.
+
+CASE FACTS:
+${JSON.stringify({
+  claimNumber: input.claimNumber,
+  vehicle: `${input.vehicleYear} ${input.vehicleMake} ${input.vehicleModel}`,
+  vin: input.vin || "",
+  carrier: input.carrier,
+  adjuster: input.adjuster,
+  dateOfLoss: input.dateOfLoss,
+  existingNarrative: input.existingNarrative || "",
+}, null, 2)}
+
+HANDLER-VERIFIED DISPUTED LINES:
+${JSON.stringify(input.disputedLines, null, 2)}
+
+SELECTED SOURCE METADATA (links/titles only; no source text was provided):
+${JSON.stringify(sources, null, 2)}`;
+}
+
 async function downloadUploadedEstimate(storageKey: string): Promise<Buffer> {
   const signedUrl = await storageGetSignedUrl(storageKey);
   const response = await fetch(signedUrl, { signal: AbortSignal.timeout(30_000) });
@@ -284,6 +406,144 @@ function getStateCoverageInfo(state: string): string {
 
 
 export const docgenRouter = router({
+  carrierRebuttalOemSources: protectedProcedure
+    .input(z.object({
+      vehicleYear: z.number().int().min(1900).max(2100),
+      vehicleMake: z.string().trim().min(1).max(96),
+      vehicleModel: z.string().trim().min(1).max(128),
+    }))
+    .query(async ({ input }) => {
+      const sources = await listOemProcedureSources();
+      const coverageGap = input.vehicleMake.toLowerCase() === "tesla"
+        ? describeTeslaCoverageGap(input.vehicleYear, input.vehicleModel)
+        : "Tesla source coverage is selected only for Tesla Model 3 and Model Y cases. Toyota/TIS remains pending owner-provided authorized source material.";
+      const applicableSources = sources.filter((source) => sourceMatchesTeslaVehicle(source, input.vehicleYear, input.vehicleMake, input.vehicleModel));
+      const referenceSources = sources.filter((source) =>
+        source.manufacturer === "Tesla"
+        && source.sourceKind === "owner_manual_reference"
+        && source.modelKey === applicableSources[0]?.modelKey
+        && source.modelYearStart === applicableSources[0]?.modelYearStart
+        && source.modelYearEnd === applicableSources[0]?.modelYearEnd,
+      );
+      return {
+        coverageGap,
+        applicableSources,
+        referenceSources,
+        libraryScope: "Tesla Model 3 and Model Y only. Official procedure records are outbound links; owner manuals are non-exportable reference metadata only.",
+      };
+    }),
+
+  reviewCarrierRebuttalWithClaude: protectedProcedure
+    .input(carrierRebuttalClaudeInput)
+    .mutation(async ({ ctx, input }) => {
+      if (input.vehicleMake.toLowerCase() !== "tesla") {
+        throw new Error("This source-aware review is currently limited to Tesla Model 3 and Model Y. Toyota/TIS is pending authorized source material.");
+      }
+      const coverageGap = describeTeslaCoverageGap(input.vehicleYear, input.vehicleModel);
+      if (coverageGap) throw new Error(coverageGap);
+
+      const selectedSourceKeys = Array.from(new Set(input.selectedSourceKeys));
+      const sources = await getOemProcedureSourcesByKeys(selectedSourceKeys);
+      if (sources.length !== selectedSourceKeys.length) {
+        throw new Error("One or more selected procedure sources were not found. Refresh the vehicle-specific source library and select an exact source family again.");
+      }
+      const incompatible = sources.filter((source) => !sourceMatchesTeslaVehicle(source, input.vehicleYear, input.vehicleMake, input.vehicleModel));
+      if (incompatible.length) {
+        throw new Error("A selected source does not match the confirmed Tesla year/model family. Do not use a generic Tesla citation.");
+      }
+      if (sources.some((source) => source.sourceKind !== "official_collision_procedure" || source.status !== "active" || !source.exportAllowed)) {
+        throw new Error("Only an active, official collision-procedure citation may support this review. Owner manuals remain reference-only and cannot be selected for a repair-operation rebuttal.");
+      }
+      const selectedKeySet = new Set(selectedSourceKeys);
+      if (input.disputedLines.some((line) => !selectedKeySet.has(line.sourceKey))) {
+        throw new Error("Every disputed line must identify one selected, vehicle-matched official procedure source plus its marked case exhibit.");
+      }
+
+      const sourceMetadata = sources.map((source) => ({
+        sourceKey: source.sourceKey,
+        title: source.title,
+        sourceUrl: source.sourceUrl,
+        revisionDisplay: source.revisionDisplay,
+        relevanceNote: source.relevanceNote,
+      }));
+      const inputFingerprint = createHash("sha256").update(JSON.stringify({
+        claimNumber: input.claimNumber,
+        vehicleYear: input.vehicleYear,
+        vehicleMake: input.vehicleMake,
+        vehicleModel: input.vehicleModel,
+        vin: input.vin || "",
+        carrier: input.carrier,
+        adjuster: input.adjuster,
+        dateOfLoss: input.dateOfLoss,
+        selectedSourceKeys,
+        disputedLines: input.disputedLines,
+        existingNarrative: input.existingNarrative || "",
+      })).digest("hex");
+
+      const saveReview = async (
+        status: "claude_completed" | "claude_unavailable" | "claude_malformed" | "manual_review_required",
+        reviewOutput: Record<string, unknown>,
+      ) => {
+        const reviewId = await createCarrierRebuttalAiReview({
+          claimNumber: input.claimNumber,
+          vehicleYear: input.vehicleYear,
+          vehicleMake: input.vehicleMake,
+          vehicleModel: input.vehicleModel,
+          vin: input.vin || null,
+          selectedSourceKeys,
+          inputFingerprint,
+          modelId: CARRIER_REBUTTAL_CLAUDE_MODEL,
+          status,
+          reviewOutput,
+          createdByUserId: ctx.user.id,
+          createdByName: ctx.user.name || ctx.user.email || null,
+        });
+        return { reviewId, status, modelId: CARRIER_REBUTTAL_CLAUDE_MODEL, output: reviewOutput };
+      };
+
+      let models: Awaited<ReturnType<typeof listLLMModels>>["data"];
+      try {
+        models = (await listLLMModels()).data;
+      } catch {
+        return saveReview("claude_unavailable", carrierRebuttalManualReviewOutput("Claude availability could not be verified. No substitute model was used; complete a manual evidence review."));
+      }
+      if (!claudeModelIsSupported(models)) {
+        return saveReview("claude_unavailable", carrierRebuttalManualReviewOutput("Claude is listed but not currently supported by the live project catalog. No substitute model was used; complete a manual evidence review."));
+      }
+
+      try {
+        const result = await invokeLLM({
+          model: CARRIER_REBUTTAL_CLAUDE_MODEL,
+          messages: [
+            { role: "system", content: "Return only valid JSON matching the response schema. Do not use external tools or sources." },
+            { role: "user", content: carrierRebuttalReviewPrompt(input, sourceMetadata) },
+          ],
+          maxTokens: 2_200,
+          thinking: { type: "enabled", budget_tokens: 1_024 },
+          outputSchema: { name: "carrier_rebuttal_claude_review", strict: true, schema: CARRIER_REBUTTAL_CLAUDE_REVIEW_SCHEMA },
+        });
+        const raw = extractText(result);
+        const parsed = carrierRebuttalClaudeOutput.safeParse(parseJsonObject(raw));
+        if (!parsed.success) {
+          return saveReview("claude_malformed", carrierRebuttalManualReviewOutput("Claude returned an unusable structured response. No narrative was applied; complete a manual evidence review."));
+        }
+        const allowedLineIds = new Set(input.disputedLines.map((line) => line.id));
+        const output = {
+          ...parsed.data,
+          neutralDisputeRows: parsed.data.neutralDisputeRows.filter((row) => allowedLineIds.has(row.lineId)),
+          handlerVerificationRequired: true,
+        };
+        return saveReview("claude_completed", output);
+      } catch (error) {
+        console.warn("[CarrierRebuttal] Claude review unavailable", error instanceof Error ? error.message : "unknown error");
+        return saveReview("claude_unavailable", carrierRebuttalManualReviewOutput("Claude could not complete this review. No substitute model was used; complete a manual evidence review."));
+      }
+    }),
+
+  carrierRebuttalAiReviewHistory: protectedProcedure
+    .input(z.object({ claimNumber: z.string().trim().max(96).optional() }))
+    .query(async ({ input }) => listCarrierRebuttalAiReviews(input.claimNumber || undefined)),
+
   parseCccValuation: protectedProcedure
     .input(z.object({
       fileUrl: z.string().url(),
