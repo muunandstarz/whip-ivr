@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
 import { jsPDF } from "jspdf";
-import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
 import {
   AlertTriangle,
@@ -5054,13 +5054,13 @@ function CarrierRebuttalTab() {
   };
 
   const oemStandard = (): string => ({
-    tesla: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published through Tesla service information and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
-    toyota: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published through Toyota Technical Information System repair manuals and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
-    lexus: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published through Lexus Technical Information System repair manuals and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+    tesla: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by Tesla at service.tesla.com and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+    toyota: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by Toyota through its Technical Information System and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
+    lexus: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by Lexus through its Technical Information System and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
     other: "The vehicle has to be repaired to its pre-loss condition under the manufacturer’s published repair procedures. The procedures that apply to this vehicle are published by the manufacturer and are attached as marked excerpts. Our estimate follows them. Where yours departs from them, the table identifies the line.",
   }[form.oem]);
   const liabilityText = form.liabilityStatus === "accepted" ? "Liability is accepted." : "Liability is not disputed.";
-  const openingParagraph = () => `Your insured’s vehicle struck our vehicle on ${carrierDate(form.dateOfLoss)}. ${liabilityText} Your estimate totals ${carrierMoney(carrierTotal.toFixed(2))}. The estimate prepared by ${form.repairFacility} after inspecting the vehicle totals ${carrierMoney(whipTotal.toFixed(2))}. The difference is ${carrierMoney(gap.toFixed(2))} across ${disputedLines.length} line${disputedLines.length === 1 ? "" : "s"}. Each line is listed below with the support for it.`;
+  const openingParagraph = () => `Your insured’s vehicle struck our vehicle on ${carrierDate(form.dateOfLoss)}. ${liabilityText} Your estimate dated ${carrierDate(form.carrierEstimateDate)} totals ${carrierMoney(carrierTotal.toFixed(2))}. The estimate prepared by ${form.repairFacility} after inspecting the vehicle, dated ${carrierDate(form.ourEstimateDate)}, totals ${carrierMoney(whipTotal.toFixed(2))}. The difference is ${carrierMoney(gap.toFixed(2))} across ${disputedLines.length} line${disputedLines.length === 1 ? "" : "s"}. Each line is listed below with the support for it.`;
   const revisedPayment = () => `Revise your estimate to ${carrierMoney(whipTotal.toFixed(2))}, the total of ours, and pay the difference of ${carrierMoney(gap.toFixed(2))}. If you maintain a reduction on any line, send the written basis for that line, naming the procedure, document or fact you rely on. A general statement that the estimate is not supported does not answer a line-item dispute. Please respond within ${form.responseDays || "10"} days of receipt.`;
   const paymentParagraph = () => "Metrocars Leasing Corp. owns the vehicle. Issue payment as directed in the attached Direction of Pay and Vehicle Ownership Notice.";
   const reservationParagraph = () => "Please reference both claim numbers on all correspondence and send it to claims@drivewhip.com. This letter does not waive any right or remedy of Metrocars Leasing Corp. or Whip Claims Management, and does not concede any position on coverage, liability or the amount of loss.";
@@ -5076,56 +5076,150 @@ function CarrierRebuttalTab() {
   const createLetterPdf = () => {
     const errors = validationErrors();
     if (errors.length) { toast.error(errors[0]); return null; }
-    const doc = new jsPDF({ unit: "mm", format: "letter" });
+    // The user-supplied reference is A4, with a restrained first-page Whip
+    // letterhead and a compact second-page close. Keep these measurements local
+    // so this rebuttal stays faithful without changing other generators.
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth(); const H = doc.internal.pageSize.getHeight();
-    const left = 25.4; const right = W - 25.4; const textWidth = right - left; const safeBottom = H - 31;
-    let y = 40; let page = 1;
+    const left = 25.4; const right = W - 25.4; const textWidth = right - left;
+    const tableRight = W - 19; const tableWidth = tableRight - left;
+    const footerRuleY = H - 18; const safeBottom = footerRuleY - 6.5;
+    let y = 43; let page = 1;
     const header = () => {
-      try { doc.addImage("data:image/png;base64," + WHIP_LOGO_B64, "PNG", left, 11, 23, 8); } catch { doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...WHIP_ORANGE); doc.text("whip", left, 18); }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(25, 25, 25); doc.text("Whip Claims Management", right, 12, { align: "right" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90); doc.text("P.O. Box 10622  Rockville, MD 20849-0622", right, 16.4, { align: "right" }); doc.text("(855) 906-5949  |  claims@drivewhip.com", right, 20.4, { align: "right" });
-      doc.setDrawColor(190, 190, 190); doc.setLineWidth(.25); doc.line(left, 24, right, 24);
+      // This source asset carries a transparent alpha channel. Do not substitute
+      // typed text: the reference requires the actual orange Whip mark.
+      doc.addImage(`data:image/png;base64,${WHIP_LOGO_B64}`, "PNG", left, 17, 18, 11.92);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(26, 26, 26);
+      doc.text("Whip Claims Management", right, 18, { align: "right" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(92, 92, 92);
+      doc.text("P.O. Box 10622  Rockville, MD 20849-0622", right, 21.9, { align: "right" });
+      doc.text("(855) 906-5949  |  claims@drivewhip.com", right, 25.8, { align: "right" });
+      doc.setDrawColor(190, 190, 190); doc.setLineWidth(.25); doc.line(left, 36, right, 36);
     };
     const footer = () => {
-      doc.setDrawColor(190, 190, 190); doc.setLineWidth(.25); doc.line(left, H - 21, right, H - 21); doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 100, 100);
-      doc.text(`Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949${page > 1 ? `  |  Page ${page}` : ""}`, W / 2, H - 16.5, { align: "center" });
+      doc.setDrawColor(190, 190, 190); doc.setLineWidth(.25); doc.line(left, footerRuleY, right, footerRuleY);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 100, 100);
+      doc.text("Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949", W / 2, H - 14, { align: "center" });
     };
-    const addPage = () => { footer(); doc.addPage(); page += 1; header(); y = 32; };
+    const addPage = () => { footer(); doc.addPage(); page += 1; y = 20; };
     const ensure = (height: number) => { if (y + height > safeBottom) addPage(); };
-    const prose = (text: string, options: { bold?: boolean; keep?: boolean } = {}) => {
-      const lines = doc.splitTextToSize(text, textWidth) as string[]; const lineHeight = 5.25;
+    const prose = (text: string, options: { keep?: boolean } = {}) => {
+      const lines = doc.splitTextToSize(text, textWidth) as string[]; const lineHeight = 5.15;
       if (options.keep && y + lines.length * lineHeight + 3 > safeBottom) addPage();
       let offset = 0;
       while (offset < lines.length) {
-        const count = Math.max(1, Math.floor((safeBottom - y) / lineHeight)); const part = lines.slice(offset, offset + count);
-        doc.setFont("helvetica", options.bold ? "bold" : "normal"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(part, left, y, { lineHeightFactor: 1.5 });
-        y += part.length * lineHeight; offset += part.length; if (offset < lines.length) addPage();
+        const count = Math.max(1, Math.floor((safeBottom - y) / lineHeight));
+        const part = lines.slice(offset, offset + count);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(24, 24, 24);
+        doc.text(part, left, y, { lineHeightFactor: 1.5 });
+        y += part.length * lineHeight; offset += part.length;
+        if (offset < lines.length) addPage();
       }
-      y += 3;
+      y += 2.7;
     };
-    const idRow = (label: string, value: string) => { ensure(5); doc.setFont("helvetica", "bold"); doc.setFontSize(9.3); doc.setTextColor(25, 25, 25); doc.text(`${label}:`, left, y); const width = doc.getTextWidth(`${label}: `); doc.setFont("helvetica", "normal"); doc.text(value, left + width, y); y += 4.4; };
-    const runIn = (label: string, value: string) => { ensure(8); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(`${label}.`, left, y); const labelWidth = doc.getTextWidth(`${label}. `); const lines = doc.splitTextToSize(value, textWidth - labelWidth) as string[]; doc.setFont("helvetica", "normal"); doc.text(lines[0], left + labelWidth, y); y += 5.25; if (lines.length > 1) { doc.text(lines.slice(1), left, y, { lineHeightFactor: 1.5 }); y += (lines.length - 1) * 5.25; } y += 3; };
+    const idRow = (label: string, value: string) => {
+      ensure(4.7); doc.setFont("helvetica", "bold"); doc.setFontSize(9.3); doc.setTextColor(25, 25, 25); doc.text(label, left, y);
+      doc.setFont("helvetica", "normal"); doc.text(value, left + 39.5, y); y += 4.25;
+    };
+    const sectionHeading = (label: string, body: string) => {
+      // The table uses a smaller type size than the prose. Restore the body font
+      // before measuring so a complete section moves together instead of leaving
+      // one line stranded at the top of the continuation page.
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+      const lines = doc.splitTextToSize(body, textWidth) as string[]; const height = 4.4 + lines.length * 5.15 + 2.7;
+      if (y + height > safeBottom) addPage();
+      doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(label, left, y); y += 5.15;
+      prose(body);
+    };
+    const exhibitSupport = (line: CarrierRebuttalLine) => {
+      const exhibit = exhibits.find((item) => item.letter.toUpperCase() === line.exhibitLetter.toUpperCase() && item.markedPage === line.exhibitMarkedPage);
+      const source = exhibit ? [exhibit.source, exhibit.title, exhibit.revisionDate].filter(Boolean).join("; ") : "";
+      return `Exhibit ${line.exhibitLetter}: ${[source, line.basis, `Estimate line ${line.ourLine}.`].filter(Boolean).join(" ")}`;
+    };
+    const formatRange = (letters: string[]) => {
+      const unique = Array.from(new Set(letters.filter(Boolean).map((letter) => letter.toUpperCase())));
+      if (!unique.length) return "";
+      if (unique.length === 1) return `Exhibit ${unique[0]}`;
+      return `Exhibits ${unique[0]}–${unique[unique.length - 1]}`;
+    };
     header();
     doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text(carrierDate(form.letterDate), left, y); y += 8;
     prose(`Re: Claim #${form.claimNumber} — Carrier Claim No. ${form.theirClaimNumber} — Date of Loss: ${carrierDate(form.dateOfLoss)}`, { keep: true });
     prose(`To:  ${form.adjuster}, ${form.carrier}`, { keep: true });
-    ensure(9); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(18, 18, 18); doc.text("Request for Reconsideration of Repair Estimate", left, y); y += 7;
-    idRow("Your insured", form.insuredName); idRow("Vehicle owner", "Metrocars Leasing Corp."); idRow("Vehicle", `${form.vehicle} | VIN ${form.vin}`); idRow("Repair facility", `${form.repairFacility}${form.repairFacilityLocation ? `, ${form.repairFacilityLocation}` : ""} | RO ${form.roNumber}`);
-    prose(openingParagraph(), { keep: true }); prose(oemStandard());
+    ensure(8); doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(18, 18, 18); doc.text("Request for Reconsideration of Repair Estimate", left, y); y += 6.2;
+    idRow("Your insured", form.insuredName);
+    idRow("Vehicle owner", "Metrocars Leasing Corp.");
+    idRow("Vehicle", `${form.vehicle} / VIN ${form.vin}`);
+    idRow("Repair facility", `${form.repairFacility}${form.repairFacilityLocation ? `, ${form.repairFacilityLocation}` : ""} — RO ${form.roNumber}, estimate dated ${carrierDate(form.ourEstimateDate)}`);
+    y += 1.8;
+    prose(openingParagraph(), { keep: true });
+    prose(oemStandard());
     if (narrative.trim()) prose(narrative.trim());
     if (form.stateRuleCitation && form.stateRuleText) prose(`${form.stateRuleCitation}: ${form.stateRuleText}`);
-    const col = [left, left + 46, left + 62, left + 78, left + 108, right];
-    const tableHeader = () => { ensure(9); doc.setFillColor(238, 238, 238); doc.rect(left, y - 3.7, textWidth, 7.5, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.2); doc.setTextColor(25, 25, 25); ["Operation", "Whip", "Carrier", "Estimate lines", "Exhibit"].forEach((label, index) => doc.text(label, col[index] + 1.2, y)); y += 5.2; };
+
+    const col = [left, left + 8.5, left + 43.8, left + 64.1, left + 86.1, left + 105.5, tableRight];
+    const headerHeight = 9.3;
+    const drawCellBorders = (top: number, height: number) => {
+      doc.setDrawColor(130, 130, 130); doc.setLineWidth(.18); doc.rect(left, top, tableWidth, height);
+      col.slice(1, -1).forEach((x) => doc.line(x, top, x, top + height));
+    };
+    const tableHeader = () => {
+      if (y + headerHeight > safeBottom) addPage();
+      doc.setFillColor(231, 231, 231); doc.rect(left, y, tableWidth, headerHeight, "F"); drawCellBorders(y, headerHeight);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.6); doc.setTextColor(25, 25, 25);
+      const headings = ["#", "Operation", ["Your", "estimate"], ["Our", "estimate"], "Difference", "Support (attached)"];
+      headings.forEach((heading, index) => {
+        const x = col[index] + 1.2;
+        if (Array.isArray(heading)) doc.text(heading, x, y + 3.6, { lineHeightFactor: 1.05 });
+        else doc.text(heading, x, y + 4.8);
+      });
+      y += headerHeight;
+    };
     tableHeader();
-    sortedLines().forEach((line) => {
-      const main = doc.splitTextToSize(line.item, col[1] - col[0] - 2.4) as string[]; const refs = doc.splitTextToSize(`Whip ${line.ourLine}; carrier ${line.carrierLine}`, col[4] - col[3] - 2.4) as string[]; const basis = doc.splitTextToSize(`Support: ${line.basis}`, textWidth - 2.4) as string[]; const h = Math.max(7, main.length * 3.4 + 3, refs.length * 3.4 + 3) + basis.length * 3.4 + 4;
-      if (y + h > safeBottom) { addPage(); tableHeader(); }
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(24, 24, 24); doc.text(main, col[0] + 1.2, y, { lineHeightFactor: 1.2 }); doc.text(carrierMoney(line.ours), col[1] + 1.2, y); doc.text(carrierMoney(line.theirs), col[2] + 1.2, y); doc.text(refs, col[3] + 1.2, y, { lineHeightFactor: 1.2 }); doc.text(`${line.exhibitLetter}, p. ${line.exhibitMarkedPage}`, col[4] + 1.2, y);
-      const baseY = y + Math.max(main.length * 3.4, refs.length * 3.4, 4) + 2; doc.setFontSize(8.2); doc.text(basis, left + 1.2, baseY, { lineHeightFactor: 1.18 }); y += h; doc.setDrawColor(215, 215, 215); doc.line(left, y - 2.2, right, y - 2.2);
+    const linesForOutput = sortedLines();
+    linesForOutput.forEach((line, index) => {
+      const operation = doc.splitTextToSize(line.item, col[2] - col[1] - 2.4) as string[];
+      const support = doc.splitTextToSize(exhibitSupport(line), col[6] - col[5] - 2.4) as string[];
+      const minimumLines = Math.max(operation.length, support.length, 1);
+      const rowHeight = Math.max(10.5, minimumLines * 3.45 + 3.7);
+      if (y + rowHeight > safeBottom) { addPage(); tableHeader(); }
+      drawCellBorders(y, rowHeight);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.15); doc.setTextColor(24, 24, 24);
+      doc.text(String(index + 1), col[0] + 1.2, y + 4);
+      doc.text(operation, col[1] + 1.2, y + 4, { lineHeightFactor: 1.18 });
+      doc.text(carrierMoney(line.theirs), col[2] + 1.2, y + 4);
+      doc.text(carrierMoney(line.ours), col[3] + 1.2, y + 4);
+      doc.text(carrierMoney((Number(line.ours) - Number(line.theirs)).toFixed(2)), col[4] + 1.2, y + 4);
+      doc.setFontSize(7.8); doc.text(support, col[5] + 1.2, y + 3.8, { lineHeightFactor: 1.16 });
+      y += rowHeight;
     });
-    y += 3; runIn("Revised payment", revisedPayment()); if (form.dopAttached) runIn("Payment", paymentParagraph()); prose(reservationParagraph());
-    ensure(34); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("Sincerely,", left, y); y += 12; doc.setFont("helvetica", "bold"); doc.text(form.handlerName, left, y); y += 4.6; doc.setFont("helvetica", "normal"); doc.text(form.handlerTitle, left, y); y += 4.6; doc.text("Whip Claims Management", left, y); y += 4.6; doc.text("P.O. Box 10622, Rockville, MD 20849", left, y); y += 4.6; doc.text(`Phone: (855) 906-5949${form.handlerExt ? ` ext. ${form.handlerExt}` : ""} | ${form.handlerEmail}`, left, y); y += 7;
-    prose(`Enclosures: ${enclosureText()}`, { keep: true }); footer();
+    const totalHeight = 8.4;
+    if (y + totalHeight > safeBottom) { addPage(); tableHeader(); }
+    drawCellBorders(y, totalHeight);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.15); doc.setTextColor(24, 24, 24);
+    doc.text("Total in dispute", col[1] + 1.2, y + 5.2);
+    doc.text(carrierMoney(lineCarrierTotal.toFixed(2)), col[2] + 1.2, y + 5.2);
+    doc.text(carrierMoney(lineWhipTotal.toFixed(2)), col[3] + 1.2, y + 5.2);
+    doc.text(carrierMoney(lineGap.toFixed(2)), col[4] + 1.2, y + 5.2);
+    y += totalHeight + 4;
+    sectionHeading("Revised payment", revisedPayment());
+    if (form.dopAttached) sectionHeading("Payment", paymentParagraph());
+    prose(reservationParagraph());
+    const signatureHeight = 38;
+    if (y + signatureHeight > safeBottom) addPage();
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(24, 24, 24); doc.text("Sincerely,", left, y); y += 12;
+    doc.text(form.handlerName, left, y); y += 4.4;
+    doc.text(form.handlerTitle, left, y); y += 6.2;
+    doc.text("Whip Claims Management", left, y); y += 4.4;
+    doc.text("P.O. Box 10622, Rockville, MD 20849", left, y); y += 4.4;
+    doc.text(`Phone: (855) 906-5949${form.handlerExt ? ` ext. ${form.handlerExt}` : ""}`, left, y); y += 4.4;
+    doc.text(form.handlerEmail, left, y); y += 6.2;
+    const enclosureLabel = `${formatRange(linesForOutput.map((line) => line.exhibitLetter))}${linesForOutput.length ? "; " : ""}${form.repairFacility} estimate and photos${form.dopAttached ? "; Direction of Pay and Vehicle Ownership Notice" : ""}`;
+    doc.setFont("helvetica", "bold"); doc.text("Enclosures:", left, y); const enclosureOffset = doc.getTextWidth("Enclosures: "); doc.setFont("helvetica", "normal");
+    const enclosureLines = doc.splitTextToSize(enclosureLabel, textWidth - enclosureOffset) as string[];
+    doc.text(enclosureLines[0] || "", left + enclosureOffset, y);
+    if (enclosureLines.length > 1) doc.text(enclosureLines.slice(1), left, y + 5.15, { lineHeightFactor: 1.5 });
+    footer();
     if (page > 3) { toast.error("This rebuttal would exceed the three-page limit. Reduce optional notes or resolve the unsupported items before generating."); return null; }
     return doc;
   };
@@ -5138,19 +5232,44 @@ function CarrierRebuttalTab() {
 
   const downloadWord = async () => {
     const errors = validationErrors(); if (errors.length) { toast.error(errors[0]); return; }
-    const run = (text: string, bold = false) => new TextRun({ text, bold, font: "Arial", size: 20, color: "1A1A1A" });
-    const paragraph = (text: string, bold = false, spacing = 180, pageBreakBefore = false) => new Paragraph({ children: [run(text, bold)], spacing: { after: spacing }, alignment: AlignmentType.LEFT, pageBreakBefore });
-    const cell = (text: string, bold = false) => new TableCell({ children: [new Paragraph({ children: [run(text, bold)] })] });
-    const rows = sortedLines().flatMap((line) => [
-      new TableRow({ children: [cell(line.item), cell(carrierMoney(line.ours)), cell(carrierMoney(line.theirs)), cell(`Whip ${line.ourLine}; carrier ${line.carrierLine}`), cell(`${line.exhibitLetter}, p. ${line.exhibitMarkedPage}`)] }),
-      new TableRow({ children: [new TableCell({ columnSpan: 5, children: [new Paragraph({ children: [run(`Support: ${line.basis}`)] })] })] }),
-    ]);
-    const word = new WordDocument({ sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, headers: { default: new Header({ children: [new Paragraph({ children: [new TextRun({ text: "whip", bold: true, color: "FF6221", size: 30 }), new TextRun({ text: "                                      Whip Claims Management", bold: true, size: 18 })] }), new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "P.O. Box 10622  Rockville, MD 20849-0622  |  (855) 906-5949  |  claims@drivewhip.com", size: 15, color: "666666" })] })] }) }, footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949", size: 14, color: "666666" })] })] }) }, children: [
-      paragraph(carrierDate(form.letterDate)), paragraph(`Re: Claim #${form.claimNumber} — Carrier Claim No. ${form.theirClaimNumber} — Date of Loss: ${carrierDate(form.dateOfLoss)}`), paragraph(`To:  ${form.adjuster}, ${form.carrier}`), paragraph("Request for Reconsideration of Repair Estimate", true, 220),
-      paragraph(`Your insured: ${form.insuredName}`), paragraph("Vehicle owner: Metrocars Leasing Corp."), paragraph(`Vehicle: ${form.vehicle} | VIN ${form.vin}`), paragraph(`Repair facility: ${form.repairFacility}${form.repairFacilityLocation ? `, ${form.repairFacilityLocation}` : ""} | RO ${form.roNumber}`),
-      paragraph(openingParagraph(), false, 220), paragraph(oemStandard(), false, 220), ...(narrative.trim() ? [paragraph(narrative.trim(), false, 220)] : []), ...(form.stateRuleCitation && form.stateRuleText ? [paragraph(`${form.stateRuleCitation}: ${form.stateRuleText}`, false, 220)] : []),
-      new Table({ width: { size: 9360, type: WidthType.DXA }, rows: [new TableRow({ children: [cell("Operation", true), cell("Whip", true), cell("Carrier", true), cell("Estimate lines", true), cell("Exhibit", true)] }), ...rows], borders: { top: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, bottom: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, left: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, right: { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" }, insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" }, insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" } } }),
-      paragraph(`Revised payment. ${revisedPayment()}`, false, 220, true), ...(form.dopAttached ? [paragraph(`Payment. ${paymentParagraph()}`, false, 220)] : []), paragraph(reservationParagraph(), false, 220), paragraph("Sincerely,"), paragraph(form.handlerName, true, 80), paragraph(form.handlerTitle, false, 80), paragraph("Whip Claims Management", false, 80), paragraph("P.O. Box 10622, Rockville, MD 20849", false, 80), paragraph(`Phone: (855) 906-5949${form.handlerExt ? ` ext. ${form.handlerExt}` : ""} | ${form.handlerEmail}`, false, 220), paragraph(`Enclosures: ${enclosureText()}`),
+    const wordRun = (text: string, bold = false, size = 20, color = "1A1A1A") => new TextRun({ text, bold, font: "Arial", size, color });
+    const para = (children: TextRun[], options: { after?: number; before?: number; pageBreakBefore?: boolean; bold?: boolean } = {}) => new Paragraph({ children, spacing: { after: options.after ?? 120, before: options.before ?? 0, line: 360 }, pageBreakBefore: options.pageBreakBefore, alignment: AlignmentType.LEFT });
+    const plain = (text: string, after = 120) => para([wordRun(text)], { after });
+    const heading = (text: string) => para([wordRun(text, true)], { after: 80, before: 80 });
+    const logoBytes = Uint8Array.from(atob(WHIP_LOGO_B64), (character) => character.charCodeAt(0));
+    const cellBorders = { top: { style: BorderStyle.SINGLE, size: 4, color: "888888" }, bottom: { style: BorderStyle.SINGLE, size: 4, color: "888888" }, left: { style: BorderStyle.SINGLE, size: 4, color: "888888" }, right: { style: BorderStyle.SINGLE, size: 4, color: "888888" } };
+    const tableWidths = [463, 1929, 1108, 1205, 1060, 3261];
+    const wordCell = (text: string, width: number, bold = false, shaded = false) => new TableCell({ width: { size: width, type: WidthType.DXA }, shading: shaded ? { type: ShadingType.CLEAR, fill: "E7E7E7" } : undefined, margins: { top: 60, bottom: 60, left: 70, right: 70 }, borders: cellBorders, children: [new Paragraph({ children: [wordRun(text, bold, 18)], spacing: { after: 0, line: 240 } })] });
+    const claimRows = [
+      ["Your insured", form.insuredName], ["Vehicle owner", "Metrocars Leasing Corp."], ["Vehicle", `${form.vehicle} / VIN ${form.vin}`], ["Repair facility", `${form.repairFacility}${form.repairFacilityLocation ? `, ${form.repairFacilityLocation}` : ""} — RO ${form.roNumber}, estimate dated ${carrierDate(form.ourEstimateDate)}`],
+    ].map(([label, value]) => new TableRow({ children: [new TableCell({ width: { size: 2200, type: WidthType.DXA }, borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } }, children: [new Paragraph({ children: [wordRun(label, true)], spacing: { after: 0, line: 240 } })] }), new TableCell({ width: { size: 6826, type: WidthType.DXA }, borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } }, children: [new Paragraph({ children: [wordRun(value)], spacing: { after: 0, line: 240 } })] })] }));
+    const referenceLines = sortedLines();
+    const support = (line: CarrierRebuttalLine) => {
+      const exhibit = exhibits.find((item) => item.letter.toUpperCase() === line.exhibitLetter.toUpperCase() && item.markedPage === line.exhibitMarkedPage);
+      const sourceText = exhibit ? [exhibit.source, exhibit.title, exhibit.revisionDate].filter(Boolean).join("; ") : "";
+      return `Exhibit ${line.exhibitLetter}: ${[sourceText, line.basis, `Estimate line ${line.ourLine}.`].filter(Boolean).join(" ")}`;
+    };
+    const disputeRows = referenceLines.map((line, index) => new TableRow({ cantSplit: true, children: [wordCell(String(index + 1), tableWidths[0]), wordCell(line.item, tableWidths[1]), wordCell(carrierMoney(line.theirs), tableWidths[2]), wordCell(carrierMoney(line.ours), tableWidths[3]), wordCell(carrierMoney((Number(line.ours) - Number(line.theirs)).toFixed(2)), tableWidths[4]), wordCell(support(line), tableWidths[5])] }));
+    disputeRows.push(new TableRow({ cantSplit: true, children: [wordCell("", tableWidths[0], true), wordCell("Total in dispute", tableWidths[1], true), wordCell(carrierMoney(lineCarrierTotal.toFixed(2)), tableWidths[2], true), wordCell(carrierMoney(lineWhipTotal.toFixed(2)), tableWidths[3], true), wordCell(carrierMoney(lineGap.toFixed(2)), tableWidths[4], true), wordCell("", tableWidths[5], true)] }));
+    const exhibitLetters = Array.from(new Set(referenceLines.map((line) => line.exhibitLetter.toUpperCase()).filter(Boolean)));
+    const exhibitRange = exhibitLetters.length === 1 ? `Exhibit ${exhibitLetters[0]}` : exhibitLetters.length ? `Exhibits ${exhibitLetters[0]}–${exhibitLetters[exhibitLetters.length - 1]}` : "";
+    const firstHeader = new Header({ children: [
+      new Table({ width: { size: 9026, type: WidthType.DXA }, borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } }, rows: [new TableRow({ children: [new TableCell({ width: { size: 3000, type: WidthType.DXA }, borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } }, children: [new Paragraph({ children: [new ImageRun({ data: logoBytes, type: "png", transformation: { width: 70, height: 47 } })], spacing: { after: 0 } })] }), new TableCell({ width: { size: 6026, type: WidthType.DXA }, borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } }, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [wordRun("Whip Claims Management", true, 18)], spacing: { after: 0 } }), new Paragraph({ alignment: AlignmentType.RIGHT, children: [wordRun("P.O. Box 10622  Rockville, MD 20849-0622", false, 15, "666666")], spacing: { after: 0 } }), new Paragraph({ alignment: AlignmentType.RIGHT, children: [wordRun("(855) 906-5949  |  claims@drivewhip.com", false, 15, "666666")], spacing: { after: 0 } })] })] })] }),
+      new Paragraph({ children: [], border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "BEBEBE", space: 8 } }, spacing: { after: 120 } }),
+    ] });
+    const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, border: { top: { style: BorderStyle.SINGLE, size: 4, color: "BEBEBE", space: 8 } }, children: [wordRun("Whip Claims Management  |  PO BOX 10622 Rockville, MD 20850  |  (855) 906-5949", false, 14, "666666")], spacing: { before: 100, after: 0 } })] });
+    const word = new WordDocument({ sections: [{ properties: { titlePage: true, page: { size: { width: 11906, height: 16838 }, margin: { top: 1000, right: 1440, bottom: 1000, left: 1440, header: 708, footer: 708 } } }, headers: { first: firstHeader, default: new Header({ children: [] }) }, footers: { default: footer, first: footer }, children: [
+      plain(carrierDate(form.letterDate), 180),
+      plain(`Re: Claim #${form.claimNumber} — Carrier Claim No. ${form.theirClaimNumber} — Date of Loss: ${carrierDate(form.dateOfLoss)}`, 80),
+      plain(`To:  ${form.adjuster}, ${form.carrier}`, 80),
+      para([wordRun("Request for Reconsideration of Repair Estimate", true)], { after: 120 }),
+      new Table({ width: { size: 9026, type: WidthType.DXA }, borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } }, rows: claimRows }),
+      plain(openingParagraph(), 160), plain(oemStandard(), 160), ...(narrative.trim() ? [plain(narrative.trim(), 160)] : []), ...(form.stateRuleCitation && form.stateRuleText ? [plain(`${form.stateRuleCitation}: ${form.stateRuleText}`, 160)] : []),
+      new Table({ width: { size: 9026, type: WidthType.DXA }, columnWidths: tableWidths, rows: [new TableRow({ tableHeader: true, cantSplit: true, children: [wordCell("#", tableWidths[0], true, true), wordCell("Operation", tableWidths[1], true, true), wordCell("Your\nestimate", tableWidths[2], true, true), wordCell("Our\nestimate", tableWidths[3], true, true), wordCell("Difference", tableWidths[4], true, true), wordCell("Support (attached)", tableWidths[5], true, true)] }), ...disputeRows], borders: cellBorders }),
+      heading("Revised payment"), plain(revisedPayment(), 160),
+      ...(form.dopAttached ? [heading("Payment"), plain(paymentParagraph(), 160)] : []), plain(reservationParagraph(), 180),
+      plain("Sincerely,", 360), plain(form.handlerName, 0), plain(form.handlerTitle, 140), plain("Whip Claims Management", 0), plain("P.O. Box 10622, Rockville, MD 20849", 0), plain(`Phone: (855) 906-5949${form.handlerExt ? ` ext. ${form.handlerExt}` : ""}`, 0), plain(form.handlerEmail, 160),
+      para([wordRun("Enclosures: ", true), wordRun(`${exhibitRange}${referenceLines.length ? "; " : ""}${form.repairFacility} estimate and photos${form.dopAttached ? "; Direction of Pay and Vehicle Ownership Notice" : ""}`)], { after: 0 }),
     ] }] });
     const blob = await Packer.toBlob(word); const href = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = href; anchor.download = `Whip Carrier Reconsideration - ${form.claimNumber} - ${form.carrier || "Carrier"}.docx`; anchor.click(); URL.revokeObjectURL(href); toast.success("Word letter downloaded.");
   };

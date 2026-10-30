@@ -66,8 +66,11 @@ describe('estimate workflow fields and previews', () => {
     expect(pageSource).toContain('const reservationParagraph = () =>');
     expect(pageSource).toContain('const downloadWord = async () =>');
     expect(pageSource).toContain('Packer.toBlob(word)');
-    expect(pageSource).toContain('paragraph(`Revised payment. ${revisedPayment()}`, false, 220, true)');
-    expect(pageSource).toContain('size: { width: 12240, height: 15840 }');
+    expect(pageSource).toContain('sectionHeading("Revised payment", revisedPayment())');
+    expect(pageSource).toContain('format: "a4"');
+    expect(pageSource).toContain('size: { width: 11906, height: 16838 }');
+    expect(pageSource).toContain('new ImageRun({ data: logoBytes, type: "png"');
+    expect(pageSource).toContain('headers: { first: firstHeader, default: new Header({ children: [] }) }');
     expect(pageSource).toContain('Whip Carrier Reconsideration - ${form.claimNumber}');
   });
 
@@ -78,13 +81,26 @@ describe('estimate workflow fields and previews', () => {
     expect(pageSource).not.toContain('Dear Mr./Ms. ${lastName}:');
   });
 
+  it('matches the supplied letterhead reference with an A4 first-page logo and six-column dispute table', () => {
+    expect(pageSource).toContain('doc.addImage(`data:image/png;base64,${WHIP_LOGO_B64}`, "PNG", left, 17, 18, 11.92)');
+    expect(pageSource).toContain('const header = () =>');
+    expect(pageSource).toContain('const col = [left, left + 8.5, left + 43.8, left + 64.1, left + 86.1, left + 105.5, tableRight];');
+    expect(pageSource).toContain('"Support (attached)"');
+    expect(pageSource).toContain('doc.setFillColor(231, 231, 231)');
+    expect(pageSource).toContain('doc.text("Total in dispute"');
+    expect(pageSource).toContain('cantSplit: true');
+    expect(pageSource).toContain('tableHeader: true');
+  });
+
   it('paginates rebuilt Carrier Rebuttals above a reserved footer and blocks packets over three pages', () => {
-    expect(pageSource).toContain('const safeBottom = H - 31;');
+    expect(pageSource).toContain('const safeBottom = footerRuleY - 6.5;');
     expect(pageSource).toContain('const addPage = () => { footer(); doc.addPage();');
+    expect(pageSource).toContain('Restore the body font\n      // before measuring');
+    expect(pageSource).toContain('doc.setFont("helvetica", "normal"); doc.setFontSize(10);\n      const lines = doc.splitTextToSize(body, textWidth)');
     expect(pageSource).toContain('if (page > 3)');
     expect(pageSource).toContain('would exceed the three-page limit');
     expect(pageSource).toContain('const tableHeader = () =>');
-    expect(pageSource).toContain('if (y + h > safeBottom) { addPage(); tableHeader(); }');
+    expect(pageSource).toContain('if (y + rowHeight > safeBottom) { addPage(); tableHeader(); }');
   });
 
   it('removes persisted LOU state before remounting the calculator on a global Clear Form action', () => {
