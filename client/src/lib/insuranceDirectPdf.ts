@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { calculateDirectLou, directMoney } from "@shared/insuranceDirect";
 
 export interface InsuranceDirectPdfInput {
   letterDate: string;
@@ -18,13 +19,11 @@ export interface InsuranceDirectPdfInput {
   hasDv: boolean;
   louDays: number;
   dailyRate: number;
-  utilizationPercent: number;
-  utilizationBasis: string;
   louAmount: number;
   repairStart: string;
   repairEnd: string;
-  prelossValue: number;
-  postlossValue: number;
+  prelossValue?: number;
+  postlossValue?: number;
   dvAmount: number;
   dvMethod: string;
   carfaxReported: boolean;
@@ -85,17 +84,6 @@ function money(value: unknown): string {
         maximumFractionDigits: 2,
       }).format(value)
     : MISSING;
-}
-
-function percent(value: unknown): string {
-  const result = numeric(value, 4);
-  return result === MISSING ? result : `${result}%`;
-}
-
-function utilizationDescription(basis: string): string {
-  const supplied = plain(basis);
-  if (/\bhandler[- ]confirmed\b/i.test(supplied)) return supplied;
-  return `a period-weighted monthly occupancy approximation${supplied ? ` (${supplied})` : ""}`;
 }
 
 interface TextBlock {
@@ -317,27 +305,44 @@ function footers(layout: LetterLayout): void {
 /**
  * Render the user's Insurance Direct demand template and, optionally, its LOU
  * support schedule. Amounts/authority are supplied by the handler; this renderer
- * neither decides damages nor substitutes legal authority or gross rental loss.
+ * preserves days × effective daily rate and manually entered diminished value.
+ * It neither decides damages nor substitutes legal authority or vehicle values.
  */
 export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF {
   if (!input.hasLou && !input.hasDv) {
     throw new RangeError("Select loss of use or diminished value before creating a demand.");
   }
-  const rounded = (value: number) => Math.round(value * 100) / 100;
-  if (input.hasLou && (![input.louAmount, input.louDays, input.dailyRate, input.utilizationPercent].every(Number.isFinite) || input.louAmount <= 0 || input.louDays <= 0 || input.dailyRate <= 0 || input.utilizationPercent <= 0 || input.utilizationPercent > 100 || Math.abs(rounded(input.louDays * input.dailyRate * input.utilizationPercent / 100) - input.louAmount) > 0.01)) {
-    throw new RangeError("The loss-of-use amount must reconcile to days, rate, and supported utilization.");
+  if (/[\[\]{}]/.test(plain(input.liabilityStatement))) {
+    throw new RangeError("Replace every square-bracket or brace placeholder in the liability statement with verified claim facts and source/exhibit references, or remove unused placeholders before generating the letter.");
   }
-  if (input.hasDv && (![input.dvAmount, input.prelossValue, input.postlossValue].every(Number.isFinite) || input.dvAmount <= 0 || input.postlossValue < 0 || Math.abs(rounded(input.prelossValue - input.postlossValue) - input.dvAmount) > 0.01)) {
-    throw new RangeError("The diminished-value amount must reconcile to the documented appraisal values.");
+  const lou = calculateDirectLou({ days: input.louDays, dailyRate: input.dailyRate });
+  if (input.hasLou && (lou.error || !Number.isFinite(input.louAmount) || input.louAmount <= 0 || directMoney(input.louAmount) !== lou.amount)) {
+    throw new RangeError("The loss-of-use amount must reconcile to days multiplied by the effective daily rate; occupancy is supporting context only.");
+  }
+  const hasValues = input.prelossValue !== undefined || input.postlossValue !== undefined;
+  if (input.hasDv) {
+    if (!Number.isFinite(input.dvAmount) || input.dvAmount <= 0 || directMoney(input.dvAmount) <= 0) {
+      throw new RangeError("Enter a positive, finite diminished-value amount manually; no vehicle valuation is calculated.");
+    }
+    if (!plain(input.dvMethod)) {
+      throw new RangeError("Enter the diminished-value method and source reference supporting the manual amount.");
+    }
+    if (hasValues) {
+      const pre = input.prelossValue; const post = input.postlossValue;
+      if (typeof pre !== "number" || typeof post !== "number" || !Number.isFinite(pre) || !Number.isFinite(post) || pre < 0 || post < 0 || directMoney(pre) <= directMoney(post)) {
+        throw new RangeError("If supplying optional pre-loss or post-repair values, enter both valid values; pre-loss must exceed post-repair.");
+      }
+      if (directMoney(directMoney(pre) - directMoney(post)) !== directMoney(input.dvAmount)) {
+        throw new RangeError("The optional pre-loss minus post-repair values must reconcile to the manually entered diminished-value amount.");
+      }
+    }
   }
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: false });
   const layout = new LetterLayout(doc);
   const both = input.hasLou && input.hasDv;
   const title = both ? "Loss of Use and Diminished Value" : input.hasLou ? "Loss of Use" : "Diminished Value";
   const total = both ? input.louAmount + input.dvAmount : input.hasLou ? input.louAmount : input.dvAmount;
-  const rate = percent(input.utilizationPercent);
-  const basis = utilizationDescription(input.utilizationBasis);
-  const calculation = `${numeric(input.louDays)} days x ${money(input.dailyRate)} per day x ${rate} = ${money(input.louAmount)}`;
+  const calculation = `${numeric(input.louDays)} days x ${money(input.dailyRate)} per day = ${money(input.louAmount)}`;
   const handlerEmail = plain(input.handlerEmail) || GENERAL_EMAIL;
   doc.setProperties({ title: `Demand for ${title}`, subject: `Claim ${plain(input.claimNumber)}`, author: "Whip Claims Management" });
   letterhead(layout, input.logoBase64);
@@ -377,13 +382,13 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
   if (input.hasLou) {
     layout.section(
       "Loss of use",
-      `The vehicle was out of service ${numeric(input.louDays)} days, from ${field(input.repairStart)} to ${field(input.repairEnd)}, while it was repaired. ${OWNER} rents its vehicles to drivers, so each day out of service is a day the vehicle could not be rented. The amount is ${numeric(input.louDays)} days at ${money(input.dailyRate)} per day, adjusted by the fleet utilization rate of ${rate} for the period, for ${money(input.louAmount)}. The rate is ${basis}; it is not daily occupancy evidence. The fleet log and the calculation are in the packet.`,
+      `The vehicle was out of service ${numeric(input.louDays)} days, from ${field(input.repairStart)} to ${field(input.repairEnd)}, while it was repaired. ${OWNER} rents its vehicles to drivers, so each day out of service is a day the vehicle could not be rented. The amount is ${numeric(input.louDays)} days at ${money(input.dailyRate)} per day, for ${money(input.louAmount)}. Monthly fleet occupancy is supporting context only, not a multiplier in this calculation or daily occupancy evidence. The fleet log and the calculation are in the packet.`,
     );
   }
   if (input.hasDv) {
     layout.section(
       "Diminished value",
-      `The enclosed appraisal documents the loss in value after repair. It values the vehicle at ${money(input.prelossValue)} before the loss and ${money(input.postlossValue)} after repair, a loss of ${money(input.dvAmount)}, using ${field(input.dvMethod).replace(/\.+$/, "")}.${input.carfaxReported ? " The loss is reported on the enclosed Carfax history, so the next buyer will see it." : ""}`,
+      `The enclosed diminished-value documentation supports the manually entered amount of ${money(input.dvAmount)} for loss in value after repair, using ${field(input.dvMethod).replace(/\.+$/, "")}.${hasValues ? ` The supplied supporting values are ${money(input.prelossValue)} before the loss and ${money(input.postlossValue)} after repair; they reconcile to the entered amount.` : ""}${input.carfaxReported ? " The loss is reported on the enclosed Carfax history, so the next buyer will see it." : ""}`,
     );
   }
   if (plain(input.stateAuthority)) layout.block({ text: plain(input.stateAuthority) });
@@ -415,8 +420,8 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
     layout.block({ text: "Loss of use support schedule", bold: true, gap: 3 });
     layout.block({ text: `Claim #${field(input.claimNumber)} — ${field(input.carrier)} Claim No. ${field(input.carrierClaimNumber)}`, gap: 2 });
     layout.block({ text: `Market: ${field(input.marketName)}\nRepair period: ${field(input.repairStart)} to ${field(input.repairEnd)}`, gap: 3 });
-    layout.block({ text: `Adjusted loss of use calculation: ${calculation}\nAdjusted loss of use demand: ${money(input.louAmount)}`, bold: true });
-    layout.block({ text: `Utilization basis: ${basis}. The ${rate} rate is a period-level adjustment, not daily occupancy evidence. Monthly snapshots below are source reporting values, not a daily rental log.` });
+    layout.block({ text: `Loss of use calculation: ${calculation}\nLoss of use demand: ${money(input.louAmount)}`, bold: true });
+    layout.block({ text: "Monthly fleet occupancy is supporting context only, not a multiplier in the days x daily rate calculation. Monthly snapshots below are source reporting values, not daily occupancy evidence or a daily rental log. Missing or older reports do not change the demand amount; no occupancy percentage is assumed." });
     const snapshotRows = (input.snapshots ?? []).map(snapshot => ({
       cells: [field(snapshot.reportMonth), numeric(snapshot.repairDays), snapshot.dataStatus === "unavailable" ? MISSING : numeric(snapshot.fleetCount), snapshot.dataStatus === "unavailable" ? MISSING : numeric(snapshot.rentCount), snapshot.dataStatus === "unavailable" ? MISSING : numeric(snapshot.availableCount), field(snapshot.utilization), snapshot.dataStatus === "latest_available" ? "Latest available (context only)" : field(snapshot.dataStatus)],
     }));

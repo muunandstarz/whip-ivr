@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { describe, expect, it, vi } from "vitest";
+import { LIABILITY_STATEMENT_EXAMPLES } from "@shared/insuranceDirect";
 import { createInsuranceDirectPdf, type InsuranceDirectPdfInput } from "./insuranceDirectPdf";
 
 function input(overrides: Partial<InsuranceDirectPdfInput> = {}): InsuranceDirectPdfInput {
@@ -21,9 +22,7 @@ function input(overrides: Partial<InsuranceDirectPdfInput> = {}): InsuranceDirec
     hasDv: true,
     louDays: 20,
     dailyRate: 50,
-    utilizationPercent: 80,
-    utilizationBasis: "Repair-day weighted September and October monthly fleet snapshots",
-    louAmount: 800,
+    louAmount: 1000,
     repairStart: "September 26, 2026",
     repairEnd: "October 15, 2026",
     prelossValue: 25000,
@@ -133,11 +132,11 @@ describe("Insurance Direct jsPDF renderer", () => {
     const text = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: false })));
     expect(text).toContain("Demand for Loss of Use");
     expect(text).toContain("That time is a damage your insured caused");
-    expect(text).toContain("Pay $800.00.");
-    expect(text).toContain("20 days at $50.00 per day, adjusted by the fleet utilization rate of 80%");
-    expect(text).toContain("period-weighted monthly occupancy approximation");
-    expect(text).toContain("not daily occupancy evidence");
-    expect(text).not.toMatch(/Diminished value|Diminished Value|appraisal|Carfax|Total demand|\$3,000\.00|\$3,800\.00/);
+    expect(text).toContain("Pay $1,000.00.");
+    expect(text).toContain("20 days at $50.00 per day, for $1,000.00");
+    expect(text).toContain("Monthly fleet occupancy is supporting context only");
+    expect(text).toContain("not a multiplier in this calculation or daily occupancy evidence");
+    expect(text).not.toMatch(/adjusted by|100%|Diminished value|Diminished Value|appraisal|Carfax|Total demand|\$3,000\.00|\$4,000\.00/);
     expect(text).toContain("loss of use summary and fleet log");
     expect(text).toContain("Direction of Pay and Vehicle Ownership Notice");
     expect(text).not.toContain("Loss of use support schedule");
@@ -147,13 +146,35 @@ describe("Insurance Direct jsPDF renderer", () => {
     const text = pdfText(createInsuranceDirectPdf(input({ hasLou: false, attachLouSchedule: true })));
     expect(text).toContain("Demand for Diminished Value");
     expect(text).toContain("That loss in value is a damage your insured caused");
-    expect(text).toContain("The enclosed appraisal documents the loss in value after repair");
+    expect(text).toContain("The enclosed diminished-value documentation supports the manually entered amount of $3,000.00");
     expect(text).toContain("$25,000.00 before the loss and $22,000.00 after repair");
-    expect(text).toContain("a loss of $3,000.00, using Comparable-market appraisal");
+    expect(text).toContain("using Comparable-market appraisal");
+    expect(text).toContain("they reconcile to the entered amount");
     expect(text).toContain("Pay $3,000.00.");
     expect(text).toContain("Carfax history report");
-    expect(text).not.toMatch(/Loss of [Uu]se|loss of use|fleet log|utilization|Total demand|\$800\.00|\$3,800\.00/);
+    expect(text).not.toMatch(/Loss of [Uu]se|loss of use|fleet log|utilization|Total demand|\$1,000\.00|\$4,000\.00/);
     expect(text).not.toContain("sells for less");
+  });
+
+  it("documents the exact manual DV amount and entered method/source without inventing vehicle values", () => {
+    const source = input({ hasLou: false, dvAmount: 2345.67, prelossValue: undefined, postlossValue: undefined, dvMethod: "Handler-entered comparable-market analysis, Exhibit D", carfaxReported: false });
+    const before = structuredClone(source);
+    const doc = createInsuranceDirectPdf(source);
+    const text = pdfText(doc);
+    expect(text).toContain("manually entered amount of $2,345.67");
+    expect(text).toContain("using Handler-entered comparable-market analysis, Exhibit D");
+    expect(text).toContain("Pay $2,345.67.");
+    expect(text).not.toMatch(/\$25,000|\$22,000|before the loss and|supplied supporting values|pre-loss|post-repair|automatic|17c|Carfax|NaN|undefined|null/);
+    expect(source).toEqual(before);
+    assertFooterSafe(doc);
+  });
+
+  it("combines gross LOU with a manual DV amount without requiring pre/post values", () => {
+    const text = pdfText(createInsuranceDirectPdf(input({ dvAmount: 2345.67, prelossValue: undefined, postlossValue: undefined })));
+    expect(text).toContain("Total demand $3,345.67");
+    expect(text).toContain("Pay $3,345.67.");
+    expect(text).toContain("20 days at $50.00 per day, for $1,000.00");
+    expect(text).toContain("manually entered amount of $2,345.67");
   });
 
   it("renders both items, exactly one total table row, and the selected combined thesis", () => {
@@ -162,11 +183,11 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(text).toContain("Repair does not make the owner whole");
     expect(text).toContain("Both are documented in the enclosed packet");
     expect(text).toContain("# Item Amount Support (attached)");
-    expect(text).toContain("This letter demands $3,800.00 for loss of use and diminished value");
+    expect(text).toContain("This letter demands $4,000.00 for loss of use and diminished value");
     expect(text.match(/Total demand/g)).toHaveLength(1);
-    expect(text).toContain("Total demand $3,800.00");
-    expect(text).toContain("Pay $3,800.00.");
-    expect(text).toContain("$800.00");
+    expect(text).toContain("Total demand $4,000.00");
+    expect(text).toContain("Pay $4,000.00.");
+    expect(text).toContain("$1,000.00");
     expect(text).toContain("$3,000.00");
     expect(text).toContain("Please respond within ten (10) days of receipt.");
   });
@@ -179,6 +200,20 @@ describe("Insurance Direct jsPDF renderer", () => {
     const text = pdfText(createInsuranceDirectPdf(input(flags)));
     expect(text).not.toMatch(/\{\{|\}\}|#if|\/if|demand_title_items|use ONE|lou only:|dv only:|Delete the row|optional; populate|<\/?[a-z][^>]*>/i);
     expect(text).not.toMatch(/17c|O\.C\.G\.A|Georgia|Maryland law|statute|§|case law|Restatement|\.\.\.\s*$/i);
+  });
+
+  it.each(["[carrier] accepted on [date].", "{carrier} accepted.", "{{liability}}", "Unresolved [facts", "Unresolved facts}"])("rejects unresolved liability placeholders %j before rendering", liabilityStatement => {
+    expect(() => createInsuranceDirectPdf(input({ liabilityStatement }))).toThrow("Replace every square-bracket or brace placeholder");
+  });
+
+  it("requires editing every starter and preserves Whip's position without claiming carrier acceptance", () => {
+    for (const example of LIABILITY_STATEMENT_EXAMPLES) {
+      expect(() => createInsuranceDirectPdf(input({ liabilityStatement: example.text }))).toThrow("source/exhibit references");
+    }
+    const liability = "Whip's liability position is supported by the scene photographs and driver statements in Exhibit A. This is Whip's evidence-supported position, not a statement that Example Insurance has accepted liability.";
+    const text = pdfText(createInsuranceDirectPdf(input({ liabilityStatement: liability })));
+    expect(text).toContain(liability);
+    expect(text).not.toMatch(/100%|\d+% (?:fault|liability)|liability accepted|fully accepted|written acceptance|verbal acceptance/i);
   });
 
   it("includes only handler-supplied optional authority and gates Carfax to the DV section", () => {
@@ -217,7 +252,7 @@ describe("Insurance Direct jsPDF renderer", () => {
 
   it("keeps Demand, Payment, signature and enclosures on one page whenever the group fits", () => {
     const pages = pageText(createInsuranceDirectPdf(input()));
-    const demandPage = pages.findIndex(page => page.includes("Pay $3,800.00."));
+    const demandPage = pages.findIndex(page => page.includes("Pay $4,000.00."));
     expect(demandPage).toBeGreaterThanOrEqual(0);
     expect(pages[demandPage]).toContain("Payment");
     expect(pages[demandPage]).toContain("Sincerely,");
@@ -225,15 +260,16 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(pages[demandPage]).toContain("Enclosures:");
   });
 
-  it("appends monthly LOU support with the adjusted amount, source notes and reconciliation", () => {
+  it("appends monthly LOU support with unchanged gross amount, source notes and reconciliation", () => {
     const doc = createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true }));
     const pages = pageText(doc);
     const schedulePage = pages.findIndex(page => page.includes("Loss of use support schedule"));
     expect(schedulePage).toBeGreaterThan(0);
     const text = pages.slice(schedulePage).join(" ");
-    expect(text).toContain("20 days x $50.00 per day x 80% = $800.00");
-    expect(text).toContain("Adjusted loss of use demand: $800.00");
-    expect(text).not.toContain("$1,000.00");
+    expect(text).toContain("20 days x $50.00 per day = $1,000.00");
+    expect(text).toContain("Loss of use demand: $1,000.00");
+    expect(text).toContain("Monthly fleet occupancy is supporting context only, not a multiplier");
+    expect(text).not.toMatch(/Adjusted|adjusted by|x 80%|100%|\$800\.00/);
     expect(text).toContain("Market: Washington, DC");
     expect(text).toContain("September 2026 5 100 70 30 70% Reported");
     expect(text).toContain("October 2026 15 100 83.33 16.67 83.3333% Reported");
@@ -243,12 +279,13 @@ describe("Insurance Direct jsPDF renderer", () => {
     assertFooterSafe(doc);
   });
 
-  it("labels handler-confirmed utilization without inventing monthly or daily evidence", () => {
-    const basis = "Handler-confirmed rental utilization for the repair period";
-    const text = pdfText(createInsuranceDirectPdf(input({ hasDv: false, utilizationBasis: basis, attachLouSchedule: true })));
-    expect(text).toContain(`The rate is ${basis}; it is not daily occupancy evidence.`);
-    expect(text).toContain(`Utilization basis: ${basis}.`);
-    expect(text).not.toContain("period-weighted monthly occupancy approximation");
+  it("keeps gross LOU with older context and never invents repair-period occupancy", () => {
+    const text = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots: [{ reportMonth: "August 2026", repairDays: 20, fleetCount: 100, rentCount: 40, availableCount: 60, utilization: "40%", dataStatus: "latest_available" }] })));
+    expect(text).toContain("Pay $1,000.00.");
+    expect(text).toContain("20 days x $50.00 per day = $1,000.00");
+    expect(text).toContain("Latest available (context only)");
+    expect(text).toContain("Missing or older reports do not change the demand amount; no occupancy percentage is assumed");
+    expect(text).not.toMatch(/adjusted by|100%|x 40%|\$400\.00|Handler-confirmed/);
   });
 
   it("shows missing source values as em dashes, preserving real zeros", () => {
@@ -268,13 +305,44 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(text).not.toMatch(/NaN|undefined|null/);
     const noRows = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots: [] })));
     expect(noRows).toContain("— — — — — — —");
+    expect(noRows).toContain("Loss of use demand: $1,000.00");
+    expect(noRows).not.toMatch(/adjusted by|100%|x \d+%/);
     const unavailable = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots: [{ reportMonth: "No reported snapshot", repairDays: 20, fleetCount: 0, rentCount: 0, availableCount: 0, utilization: "—", dataStatus: "unavailable" }] })));
     expect(unavailable).toContain("No reported snapshot 20 — — — — unavailable");
+    expect(unavailable).toContain("Pay $1,000.00.");
   });
 
   it("rejects inconsistent amounts instead of printing an incorrect equation or silently replacing the demand", () => {
     expect(() => createInsuranceDirectPdf(input({ hasDv: false, louAmount: 750, attachLouSchedule: true }))).toThrow("must reconcile");
-    expect(() => createInsuranceDirectPdf(input({ hasLou: false, dvAmount: 2000 }))).toThrow("must reconcile");
+    expect(() => createInsuranceDirectPdf(input({ hasDv: false, louAmount: 800, attachLouSchedule: true }))).toThrow("effective daily rate");
+    const manual = input({ hasLou: false, dvAmount: 2000 });
+    expect(() => createInsuranceDirectPdf(manual)).toThrow("must reconcile to the manually entered diminished-value amount");
+    expect(manual.dvAmount).toBe(2000);
+  });
+
+  it.each([0, -1, NaN, Infinity])("rejects invalid manual DV %j rather than deriving it from supporting values", dvAmount => {
+    expect(() => createInsuranceDirectPdf(input({ hasLou: false, dvAmount }))).toThrow("amount manually");
+  });
+
+  it("requires the supplied DV method/source and validates optional values as a pair", () => {
+    expect(() => createInsuranceDirectPdf(input({ hasLou: false, dvMethod: " " }))).toThrow("method and source reference");
+    for (const values of [
+      { prelossValue: undefined },
+      { postlossValue: undefined },
+      { prelossValue: NaN },
+      { postlossValue: Infinity },
+      { postlossValue: -1 },
+      { prelossValue: 20000 },
+    ]) {
+      expect(() => createInsuranceDirectPdf(input({ hasLou: false, ...values }))).toThrow("enter both valid values");
+    }
+    expect(() => createInsuranceDirectPdf(input({ hasLou: false, dvAmount: 0, prelossValue: undefined, postlossValue: undefined }))).toThrow("amount manually");
+  });
+
+  it.each([0, -1, NaN, Infinity])("rejects invalid LOU rate/day inputs %j without an occupancy default", value => {
+    expect(() => createInsuranceDirectPdf(input({ hasDv: false, dailyRate: value }))).toThrow("must reconcile");
+    expect(() => createInsuranceDirectPdf(input({ hasDv: false, louDays: value }))).toThrow("must reconcile");
+    expect(() => createInsuranceDirectPdf(input({ hasDv: false, louAmount: value }))).toThrow("must reconcile");
   });
 
   it("uses only the supplied logo, exactly once, and tolerates undecodable logo data", () => {

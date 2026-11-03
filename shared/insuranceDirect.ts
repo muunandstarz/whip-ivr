@@ -1,10 +1,32 @@
 export type InsuranceDirectMode = "lou" | "dv" | "both";
 
-export interface DirectUtilizationSnapshot {
-  repairDays: number;
-  utilization: string;
-  dataStatus?: "reported" | "latest_available" | "unavailable";
-}
+/** Editable starting points only: every placeholder must be replaced with verified facts. */
+export const LIABILITY_STATEMENT_EXAMPLES: Array<{ id: string; label: string; text: string; note: string }> = [
+  {
+    id: "written-acceptance",
+    label: "Documented written acceptance",
+    text: "[carrier] documented written acceptance of liability on [date] in [source/exhibit]; the stated scope of that acceptance is [facts].",
+    note: "Use only when the written carrier response supports the stated acceptance and its scope. Identify and enclose that response; do not expand it to full acceptance.",
+  },
+  {
+    id: "verbal-acceptance",
+    label: "Documented verbal acceptance",
+    text: "[carrier]'s representative verbally accepted liability on [date], as recorded in [source/exhibit]; the documented scope of that acceptance is [facts].",
+    note: "Identify the representative and the contemporaneous call note or other record in the facts. Do not describe a verbal statement as written carrier acceptance.",
+  },
+  {
+    id: "whip-evidence-position",
+    label: "Whip evidence-supported position — not carrier acceptance",
+    text: "Whip's liability position is supported by [facts], documented in [source/exhibit] dated [date]. This is Whip's evidence-supported position submitted to [carrier], not a statement that [carrier] has accepted liability.",
+    note: "Use when the evidence supports Whip's position but the carrier has not accepted liability. Describe the actual evidence without inventing a fault percentage.",
+  },
+  {
+    id: "partial-or-disputed",
+    label: "Partial acceptance / disputed damages",
+    text: "[carrier]'s response dated [date] in [source/exhibit] documents partial acceptance or disputed damages as follows: [facts]. This demand preserves Whip's position on the unresolved items.",
+    note: "Edit to distinguish exactly what was accepted, what remains disputed, and the supporting record. Do not imply agreement on all liability or damages.",
+  },
+];
 
 export function directDemandItems(mode: InsuranceDirectMode) {
   return { hasLou: mode !== "dv", hasDv: mode !== "lou", title: mode === "both" ? "Loss of Use and Diminished Value" : mode === "lou" ? "Loss of Use" : "Diminished Value" };
@@ -12,7 +34,8 @@ export function directDemandItems(mode: InsuranceDirectMode) {
 
 export function directMoney(value: string | number): number {
   const numeric = typeof value === "number" ? value : Number(value.replace(/[$,\s]/g, ""));
-  return Number.isFinite(numeric) && numeric >= 0 ? Math.round(numeric * 100) / 100 : 0;
+  const rounded = Math.round(numeric * 100) / 100;
+  return Number.isFinite(numeric) && Number.isFinite(rounded) && numeric >= 0 ? rounded : 0;
 }
 
 /** Date-only UTC arithmetic: pickup/return date is excluded from out-of-service days. */
@@ -26,34 +49,19 @@ export function directRepairDays(start: string, end: string): number {
   return Number.isFinite(from) && Number.isFinite(to) ? Math.max(0, Math.round((to - from) / 86_400_000)) : 0;
 }
 
-export function calculateDirectLou(input: {
-  days: number;
-  dailyRate: number;
-  snapshots: DirectUtilizationSnapshot[];
-  utilizationOverride: string;
-  utilizationOverrideBasis: string;
-}) {
+/** The existing LOU calculation: days × effective daily rate. Occupancy is context only. */
+export function calculateDirectLou(input: { days: number; dailyRate: number }): { amount: number; gross: number; error: string } {
+  if (!Number.isFinite(input.days) || input.days <= 0) {
+    return { amount: 0, gross: 0, error: "Enter a positive, finite out-of-service day count." };
+  }
+  if (!Number.isFinite(input.dailyRate) || input.dailyRate <= 0) {
+    return { amount: 0, gross: 0, error: "Enter a positive, finite effective daily rate." };
+  }
   const gross = directMoney(input.days * input.dailyRate);
-  if (input.utilizationOverride.trim()) {
-    const percent = Number(input.utilizationOverride);
-    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-      return { gross, amount: 0, percent: null, basis: "", error: "Enter a supported utilization percentage greater than 0 and no more than 100." };
-    }
-    if (!input.utilizationOverrideBasis.trim()) {
-      return { gross, amount: 0, percent: null, basis: "", error: "Identify the source, dates, and basis for the handler-confirmed utilization percentage." };
-    }
-    return { gross, amount: directMoney(gross * percent / 100), percent, basis: `Handler-confirmed period utilization: ${input.utilizationOverrideBasis.trim()}`, error: "" };
+  if (gross <= 0) {
+    return { amount: 0, gross: 0, error: "The loss-of-use calculation must produce a positive, finite amount." };
   }
-  // Latest-available data may describe an earlier month, not the repair period.
-  // It can be displayed as context but cannot silently drive this demand amount.
-  const complete = input.days > 0 && input.snapshots.length > 0
-    && input.snapshots.every((row) => row.dataStatus === "reported" && /^\d+(?:\.\d+)?%$/.test(row.utilization) && Number(row.utilization.replace("%", "")) > 0 && Number(row.utilization.replace("%", "")) <= 100)
-    && input.snapshots.reduce((total, row) => total + row.repairDays, 0) === input.days;
-  if (!complete) {
-    return { gross, amount: 0, percent: null, basis: "", error: "Utilization is unavailable or does not match all repair dates. Enter a verified period percentage and its source; no 100% default or older-month fallback is used." };
-  }
-  const percent = input.snapshots.reduce((total, row) => total + Number(row.utilization.replace("%", "")) * row.repairDays, 0) / input.days;
-  return { gross, amount: directMoney(gross * percent / 100), percent, basis: "Repair-day-weighted reported monthly market occupancy, used as a period approximation—not measured daily utilization.", error: "" };
+  return { amount: gross, gross, error: "" };
 }
 
 export interface InsuranceDirectDraft {
@@ -62,8 +70,7 @@ export interface InsuranceDirectDraft {
   insuredName: string;
   repairCompleted: string;
   liabilityStatement: string;
-  utilizationOverride: string;
-  utilizationOverrideBasis: string;
+  dvAmount: string;
   prelossValue: string;
   postlossValue: string;
   dvMethod: string;
@@ -79,7 +86,7 @@ export interface InsuranceDirectDraft {
 export function initialInsuranceDirectDraft(): InsuranceDirectDraft {
   const now = new Date();
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  return { mode: "lou", letterDate: date, insuredName: "", repairCompleted: "", liabilityStatement: "", utilizationOverride: "", utilizationOverrideBasis: "", prelossValue: "", postlossValue: "", dvMethod: "", carfaxReported: false, stateAuthority: "", authorityVerified: false, handlerExtension: "", handlerEmail: "claims@drivewhip.com", evidenceConfirmed: false, dopConfirmed: false };
+  return { mode: "lou", letterDate: date, insuredName: "", repairCompleted: "", liabilityStatement: "", dvAmount: "", prelossValue: "", postlossValue: "", dvMethod: "", carfaxReported: false, stateAuthority: "", authorityVerified: false, handlerExtension: "", handlerEmail: "claims@drivewhip.com", evidenceConfirmed: false, dopConfirmed: false };
 }
 
 export function validateInsuranceDirectDemand(input: {
@@ -104,6 +111,7 @@ export function validateInsuranceDirectDemand(input: {
   const errors: string[] = [];
   const required = { "letter date": input.draft.letterDate, "Whip claim number": input.claimNumber, "carrier claim number": input.carrierClaimNumber, "carrier name": input.carrier, "carrier adjuster": input.adjuster, "date of loss": input.dateOfLoss, "carrier's insured": input.draft.insuredName, "driver": input.driver, "vehicle year/make/model": input.vehicle, "repair facility": input.repairFacility, "repair completed date": input.draft.repairCompleted || input.repairEnd, "verified liability statement": input.draft.liabilityStatement, "handler": input.handlerName, "handler title": input.handlerTitle };
   for (const [label, value] of Object.entries(required)) if (!value.trim()) errors.push(`Enter the ${label}.`);
+  if (/[\[\]{}]/.test(input.draft.liabilityStatement)) errors.push("Replace every square-bracket or brace placeholder in the liability statement with verified claim facts and source/exhibit references, or remove unused placeholders before generating the letter.");
   for (const [label, value] of [["letter date", input.draft.letterDate], ["date of loss", input.dateOfLoss], ["repair completed date", input.draft.repairCompleted || input.repairEnd]]) {
     const time = Date.parse(`${value}T00:00:00Z`);
     if (value && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== value)) errors.push(`Enter a valid ${label}.`);
@@ -114,17 +122,26 @@ export function validateInsuranceDirectDemand(input: {
   if (completed && input.draft.letterDate && completed > input.draft.letterDate) errors.push("Repair completion cannot follow the letter date; this form is for completed repairs.");
   const { hasLou, hasDv } = directDemandItems(input.draft.mode);
   if (hasLou) {
-    if (directRepairDays(input.repairStart, input.repairEnd) <= 0) errors.push("Enter a valid completed out-of-service period; return date must follow drop-off.");
+    const days = directRepairDays(input.repairStart, input.repairEnd);
+    if (days <= 0) errors.push("Enter a valid completed out-of-service period; return date must follow drop-off.");
     if (input.dailyRate <= 0 || !Number.isFinite(input.dailyRate)) errors.push("Enter a positive daily rate.");
     if (input.louError) errors.push(input.louError);
-    if (input.louAmount <= 0) errors.push("The supported loss-of-use amount must be greater than zero.");
+    if (!Number.isFinite(input.louAmount) || input.louAmount <= 0) errors.push("The loss-of-use amount must be positive and finite.");
+    else if (days > 0 && input.dailyRate > 0 && Number.isFinite(input.dailyRate) && directMoney(input.louAmount) !== directMoney(days * input.dailyRate)) errors.push("The loss-of-use amount must equal out-of-service days multiplied by the effective daily rate; occupancy is supporting context only.");
     if (input.repairStart && input.dateOfLoss && input.repairStart < input.dateOfLoss) errors.push("Out-of-service start cannot precede the date of loss.");
   }
   if (hasDv) {
-    const pre = directMoney(input.draft.prelossValue); const post = directMoney(input.draft.postlossValue);
-    const rawPre = Number(input.draft.prelossValue.replace(/[$,\s]/g, "")); const rawPost = Number(input.draft.postlossValue.replace(/[$,\s]/g, ""));
-    if (!input.draft.prelossValue.trim() || !input.draft.postlossValue.trim() || !Number.isFinite(rawPre) || !Number.isFinite(rawPost) || rawPre < 0 || rawPost < 0 || pre <= post) errors.push("Enter appraised pre-loss and post-repair values; the documented pre-loss value must exceed the post-repair value.");
-    if (!input.draft.dvMethod.trim()) errors.push("Enter the diminished-value appraisal method and source reference.");
+    const rawAmount = Number(input.draft.dvAmount.replace(/[$,\s]/g, ""));
+    const amount = directMoney(input.draft.dvAmount);
+    if (!input.draft.dvAmount.trim() || !Number.isFinite(rawAmount) || rawAmount <= 0 || amount <= 0) errors.push("Enter a positive, finite diminished-value amount manually; no amount is calculated from vehicle values.");
+    const preValue = input.draft.prelossValue ?? ""; const postValue = input.draft.postlossValue ?? "";
+    if (preValue.trim() || postValue.trim()) {
+      const rawPre = Number(preValue.replace(/[$,\s]/g, "")); const rawPost = Number(postValue.replace(/[$,\s]/g, ""));
+      const pre = directMoney(preValue); const post = directMoney(postValue);
+      if (!preValue.trim() || !postValue.trim() || !Number.isFinite(rawPre) || !Number.isFinite(rawPost) || rawPre < 0 || rawPost < 0 || pre <= post) errors.push("If supplying optional pre-loss or post-repair values, enter both valid values; pre-loss must exceed post-repair.");
+      else if (amount > 0 && directMoney(pre - post) !== amount) errors.push("The optional pre-loss minus post-repair values must reconcile to the manually entered diminished-value amount; verify the amount and supporting values.");
+    }
+    if (!input.draft.dvMethod.trim()) errors.push("Enter the diminished-value method and source reference supporting the manual amount.");
   }
   if (input.draft.stateAuthority.trim() && !input.draft.authorityVerified) errors.push("Confirm that any optional state authority is verified for the loss state, or leave it blank.");
   if (!input.draft.evidenceConfirmed) errors.push("Confirm repairs are complete and all selected damage items have the listed supporting exhibits.");

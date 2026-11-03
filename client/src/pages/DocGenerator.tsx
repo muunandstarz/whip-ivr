@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
-import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
+import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, LIABILITY_STATEMENT_EXAMPLES, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
 import { createInsuranceDirectPdf } from "@/lib/insuranceDirectPdf";
 import { jsPDF } from "jspdf";
 import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
@@ -308,12 +308,14 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "carrier-rebuttal", label: "Carrier Rebuttal", icon: Scale },
       { id: "payment-receipt", label: "Payment Receipt", icon: Receipt },
       { id: "urgently-invoice", label: "Towing Invoice", icon: Truck },
-      { id: "dv-calculator", label: "DV Calculator", icon: TrendingDown },
     ],
   },
   {
     label: "Insurance Direct",
-    items: [{ id: "lou-calculator", label: "Insurance Direct: Loss of Use", icon: Calculator }],
+    items: [
+      { id: "lou-calculator", label: "Insurance Direct: Loss of Use", icon: Calculator },
+      { id: "dv-calculator", label: "DV Calculator", icon: TrendingDown },
+    ],
   },
   {
     label: "Medical Review",
@@ -6555,6 +6557,9 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
   const [directDraft, setDirectDraft] = useState<InsuranceDirectDraft>(initialInsuranceDirectDraft);
   const setDirect = <K extends keyof InsuranceDirectDraft>(key: K, value: InsuranceDirectDraft[K]) => setDirectDraft((current) => ({ ...current, [key]: value }));
   const { hasLou, hasDv } = directDemandItems(directDraft.mode);
+  const [showDemand, setShowDemand] = useState(false);
+  const [liabilityExample, setLiabilityExample] = useState("");
+  useEffect(() => { document.getElementById("lou-workflow-start")?.scrollIntoView({ block: "start" }); }, [showDemand]);
   // Push to demand
   const [pushedToDemand, setPushedToDemand] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
@@ -6616,7 +6621,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
   // A preview belongs only to the exact current inputs, never a stale prior claim.
   useEffect(() => { setPreviewPdfUrl(null); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, repairFacility, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft]);
   useEffect(() => () => { if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl); }, [previewPdfUrl]);
-  useEffect(() => { setDirectDraft((current) => ({ ...current, evidenceConfirmed: false, dopConfirmed: false })); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, repairFacility, dropOffDate, pickUpDate, dailyRate, customRate, directDraft.mode, directDraft.insuredName, directDraft.repairCompleted, directDraft.liabilityStatement, directDraft.utilizationOverride, directDraft.utilizationOverrideBasis, directDraft.prelossValue, directDraft.postlossValue, directDraft.dvMethod, directDraft.carfaxReported]);
+  useEffect(() => { setDirectDraft((current) => ({ ...current, evidenceConfirmed: false, dopConfirmed: false })); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, repairFacility, dropOffDate, pickUpDate, dailyRate, customRate, directDraft.mode, directDraft.insuredName, directDraft.repairCompleted, directDraft.liabilityStatement, directDraft.dvAmount, directDraft.prelossValue, directDraft.postlossValue, directDraft.dvMethod, directDraft.carfaxReported]);
   // Auto-set rate when vehicle model changes
   useEffect(() => {
     if (vehicleClass && vehicleOptions.length > 0) {
@@ -6683,10 +6688,17 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
     return rows;
   };
   const utilizationSnapshots = summarizeLouUtilizationRows(getUtilizationRows());
-  const directLou = calculateDirectLou({ days, dailyRate: effectiveRate, snapshots: utilizationSnapshots, utilizationOverride: directDraft.utilizationOverride, utilizationOverrideBasis: directDraft.utilizationOverrideBasis });
-  const dvAmount = directMoney(Math.max(0, directMoney(directDraft.prelossValue) - directMoney(directDraft.postlossValue)));
+  const directLou = calculateDirectLou({ days, dailyRate: effectiveRate });
+  const dvAmount = directMoney(directDraft.dvAmount);
   const directTotal = directMoney((hasLou ? directLou.amount : 0) + (hasDv ? dvAmount : 0));
   const directErrors = validateInsuranceDirectDemand({ draft: directDraft, claimNumber, carrierClaimNumber: adverseClaimNo, carrier: adverseCarrier, adjuster, dateOfLoss, vehicle: ymm, vin, driver: memberDriver, repairFacility, repairStart: dropOffDate, repairEnd: pickUpDate, handlerName: louHandlerName, handlerTitle, dailyRate: effectiveRate, louError: directLou.error, louAmount: directLou.amount });
+
+  const openDirectDemand = () => {
+    if (days <= 0 || effectiveRate <= 0) { toast.error("Enter a valid repair period and daily rate before using LOU in the letter."); return; }
+    if (directDraft.mode === "dv") setDirect("mode", "lou");
+    setShowDemand(true);
+    toast.success(`LOU of $${louTotal} carried into the Insurance Direct letter.`);
+  };
 
   const handlePushToDemand = () => {
     if (days <= 0 || effectiveRate <= 0) {
@@ -6738,9 +6750,8 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
       repairCompleted: formatNorthAmericanLetterDate(directDraft.repairCompleted || pickUpDate),
       liabilityStatement: directDraft.liabilityStatement,
       hasLou, hasDv, louDays: days, dailyRate: effectiveRate,
-      utilizationPercent: directLou.percent ?? 0, utilizationBasis: directLou.basis,
       louAmount: hasLou ? directLou.amount : 0, repairStart: formatNorthAmericanLetterDate(dropOffDate), repairEnd: formatNorthAmericanLetterDate(pickUpDate),
-      prelossValue: directMoney(directDraft.prelossValue), postlossValue: directMoney(directDraft.postlossValue),
+      prelossValue: directDraft.prelossValue.trim() ? directMoney(directDraft.prelossValue) : undefined, postlossValue: directDraft.postlossValue.trim() ? directMoney(directDraft.postlossValue) : undefined,
       dvAmount: hasDv ? dvAmount : 0, dvMethod: directDraft.dvMethod,
       carfaxReported: hasDv && directDraft.carfaxReported,
       stateAuthority: directDraft.authorityVerified ? directDraft.stateAuthority : "",
@@ -6755,8 +6766,13 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
   const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
-    <div className="space-y-4 max-w-4xl">
-      <Panel title="Insurance Direct: Loss of Use" tag="REPAIRS COMPLETED · NOT SUBROGATION">
+    <div id="lou-workflow-start" className="space-y-4 max-w-4xl">
+      <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+        <h2 className="text-base font-semibold">Insurance Direct: Loss of Use</h2>
+        <p className="text-xs leading-5 text-muted-foreground">Calculate LOU using the existing days × daily rate workflow, then carry that amount into the completed-repair demand letter. Fleet utilization stays in the supporting schedule; it does not reduce or recalculate the LOU amount. DV is entered manually from the separate DV report.</p>
+        <div className="flex flex-wrap gap-2"><Button id="lou-step-calculator" variant={!showDemand ? "default" : "outline"} size="sm" onClick={() => setShowDemand(false)}>1. LOU Calculator</Button><Button id="lou-step-letter" variant={showDemand ? "default" : "outline"} size="sm" onClick={() => setShowDemand(true)}>2. Demand Letter</Button></div>
+      </div>
+      {showDemand && <Panel title="Insurance Direct Demand Letter" tag="REPAIRS COMPLETED · NOT SUBROGATION">
         <p className="mb-3 text-xs leading-5 text-muted-foreground">Use for direct demands to the responsible carrier after the vehicle has been repaired in real time. Choose loss of use, documented diminished value, or both. The letter demands these items in addition to repair costs; it does not demand repair costs again. No letter is sent automatically.</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1"><Label htmlFor="lou-direct-mode" className="text-xs font-semibold">Demand items</Label><select id="lou-direct-mode" className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs" value={directDraft.mode} onChange={(event) => setDirect("mode", event.target.value as InsuranceDirectDraft["mode"])}><option value="lou">Loss of Use only</option><option value="dv">Diminished Value only</option><option value="both">Loss of Use and Diminished Value</option></select></div>
@@ -6764,8 +6780,14 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
           <Field label="Their Insured's Name" id="lou-insured" value={directDraft.insuredName} onChange={(value) => setDirect("insuredName", value)} placeholder="Carrier's insured — not the Whip driver" required />
           <Field label="Repair Completed Date" id="lou-completed" value={directDraft.repairCompleted || pickUpDate} onChange={(value) => setDirect("repairCompleted", value)} type="date" required />
         </div>
-        <div className="mt-3"><TextareaField label="Verified Liability Statement" id="lou-liability" value={directDraft.liabilityStatement} onChange={(value) => setDirect("liabilityStatement", value)} placeholder="Enter the verified liability position for this claim. Do not imply the carrier accepted liability unless confirmed." rows={2} /></div>
-      </Panel>
+        <div className="mt-3 space-y-2">
+          <Label htmlFor="lou-liability-example" className="text-xs font-semibold">Liability statement examples — choose a starting point</Label>
+          <select id="lou-liability-example" className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs" value={liabilityExample} onChange={(event) => setLiabilityExample(event.target.value)}><option value="">— Choose an example —</option>{LIABILITY_STATEMENT_EXAMPLES.map((example) => <option key={example.id} value={example.id}>{example.label}</option>)}</select>
+          {liabilityExample && <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2"><p className="text-xs leading-5 whitespace-pre-wrap">{LIABILITY_STATEMENT_EXAMPLES.find((example) => example.id === liabilityExample)?.text}</p><p className="text-xs text-muted-foreground">{LIABILITY_STATEMENT_EXAMPLES.find((example) => example.id === liabilityExample)?.note}</p><Button id="lou-use-liability-example" variant="outline" size="sm" onClick={() => { const example = LIABILITY_STATEMENT_EXAMPLES.find((item) => item.id === liabilityExample); if (example) setDirect("liabilityStatement", example.text); }}>Use example in editable statement</Button></div>}
+          <TextareaField label="Verified Liability Statement" id="lou-liability" value={directDraft.liabilityStatement} onChange={(value) => setDirect("liabilityStatement", value)} placeholder="State the actual verified position and source. Acceptance wording is only appropriate when documented." rows={3} />
+          <p className="text-xs leading-5 text-muted-foreground">Replace every bracketed placeholder with verified claim facts and identify the correspondence, note, or exhibit. Selecting an example does not verify liability or insert it automatically. Repair payment alone is not treated as carrier acceptance.</p>
+        </div>
+      </Panel>}
       <Panel title="Claim Information">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field label="Whip Claim No." id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="XXX-1234-123456-123456" required />
@@ -6841,7 +6863,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
           <Field label="Repair Facility" id="lou-facility" value={repairFacility} onChange={setRepairFacility} placeholder="e.g. Total Recon — Laurel" />
           <Field label="RO Number" id="lou-ro" value={roNumber} onChange={setRoNumber} placeholder="e.g. 1739" />
         </div>
-        {hasLou && <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+        {(!showDemand || hasLou) && <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
           <Field label="Drop-Off Date" id="lou-dropoff" value={dropOffDate} onChange={setDropOffDate} type="date" required />
           <Field label="Returned to Service" id="lou-pickup" value={pickUpDate} onChange={setPickUpDate} type="date" required />
           <div className="flex flex-col justify-end">
@@ -6853,7 +6875,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
         </div>}
       </Panel>
 
-      {hasLou && <Panel title="Daily Rate & Period Utilization" tag="DIRECT DEMAND IS UTILIZATION-ADJUSTED">
+      {(!showDemand || hasLou) && <Panel title="Daily Rate" tag="AUTO-CALCULATES">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-foreground/70 mb-1">Whip Standard Rate</label>
@@ -6871,46 +6893,49 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
             Rate basis: {ymm || vehicleClass} — Whip Standard Rate, {marketName} market (${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = ${effectiveRate.toFixed(2)}/day)
           </div>
         )}
-        <p className="mt-3 text-xs leading-5 text-muted-foreground">Direct LOU = days × daily rate × supported period utilization. Matching reported months are weighted by repair days. Monthly snapshots remain monthly approximations, not a daily fleet log. An older report or missing month does not default to 100%.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-          <Field label="Verified Period Utilization Override (%)" id="lou-util-override" value={directDraft.utilizationOverride} onChange={(value) => setDirect("utilizationOverride", value)} type="number" placeholder="Blank = matching source months only" />
-          <Field label="Override Source / Dates / Basis" id="lou-util-basis" value={directDraft.utilizationOverrideBasis} onChange={(value) => setDirect("utilizationOverrideBasis", value)} placeholder="Verified source and period supported" />
-        </div>
-        <p className={`mt-2 text-xs leading-5 ${directLou.error ? "text-amber-800" : "text-muted-foreground"}`}>{directLou.error || `${directLou.percent?.toFixed(2)}% — ${directLou.basis}`}</p>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">LOU = documented days out of service × selected daily rate. The same calculator amount appears in the demand letter and support schedule. Reported monthly utilization is evidence context, not a multiplier.</p>
       </Panel>}
 
-      {hasDv && <Panel title="Diminished Value" tag="DOCUMENTED APPRAISAL · NOT AN AUTOMATED VALUATION">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Appraised Pre-Loss Value ($)" id="lou-dv-pre" value={directDraft.prelossValue} onChange={(value) => setDirect("prelossValue", value)} type="number" required />
-          <Field label="Appraised Post-Repair Value ($)" id="lou-dv-post" value={directDraft.postlossValue} onChange={(value) => setDirect("postlossValue", value)} type="number" required />
+      {showDemand && hasDv && <Panel title="Diminished Value" tag="MANUAL ENTRY · NO AUTOMATIC TRANSFER">
+        <p className="mb-3 text-xs leading-5 text-muted-foreground">Use the DV Calculator in the Insurance Direct navigation group, review its report, then manually enter the supported amount below. This form does not calculate or import DV.</p>
+        <Field label="Manual DV Demand Amount ($)" id="lou-dv-amount" value={directDraft.dvAmount} onChange={(value) => setDirect("dvAmount", value)} type="number" required />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <Field label="Optional Appraised Pre-Loss Value ($)" id="lou-dv-pre" value={directDraft.prelossValue} onChange={(value) => setDirect("prelossValue", value)} type="number" />
+          <Field label="Optional Appraised Post-Repair Value ($)" id="lou-dv-post" value={directDraft.postlossValue} onChange={(value) => setDirect("postlossValue", value)} type="number" />
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">Optional values are for explaining the report only. They never set or change the manual DV amount; if provided, both must agree with it.</p>
         <div className="mt-3"><TextareaField label="Appraisal Method / Source Reference" id="lou-dv-method" value={directDraft.dvMethod} onChange={(value) => setDirect("dvMethod", value)} placeholder="Method and exhibit/reference from the actual appraisal" rows={2} /></div>
         <div className="mt-3 flex items-center justify-between gap-3"><label className="flex items-center gap-2 text-xs"><Checkbox checked={directDraft.carfaxReported} onCheckedChange={(checked) => setDirect("carfaxReported", checked === true)} />Loss appears on the Carfax history report being enclosed</label><p className="text-sm font-semibold">Documented DV: ${dvAmount.toFixed(2)}</p></div>
       </Panel>}
 
-      <Panel title="Handler">
+      {showDemand && <Panel title="Handler">
         <div className="grid grid-cols-2 gap-3">
           <HandlerSelect value={louHandlerName} onChange={setLouHandlerName} onHandlerChange={(handler) => setDirect("handlerExtension", handler.extension || "")} label="Handler Name" id="lou-handler" />
           <Field label="Title" id="lou-title" value={handlerTitle} onChange={setHandlerTitle} placeholder="e.g. Claims Resolution Specialist" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><Field label="Handler Extension" id="lou-handler-ext" value={directDraft.handlerExtension} onChange={(value) => setDirect("handlerExtension", value)} placeholder="Auto-fills from the IVR directory" /><Field label="Handler Email" id="lou-handler-email" value={directDraft.handlerEmail} onChange={(value) => setDirect("handlerEmail", value)} placeholder="claims@drivewhip.com" /></div>
-      </Panel>
+      </Panel>}
 
-      <Panel title="Supporting Packet & Optional Authority" tag="HANDLER VERIFIED">
+      {showDemand && <Panel title="Supporting Packet & Optional Authority" tag="HANDLER VERIFIED">
         <TextareaField label="Optional Verified Authority for the Loss State" id="lou-state-authority" value={directDraft.stateAuthority} onChange={(value) => { setDirectDraft((current) => ({ ...current, stateAuthority: value, authorityVerified: false })); }} placeholder="Leave blank unless the exact citation and relevance to this loss state have been verified. No default legal authority is inserted." rows={2} />
         {directDraft.stateAuthority.trim() && <label className="mt-2 flex items-center gap-2 text-xs"><Checkbox checked={directDraft.authorityVerified} onCheckedChange={(checked) => setDirect("authorityVerified", checked === true)} />I verified this authority and its applicability to the loss state.</label>}
         <label className="mt-3 flex items-start gap-2 text-xs leading-5"><Checkbox checked={directDraft.evidenceConfirmed} onCheckedChange={(checked) => setDirect("evidenceConfirmed", checked === true)} /><span>Repairs are completed. The claim supports the stated liability position and selected amounts. I will enclose the repair estimate/final bill and image report{hasLou ? ", and the loss-of-use summary plus supporting fleet/utilization records" : ""}{hasDv ? ", and the diminished-value appraisal" : ""}{hasDv && directDraft.carfaxReported ? ", including the Carfax history report" : ""}.</span></label>
         <label className="mt-3 flex items-start gap-2 text-xs leading-5"><Checkbox checked={directDraft.dopConfirmed} onCheckedChange={(checked) => setDirect("dopConfirmed", checked === true)} /><span>The Direction of Pay and Vehicle Ownership Notice for Metrocars Leasing Corp. will be enclosed. This generator does not create or attach those source exhibits automatically.</span></label>
-      </Panel>
+      </Panel>}
 
       {/* Direct-insurance summary: distinct from the unchanged subrogation handoff. */}
-      <div className="p-4 rounded-xl border border-border bg-muted/20">
+      {!showDemand && <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+        <div><div className="text-xs font-semibold text-muted-foreground uppercase">Standalone LOU Calculator — Total</div><div id="lou-calculator-total" className="text-3xl font-bold">${louTotal}</div><p className="text-xs text-muted-foreground">{days} days × ${effectiveRate.toFixed(2)}/day = ${louTotal}</p></div>
+        <div className="flex flex-wrap gap-2"><Button id="lou-use-in-letter" size="sm" onClick={openDirectDemand}>Use LOU in Insurance Direct Letter</Button><Button variant="outline" size="sm" onClick={() => { setDirect("mode", "dv"); setShowDemand(true); }}>Build DV-only Letter</Button><Button variant="outline" size="sm" onClick={handlePushToDemand}>{pushedToDemand ? "Pushed!" : "Push LOU to Subro Demand"}</Button></div>
+        <p className="text-xs text-muted-foreground">Calculating does not require carrier/letter details. Complete those in step 2 before previewing the letter. The Subro handoff remains available only for an actual subrogation claim.</p>
+      </div>}
+      {showDemand && <div className="p-4 rounded-xl border border-border bg-muted/20">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <div>
             <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Insurance Direct — Total Demand</div>
             <div className="text-3xl font-bold text-foreground">${directTotal.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              {hasLou ? `LOU: ${days} days × $${effectiveRate.toFixed(2)}/day × ${directLou.percent?.toFixed(2) || "unverified"}% = $${directLou.amount.toFixed(2)}` : ""}{hasLou && hasDv ? " · " : ""}{hasDv ? `DV: $${dvAmount.toFixed(2)}` : ""}
+              {hasLou ? `LOU: ${days} days × $${effectiveRate.toFixed(2)}/day = $${directLou.amount.toFixed(2)}` : ""}{hasLou && hasDv ? " · " : ""}{hasDv ? `DV: $${dvAmount.toFixed(2)}` : ""}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -6919,11 +6944,11 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
           </div>
         </div>
         {directErrors.length > 0 && <details className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground"><summary className="cursor-pointer font-semibold text-foreground">Complete before generating — {directErrors.length} remaining checks</summary><ul className="mt-2 list-disc pl-4 space-y-1">{directErrors.map((error) => <li key={error}>{error}</li>)}</ul></details>}
-        {hasLou && <details className="mt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">Separate subrogation workflow (unchanged)</summary><p className="mt-2">This optional handoff transfers the existing gross LOU calculator amount (${louTotal}) to Subro Demand, not this utilization-adjusted direct demand. It does not transfer DV or create a subrogation claim.</p><Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={handlePushToDemand}>{pushedToDemand ? <CheckCircle className="w-3.5 h-3.5" /> : <Calculator className="w-3.5 h-3.5" />}{pushedToDemand ? "Pushed!" : "Push Gross LOU to Subro Demand"}</Button></details>}
-      </div>
+        {hasLou && <details className="mt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">Separate subrogation workflow (unchanged)</summary><p className="mt-2">This optional handoff transfers the same LOU calculator amount (${louTotal}) to Subro Demand. It does not transfer DV or create a subrogation claim.</p><Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={handlePushToDemand}>{pushedToDemand ? <CheckCircle className="w-3.5 h-3.5" /> : <Calculator className="w-3.5 h-3.5" />}{pushedToDemand ? "Pushed!" : "Push LOU to Subro Demand"}</Button></details>}
+      </div>}
 
       {/* Monthly Fleet Utilization Preview */}
-      {hasLou && days > 0 && dropOffDate && pickUpDate && (
+      {(!showDemand || hasLou) && days > 0 && dropOffDate && pickUpDate && (
         <Panel title="Monthly Fleet Utilization Snapshot Preview" tag="INCLUDED IN PDF">
           <p className="mb-2 text-xs text-muted-foreground">One row is shown for each source reporting month. “Reported unrented” accounts for the unoccupied portion of the report’s rentable-fleet denominator; this is not a daily utilization feed.</p>
           <div className="overflow-x-auto">
@@ -6958,7 +6983,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftCha
         </Panel>
       )}
 
-      {previewPdfUrl && (
+      {showDemand && previewPdfUrl && (
         <PreviewPanel
           text=""
           onCopy={() => toast.info("Copy the PDF from the preview")}
@@ -9042,11 +9067,11 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
 function DVCalculatorTab() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Diminished Value Calculator</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Opens the DV Calculator portal in a new window. Complete the valuation there, then return here to enter the DV amount in the Subro Demand Letter.
+            Opens the DV Calculator portal in a new window. Complete the valuation there, then manually enter the supported DV amount in Insurance Direct: Loss of Use. No numbers are transferred automatically.
           </p>
         </div>
         <a
@@ -9093,7 +9118,7 @@ function DVCalculatorTab() {
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#ff6221]/10 text-[#ff6221] flex items-center justify-center text-xs font-bold">8</span>
-            <span>Return to the <strong className="text-foreground">Subro Demand Letter</strong> tab (if applicable) and manually enter the DV amount. The DV amount will <strong className="text-foreground">not push automatically</strong>.</span>
+            <span>Return to <strong className="text-foreground">Insurance Direct: Loss of Use → Demand Letter</strong>, select DV or both, and manually enter the verified DV amount and report reference. For an actual subrogation claim, the separate Subro Demand Letter remains available. DV will <strong className="text-foreground">not push automatically</strong> into either form.</span>
           </li>
         </ol>
       </div>
@@ -9109,7 +9134,7 @@ function DVCalculatorTab() {
             <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Manual entry required — DV amount does not push automatically</p>
             <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
               The DV Calculator produces a separate standalone report. After downloading and confirming the PDF, navigate to the
-              <strong> Subro Demand Letter</strong> tab and enter the DV amount manually in the demand.
+              <strong> Insurance Direct: Loss of Use → Demand Letter</strong> step and enter the DV amount and report reference manually. The separate Subro Demand Letter is for actual subrogation claims.
             </p>
           </div>
         </div>
