@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 const source = readFileSync(resolve(process.cwd(), "client/src/pages/DocGenerator.tsx"), "utf8");
 const renderer = readFileSync(resolve(process.cwd(), "client/src/lib/insuranceDirectPdf.ts"), "utf8");
+const normalLou = readFileSync(resolve(process.cwd(), "client/src/lib/standaloneLouPdf.ts"), "utf8");
 const calculations = readFileSync(resolve(process.cwd(), "shared/insuranceDirect.ts"), "utf8");
 const standalone = source.slice(source.indexOf("function LOUCalculatorTab("), source.indexOf("// ─── Tab: Medical Bill Review"));
 
@@ -22,8 +23,8 @@ describe("Insurance Direct standalone Loss of Use calculator and evidence", () =
   it("preserves one monthly-source snapshot rather than representing repeated daily telemetry", () => {
     expect(source).toContain("function summarizeLouUtilizationRows(rows: LouUtilizationRow[]): LouUtilizationSnapshot[]");
     expect(source).toContain("MONTHLY FLEET UTILIZATION SNAPSHOTS");
-    expect(renderer).toContain("Reported unrented");
-    expect(renderer).toContain("not daily occupancy evidence or a daily rental log");
+    expect(normalLou).toContain("Reported unrented");
+    expect(normalLou).toContain("not a daily tracking feed");
     expect(source).not.toContain("daily record${louUtilizationRows.length");
   });
 
@@ -50,11 +51,17 @@ describe("Insurance Direct standalone Loss of Use calculator and evidence", () =
     expect(standalone).toContain("const [showDemand, setShowDemand] = useState(false)");
     expect(standalone).toContain('id="lou-calculator-total"');
     expect(standalone).toContain('id="lou-use-in-letter"');
-    expect(standalone).toContain("Use LOU in Insurance Direct Letter");
-    expect(standalone).toContain("Preview Demand");
-    expect(standalone).toContain("Download Demand Packet");
-    expect(standalone).toContain("total: louTotal,");
-    expect(standalone).toContain("Push LOU to Subro Demand");
+    expect(standalone).toContain("Push LOU to Active-Claim Cover Letter");
+    expect(standalone).toContain("Preview Cover Letter + LOU Packet");
+    expect(standalone).toContain("Download Cover Letter + LOU Packet");
+    expect(standalone).toContain("createStandaloneLouPdf(louRecord)");
+    expect(standalone).toContain("Preview LOU Form");
+    expect(standalone).toContain("Download LOU Form");
+    expect(standalone).not.toContain('onNavigate("subro-demand")');
+    expect(standalone).not.toContain("LOU_DEMAND_HANDOFF_KEY");
+    expect(standalone).not.toContain("Push LOU to Subro Demand");
+    expect(renderer).toContain("appendStandaloneLouForm(doc, record");
+    expect(normalLou).toContain("appendStandaloneLouForm(doc, input");
     expect(source).toContain('sessionStorage.removeItem("lou_calc_state")');
     expect(standalone).toContain("onDraftChange?.(draftData)");
   });

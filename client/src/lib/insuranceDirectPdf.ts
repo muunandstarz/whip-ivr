@@ -1,3 +1,4 @@
+import { appendStandaloneLouForm, type StandaloneLouInput } from "./standaloneLouPdf";
 import { jsPDF } from "jspdf";
 import { calculateDirectLou, directMoney } from "@shared/insuranceDirect";
 
@@ -46,6 +47,7 @@ export interface InsuranceDirectPdfInput {
   sourceNote: string;
   reconciliation: string;
   attachLouSchedule: boolean;
+  louRecord?: StandaloneLouInput;
 }
 
 const MARGIN = 25.4;
@@ -342,7 +344,6 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
   const both = input.hasLou && input.hasDv;
   const title = both ? "Loss of Use and Diminished Value" : input.hasLou ? "Loss of Use" : "Diminished Value";
   const total = both ? input.louAmount + input.dvAmount : input.hasLou ? input.louAmount : input.dvAmount;
-  const calculation = `${numeric(input.louDays)} days x ${money(input.dailyRate)} per day = ${money(input.louAmount)}`;
   const handlerEmail = plain(input.handlerEmail) || GENERAL_EMAIL;
   doc.setProperties({ title: `Demand for ${title}`, subject: `Claim ${plain(input.claimNumber)}`, author: "Whip Claims Management" });
   letterhead(layout, input.logoBase64);
@@ -395,7 +396,7 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
 
   const enclosures = ["Repair estimate or final bill", "image report"];
   if (input.hasLou) enclosures.push("loss of use summary and fleet log");
-  if (input.hasLou && input.attachLouSchedule) enclosures.push("loss of use support schedule");
+  if (input.hasLou && input.attachLouSchedule) enclosures.push("Loss of Use / Rental Reimbursement Request with monthly utilization and supporting basis");
   if (input.hasDv) enclosures.push("diminished value appraisal");
   if (input.hasDv && input.carfaxReported) enclosures.push("Carfax history report");
   enclosures.push("Direction of Pay and Vehicle Ownership Notice");
@@ -416,23 +417,20 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
   layout.blocksTogether(closing);
 
   if (input.hasLou && input.attachLouSchedule) {
-    layout.newPage();
-    layout.block({ text: "Loss of use support schedule", bold: true, gap: 3 });
-    layout.block({ text: `Claim #${field(input.claimNumber)} — ${field(input.carrier)} Claim No. ${field(input.carrierClaimNumber)}`, gap: 2 });
-    layout.block({ text: `Market: ${field(input.marketName)}\nRepair period: ${field(input.repairStart)} to ${field(input.repairEnd)}`, gap: 3 });
-    layout.block({ text: `Loss of use calculation: ${calculation}\nLoss of use demand: ${money(input.louAmount)}`, bold: true });
-    layout.block({ text: "Monthly fleet occupancy is supporting context only, not a multiplier in the days x daily rate calculation. Monthly snapshots below are source reporting values, not daily occupancy evidence or a daily rental log. Missing or older reports do not change the demand amount; no occupancy percentage is assumed." });
-    const snapshotRows = (input.snapshots ?? []).map(snapshot => ({
-      cells: [field(snapshot.reportMonth), numeric(snapshot.repairDays), snapshot.dataStatus === "unavailable" ? MISSING : numeric(snapshot.fleetCount), snapshot.dataStatus === "unavailable" ? MISSING : numeric(snapshot.rentCount), snapshot.dataStatus === "unavailable" ? MISSING : numeric(snapshot.availableCount), field(snapshot.utilization), snapshot.dataStatus === "latest_available" ? "Latest available (context only)" : field(snapshot.dataStatus)],
-    }));
-    layout.table(
-      ["Report month", "Repair days", "Reported rentable fleet", "Rented", "Reported unrented", "Occupancy", "Data status"],
-      [29, 18, 20, 20, 22, 22, layout.width - 131],
-      snapshotRows.length ? snapshotRows : [{ cells: Array(7).fill(MISSING) }],
-      8.2,
-    );
-    layout.section("Source note", field(input.sourceNote));
-    layout.section("Reconciliation", field(input.reconciliation));
+    const record: StandaloneLouInput = input.louRecord ?? {
+      claimNumber: input.claimNumber, carrierClaimNumber: input.carrierClaimNumber, dateOfLoss: input.dateOfLoss,
+      carrier: input.carrier, adjuster: input.adjuster, vehicle: input.vehicle, vin: input.vin, driver: input.driver,
+      registeredOwner: OWNER, vehicleStatus: "", vehicleClass: "", repairFacility: input.repairFacility, roNumber: "",
+      repairStart: input.repairStart, repairEnd: input.repairEnd, days: input.louDays, dailyRate: input.dailyRate, amount: input.louAmount,
+      customRate: false, marketName: input.marketName, letterDate: input.letterDate,
+      handlerName: input.handlerName, handlerTitle: input.handlerTitle, handlerExtension: input.handlerExtension,
+      handlerEmail: input.handlerEmail, logoBase64: input.logoBase64, snapshots: input.snapshots,
+      sourceNote: input.sourceNote, reconciliation: input.reconciliation, verifiedAuthority: input.stateAuthority,
+    };
+    if (directMoney(record.amount) !== directMoney(input.louAmount) || record.days !== input.louDays || record.dailyRate !== input.dailyRate || record.claimNumber !== input.claimNumber || record.vin !== input.vin || record.repairStart !== input.repairStart || record.repairEnd !== input.repairEnd) {
+      throw new RangeError("The attached LOU record must match this claim, vehicle, repair period, and cover-letter calculation.");
+    }
+    appendStandaloneLouForm(doc, record, { addPage: true, letterhead: false });
   }
   footers(layout);
   return doc;

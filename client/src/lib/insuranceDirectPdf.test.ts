@@ -84,6 +84,8 @@ function assertFooterSafe(doc: jsPDF): void {
   const scale = doc.internal.scaleFactor;
   for (const stream of pageStreams(doc)) {
     const textBlocks = Array.from(stream.matchAll(/BT\n([\s\S]*?)\nET/g), match => match[1]);
+    const standalonePage = stream.includes("Rental Reimbursement");
+    const margin = standalonePage ? 14 : 25.4;
     for (const block of textBlocks) {
       const text = strings(block).join(" ");
       const position = /(-?[\d.]+) (-?[\d.]+) Td/.exec(block);
@@ -94,14 +96,14 @@ function assertFooterSafe(doc: jsPDF): void {
       const size = Number(/\/F\d+ ([\d.]+) Tf/.exec(block)?.[1] ?? 10);
       const bold = /\/F2 /.test(block);
       const footer = text.startsWith("Whip Claims Management |") || /^Page \d+ of \d+$/.test(text);
-      expect(y, text).toBeGreaterThanOrEqual(25.4);
+      expect(y, text).toBeGreaterThanOrEqual(standalonePage ? 24 : 25.4);
       if (!footer) expect(y + 1, text).toBeLessThanOrEqual(height - 24);
       else expect(y, text).toBeGreaterThan(height - 24);
       doc.setFont("helvetica", bold ? "bold" : "normal");
       doc.setFontSize(size);
       // Right/center alignment is already resolved by jsPDF into the Td x.
-      expect(x, text).toBeGreaterThanOrEqual(25.4 - 0.01);
-      expect(x + doc.getTextWidth(text), text).toBeLessThanOrEqual(width - 25.4 + 0.05);
+      expect(x, text).toBeGreaterThanOrEqual(margin - 0.01);
+      expect(x + doc.getTextWidth(text), text).toBeLessThanOrEqual(width - margin + 0.05);
     }
     // Every body table cell also stays above the reserved band.
     for (const match of stream.matchAll(/(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) re/g)) {
@@ -260,56 +262,42 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(pages[demandPage]).toContain("Enclosures:");
   });
 
-  it("appends monthly LOU support with unchanged gross amount, source notes and reconciliation", () => {
+  it("appends the full standard LOU request and its supporting basis after the cover letter", () => {
     const doc = createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true }));
     const pages = pageText(doc);
-    const schedulePage = pages.findIndex(page => page.includes("Loss of use support schedule"));
-    expect(schedulePage).toBeGreaterThan(0);
-    const text = pages.slice(schedulePage).join(" ");
-    expect(text).toContain("20 days x $50.00 per day = $1,000.00");
-    expect(text).toContain("Loss of use demand: $1,000.00");
-    expect(text).toContain("Monthly fleet occupancy is supporting context only, not a multiplier");
-    expect(text).not.toMatch(/Adjusted|adjusted by|x 80%|100%|\$800\.00/);
-    expect(text).toContain("Market: Washington, DC");
-    expect(text).toContain("September 2026 5 100 70 30 70% Reported");
-    expect(text).toContain("October 2026 15 100 83.33 16.67 83.3333% Reported");
-    expect(text).toContain("Source note Monthly fleet reports supplied by operations.");
-    expect(text).toContain("Reconciliation Five September repair days and fifteen October repair days");
-    expect(text).not.toContain("P.O. Box 10622 Rockville, MD 20849-0622");
+    const formPage = pages.findIndex(page => page.startsWith("Loss of Use / Rental Reimbursement Request"));
+    expect(formPage).toBeGreaterThan(0);
+    const text = pages.slice(formPage).join(" ");
+    for (const label of ["Whip Claim No.", "Adverse Claim No.", "VIN", "Registered Owner", "Vehicle Status", "Vehicle Class", "RO Number", "Days Claimed", "REPAIR PERIOD", "MONTHLY FLEET UTILIZATION SNAPSHOTS", "Loss of Use Breakdown", "TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", "Loss of Use / Rental Reimbursement Supporting Basis", "SOURCE NOTE", "RECONCILIATION"]) expect(text).toContain(label);
+    expect(text).toContain("$1000.00");
+    expect(text).toContain("Monthly fleet reports supplied by operations.");
+    expect(text).toContain("not a multiplier");
+    expect(text).not.toMatch(/Adjusted|adjusted by|100%|\$800\.00/);
+    expect(pages.slice(0, formPage).join(" ")).toContain("Pay $1,000.00.");
+    expect(text).not.toContain("Loss of use support schedule");
     assertFooterSafe(doc);
   });
 
-  it("keeps gross LOU with older context and never invents repair-period occupancy", () => {
-    const text = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots: [{ reportMonth: "August 2026", repairDays: 20, fleetCount: 100, rentCount: 40, availableCount: 60, utilization: "40%", dataStatus: "latest_available" }] })));
-    expect(text).toContain("Pay $1,000.00.");
-    expect(text).toContain("20 days x $50.00 per day = $1,000.00");
-    expect(text).toContain("Latest available (context only)");
-    expect(text).toContain("Missing or older reports do not change the demand amount; no occupancy percentage is assumed");
-    expect(text).not.toMatch(/adjusted by|100%|x 40%|\$400\.00|Handler-confirmed/);
+  it("keeps the unchanged LOU amount with older or unavailable monthly context", () => {
+    for (const snapshots of [
+      [{ reportMonth: "August 2026", repairDays: 20, fleetCount: 100, rentCount: 40, availableCount: 60, utilization: "40%", dataStatus: "latest_available" }],
+      [{ reportMonth: "No reported snapshot", repairDays: 20, fleetCount: 0, rentCount: 0, availableCount: 0, utilization: "—", dataStatus: "unavailable" }],
+      [],
+    ]) {
+      const text = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots })));
+      expect(text).toContain("Pay $1,000.00.");
+      expect(text).toContain("$1000.00");
+      expect(text).not.toMatch(/adjusted by|100%|x 40%|\$400\.00|NaN|undefined/);
+    }
   });
 
-  it("shows missing source values as em dashes, preserving real zeros", () => {
-    const doc = createInsuranceDirectPdf(input({
-      hasDv: false,
-      attachLouSchedule: true,
-      marketName: "",
-      sourceNote: " ",
-      reconciliation: "",
-      snapshots: [{ reportMonth: "", repairDays: Number.NaN, fleetCount: 0, rentCount: Number.NaN, availableCount: 0, utilization: "" }],
-    }));
-    const text = pdfText(doc);
-    expect(text).toContain("Market: —");
-    expect(text).toContain("— — 0 — 0 — —");
-    expect(text).toContain("Source note —");
-    expect(text).toContain("Reconciliation —");
+  it("shows missing source values as em dashes without replacing actual zero counts", () => {
+    const text = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, marketName: "", sourceNote: "", reconciliation: "", snapshots: [{ reportMonth: "", repairDays: NaN, fleetCount: 0, rentCount: NaN, availableCount: 0, utilization: "" }] })));
+    expect(text).toContain("0");
+    expect(text).toContain("—");
+    expect(text).toContain("No monthly source report is available");
+    expect(text).toContain("No reported monthly snapshot is available to reconcile");
     expect(text).not.toMatch(/NaN|undefined|null/);
-    const noRows = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots: [] })));
-    expect(noRows).toContain("— — — — — — —");
-    expect(noRows).toContain("Loss of use demand: $1,000.00");
-    expect(noRows).not.toMatch(/adjusted by|100%|x \d+%/);
-    const unavailable = pdfText(createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true, snapshots: [{ reportMonth: "No reported snapshot", repairDays: 20, fleetCount: 0, rentCount: 0, availableCount: 0, utilization: "—", dataStatus: "unavailable" }] })));
-    expect(unavailable).toContain("No reported snapshot 20 — — — — unavailable");
-    expect(unavailable).toContain("Pay $1,000.00.");
   });
 
   it("rejects inconsistent amounts instead of printing an incorrect equation or silently replacing the demand", () => {

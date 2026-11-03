@@ -55,9 +55,14 @@ describe("Medical Bill Review and total-loss subrogation demand", () => {
     expect(clientSource).toContain('doc.setDrawColor(150, 150, 150); doc.line(lm, y, rm, y); nl(4);');
   });
 
-  it("pushes a complete LOU handoff into Subro Demand and provides an in-demand mini calculator", () => {
+  it("retargets standalone LOU to the active-claim cover letter while preserving the separate Subro mini calculator", () => {
     expect(clientSource).toContain('const LOU_DEMAND_HANDOFF_KEY = "lou_demand_handoff";');
-    expect(clientSource).toContain('onPushToDemand?.(handoff);');
+    const standalone = clientSource.slice(clientSource.indexOf("function LOUCalculatorTab("), clientSource.indexOf("// ─── Tab: Medical Bill Review"));
+    expect(standalone).toContain("Push LOU to Active-Claim Cover Letter");
+    expect(standalone).toContain("setShowDemand(true)");
+    expect(standalone).not.toContain("onPushToDemand");
+    expect(standalone).not.toContain('onNavigate("subro-demand")');
+    expect(standalone).not.toContain('sessionStorage.setItem(LOU_DEMAND_HANDOFF_KEY');
     expect(clientSource).toContain('louHandoff={louDemandHandoff}');
     expect(clientSource).toContain('onLouHandoffConsumed={handleLouHandoffConsumed}');
     expect(clientSource).toContain('aria-label="LOU calculator for this demand"');
