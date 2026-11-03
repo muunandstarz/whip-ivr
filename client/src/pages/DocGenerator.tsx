@@ -16,6 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
+import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
+import { createInsuranceDirectPdf } from "@/lib/insuranceDirectPdf";
 import { jsPDF } from "jspdf";
 import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
@@ -306,9 +308,12 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "carrier-rebuttal", label: "Carrier Rebuttal", icon: Scale },
       { id: "payment-receipt", label: "Payment Receipt", icon: Receipt },
       { id: "urgently-invoice", label: "Towing Invoice", icon: Truck },
-      { id: "lou-calculator", label: "LOU Calculator", icon: Calculator },
       { id: "dv-calculator", label: "DV Calculator", icon: TrendingDown },
     ],
+  },
+  {
+    label: "Insurance Direct",
+    items: [{ id: "lou-calculator", label: "Insurance Direct: Loss of Use", icon: Calculator }],
   },
   {
     label: "Medical Review",
@@ -1261,7 +1266,7 @@ function Panel({
 }) {
   return (
     <div className="border border-border rounded-lg overflow-hidden mb-4">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {tag && (
           <span className="text-[10px] font-mono font-bold text-[#ff6221] bg-[#ff6221]/10 px-1.5 py-0.5 rounded">
@@ -6522,7 +6527,7 @@ const STANDARD_LOU_RATES = [
   { label: "Custom / Enter manually", rate: "" },
 ];
 
-function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: DocGenTab) => void; onPushToDemand?: (handoff: LouDemandHandoff) => void }) {
+function LOUCalculatorTab({ onNavigate, onPushToDemand, initialDraft, onDraftChange }: { onNavigate?: (tab: DocGenTab) => void; onPushToDemand?: (handoff: LouDemandHandoff) => void; initialDraft?: Record<string, unknown>; onDraftChange?: (data: Record<string, unknown>) => void }) {
   // Claim info
   const [claimNumber, setClaimNumber] = useState("");
   const [adverseClaimNo, setAdverseClaimNo] = useState("");
@@ -6533,7 +6538,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   const [ymm, setYmm] = useState("");
   const [vin, setVin] = useState("");
   const [memberDriver, setMemberDriver] = useState("");
-  const [registeredOwner, setRegisteredOwner] = useState("");
+  const [registeredOwner, setRegisteredOwner] = useState("Metrocars Leasing Corp.");
   const [vehicleStatus, setVehicleStatus] = useState("Actively leased / Revenue-generating");
   const [vehicleClass, setVehicleClass] = useState("");
   const [marketCode, setMarketCode] = useState("DC");
@@ -6547,12 +6552,13 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   const [customRate, setCustomRate] = useState("");
   const [louHandlerName, setLouHandlerName] = useState("");
   const [handlerTitle, setHandlerTitle] = useState("Claims Resolution Specialist");
+  const [directDraft, setDirectDraft] = useState<InsuranceDirectDraft>(initialInsuranceDirectDraft);
+  const setDirect = <K extends keyof InsuranceDirectDraft>(key: K, value: InsuranceDirectDraft[K]) => setDirectDraft((current) => ({ ...current, [key]: value }));
+  const { hasLou, hasDv } = directDemandItems(directDraft.mode);
   // Push to demand
   const [pushedToDemand, setPushedToDemand] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [vinDecoding, setVinDecoding] = useState(false);
-
-  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   // ── tRPC market pricing ──
   const { data: allMarkets } = trpc.lou.getMarketPricing.useQuery(undefined, { staleTime: 300_000 });
@@ -6568,7 +6574,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   const utilRows = utilRowsData || [];
   // ── sessionStorage persistence: restore on mount ──
   useEffect(() => {
-    const saved = sessionStorage.getItem("lou_calc_state");
+    const saved = initialDraft && Object.keys(initialDraft).length ? JSON.stringify(initialDraft) : sessionStorage.getItem("lou_calc_state");
     if (saved) {
       try {
         const s = JSON.parse(saved);
@@ -6592,18 +6598,25 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
         if (s.customRate) setCustomRate(s.customRate);
         if (s.louHandlerName) setLouHandlerName(s.louHandlerName);
         if (s.handlerTitle) setHandlerTitle(s.handlerTitle);
+        if (s.directDraft && typeof s.directDraft === "object") setDirectDraft({ ...initialInsuranceDirectDraft(), ...s.directDraft, mode: ["lou", "dv", "both"].includes(s.directDraft.mode) ? s.directDraft.mode : "lou", evidenceConfirmed: false, dopConfirmed: false, authorityVerified: false });
       } catch { /* ignore */ }
     }
   }, []);
   // ── sessionStorage persistence: save on change ──
   useEffect(() => {
-    sessionStorage.setItem("lou_calc_state", JSON.stringify({
+    const draftData = {
       claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster,
       ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode,
       repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate,
-      louHandlerName, handlerTitle,
-    }));
-  }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle]);
+      louHandlerName, handlerTitle, directDraft,
+    };
+    sessionStorage.setItem("lou_calc_state", JSON.stringify(draftData));
+    onDraftChange?.(draftData);
+  }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft]);
+  // A preview belongs only to the exact current inputs, never a stale prior claim.
+  useEffect(() => { setPreviewPdfUrl(null); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, repairFacility, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft]);
+  useEffect(() => () => { if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl); }, [previewPdfUrl]);
+  useEffect(() => { setDirectDraft((current) => ({ ...current, evidenceConfirmed: false, dopConfirmed: false })); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, repairFacility, dropOffDate, pickUpDate, dailyRate, customRate, directDraft.mode, directDraft.insuredName, directDraft.repairCompleted, directDraft.liabilityStatement, directDraft.utilizationOverride, directDraft.utilizationOverrideBasis, directDraft.prelossValue, directDraft.postlossValue, directDraft.dvMethod, directDraft.carfaxReported]);
   // Auto-set rate when vehicle model changes
   useEffect(() => {
     if (vehicleClass && vehicleOptions.length > 0) {
@@ -6627,14 +6640,9 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   };
 
   // Calculate days
-  const calcDays = () => {
-    if (!dropOffDate || !pickUpDate) return 0;
-    const d1 = new Date(dropOffDate), d2 = new Date(pickUpDate);
-    const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  };
+  const calcDays = () => directRepairDays(dropOffDate, pickUpDate);
   const days = calcDays();
-  const effectiveRate = parseFloat(customRate || dailyRate || "0");
+  const effectiveRate = directMoney(customRate || dailyRate || "0");
   const louTotal = (days * effectiveRate).toFixed(2);
 
   // The server resolves reported workbook Occupancy/Utilization values. Never
@@ -6675,6 +6683,10 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
     return rows;
   };
   const utilizationSnapshots = summarizeLouUtilizationRows(getUtilizationRows());
+  const directLou = calculateDirectLou({ days, dailyRate: effectiveRate, snapshots: utilizationSnapshots, utilizationOverride: directDraft.utilizationOverride, utilizationOverrideBasis: directDraft.utilizationOverrideBasis });
+  const dvAmount = directMoney(Math.max(0, directMoney(directDraft.prelossValue) - directMoney(directDraft.postlossValue)));
+  const directTotal = directMoney((hasLou ? directLou.amount : 0) + (hasDv ? dvAmount : 0));
+  const directErrors = validateInsuranceDirectDemand({ draft: directDraft, claimNumber, carrierClaimNumber: adverseClaimNo, carrier: adverseCarrier, adjuster, dateOfLoss, vehicle: ymm, vin, driver: memberDriver, repairFacility, repairStart: dropOffDate, repairEnd: pickUpDate, handlerName: louHandlerName, handlerTitle, dailyRate: effectiveRate, louError: directLou.error, louAmount: directLou.amount });
 
   const handlePushToDemand = () => {
     if (days <= 0 || effectiveRate <= 0) {
@@ -6718,330 +6730,56 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
   };
 
   const handleDownload = (shouldDownload = true) => {
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    const H = doc.internal.pageSize.getHeight();
-    // The footer rule/text occupies the final 12 mm. Reserve a further 8 mm
-    // so a variable utilization narrative or the total can never enter it.
-    const LOU_PAGE_BODY_BOTTOM = H - 20;
-    const LOU_CALCULATION_AND_TOTAL_HEIGHT = 43;
-    let y = addWhipLetterhead(doc, "LOSS OF USE CALCULATION", `Claim #${claimNumber || "[Claim Number]"}`);
-
-    // Title
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    doc.text("Loss of Use / Rental Reimbursement Request", 14, y);
-    y += 6;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text("Monthly Fleet Utilization & Claim Documentation", 14, y);
-    y += 5;
-    doc.text(today, 14, y);
-    y += 8;
-
-    // Claim info table
-    const claimRows = [
-      ["Whip Claim No.", claimNumber || "—"],
-      ["Adverse Claim No.", adverseClaimNo || "—"],
-      ["Date of Loss", dateOfLoss || "—"],
-      ["Adverse Carrier", adverseCarrier || "—"],
-      ["Vehicle", ymm || "—"],
-      ["VIN", vin || "—"],
-      ["Member / Driver", memberDriver || "—"],
-      ["Registered Owner", registeredOwner || "—"],
-      ["Vehicle Status", vehicleStatus || "—"],
-      ["Vehicle Class", vehicleClass || "—"],
-    ];
-    const colW = (W - 28) / 2;
-    for (const [label, value] of claimRows) {
-      doc.setFillColor(248, 248, 248);
-      doc.rect(14, y, W - 28, 6.5, "F");
-      doc.setDrawColor(220, 220, 220);
-      doc.rect(14, y, W - 28, 6.5, "S");
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text(label, 16, y + 4.5);
-      doc.setFont("helvetica", "normal");
-      doc.text(value, 16 + colW, y + 4.5);
-      y += 6.5;
-    }
-    y += 6;
-
-    // Repair Period section
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(23, 27, 49);
-    doc.text("REPAIR PERIOD", 14, y);
-    y += 2;
-    doc.setDrawColor(23, 27, 49);
-    doc.setLineWidth(0.5);
-    doc.line(14, y, W - 14, y);
-    doc.setLineWidth(0.2);
-    y += 4;
-
-    const repairRows = [
-      ["Repair Facility", repairFacility || "—"],
-      ["RO Number", roNumber || "—"],
-      ["Drop-Off Date", dropOffDate || "—"],
-      ["Pick-Up Date", pickUpDate || "—"],
-      ["Total Days in Repair", String(days)],
-      ["Days Claimed", String(days)],
-    ];
-    for (const [label, value] of repairRows) {
-      doc.setFillColor(248, 248, 248);
-      doc.rect(14, y, W - 28, 6.5, "F");
-      doc.setDrawColor(220, 220, 220);
-      doc.rect(14, y, W - 28, 6.5, "S");
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text(label, 16, y + 4.5);
-      doc.setFont("helvetica", "normal");
-      doc.text(value, 16 + colW, y + 4.5);
-      y += 6.5;
-    }
-    y += 6;
-
-    // Monthly Fleet Utilization Snapshot section. The source report is monthly,
-    // so presenting one snapshot per report month is materially more accurate
-    // than repeating the same values once for every repair date.
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(23, 27, 49);
-    doc.text("MONTHLY FLEET UTILIZATION SNAPSHOTS", 14, y);
-    y += 2;
-    doc.setDrawColor(23, 27, 49);
-    doc.setLineWidth(0.5);
-    doc.line(14, y, W - 14, y);
-    doc.setLineWidth(0.2);
-    y += 4;
-
-    // Utilization methodology note
-    const methodNote = `The Whip Utilization Report is a monthly market snapshot, not a daily tracking feed. This table therefore shows one reconciled snapshot for each applicable report month, rather than repeating the same month-end numbers for every repair day. The report supplies Rented, Reported Unrented, Rentable Fleet, and Occupancy values.`;
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    const methodLines = doc.splitTextToSize(methodNote, W - 28);
-    doc.text(methodLines, 14, y);
-    y += methodLines.length * 4 + 4;
-
-    const utilRows = getUtilizationRows();
-    const utilizationSnapshots = summarizeLouUtilizationRows(utilRows);
-    // Utilization table header
-    doc.setFillColor(23, 27, 49);
-    doc.rect(14, y, W - 28, 10, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(6.2);
-    doc.setFont("helvetica", "bold");
-    const cols = [14, 45, 60, 91, 111, 130, 166];
-    const headers = ["Report month", "Repair days", "Location", "Rentable fleet", "Rented", "Reported", "Occupancy"];
-    headers.forEach((h, i) => doc.text(h, cols[i] + 1, y + 4));
-    doc.setFontSize(5.6);
-    doc.text("unrented", cols[5] + 1, y + 7.5);
-    y += 10;
-
-    // Utilization snapshots, one per actual report month.
-    for (let i = 0; i < utilizationSnapshots.length; i++) {
-      const snapshot = utilizationSnapshots[i]!;
-      if (y + 6 > LOU_PAGE_BODY_BOTTOM) {
-        addLetterFooter(doc);
-        doc.addPage();
-        y = 24;
-      }
-      if (i % 2 === 0) { doc.setFillColor(248, 248, 252); doc.rect(14, y, W - 28, 6, "F"); }
-      doc.setTextColor(40, 40, 40);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.text(snapshot.reportMonth, cols[0] + 1, y + 4);
-      doc.text(String(snapshot.repairDays), cols[1] + 1, y + 4);
-      doc.text(marketName, cols[2] + 1, y + 4);
-      doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.fleetCount), cols[3] + 1, y + 4);
-      doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.rentCount), cols[4] + 1, y + 4);
-      doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.availableCount), cols[5] + 1, y + 4);
-      doc.setTextColor(40, 40, 40);
-      doc.setFont("helvetica", "bold");
-      doc.text(snapshot.utilization, cols[6] + 1, y + 4);
-      doc.setTextColor(40, 40, 40);
-      doc.setFont("helvetica", "normal");
-      y += 6;
-    }
-    y += 4;
-
-    // Preserve the source material, but render it on the supporting page so
-    // the first-page total retains a clear fixed-footer exclusion zone.
-    const utilizationSourceNote = louUtilizationSourceNote(utilRows);
-    const methLines = doc.splitTextToSize(utilizationSourceNote, W - 30);
-    const reconciliation = louUtilizationReconciliation(utilizationSnapshots);
-    const reconciliationLines = doc.splitTextToSize(reconciliation, W - 28);
-    const calculationNeedsSupportingPage = y + LOU_CALCULATION_AND_TOTAL_HEIGHT > LOU_PAGE_BODY_BOTTOM;
-    const renderCalculationAndTotal = () => {
-      // LOU Breakdown section
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(23, 27, 49);
-      doc.text("LOSS OF USE / RENTAL CALCULATION", 14, y);
-      y += 2;
-      doc.setDrawColor(23, 27, 49);
-      doc.setLineWidth(0.5);
-      doc.line(14, y, W - 14, y);
-      doc.setLineWidth(0.2);
-      y += 6;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text("Loss of Use Breakdown", 14, y);
-      y += 6;
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Days Out of Service: ${days} × Daily Rate (Whip Standard Rate): $${effectiveRate.toFixed(2)}`, 14, y);
-      y += 5;
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "italic");
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Rate basis: ${ymm || "Vehicle"} — Whip Standard Rate, ${marketName} market ($${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day)`, 14, y);
-      y += 8;
-      // Total box
-      doc.setFillColor(23, 27, 49);
-      doc.rect(14, y, W - 28, 10, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", 16, y + 6.5);
-      doc.setFontSize(11);
-      doc.text(`$${louTotal}`, W - 16, y + 6.5, { align: "right" });
-      y += 16;
-    };
-    if (!calculationNeedsSupportingPage) renderCalculationAndTotal();
-
-    // Close the factual calculation page before rendering source material and
-    // legal support. The Whip letterhead is intentionally limited to page one.
-    addLetterFooter(doc);
-    const startSupportingPage = (continued = false) => {
-      doc.addPage();
-      y = 24;
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text(
-        continued
-          ? "Loss of Use / Rental Reimbursement Supporting Basis (continued)"
-          : "Loss of Use / Rental Reimbursement Supporting Basis",
-        14,
-        y
-      );
-      y += 6;
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(100, 100, 100);
-      doc.text("Attached to the preceding monthly utilization snapshot and reimbursement calculation.", 14, y);
-      y += 10;
-    };
-    const ensureSupportingSpace = (needed: number) => {
-      if (y + needed <= LOU_PAGE_BODY_BOTTOM) return;
-      addLetterFooter(doc);
-      startSupportingPage(true);
-    };
-    startSupportingPage();
-
-    const sourceBlockHeight = methLines.length * 3.5 + 8;
-    const reconciliationBlockHeight = reconciliationLines.length * 3.5 + 8;
-    ensureSupportingSpace(sourceBlockHeight + reconciliationBlockHeight);
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(80, 80, 80);
-    doc.setFillColor(245, 245, 250);
-    doc.rect(14, y, W - 28, methLines.length * 3.5 + 4, "F");
-    doc.text(methLines, 16, y + 3.5);
-    y += sourceBlockHeight;
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(60, 60, 60);
-    doc.text(reconciliationLines, 14, y);
-    y += reconciliationBlockHeight;
-    if (calculationNeedsSupportingPage) {
-      ensureSupportingSpace(LOU_CALCULATION_AND_TOTAL_HEIGHT);
-      renderCalculationAndTotal();
-    }
-
-    // Legal basis section
-    const legalText1 = "Under the common law of negligence and the applicable state tort statutes, a tortfeasor is liable for all economic losses proximately caused by their negligent act, including loss of use of a damaged vehicle. Loss of use damages are recoverable by the owner of a revenue-generating vehicle for each day the vehicle is out of service due to the collision — regardless of whether a substitute vehicle was rented. See, e.g., Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).";
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    const legal1Lines = doc.splitTextToSize(legalText1, W - 28);
-    ensureSupportingSpace(6 + legal1Lines.length * 4 + 4);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    doc.text("Legal Basis — Tort / Third-Party Liability:", 14, y);
-    y += 6;
-
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    doc.text(legal1Lines, 14, y);
-    y += legal1Lines.length * 4 + 4;
-
-    const displayedUtilizationRows = getUtilizationRows();
-    const reportedUtilization = displayedUtilizationRows.find((row) => row.utilization !== "—")?.utilization;
-    const legalText2 = `The subject vehicle is registered to ${registeredOwner || "the registered owner"} and is identified as a revenue-generating fleet asset. It was unavailable for service during the repair period described above. The requested loss of use equals the applicable daily rate multiplied by the documented days out of service. ${reportedUtilization ? `The attached monthly utilization snapshot records ${reportedUtilization} market occupancy in the applicable report month and supports the business basis for this claimed out-of-service period.` : "No reported market-utilization percentage was available for the requested period, so this schedule does not represent one."} This request remains subject to the applicable jurisdiction, policy, liability, repair-period, and claim-specific evidence.`;
-    const legal2Lines = doc.splitTextToSize(legalText2, W - 28);
-    ensureSupportingSpace(legal2Lines.length * 4 + 4);
-    doc.text(legal2Lines, 14, y);
-    y += legal2Lines.length * 4 + 4;
-
-    const noteText = "Note: If the Loss of Use amount above is zero, Loss of Use is not being claimed on this file. Please contact us directly if additional documentation is required for review.";
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(100, 100, 100);
-    const noteLines = doc.splitTextToSize(noteText, W - 28);
-    const signatureHeight = louHandlerName ? 28 : 23;
-    ensureSupportingSpace(noteLines.length * 4 + 8 + signatureHeight);
-    doc.text(noteLines, 14, y);
-    y += noteLines.length * 4 + 8;
-
-    // Signature
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    doc.text("Respectfully,", 14, y);
-    y += 8;
-    doc.setFont("helvetica", "bold");
-    doc.text("Whip Claims Management", 14, y);
-    y += 5;
-    doc.setFont("helvetica", "normal");
-    if (louHandlerName) { doc.text(louHandlerName, 14, y); y += 5; }
-    doc.text(handlerTitle, 14, y);
-    y += 5;
-    doc.text("(855) 906-5949  |  claims@drivewhip.com", 14, y);
-    y += 5;
-    doc.text("P.O. Box 10622, Rockville, MD 20849", 14, y);
-
-    addSOLNotice(doc);
-    addLetterFooter(doc);
+    if (directErrors.length) { toast.error(directErrors[0]); return; }
+    const doc = createInsuranceDirectPdf({
+      letterDate: formatNorthAmericanLetterDate(directDraft.letterDate), claimNumber, carrierClaimNumber: adverseClaimNo,
+      dateOfLoss: formatNorthAmericanLetterDate(dateOfLoss), carrier: adverseCarrier, adjuster, insuredName: directDraft.insuredName,
+      driver: memberDriver, vehicle: ymm, vin, repairFacility,
+      repairCompleted: formatNorthAmericanLetterDate(directDraft.repairCompleted || pickUpDate),
+      liabilityStatement: directDraft.liabilityStatement,
+      hasLou, hasDv, louDays: days, dailyRate: effectiveRate,
+      utilizationPercent: directLou.percent ?? 0, utilizationBasis: directLou.basis,
+      louAmount: hasLou ? directLou.amount : 0, repairStart: formatNorthAmericanLetterDate(dropOffDate), repairEnd: formatNorthAmericanLetterDate(pickUpDate),
+      prelossValue: directMoney(directDraft.prelossValue), postlossValue: directMoney(directDraft.postlossValue),
+      dvAmount: hasDv ? dvAmount : 0, dvMethod: directDraft.dvMethod,
+      carfaxReported: hasDv && directDraft.carfaxReported,
+      stateAuthority: directDraft.authorityVerified ? directDraft.stateAuthority : "",
+      handlerName: louHandlerName, handlerTitle, handlerExtension: directDraft.handlerExtension,
+      handlerEmail: directDraft.handlerEmail || "claims@drivewhip.com", logoBase64: WHIP_LOGO_B64,
+      snapshots: utilizationSnapshots, marketName, sourceNote: louUtilizationSourceNote(getUtilizationRows()),
+      reconciliation: louUtilizationReconciliation(utilizationSnapshots), attachLouSchedule: hasLou,
+    });
     setPreviewPdfUrl(getPDFDataUrl(doc));
-    if (shouldDownload) downloadPDF(doc, `Whip_LOU_${claimNumber || "Draft"}.pdf`);
+    if (shouldDownload) downloadPDF(doc, `Whip_Insurance_Direct_${directDraft.mode.toUpperCase()}_${claimNumber || "Draft"}.pdf`);
   };
   const handlePreviewOnly = () => { handleDownload(false); };
 
   return (
     <div className="space-y-4 max-w-4xl">
-      <Panel title="Claim Information">
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Whip Claim No." id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="e.g. MD6178755821307337" required />
-          <Field label="Adverse Claim No." id="lou-adverse" value={adverseClaimNo} onChange={setAdverseClaimNo} placeholder="e.g. 70099283384-1-2" />
-          <Field label="Date of Loss" id="lou-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" />
+      <Panel title="Insurance Direct: Loss of Use" tag="REPAIRS COMPLETED · NOT SUBROGATION">
+        <p className="mb-3 text-xs leading-5 text-muted-foreground">Use for direct demands to the responsible carrier after the vehicle has been repaired in real time. Choose loss of use, documented diminished value, or both. The letter demands these items in addition to repair costs; it does not demand repair costs again. No letter is sent automatically.</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1"><Label htmlFor="lou-direct-mode" className="text-xs font-semibold">Demand items</Label><select id="lou-direct-mode" className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs" value={directDraft.mode} onChange={(event) => setDirect("mode", event.target.value as InsuranceDirectDraft["mode"])}><option value="lou">Loss of Use only</option><option value="dv">Diminished Value only</option><option value="both">Loss of Use and Diminished Value</option></select></div>
+          <Field label="Letter Date" id="lou-letter-date" value={directDraft.letterDate} onChange={(value) => setDirect("letterDate", value)} type="date" required />
+          <Field label="Their Insured's Name" id="lou-insured" value={directDraft.insuredName} onChange={(value) => setDirect("insuredName", value)} placeholder="Carrier's insured — not the Whip driver" required />
+          <Field label="Repair Completed Date" id="lou-completed" value={directDraft.repairCompleted || pickUpDate} onChange={(value) => setDirect("repairCompleted", value)} type="date" required />
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          <Field label="Adverse Carrier" id="lou-carrier" value={adverseCarrier} onChange={setAdverseCarrier} placeholder="e.g. Farmers Insurance" />
-          <Field label="Adjuster" id="lou-adjuster" value={adjuster} onChange={setAdjuster} placeholder="e.g. John Smith" />
+        <div className="mt-3"><TextareaField label="Verified Liability Statement" id="lou-liability" value={directDraft.liabilityStatement} onChange={(value) => setDirect("liabilityStatement", value)} placeholder="Enter the verified liability position for this claim. Do not imply the carrier accepted liability unless confirmed." rows={2} /></div>
+      </Panel>
+      <Panel title="Claim Information">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Field label="Whip Claim No." id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="XXX-1234-123456-123456" required />
+          <Field label="Their Claim No." id="lou-adverse" value={adverseClaimNo} onChange={setAdverseClaimNo} placeholder="Carrier's claim reference" required />
+          <Field label="Date of Loss" id="lou-dol" value={dateOfLoss} onChange={setDateOfLoss} type="date" required />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <Field label="Their Insurance Carrier" id="lou-carrier" value={adverseCarrier} onChange={setAdverseCarrier} placeholder="e.g. Farmers Insurance" required />
+          <Field label="Their Adjuster" id="lou-adjuster" value={adjuster} onChange={setAdjuster} placeholder="Carrier's handling adjuster" required />
         </div>
       </Panel>
 
       <Panel title="Vehicle Information">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Year / Make / Model" id="lou-ymm" value={ymm} onChange={setYmm} placeholder="e.g. TOYOTA CAMRY LE 2023" required />
           <div className="space-y-1">
             <Label className="text-xs font-semibold text-foreground/80">VIN</Label>
@@ -7068,9 +6806,9 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          <Field label="Member / Driver" id="lou-driver" value={memberDriver} onChange={setMemberDriver} placeholder="First Last" />
-          <Field label="Registered Owner" id="lou-owner" value={registeredOwner} onChange={setRegisteredOwner} placeholder="e.g. Metro Cars Leasing Corp." />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <Field label="Whip Driver" id="lou-driver" value={memberDriver} onChange={setMemberDriver} placeholder="First Last" required />
+          <div className="space-y-1"><Label htmlFor="lou-owner" className="text-xs font-semibold">Vehicle Owner</Label><Input id="lou-owner" value="Metrocars Leasing Corp." readOnly className="h-8 text-sm bg-muted/30" /></div>
         </div>
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div>
@@ -7085,6 +6823,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
           <div>
             <label className="block text-xs font-medium text-foreground/70 mb-1">Vehicle Class</label>
             <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={vehicleClass} onChange={e => setVehicleClass(e.target.value)}>
+              <option value="">— Select vehicle class —</option>
               {vehicleOptions.map(v => <option key={v.model} value={v.model}>{v.model} — ${v.dailyRate.toFixed(2)}/day</option>)}
             </select>
           </div>
@@ -7097,24 +6836,24 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
         </div>
       </Panel>
 
-      <Panel title="Repair Period" tag="AUTO-CALCULATES">
+      <Panel title="Completed Repair Period" tag="RETURN DATE EXCLUDED FROM LOU DAYS">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Repair Facility" id="lou-facility" value={repairFacility} onChange={setRepairFacility} placeholder="e.g. Total Recon — Laurel" />
           <Field label="RO Number" id="lou-ro" value={roNumber} onChange={setRoNumber} placeholder="e.g. 1739" />
         </div>
-        <div className="grid grid-cols-3 gap-3 mt-3">
+        {hasLou && <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
           <Field label="Drop-Off Date" id="lou-dropoff" value={dropOffDate} onChange={setDropOffDate} type="date" required />
-          <Field label="Pick-Up Date" id="lou-pickup" value={pickUpDate} onChange={setPickUpDate} type="date" required />
+          <Field label="Returned to Service" id="lou-pickup" value={pickUpDate} onChange={setPickUpDate} type="date" required />
           <div className="flex flex-col justify-end">
             <div className="p-2 rounded-md bg-muted/40 border border-border text-center">
               <div className="text-xs text-muted-foreground">Days in Repair</div>
               <div className="text-2xl font-bold text-foreground">{days}</div>
             </div>
           </div>
-        </div>
+        </div>}
       </Panel>
 
-      <Panel title="Daily Rate" tag="AUTO-CALCULATES">
+      {hasLou && <Panel title="Daily Rate & Period Utilization" tag="DIRECT DEMAND IS UTILIZATION-ADJUSTED">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-foreground/70 mb-1">Whip Standard Rate</label>
@@ -7132,48 +6871,59 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
             Rate basis: {ymm || vehicleClass} — Whip Standard Rate, {marketName} market (${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = ${effectiveRate.toFixed(2)}/day)
           </div>
         )}
-      </Panel>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">Direct LOU = days × daily rate × supported period utilization. Matching reported months are weighted by repair days. Monthly snapshots remain monthly approximations, not a daily fleet log. An older report or missing month does not default to 100%.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <Field label="Verified Period Utilization Override (%)" id="lou-util-override" value={directDraft.utilizationOverride} onChange={(value) => setDirect("utilizationOverride", value)} type="number" placeholder="Blank = matching source months only" />
+          <Field label="Override Source / Dates / Basis" id="lou-util-basis" value={directDraft.utilizationOverrideBasis} onChange={(value) => setDirect("utilizationOverrideBasis", value)} placeholder="Verified source and period supported" />
+        </div>
+        <p className={`mt-2 text-xs leading-5 ${directLou.error ? "text-amber-800" : "text-muted-foreground"}`}>{directLou.error || `${directLou.percent?.toFixed(2)}% — ${directLou.basis}`}</p>
+      </Panel>}
+
+      {hasDv && <Panel title="Diminished Value" tag="DOCUMENTED APPRAISAL · NOT AN AUTOMATED VALUATION">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Appraised Pre-Loss Value ($)" id="lou-dv-pre" value={directDraft.prelossValue} onChange={(value) => setDirect("prelossValue", value)} type="number" required />
+          <Field label="Appraised Post-Repair Value ($)" id="lou-dv-post" value={directDraft.postlossValue} onChange={(value) => setDirect("postlossValue", value)} type="number" required />
+        </div>
+        <div className="mt-3"><TextareaField label="Appraisal Method / Source Reference" id="lou-dv-method" value={directDraft.dvMethod} onChange={(value) => setDirect("dvMethod", value)} placeholder="Method and exhibit/reference from the actual appraisal" rows={2} /></div>
+        <div className="mt-3 flex items-center justify-between gap-3"><label className="flex items-center gap-2 text-xs"><Checkbox checked={directDraft.carfaxReported} onCheckedChange={(checked) => setDirect("carfaxReported", checked === true)} />Loss appears on the Carfax history report being enclosed</label><p className="text-sm font-semibold">Documented DV: ${dvAmount.toFixed(2)}</p></div>
+      </Panel>}
 
       <Panel title="Handler">
         <div className="grid grid-cols-2 gap-3">
-          <HandlerSelect value={louHandlerName} onChange={setLouHandlerName} label="Handler Name" id="lou-handler" />
+          <HandlerSelect value={louHandlerName} onChange={setLouHandlerName} onHandlerChange={(handler) => setDirect("handlerExtension", handler.extension || "")} label="Handler Name" id="lou-handler" />
           <Field label="Title" id="lou-title" value={handlerTitle} onChange={setHandlerTitle} placeholder="e.g. Claims Resolution Specialist" />
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><Field label="Handler Extension" id="lou-handler-ext" value={directDraft.handlerExtension} onChange={(value) => setDirect("handlerExtension", value)} placeholder="Auto-fills from the IVR directory" /><Field label="Handler Email" id="lou-handler-email" value={directDraft.handlerEmail} onChange={(value) => setDirect("handlerEmail", value)} placeholder="claims@drivewhip.com" /></div>
       </Panel>
 
-      {/* LOU Summary */}
-      <div className="p-4 rounded-xl border-2 border-[#ff6221]/30 bg-[#ff6221]/5">
-        <div className="flex items-center justify-between">
+      <Panel title="Supporting Packet & Optional Authority" tag="HANDLER VERIFIED">
+        <TextareaField label="Optional Verified Authority for the Loss State" id="lou-state-authority" value={directDraft.stateAuthority} onChange={(value) => { setDirectDraft((current) => ({ ...current, stateAuthority: value, authorityVerified: false })); }} placeholder="Leave blank unless the exact citation and relevance to this loss state have been verified. No default legal authority is inserted." rows={2} />
+        {directDraft.stateAuthority.trim() && <label className="mt-2 flex items-center gap-2 text-xs"><Checkbox checked={directDraft.authorityVerified} onCheckedChange={(checked) => setDirect("authorityVerified", checked === true)} />I verified this authority and its applicability to the loss state.</label>}
+        <label className="mt-3 flex items-start gap-2 text-xs leading-5"><Checkbox checked={directDraft.evidenceConfirmed} onCheckedChange={(checked) => setDirect("evidenceConfirmed", checked === true)} /><span>Repairs are completed. The claim supports the stated liability position and selected amounts. I will enclose the repair estimate/final bill and image report{hasLou ? ", and the loss-of-use summary plus supporting fleet/utilization records" : ""}{hasDv ? ", and the diminished-value appraisal" : ""}{hasDv && directDraft.carfaxReported ? ", including the Carfax history report" : ""}.</span></label>
+        <label className="mt-3 flex items-start gap-2 text-xs leading-5"><Checkbox checked={directDraft.dopConfirmed} onCheckedChange={(checked) => setDirect("dopConfirmed", checked === true)} /><span>The Direction of Pay and Vehicle Ownership Notice for Metrocars Leasing Corp. will be enclosed. This generator does not create or attach those source exhibits automatically.</span></label>
+      </Panel>
+
+      {/* Direct-insurance summary: distinct from the unchanged subrogation handoff. */}
+      <div className="p-4 rounded-xl border border-border bg-muted/20">
+        <div className="flex flex-wrap gap-4 items-center justify-between">
           <div>
-            <div className="text-xs text-[#ff6221]/70 font-medium uppercase tracking-wider">Total LOU / Rental Reimbursement</div>
-            <div className="text-3xl font-bold text-[#ff6221]">${louTotal}</div>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Insurance Direct — Total Demand</div>
+            <div className="text-3xl font-bold text-foreground">${directTotal.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              {days} days × ${effectiveRate.toFixed(2)}/day · {vehicleClass} · {marketName}
+              {hasLou ? `LOU: ${days} days × $${effectiveRate.toFixed(2)}/day × ${directLou.percent?.toFixed(2) || "unverified"}% = $${directLou.amount.toFixed(2)}` : ""}{hasLou && hasDv ? " · " : ""}{hasDv ? `DV: $${dvAmount.toFixed(2)}` : ""}
             </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className={`gap-1.5 ${pushedToDemand ? "border-green-500 text-green-600" : "border-[#ff6221]/40 text-[#ff6221] hover:bg-[#ff6221]/10"}`}
-              onClick={handlePushToDemand}
-            >
-              {pushedToDemand ? <CheckCircle className="w-3.5 h-3.5" /> : <Calculator className="w-3.5 h-3.5" />}
-              {pushedToDemand ? "Pushed!" : "Push to Demand Letter"}
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5 bg-[#ff6221] hover:bg-[#e5541a] text-white"
-              onClick={() => handleDownload()}
-            >
-              <Download className="w-3.5 h-3.5" /> Download PDF
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handlePreviewOnly}><Eye className="w-3.5 h-3.5" />Preview Demand</Button>
+            <Button size="sm" className="gap-1.5 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => handleDownload()}><Download className="w-3.5 h-3.5" />Download Demand Packet</Button>
           </div>
         </div>
+        {directErrors.length > 0 && <details className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground"><summary className="cursor-pointer font-semibold text-foreground">Complete before generating — {directErrors.length} remaining checks</summary><ul className="mt-2 list-disc pl-4 space-y-1">{directErrors.map((error) => <li key={error}>{error}</li>)}</ul></details>}
+        {hasLou && <details className="mt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">Separate subrogation workflow (unchanged)</summary><p className="mt-2">This optional handoff transfers the existing gross LOU calculator amount (${louTotal}) to Subro Demand, not this utilization-adjusted direct demand. It does not transfer DV or create a subrogation claim.</p><Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={handlePushToDemand}>{pushedToDemand ? <CheckCircle className="w-3.5 h-3.5" /> : <Calculator className="w-3.5 h-3.5" />}{pushedToDemand ? "Pushed!" : "Push Gross LOU to Subro Demand"}</Button></details>}
       </div>
 
       {/* Monthly Fleet Utilization Preview */}
-      {days > 0 && dropOffDate && pickUpDate && (
+      {hasLou && days > 0 && dropOffDate && pickUpDate && (
         <Panel title="Monthly Fleet Utilization Snapshot Preview" tag="INCLUDED IN PDF">
           <p className="mb-2 text-xs text-muted-foreground">One row is shown for each source reporting month. “Reported unrented” accounts for the unoccupied portion of the report’s rentable-fleet denominator; this is not a daily utilization feed.</p>
           <div className="overflow-x-auto">
@@ -7213,7 +6963,7 @@ function LOUCalculatorTab({ onNavigate, onPushToDemand }: { onNavigate?: (tab: D
           text=""
           onCopy={() => toast.info("Copy the PDF from the preview")}
           onDownload={handleDownload}
-          filename={`Whip_LOU_${claimNumber || "Draft"}.pdf`}
+          filename={`Whip_Insurance_Direct_${directDraft.mode.toUpperCase()}_${claimNumber || "Draft"}.pdf`}
           pdfUrl={previewPdfUrl}
         
         onPreview={handlePreviewOnly}/>
@@ -9457,6 +9207,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     setActiveTab(normalizeDocGeneratorTab(draft.tabKey));
     setCurrentDraftId(draft.id);
     setCurrentFormData(draft.formData as Record<string, unknown>);
+    if (draft.tabKey === "lou-calculator") setFormResetKey((key) => key + 1);
     setShowMyDocs(false);
     toast.info("Draft loaded — fill in the form and generate");
   };
@@ -9469,6 +9220,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
     setActiveTab(normalizeDocGeneratorTab(t.tabKey));
     setCurrentFormData(t.formData as Record<string, unknown>);
+    if (t.tabKey === "lou-calculator") setFormResetKey((key) => key + 1);
     markReadMut.mutate({ templateId: t.id });
     setShowSharedTemplates(false);
     toast.info("Shared template loaded");
@@ -9494,7 +9246,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "urgently-invoice": return <UrgentlyInvoiceTab />;
       case "pip-exhaustion": return <PIPExhaustionTab />;
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
-      case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} />;
+      case "lou-calculator": return <LOUCalculatorTab onNavigate={setActiveTab} onPushToDemand={handleLouDemandHandoff} initialDraft={currentFormData.directDraft ? currentFormData : undefined} onDraftChange={setCurrentFormData} />;
       case "pip-bill-review": return <MedicalReviewWorkspace />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
@@ -9521,7 +9273,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     <WhipLayout>
       <div className="document-neutral flex h-full min-h-0">
         {/* Sidebar Nav */}
-        <aside className="w-56 shrink-0 border-r border-border bg-muted/20 overflow-y-auto flex flex-col">
+        <aside className="hidden md:flex w-56 shrink-0 border-r border-border bg-muted/20 overflow-y-auto flex-col">
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-[#ff6221]" />
@@ -9595,9 +9347,14 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
 
         {/* Main Content */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="md:hidden shrink-0 border-b border-border bg-muted/20 px-4 py-3 space-y-2">
+            <Label htmlFor="docgen-mobile-form" className="text-xs font-semibold">Document Generator — Select Form</Label>
+            <select id="docgen-mobile-form" className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm" value={activeTab} onChange={(event) => setActiveTab(event.target.value as DocGenTab)}>{NAV_GROUPS.map((group) => <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select>
+            <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowMyDocs(!showMyDocs)}>My Documents</Button><Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShowSharedTemplates(!showSharedTemplates)}>Shared with Me</Button></div>
+          </div>
           {/* Header bar */}
-          <div className="px-6 py-3 border-b border-border flex items-center gap-3 bg-background shrink-0">
-            <div className="flex items-center gap-1.5 text-sm">
+          <div className="px-4 md:px-6 py-3 border-b border-border flex flex-wrap items-center gap-3 bg-background shrink-0">
+            <div className="hidden md:flex items-center gap-1.5 text-sm">
               <span className="text-foreground/50 font-medium">Document Generator</span>
               <ChevronRight className="w-3.5 h-3.5 text-foreground/30" />
               <span className="font-bold text-foreground">{activeLabel}</span>
@@ -9606,7 +9363,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
               className={`ml-0.5 transition-colors ${isFavorite ? "text-amber-400" : "text-foreground/30 hover:text-amber-400"}`}>
               <Star className={`w-4 h-4 ${isFavorite ? "fill-amber-400" : ""}`} />
             </button>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               {activeTab !== "klutch-policy-declarations" && (
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={handleClearForm} title="Clear all fields and the preview for this generator">
                   <RotateCcw className="w-3.5 h-3.5" /> Clear Form
@@ -9733,7 +9490,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
 
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
+            <div className="p-3 sm:p-6">
               <div key={`${activeTab}-${formResetKey}`}>
                 {renderTab()}
               </div>
