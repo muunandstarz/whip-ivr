@@ -44,7 +44,7 @@ describe("Standard LOU form and active-claim attachment", () => {
     const original = record(); const before = structuredClone(original);
     const standalone = pages(createStandaloneLouPdf(original)).join(" ");
     const pdf = createInsuranceDirectPdf(cover(original)); const packet = pages(pdf);
-    const firstFormPage = packet.findIndex(p => p.startsWith("Loss of Use / Rental Reimbursement Request"));
+    const firstFormPage = packet.findIndex(p => p.includes("Loss of Use / Rental Reimbursement Request") && p.includes("Monthly Fleet Utilization & Claim Documentation"));
     expect(firstFormPage).toBeGreaterThan(0);
     expect(packet.slice(0, firstFormPage).join(" ")).toContain("Pay $3,500.00.");
     const appended = packet.slice(firstFormPage).join(" ");
@@ -84,7 +84,9 @@ describe("Standard LOU form and active-claim attachment", () => {
     for (const text of [standalone, appended]) {
       expect(text).toContain("$429.00/wk");
       expect(text).toContain("$61.29/day");
-      expect(text).toContain("DriveWhip_Rate_Sheet.xlsx");
+      expect(text).not.toContain("DriveWhip_Rate_Sheet.xlsx");
+      expect(text).not.toContain("RATE SOURCE");
+      expect(text).toContain("Rate basis:");
       expect(text).not.toContain("$429.03/wk");
     }
   });

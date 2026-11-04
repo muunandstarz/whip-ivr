@@ -20,7 +20,7 @@ import { findLouVehicleRate, louRateSourceLabel } from "@shared/louRates";
 import { buildDvReportReference, dvReportConflicts, DV_REFERENCE_STARTER, type DvReportFacts } from "@shared/insuranceDirectDv";
 import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, LIABILITY_STATEMENT_EXAMPLES, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
 import { createInsuranceDirectPdf } from "@/lib/insuranceDirectPdf";
-import { createStandaloneLouPdf, type StandaloneLouInput } from "@/lib/standaloneLouPdf";
+import { createStandaloneLouPdf, appendLouPacketAttachment, numberLouPages, type StandaloneLouInput } from "@/lib/standaloneLouPdf";
 import { jsPDF } from "jspdf";
 import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
@@ -208,6 +208,10 @@ type LouSupportingSchedule = {
   total: number;
   weeklyRate?: number;
   rateSource?: string;
+  customRate: boolean;
+  letterDate: string;
+  handlerExtension: string;
+  handlerEmail: string;
   handlerName: string;
   handlerTitle: string;
   utilizationRows: LouUtilizationRow[];
@@ -626,185 +630,26 @@ function getPDFDataUrl(doc: jsPDF): string {
  * the same PDF packet.
  */
 function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule) {
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
-  const lm = 14;
-  const rm = W - 14;
-  const tw = W - 28;
-  const addSchedulePage = (continued = false) => {
-    doc.addPage();
-    let start = addWhipLetterhead(doc, "LOSS OF USE SUPPORTING SCHEDULE", `Claim #${schedule.claimNumber || "[Claim Number]"}`);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(30, 30, 30);
-    doc.text(continued ? "Loss of Use / Rental Reimbursement Schedule (continued)" : "Loss of Use / Rental Reimbursement Supporting Schedule", lm, start);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text("Monthly fleet snapshots, calculation, and supporting claim documentation", lm, start + 5);
-    return start + 12;
-  };
-  let y = addSchedulePage();
-  const ensure = (needed: number) => {
-    if (y + needed > H - 20) y = addSchedulePage(true);
-  };
-  const section = (title: string) => {
-    ensure(12);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(25, 25, 25);
-    doc.text(title, lm, y);
-    y += 2;
-    doc.setDrawColor(150, 150, 150);
-    doc.setLineWidth(0.4);
-    doc.line(lm, y, rm, y);
-    doc.setLineWidth(0.2);
-    y += 4;
-  };
-  const infoRows = (rows: Array<[string, string]>) => {
-    const labelWidth = 50;
-    for (const [label, value] of rows) {
-      ensure(7);
-      doc.setFillColor(248, 248, 248);
-      doc.rect(lm, y, tw, 6.5, "F");
-      doc.setDrawColor(220, 220, 220);
-      doc.rect(lm, y, tw, 6.5, "S");
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(40, 40, 40);
-      doc.text(label, lm + 2, y + 4.4);
-      doc.setFont("helvetica", "normal");
-      const lines = doc.splitTextToSize(value || "—", tw - labelWidth - 4) as string[];
-      doc.text(lines[0] || "—", lm + labelWidth, y + 4.4);
-      y += 6.5;
-    }
-    y += 4;
-  };
-  const longDate = (value: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
-
-  section("CLAIM & VEHICLE INFORMATION");
-  infoRows([
-    ["Whip Claim No.", schedule.claimNumber],
-    ["Adverse Claim No.", schedule.adverseClaimNumber],
-    ["Date of Loss", longDate(schedule.dateOfLoss)],
-    ["Adverse Carrier", schedule.adverseCarrier],
-    ["Vehicle", schedule.vehicle],
-    ["VIN", schedule.vin],
-    ["Member / Driver", schedule.memberDriver],
-    ["Registered Owner", schedule.registeredOwner],
-    ["Vehicle Status", schedule.vehicleStatus],
-    ["Vehicle Class", schedule.vehicleClass],
-  ]);
-
-  section("REPAIR PERIOD");
-  infoRows([
-    ["Repair Facility", schedule.repairFacility],
-    ["RO Number", schedule.roNumber],
-    ["Drop-Off Date", longDate(schedule.repairStart)],
-    ["Pick-Up Date", longDate(schedule.repairEnd)],
-    ["Total Days in Repair", String(schedule.days)],
-    ["Days Claimed", String(schedule.days)],
-  ]);
-
-  section("MONTHLY FLEET UTILIZATION SNAPSHOTS");
-  const methodNote = `The Whip Utilization Report is a monthly market snapshot, not a daily tracking feed. Accordingly, this table shows one reconciled snapshot for each applicable report month rather than repeating the same month-end values for every repair day. The report supplies Rented, Reported Unrented, Rentable Fleet, and Occupancy values.`;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(60, 60, 60);
-  const methodLines = doc.splitTextToSize(methodNote, tw) as string[];
-  ensure(methodLines.length * 4 + 12);
-  doc.text(methodLines, lm, y);
-  y += methodLines.length * 4 + 4;
-
-  const cols = [lm, 45, 60, 91, 111, 130, 166];
-  const headers = ["Report month", "Repair days", "Location", "Rentable fleet", "Rented", "Reported", "Occupancy"];
-  ensure(10);
-  doc.setFillColor(45, 45, 45);
-  doc.rect(lm, y, tw, 10, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(6.2);
-  doc.setFont("helvetica", "bold");
-  headers.forEach((header, index) => doc.text(header, cols[index] + 1, y + 4));
-  doc.setFontSize(5.6);
-  doc.text("unrented", cols[5] + 1, y + 7.5);
-  y += 10;
-  const utilizationRows = schedule.utilizationRows.length > 0
-    ? schedule.utilizationRows
-    : Array.from({ length: schedule.days }, (_, index) => ({
-      date: new Date(new Date(`${schedule.repairStart}T00:00:00`).getTime() + index * 86_400_000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      fleetCount: 0,
-      rentCount: 0,
-      availableCount: 0,
-      utilization: "—",
-    }));
-  const utilizationSourceNote = louUtilizationSourceNote(utilizationRows);
-  const utilizationSnapshots = summarizeLouUtilizationRows(utilizationRows);
-  utilizationSnapshots.forEach((snapshot, index) => {
-    ensure(7);
-    if (index % 2 === 0) { doc.setFillColor(248, 248, 248); doc.rect(lm, y, tw, 6, "F"); }
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(40, 40, 40);
-    doc.setFontSize(7);
-    doc.text(snapshot.reportMonth, cols[0] + 1, y + 4);
-    doc.text(String(snapshot.repairDays), cols[1] + 1, y + 4);
-    doc.text(schedule.marketName, cols[2] + 1, y + 4);
-    doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.fleetCount), cols[3] + 1, y + 4);
-    doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.rentCount), cols[4] + 1, y + 4);
-    doc.text(snapshot.dataStatus === "unavailable" ? "—" : String(snapshot.availableCount), cols[5] + 1, y + 4);
-    doc.setFont("helvetica", "bold");
-    doc.text(snapshot.utilization, cols[6] + 1, y + 4);
-    y += 6;
+  const firstFormPage = doc.getNumberOfPages() + 1;
+  const snapshots = summarizeLouUtilizationRows(schedule.utilizationRows);
+  // Map claim facts only; all typography, content, pagination and footer geometry
+  // come from the exact same complete form used by standalone LOU downloads.
+  appendLouPacketAttachment(doc, {
+    claimNumber: schedule.claimNumber, carrierClaimNumber: schedule.adverseClaimNumber,
+    dateOfLoss: formatNorthAmericanLetterDate(schedule.dateOfLoss),
+    carrier: schedule.adverseCarrier, adjuster: schedule.adjuster, vehicle: schedule.vehicle,
+    vin: schedule.vin, driver: schedule.memberDriver, registeredOwner: schedule.registeredOwner,
+    vehicleStatus: schedule.vehicleStatus, vehicleClass: schedule.vehicleClass,
+    marketName: schedule.marketName, repairFacility: schedule.repairFacility, roNumber: schedule.roNumber,
+    repairStart: formatNorthAmericanLetterDate(schedule.repairStart), repairEnd: formatNorthAmericanLetterDate(schedule.repairEnd),
+    days: schedule.days, dailyRate: schedule.dailyRate, amount: Number(schedule.total.toFixed(2)),
+    customRate: schedule.customRate, weeklyRate: schedule.weeklyRate, rateSource: schedule.rateSource,
+    letterDate: schedule.letterDate, handlerName: schedule.handlerName, handlerTitle: schedule.handlerTitle,
+    handlerExtension: schedule.handlerExtension, handlerEmail: schedule.handlerEmail, logoBase64: WHIP_LOGO_B64,
+    snapshots, sourceNote: louUtilizationSourceNote(schedule.utilizationRows),
+    reconciliation: louUtilizationReconciliation(snapshots),
   });
-  y += 5;
-
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(6.8);
-  doc.setTextColor(85, 85, 85);
-  const sourceLines = doc.splitTextToSize(utilizationSourceNote, tw) as string[];
-  ensure(sourceLines.length * 3.5 + 7);
-  doc.text(sourceLines, lm, y);
-  y += sourceLines.length * 3.5 + 5;
-  const reconciliationLines = doc.splitTextToSize(louUtilizationReconciliation(utilizationSnapshots), tw) as string[];
-  ensure(reconciliationLines.length * 3.5 + 7);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(55, 55, 55);
-  doc.text(reconciliationLines, lm, y);
-  y += reconciliationLines.length * 3.5 + 5;
-
-  section("LOSS OF USE / RENTAL CALCULATION");
-  const averageUtilization = utilizationRows.find((row) => row.utilization !== "—")?.utilization || "—";
-  const rateBasis = `Days Out of Service: ${schedule.days} × Daily Rate: $${schedule.dailyRate.toFixed(2)}. Rate basis: ${schedule.vehicleClass || schedule.vehicle || "Vehicle"}, ${schedule.marketName} market.${schedule.weeklyRate ? ` Published weekly rate $${schedule.weeklyRate.toFixed(2)} ÷ 7, rounded to cents.` : " Handler-entered daily rate; no published weekly rate represented."}${schedule.rateSource ? ` RATE SOURCE: ${schedule.rateSource}` : ""}`;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(40, 40, 40);
-  for (const line of doc.splitTextToSize(rateBasis, tw) as string[]) { ensure(4.2); doc.text(line, lm, y); y += 4.2; }
-  y += 4;
-  ensure(18);
-  doc.setFillColor(35, 35, 35);
-  doc.rect(lm, y, tw, 10, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", lm + 2, y + 6.5);
-  doc.text(`$${schedule.total.toFixed(2)}`, rm - 2, y + 6.5, { align: "right" });
-  y += 16;
-
-  section("LEGAL BASIS & UTILIZATION METHODOLOGY");
-  const legalText = `Under the common law of negligence and applicable state tort statutes, a tortfeasor is liable for economic losses proximately caused by a negligent act, including loss of use of a damaged vehicle. Loss-of-use damages are recoverable for each day a revenue-generating vehicle is out of service due to the collision, regardless of whether a substitute vehicle was rented. See Restatement (Second) of Torts § 928; Enterprise Leasing Co. v. Allstate Ins. Co., 671 A.2d 509 (Md. Ct. Spec. App. 1996); Hertz Corp. v. State Farm Mut. Auto. Ins. Co., 573 N.W.2d 686 (Minn. Ct. App. 1998).
-
-The subject vehicle is registered to ${schedule.registeredOwner || "the registered owner"} and is actively leased as a revenue-generating fleet asset. It was unavailable for service during the repair period, resulting in direct economic loss equal to the applicable daily rate multiplied by the days out of service. The monthly utilization snapshot above${averageUtilization === "—" ? "" : ` (showing ${averageUtilization} reported occupancy)`} documents the applicable market utilization basis for this claimed period.`;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(60, 60, 60);
-  const legalLines = doc.splitTextToSize(legalText, tw) as string[];
-  ensure(legalLines.length * 4 + 20);
-  doc.text(legalLines, lm, y);
-  y += legalLines.length * 4 + 8;
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "italic");
-  doc.setTextColor(100, 100, 100);
-  doc.text("This supporting schedule is enclosed with the Subrogation Demand and is part of the same settlement packet.", lm, y);
-  addLetterFooter(doc);
+  numberLouPages(doc, { startPage: firstFormPage });
 }
 
 // ─── Denial Templates ─────────────────────────────────────────────────────────
@@ -4239,6 +4084,10 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
       total: louCalculatedTotal,
       weeklyRate: louUsesPublishedRate ? louPublishedRate!.weeklyRate : undefined,
       rateSource: louUsesPublishedRate && louMarket ? `${louRateSourceLabel(louMarket)} Source cell: ${louPublishedRate!.sourceCell}.` : undefined,
+      customRate: !louUsesPublishedRate,
+      letterDate: formatNorthAmericanLetterDate(today),
+      handlerExtension,
+      handlerEmail: "claims@drivewhip.com",
       handlerName,
       handlerTitle: "Claims Resolution Specialist",
       utilizationRows: louUtilizationRows,

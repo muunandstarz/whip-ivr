@@ -84,7 +84,7 @@ function assertFooterSafe(doc: jsPDF): void {
   const scale = doc.internal.scaleFactor;
   for (const stream of pageStreams(doc)) {
     const textBlocks = Array.from(stream.matchAll(/BT\n([\s\S]*?)\nET/g), match => match[1]);
-    const standalonePage = stream.includes("Rental Reimbursement");
+    const standalonePage = strings(stream).some(text => text.startsWith("Loss of Use / Rental Reimbursement Request") || text === "Loss of Use / Rental Reimbursement Supporting Basis");
     const margin = standalonePage ? 14 : 25.4;
     for (const block of textBlocks) {
       const text = strings(block).join(" ");
@@ -96,7 +96,7 @@ function assertFooterSafe(doc: jsPDF): void {
       const size = Number(/\/F\d+ ([\d.]+) Tf/.exec(block)?.[1] ?? 10);
       const bold = /\/F2 /.test(block);
       const footer = text.startsWith("Whip Claims Management |") || /^Page \d+ of \d+$/.test(text);
-      expect(y, text).toBeGreaterThanOrEqual(standalonePage ? 24 : 25.4);
+      expect(y, text).toBeGreaterThanOrEqual(standalonePage ? 14 : 25.4);
       if (!footer) expect(y + 1, text).toBeLessThanOrEqual(height - 24);
       else expect(y, text).toBeGreaterThan(height - 24);
       doc.setFont("helvetica", bold ? "bold" : "normal");
@@ -265,7 +265,7 @@ describe("Insurance Direct jsPDF renderer", () => {
   it("appends the full standard LOU request and its supporting basis after the cover letter", () => {
     const doc = createInsuranceDirectPdf(input({ hasDv: false, attachLouSchedule: true }));
     const pages = pageText(doc);
-    const formPage = pages.findIndex(page => page.startsWith("Loss of Use / Rental Reimbursement Request"));
+    const formPage = pageStreams(doc).findIndex(stream => strings(stream).includes("Loss of Use / Rental Reimbursement Request"));
     expect(formPage).toBeGreaterThan(0);
     const text = pages.slice(formPage).join(" ");
     for (const label of ["Whip Claim No.", "Adverse Claim No.", "VIN", "Registered Owner", "Vehicle Status", "Vehicle Class", "RO Number", "Days Claimed", "REPAIR PERIOD", "MONTHLY FLEET UTILIZATION SNAPSHOTS", "Loss of Use Breakdown", "TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", "Loss of Use / Rental Reimbursement Supporting Basis", "SOURCE NOTE", "RECONCILIATION"]) expect(text).toContain(label);
@@ -333,7 +333,7 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(() => createInsuranceDirectPdf(input({ hasDv: false, louAmount: value }))).toThrow("must reconcile");
   });
 
-  it("uses only the supplied logo, exactly once, and tolerates undecodable logo data", () => {
+  it("uses only the supplied logo on the cover and the first standard-form page, never continuation pages", () => {
     // Tiny image fixture represents caller-provided bytes; the renderer has no
     // bundled replacement logo and makes no request for assets.
     const logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
@@ -341,9 +341,12 @@ describe("Insurance Direct jsPDF renderer", () => {
     const spy = vi.spyOn(api, "addImage");
     try {
       const doc = createInsuranceDirectPdf(input({ logoBase64: logo, attachLouSchedule: true }));
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledTimes(2);
       expect(spy.mock.calls[0][0]).toBe(logo);
-      expect(pageStreams(doc).slice(1).join("\n")).not.toMatch(/\/I\d+ Do/);
+      expect(spy.mock.calls.every(call => call[0] === logo)).toBe(true);
+      const streams = pageStreams(doc);
+      expect(streams.filter(stream => /\/I\d+ Do/.test(stream))).toHaveLength(2);
+      expect(streams.slice(streams.findIndex(stream => strings(stream).includes("Loss of Use / Rental Reimbursement Request")) + 1).join("\n")).not.toMatch(/\/I\d+ Do/);
     } finally {
       spy.mockRestore();
     }

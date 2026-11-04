@@ -12,7 +12,7 @@ describe("Insurance Direct standalone Loss of Use calculator and evidence", () =
   it("renders canonical server percentages and source provenance without recomputing occupancy", () => {
     expect(source).toContain("function formatLouUtilization(value: unknown): string");
     expect(source).toContain('r.dataStatus === "unavailable" ? "—" : formatLouUtilization(r.utilization)');
-    expect(source).toContain("const utilizationSourceNote = louUtilizationSourceNote(utilizationRows);");
+    expect(source).toContain("sourceNote: louUtilizationSourceNote(schedule.utilizationRows)");
     expect(source).toContain("reported unrented");
     expect(source).toContain("reported rentable fleet");
     expect(standalone).toContain("sourceNote: louUtilizationSourceNote(getUtilizationRows())");
@@ -22,19 +22,19 @@ describe("Insurance Direct standalone Loss of Use calculator and evidence", () =
 
   it("preserves one monthly-source snapshot rather than representing repeated daily telemetry", () => {
     expect(source).toContain("function summarizeLouUtilizationRows(rows: LouUtilizationRow[]): LouUtilizationSnapshot[]");
-    expect(source).toContain("MONTHLY FLEET UTILIZATION SNAPSHOTS");
+    expect(normalLou).toContain("MONTHLY FLEET UTILIZATION SNAPSHOTS");
     expect(normalLou).toContain("Reported unrented");
     expect(normalLou).toContain("not a daily tracking feed");
     expect(source).not.toContain("daily record${louUtilizationRows.length");
   });
 
-  it("prints letterhead only on page one and reserves the footer band before all paragraphs and table rows", () => {
+  it("uses each document's first-page header and reserves the footer band before all paragraphs and table rows", () => {
     expect(renderer.match(/letterhead\(layout, input.logoBase64\)/g)).toHaveLength(1);
     expect(renderer.indexOf("layout.blocksTogether(closing)")).toBeLessThan(renderer.indexOf("if (input.hasLou && input.attachLouSchedule) {"));
     expect(renderer).toContain("const FOOTER_BAND = 24;");
     expect(renderer).toContain("this.bottom = doc.internal.pageSize.getHeight() - FOOTER_BAND;");
     expect(renderer).toContain("if (this.y + LINE_HEIGHT > this.bottom) this.newPage();");
-    expect(renderer).toContain("footers(layout);");
+    expect(renderer).toContain("footers(layout, lastCoverPage);");
   });
 
   it("carries the existing days times rate amount to the direct letter without applying or requiring occupancy", () => {
@@ -60,8 +60,10 @@ describe("Insurance Direct standalone Loss of Use calculator and evidence", () =
     expect(standalone).not.toContain('onNavigate("subro-demand")');
     expect(standalone).not.toContain("LOU_DEMAND_HANDOFF_KEY");
     expect(standalone).not.toContain("Push LOU to Subro Demand");
-    expect(renderer).toContain("appendStandaloneLouForm(doc, record");
+    expect(renderer).toContain("appendLouPacketAttachment(doc, record");
     expect(normalLou).toContain("appendStandaloneLouForm(doc, input");
+    expect(source).toContain("appendLouPacketAttachment(doc, {");
+    expect(normalLou).not.toContain("paragraph(`RATE SOURCE:");
     expect(source).toContain('sessionStorage.removeItem("lou_calc_state")');
     expect(standalone).toContain("onDraftChange?.(draftData)");
   });

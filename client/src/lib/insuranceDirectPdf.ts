@@ -1,4 +1,4 @@
-import { appendStandaloneLouForm, type StandaloneLouInput } from "./standaloneLouPdf";
+import { appendLouPacketAttachment, numberLouPages, type StandaloneLouInput } from "./standaloneLouPdf";
 import { jsPDF } from "jspdf";
 import { calculateDirectLou, directMoney } from "@shared/insuranceDirect";
 
@@ -282,11 +282,11 @@ function letterhead(layout: LetterLayout, logoBase64: string): void {
   layout.font();
 }
 
-function footers(layout: LetterLayout): void {
+function footers(layout: LetterLayout, lastCoverPage = layout.doc.getNumberOfPages()): void {
   const { doc } = layout;
   const pages = doc.getNumberOfPages();
   const height = doc.internal.pageSize.getHeight();
-  for (let page = 1; page <= pages; page++) {
+  for (let page = 1; page <= lastCoverPage; page++) {
     doc.setPage(page);
     doc.setDrawColor(165);
     doc.setLineWidth(0.2);
@@ -416,6 +416,7 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
   );
   layout.blocksTogether(closing);
 
+  const lastCoverPage = doc.getNumberOfPages();
   if (input.hasLou && input.attachLouSchedule) {
     const record: StandaloneLouInput = input.louRecord ?? {
       claimNumber: input.claimNumber, carrierClaimNumber: input.carrierClaimNumber, dateOfLoss: input.dateOfLoss,
@@ -430,8 +431,11 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
     if (directMoney(record.amount) !== directMoney(input.louAmount) || record.days !== input.louDays || record.dailyRate !== input.dailyRate || record.claimNumber !== input.claimNumber || record.vin !== input.vin || record.repairStart !== input.repairStart || record.repairEnd !== input.repairEnd) {
       throw new RangeError("The attached LOU record must match this claim, vehicle, repair period, and cover-letter calculation.");
     }
-    appendStandaloneLouForm(doc, record, { addPage: true, letterhead: false });
+    appendLouPacketAttachment(doc, record);
   }
-  footers(layout);
+  // Keep the cover-letter footer, then use the identical standard LOU footer
+  // only on appended form pages (no duplicate rules or contact lines).
+  footers(layout, lastCoverPage);
+  if (doc.getNumberOfPages() > lastCoverPage) numberLouPages(doc, { startPage: lastCoverPage + 1 });
   return doc;
 }

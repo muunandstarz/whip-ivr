@@ -18,11 +18,16 @@ const clean = (v: string) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]
 const value = (v: string) => clean(v) || "—";
 const numberValue = (v: number) => Number.isFinite(v) ? String(v) : "—";
 
-/** The ordinary LOU request, shared by standalone downloads and active-claim packets. */
+/** One ordinary LOU request for standalone, Subro and active-claim packets. */
 export function appendStandaloneLouForm(doc: jsPDF, input: StandaloneLouInput, options: { addPage?: boolean; letterhead?: boolean } = {}): void {
   const calculation = calculateDirectLou({ days: input.days, dailyRate: input.dailyRate });
   if (calculation.error || !Number.isFinite(input.amount) || directMoney(input.amount) !== calculation.amount) throw new RangeError("The LOU form must use the same days × daily rate amount as the calculator.");
-  if (options.addPage !== false) doc.addPage();
+  // Cover-letter graphics state must not change the appended form's geometry.
+  if (options.addPage !== false) {
+    doc.setLineWidth(0.200025); doc.setDrawColor(0); doc.setFillColor(255, 255, 255);
+    doc.addPage();
+  }
+  doc.setLineWidth(0.200025); doc.setDrawColor(0); doc.setFillColor(255, 255, 255);
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const left = 14, width = W - 28, bottom = H - 24;
@@ -104,7 +109,6 @@ export function appendStandaloneLouForm(doc: jsPDF, input: StandaloneLouInput, o
   const publishedWeekly = !input.customRate && Number.isFinite(input.weeklyRate) && input.weeklyRate! > 0;
   if (publishedWeekly && Number((input.weeklyRate! / 7).toFixed(2)) !== input.dailyRate) throw new RangeError("The published weekly rate must match the selected daily rate, rounded to cents.");
   paragraph(`Rate basis: ${input.customRate ? "Handler-entered custom rate" : "Whip Standard Rate"} — ${input.vehicleClass || input.vehicle || "Vehicle"}, ${input.marketName} market${publishedWeekly ? ` ($${input.weeklyRate!.toFixed(2)}/wk ÷ 7 = $${input.dailyRate.toFixed(2)}/day, rounded to cents)` : ` ($${input.dailyRate.toFixed(2)}/day; no published weekly rate represented)`}`, 7);
-  if (publishedWeekly && input.rateSource) paragraph(`RATE SOURCE: ${input.rateSource}`, 7);
   reserve(14); doc.setFillColor(235, 235, 235); doc.rect(left, y, width, 11, "F");
   font(8, true); doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", left + 2, y + 7);
   font(11, true); doc.text(`$${input.amount.toFixed(2)}`, W - left - 2, y + 7, { align: "right" }); y += 17;
@@ -125,18 +129,26 @@ export function appendStandaloneLouForm(doc: jsPDF, input: StandaloneLouInput, o
   paragraph(`${input.handlerTitle || "Claims Resolution Specialist"}\nWhip Claims Management\n(855) 906-5949${input.handlerExtension ? ` ext. ${input.handlerExtension}` : ""} | ${input.handlerEmail || "claims@drivewhip.com"}\nP.O. Box 10622, Rockville, MD 20849`, 8);
 }
 
+/** Packet attachment is exactly the standalone form, including its first-page header. */
+export function appendLouPacketAttachment(doc: jsPDF, input: StandaloneLouInput): void {
+  appendStandaloneLouForm(doc, input, { addPage: true, letterhead: true });
+}
+
 export function createStandaloneLouPdf(input: StandaloneLouInput): jsPDF {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  appendStandaloneLouForm(doc, input, { addPage: false, letterhead: true });
+  // Use the same new-page entry point as packets, so inherited PDF drawing state
+  // is identical. The constructor's unused blank page never enters the output.
+  appendLouPacketAttachment(doc, input);
+  doc.deletePage(1);
   numberLouPages(doc);
   return doc;
 }
 
-/** Called once after assembly so packet page numbers include the cover letter. */
-export function numberLouPages(doc: jsPDF): void {
+/** Footer geometry is identical for standalone and attached forms; packet numbers include the cover. */
+export function numberLouPages(doc: jsPDF, options: { startPage?: number } = {}): void {
   const pages = doc.getNumberOfPages();
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
-  for (let p = 1; p <= pages; p++) {
+  for (let p = options.startPage ?? 1; p <= pages; p++) {
     doc.setPage(p); doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(100); doc.setDrawColor(165);
     doc.line(14, H - 20, W - 14, H - 20);
     doc.text("Whip Claims Management | PO BOX 10622 Rockville, MD 20850 | (855) 906-5949", W / 2, H - 16, { align: "center" });
