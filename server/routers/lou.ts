@@ -11,79 +11,8 @@ import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { resolveUtilizationRows } from "../louUtilization";
 
-// ── Inline pricing data ────────────────────────────────────────────────────
-const MARKET_PRICING = [
-  { code: "DC", name: "Washington DC (Rockville)", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
-    { model: "Toyota Corolla", weeklyRate: 350, dailyRate: 50.00, vehicleClass: "Compact" },
-    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 375, dailyRate: 53.57, vehicleClass: "Midsize Sedan" },
-    { model: "Toyota Camry Hybrid", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Midsize Hybrid" },
-    { model: "Toyota RAV4 (Gas)", weeklyRate: 425, dailyRate: 60.71, vehicleClass: "SUV" },
-    { model: "Toyota Highlander", weeklyRate: 450, dailyRate: 64.29, vehicleClass: "SUV" },
-  ]},
-  { code: "BWI", name: "Baltimore (Glen Burnie)", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
-    { model: "Toyota Corolla", weeklyRate: 350, dailyRate: 50.00, vehicleClass: "Compact" },
-    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 375, dailyRate: 53.57, vehicleClass: "Midsize Sedan" },
-    { model: "Toyota Camry Hybrid", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Midsize Hybrid" },
-    { model: "Toyota RAV4 (Gas)", weeklyRate: 425, dailyRate: 60.71, vehicleClass: "SUV" },
-    { model: "Toyota Highlander", weeklyRate: 450, dailyRate: 64.29, vehicleClass: "SUV" },
-  ]},
-  { code: "ATL", name: "Atlanta", taxNote: "Rates include Georgia state sales tax.", vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 430.00, dailyRate: 61.43, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 484.00, dailyRate: 69.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 592.63, dailyRate: 84.66, vehicleClass: "Electric/EV" },
-    { model: "Toyota Corolla", weeklyRate: 377.13, dailyRate: 53.88, vehicleClass: "Compact" },
-    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 404.06, dailyRate: 57.72, vehicleClass: "Midsize Sedan" },
-    { model: "Toyota Camry Hybrid", weeklyRate: 429.92, dailyRate: 61.42, vehicleClass: "Midsize Hybrid" },
-    { model: "Toyota RAV4 (Gas)", weeklyRate: 457.94, dailyRate: 65.42, vehicleClass: "SUV" },
-    { model: "Toyota Highlander", weeklyRate: 484.88, dailyRate: 69.27, vehicleClass: "SUV" },
-  ]},
-  { code: "CHI", name: "Chicago", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
-    { model: "Toyota Corolla", weeklyRate: 350, dailyRate: 50.00, vehicleClass: "Compact" },
-    { model: "Toyota Camry / Honda Accord (Gas)", weeklyRate: 375, dailyRate: 53.57, vehicleClass: "Midsize Sedan" },
-    { model: "Toyota Camry Hybrid", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Midsize Hybrid" },
-    { model: "Toyota RAV4 (Gas)", weeklyRate: 425, dailyRate: 60.71, vehicleClass: "SUV" },
-    { model: "Toyota Highlander", weeklyRate: 450, dailyRate: 64.29, vehicleClass: "SUV" },
-  ]},
-  { code: "MIA", name: "Miami", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
-  ]},
-  { code: "ORL", name: "Orlando", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
-  ]},
-  { code: "PHL", name: "Philadelphia", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
-  ]},
-  { code: "RIC", name: "Richmond", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
-  ]},
-  { code: "BOS", name: "Boston", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 550, dailyRate: 78.57, vehicleClass: "Electric/EV" },
-  ]},
-  { code: "DAL", name: "Dallas", taxNote: null, vehicles: [
-    { model: "Tesla Model 3 (LR/SR)", weeklyRate: 399, dailyRate: 57.00, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2018–2025)", weeklyRate: 449, dailyRate: 64.14, vehicleClass: "Electric/EV" },
-    { model: "Tesla Model Y (2026)", weeklyRate: 499, dailyRate: 71.29, vehicleClass: "Electric/EV" },
-  ]},
-];
+// Shared owner-supplied workbook catalog for both active LOU calculators.
+import { MARKET_PRICING } from "../../shared/louRates";
 
 const MKT_BRIDGE: Record<string, string> = {
   DC: "RCK", BWI: "GB", ATL: "ATL", CHI: "CHI",

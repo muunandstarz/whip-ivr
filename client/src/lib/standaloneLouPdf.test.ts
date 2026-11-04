@@ -75,4 +75,28 @@ describe("Standard LOU form and active-claim attachment", () => {
     expect(text).not.toContain("Rental Reimbursement Request");
     expect(text).not.toContain("SYN-RO-444");
   });
+
+  it("prints the actual published weekly rate, not rounded daily rate multiplied back by seven", () => {
+    const input = { ...record(), vehicleClass: "Toyota Camry (2025 & newer)", dailyRate: 61.29, amount: Number((10 * 61.29).toFixed(2)), weeklyRate: 429, customRate: false,
+      rateSource: "DriveWhip_Rate_Sheet.xlsx · Weekly Rates · effective 2026-08-12 · Source cell B11." };
+    const standalone = pages(createStandaloneLouPdf(input)).join(" ");
+    const appended = pages(createInsuranceDirectPdf(cover(input))).join(" ");
+    for (const text of [standalone, appended]) {
+      expect(text).toContain("$429.00/wk");
+      expect(text).toContain("$61.29/day");
+      expect(text).toContain("DriveWhip_Rate_Sheet.xlsx");
+      expect(text).not.toContain("$429.03/wk");
+    }
+  });
+
+  it("does not attribute a handler-entered custom override to the published weekly sheet", () => {
+    const text = pages(createStandaloneLouPdf({ ...record(), weeklyRate: 429, rateSource: "SHOULD_NOT_PRINT" })).join(" ");
+    expect(text).toContain("Handler-entered custom rate");
+    expect(text).not.toContain("SHOULD_NOT_PRINT");
+    expect(text).not.toContain("$429.00/wk");
+  });
+
+  it("rejects inconsistent published weekly-rate metadata", () => {
+    expect(() => createStandaloneLouPdf({ ...record(), customRate: false, weeklyRate: 429 })).toThrow("published weekly rate must match");
+  });
 });

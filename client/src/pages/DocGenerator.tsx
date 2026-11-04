@@ -16,6 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
+import { findLouVehicleRate, louRateSourceLabel } from "@shared/louRates";
+import { buildDvReportReference, dvReportConflicts, DV_REFERENCE_STARTER, type DvReportFacts } from "@shared/insuranceDirectDv";
 import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, LIABILITY_STATEMENT_EXAMPLES, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
 import { createInsuranceDirectPdf } from "@/lib/insuranceDirectPdf";
 import { createStandaloneLouPdf, type StandaloneLouInput } from "@/lib/standaloneLouPdf";
@@ -204,6 +206,8 @@ type LouSupportingSchedule = {
   days: number;
   dailyRate: number;
   total: number;
+  weeklyRate?: number;
+  rateSource?: string;
   handlerName: string;
   handlerTitle: string;
   utilizationRows: LouUtilizationRow[];
@@ -769,12 +773,12 @@ function appendLouSupportingSchedule(doc: jsPDF, schedule: LouSupportingSchedule
 
   section("LOSS OF USE / RENTAL CALCULATION");
   const averageUtilization = utilizationRows.find((row) => row.utilization !== "—")?.utilization || "—";
-  const rateBasis = `Days Out of Service: ${schedule.days} × Daily Rate: $${schedule.dailyRate.toFixed(2)}. Rate basis: ${schedule.vehicle || "Vehicle"}, ${schedule.marketName} market.`;
+  const rateBasis = `Days Out of Service: ${schedule.days} × Daily Rate: $${schedule.dailyRate.toFixed(2)}. Rate basis: ${schedule.vehicleClass || schedule.vehicle || "Vehicle"}, ${schedule.marketName} market.${schedule.weeklyRate ? ` Published weekly rate $${schedule.weeklyRate.toFixed(2)} ÷ 7, rounded to cents.` : " Handler-entered daily rate; no published weekly rate represented."}${schedule.rateSource ? ` RATE SOURCE: ${schedule.rateSource}` : ""}`;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(40, 40, 40);
-  doc.text(doc.splitTextToSize(rateBasis, tw), lm, y);
-  y += 10;
+  for (const line of doc.splitTextToSize(rateBasis, tw) as string[]) { ensure(4.2); doc.text(line, lm, y); y += 4.2; }
+  y += 4;
   ensure(18);
   doc.setFillColor(35, 35, 35);
   doc.rect(lm, y, tw, 10, "F");
@@ -4163,9 +4167,18 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
   const parseEstimateMutation = trpc.docgen.parseEstimate.useMutation();
   const { data: louMarketsData } = trpc.lou.getMarketPricing.useQuery(undefined, { staleTime: 300_000 });
   const louMarkets = Array.isArray(louMarketsData) ? louMarketsData : [];
-  const louMarket = louMarkets.find((market) => market.code === louMarketCode) || louMarkets[0];
+  const louMarket = louMarkets.find((market) => market.code === louMarketCode);
   const louMarketName = louMarket?.name || louMarketCode;
   const louVehicleOptions = louMarket?.vehicles || [];
+  const louPublishedRate = louVehicleOptions.find((vehicle) => vehicle.model === louVehicleClass);
+  const louUsesPublishedRate = !!louPublishedRate && Number(louDailyRate) === louPublishedRate.dailyRate;
+  useEffect(() => {
+    if (!louMarketsData || !louVehicleClass) return;
+    const migrated = findLouVehicleRate(louMarketCode, louVehicleClass);
+    const selected = louVehicleOptions.find((vehicle) => vehicle.model === migrated?.model);
+    if (selected) { setLouVehicleClass(selected.model); setLouDailyRate(selected.dailyRate.toFixed(2)); }
+    else setLouDailyRate("");
+  }, [louVehicleClass, louMarketCode, louMarketsData]);
   const { data: louUtilRowsData, isFetching: louUtilizationLoading } = trpc.lou.getUtilRows.useQuery(
     { marketCode: louMarketCode, dropOff: louRepairStart, pickUp: louRepairEnd },
     { enabled: Boolean(louRepairStart && louRepairEnd && louRepairStart < louRepairEnd), staleTime: 300_000 },
@@ -4224,6 +4237,8 @@ function SubroDemandTab({ onNavigate, louHandoff, onLouHandoffConsumed }: { onNa
       days: louRepairDays,
       dailyRate: parseFloat(louDailyRate) || 0,
       total: louCalculatedTotal,
+      weeklyRate: louUsesPublishedRate ? louPublishedRate!.weeklyRate : undefined,
+      rateSource: louUsesPublishedRate && louMarket ? `${louRateSourceLabel(louMarket)} Source cell: ${louPublishedRate!.sourceCell}.` : undefined,
       handlerName,
       handlerTitle: "Claims Resolution Specialist",
       utilizationRows: louUtilizationRows,
@@ -4738,12 +4753,15 @@ We accordingly submit this formal demand for reimbursement of the damages set fo
               </div>
               <div className="space-y-1">
                 <Label htmlFor="sd-lou-vehicle-class" className="text-xs font-semibold text-foreground/80">Vehicle Class / Rate Basis</Label>
-                <select id="sd-lou-vehicle-class" value={louVehicleClass} onChange={(event) => { const selected = louVehicleOptions.find((vehicle) => vehicle.model === event.target.value); setLouVehicleClass(event.target.value); if (selected) setLouDailyRate(selected.dailyRate.toFixed(2)); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
-                  <option value="">Select vehicle class…</option>
-                  {louVehicleOptions.map((vehicle) => <option key={vehicle.model} value={vehicle.model}>{vehicle.model} — ${vehicle.dailyRate.toFixed(2)}/day</option>)}
+                <select id="sd-lou-vehicle-class" value={louVehicleClass} onChange={(event) => { const selected = louVehicleOptions.find((vehicle) => vehicle.model === event.target.value); setLouVehicleClass(event.target.value); setLouDailyRate(selected?.dailyRate.toFixed(2) || ""); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                  <option value="">Select vehicle type / model year…</option>
+                  {louVehicleClass && !louPublishedRate && <option value={louVehicleClass} disabled>{louVehicleClass} — no published rate; reselect</option>}
+                  {louVehicleOptions.map((vehicle) => <option key={vehicle.model} value={vehicle.model}>{vehicle.model} — ${vehicle.weeklyRate.toFixed(2)}/week · ${vehicle.dailyRate.toFixed(2)}/day</option>)}
                 </select>
               </div>
             </div>
+            {louMarket && <p id="sd-lou-rate-source" className="mt-2 text-[11px] leading-4 text-muted-foreground">{louRateSourceLabel(louMarket)} Blank / not-offered cells are excluded. Confirm applicability to this repair period.</p>}
+            {louVehicleClass && !louPublishedRate && <p role="alert" className="mt-2 text-xs text-destructive">No published rate for this vehicle/model-year in this market. Select an offered type or enter a documented manual daily rate; no other market's rate is substituted.</p>}
             <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Repair Facility" id="sd-lou-facility" value={louRepairFacility} onChange={setLouRepairFacility} placeholder="e.g. Total Recon — Laurel" />
               <Field label="RO Number (from estimate)" id="sd-lou-ro" value={louRoNumber} onChange={setLouRoNumber} placeholder="Pre-fills from estimate when available" />
@@ -6559,6 +6577,19 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   const setDirect = <K extends keyof InsuranceDirectDraft>(key: K, value: InsuranceDirectDraft[K]) => setDirectDraft((current) => ({ ...current, [key]: value }));
   const { hasLou, hasDv } = directDemandItems(directDraft.mode);
   const [showDemand, setShowDemand] = useState(false);
+  const [dvReportReview, setDvReportReview] = useState<DvReportFacts | null>(null);
+  const [dvReportBusy, setDvReportBusy] = useState(false);
+  const [dvReportReviewed, setDvReportReviewed] = useState(false);
+  const [dvReportError, setDvReportError] = useState("");
+  const dvRequestId = useRef(0);
+  const dvReportInput = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { dvRequestId.current += 1; }, []);
+  const { data: dvReviewHistory, refetch: refetchDvReviewHistory } = trpc.docgen.insuranceDirectDvReviewHistory.useQuery(
+    { claimNumber: claimNumber.trim() }, { enabled: !!claimNumber.trim(), refetchOnWindowFocus: true },
+  );
+  const reportConflicts = dvReportReview ? dvReportConflicts({ claimNumber, vin }, dvReportReview) : [];
+  useEffect(() => { setDvReportReviewed(false); }, [claimNumber, vin, dvReportReview]);
+
   const [liabilityExample, setLiabilityExample] = useState("");
   useEffect(() => { document.getElementById("lou-workflow-start")?.scrollIntoView({ block: "start" }); }, [showDemand]);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
@@ -6567,9 +6598,11 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   // ── tRPC market pricing ──
   const { data: allMarkets } = trpc.lou.getMarketPricing.useQuery(undefined, { staleTime: 300_000 });
   const markets = Array.isArray(allMarkets) ? allMarkets : [];
-  const currentMarket = markets.find(m => m.code === marketCode) || markets[0];
+  const currentMarket = markets.find(m => m.code === marketCode);
   const marketName = currentMarket?.name || marketCode;
   const vehicleOptions = currentMarket?.vehicles || [];
+  const publishedRate = vehicleOptions.find(v => v.model === vehicleClass);
+  const usesPublishedRate = !customRate.trim() && !!publishedRate && Number(dailyRate) === publishedRate.dailyRate;
   // ── tRPC utilization rows ──
   const { data: utilRowsData } = trpc.lou.getUtilRows.useQuery(
     { marketCode, dropOff: dropOffDate, pickUp: pickUpDate },
@@ -6621,13 +6654,14 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   useEffect(() => { setPreviewPdfUrl(null); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft, showDemand, utilRowsData]);
   useEffect(() => () => { if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl); }, [previewPdfUrl]);
   useEffect(() => { setDirectDraft((current) => ({ ...current, evidenceConfirmed: false, dopConfirmed: false })); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, directDraft.mode, directDraft.insuredName, directDraft.repairCompleted, directDraft.liabilityStatement, directDraft.dvAmount, directDraft.prelossValue, directDraft.postlossValue, directDraft.dvMethod, directDraft.carfaxReported]);
-  // Auto-set rate when vehicle model changes
+  // Resolve only this market's published rate; never carry an unavailable model's old price.
   useEffect(() => {
-    if (vehicleClass && vehicleOptions.length > 0) {
-      const found = vehicleOptions.find(v => v.model === vehicleClass);
-      if (found) setDailyRate(found.dailyRate.toFixed(2));
-    }
-  }, [vehicleClass, marketCode]);
+    if (!allMarkets || !vehicleClass) return;
+    const migrated = findLouVehicleRate(marketCode, vehicleClass);
+    const found = vehicleOptions.find(v => v.model === migrated?.model);
+    if (found) { setVehicleClass(found.model); setDailyRate(found.dailyRate.toFixed(2)); }
+    else setDailyRate("");
+  }, [vehicleClass, marketCode, allMarkets]);
   const decodeVinLou = async () => {
     if (vin.length !== 17) { toast.error("VIN must be exactly 17 characters"); return; }
     setVinDecoding(true);
@@ -6652,6 +6686,43 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   // The server resolves reported workbook Occupancy/Utilization values. Never
   // derive a percentage from the display counts here: the source columns have
   // distinct meanings and that error previously produced 10,000% rates.
+  const readDvReport = async (file: File) => {
+    const requestId = ++dvRequestId.current;
+    setDvReportBusy(true); setDvReportError(""); setDvReportReview(null); setDvReportReviewed(false);
+    const payload = new FormData(); payload.append("file", file); payload.append("claimNumber", claimNumber.trim());
+    try {
+      const response = await fetch("/api/insurance-direct/dv-report/analyze", { method: "POST", credentials: "include", body: payload });
+      if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("The report reader is unavailable. Your form was not changed; use the field guide and enter the report amount manually.");
+      const result = await response.json() as { report?: DvReportFacts; error?: string; warnings?: string[] };
+      if (requestId !== dvRequestId.current) return;
+      if (!response.ok || !result.report) throw new Error(result.error || "The report could not be read. Enter the final DV opinion and its source reference manually.");
+      setDvReportReview(result.report);
+      toast.success("Report read. Match the VIN/claim, review the values, then apply only this report.");
+      if (claimNumber.trim()) void refetchDvReviewHistory();
+    } catch (error) {
+      if (requestId === dvRequestId.current) setDvReportError(error instanceof Error ? error.message : "The report could not be read. Enter its facts manually.");
+    } finally {
+      payload.delete("file");
+      if (requestId === dvRequestId.current) setDvReportBusy(false);
+      if (dvReportInput.current) dvReportInput.current.value = "";
+    }
+  };
+  const applyDvReport = () => {
+    if (!dvReportReview || !dvReportReviewed || reportConflicts.length) return;
+    const report = dvReportReview;
+    if (!claimNumber.trim() && report.claimNumberRole === "our") setClaimNumber(report.claimNumber);
+    if (!vin.trim() && report.vin) setVin(report.vin);
+    if (!ymm.trim()) setYmm([report.vehicleYear, report.vehicleMake, report.vehicleModel].filter(Boolean).join(" "));
+    if (!dateOfLoss.trim() && report.dateOfLoss) setDateOfLoss(report.dateOfLoss);
+    if (!repairFacility.trim() && report.repairFacility) setRepairFacility(report.repairFacility);
+    setDirectDraft(prev => ({ ...prev, mode: prev.mode === "dv" ? "dv" : "both",
+      dvAmount: report.dvAmount, prelossValue: report.prelossValue || "", postlossValue: report.postlossValue || "",
+      dvMethod: buildDvReportReference(report), carfaxReported: false, evidenceConfirmed: false, dopConfirmed: false,
+    }));
+    setShowDemand(true);
+    toast.success("Applied this report's DV amount and reference. Carrier, liability, repair dates, and enclosures still require confirmation.");
+  };
+
   const getUtilizationRows = () => {
     if (utilRows.length > 0) {
       return utilRows.map(r => ({
@@ -6706,7 +6777,9 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
     carrier: adverseCarrier, adjuster, vehicle: ymm, vin, driver: memberDriver,
     registeredOwner, vehicleStatus, vehicleClass, repairFacility, roNumber,
     repairStart: formatNorthAmericanLetterDate(dropOffDate), repairEnd: formatNorthAmericanLetterDate(pickUpDate),
-    days, dailyRate: effectiveRate, amount: directLou.amount, customRate: !!customRate.trim(), marketName,
+    days, dailyRate: effectiveRate, amount: directLou.amount, customRate: !usesPublishedRate, marketName,
+    weeklyRate: usesPublishedRate ? publishedRate!.weeklyRate : undefined,
+    rateSource: usesPublishedRate && currentMarket ? `${louRateSourceLabel(currentMarket)} Source cell: ${publishedRate!.sourceCell}.` : undefined,
     letterDate: formatNorthAmericanLetterDate(directDraft.letterDate), handlerName: louHandlerName, handlerTitle,
     handlerExtension: directDraft.handlerExtension, handlerEmail: directDraft.handlerEmail, logoBase64: WHIP_LOGO_B64,
     snapshots: utilizationSnapshots, sourceNote: louUtilizationSourceNote(getUtilizationRows()),
@@ -6767,6 +6840,23 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           <p className="text-xs leading-5 text-muted-foreground">Replace every bracketed placeholder with verified claim facts and identify the correspondence, note, or exhibit. Selecting an example does not verify liability or insert it automatically. Repair payment alone is not treated as carrier acceptance.</p>
         </div>
       </Panel>}
+      <Panel title="DV Report · Optional Prefill" tag="CURRENT REPORT ONLY · NO PRESET AMOUNTS">
+        <p className="mb-3 text-xs leading-5 text-muted-foreground">Upload the appraisal to reduce typing, or use the field guide below and enter the values manually. Nothing is applied until you match this report to the claim and review it. The PDF is processed transiently and is not retained; structured review results are recorded for the team.</p>
+        <input ref={dvReportInput} id="lou-dv-report-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" className="hidden" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void readDvReport(file); }} />
+        <Button id="lou-dv-read-report" size="sm" variant="outline" disabled={dvReportBusy} onClick={() => dvReportInput.current?.click()}>{dvReportBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}{dvReportBusy ? "Reading DV Report…" : "Upload & Read DV Report"}</Button>
+        {dvReportError && <p role="alert" className="mt-3 text-xs text-destructive">{dvReportError}</p>}
+        {dvReportReview && <div className="mt-3 space-y-3 rounded-md border border-border bg-muted/20 p-3">
+          <div className="grid gap-2 text-xs sm:grid-cols-2"><p><strong>Reported final DV:</strong> ${directMoney(dvReportReview.dvAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><p><strong>Source:</strong> {dvReportReview.dvSourcePage || "Locate final opinion in report"}</p><p><strong>Report:</strong> {dvReportReview.reportId || "Not stated"} · {dvReportReview.reportDate || "Date not stated"}</p><p><strong>Vehicle:</strong> {[dvReportReview.vehicleYear, dvReportReview.vehicleMake, dvReportReview.vehicleModel].filter(Boolean).join(" ") || "Not stated"}</p><p className="break-all"><strong>VIN:</strong> {dvReportReview.vin || "Not stated"}</p><p><strong>Claim:</strong> {dvReportReview.claimNumber || "Not stated"}</p><p><strong>Report claimant:</strong> {dvReportReview.claimantName || "Not stated"} (confirm their role; not automatically the Whip driver or carrier’s insured)</p></div>
+          {dvReportReview.adjustedVehicleValue && <p className="text-xs text-muted-foreground">Adjusted vehicle-value calculation basis: ${directMoney(dvReportReview.adjustedVehicleValue).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. This is not automatically treated as a separate pre-loss/post-repair appraisal pair.</p>}
+          <p className="text-xs">{buildDvReportReference(dvReportReview)}</p>
+          {dvReportReview.carfaxReported === true && <p className="text-xs text-muted-foreground">The appraisal describes a CarFax-reported incident. This does not confirm that a separate CarFax report is enclosed; the enclosure checkbox remains unchecked.</p>}
+          {dvReportReview.warnings.map((warning, index) => <p className="text-xs text-muted-foreground" key={index}>{warning}</p>)}
+          {reportConflicts.map(conflict => <p role="alert" className="text-xs text-destructive" key={conflict}>{conflict}</p>)}
+          <label className="flex items-start gap-2 text-xs leading-5"><Checkbox id="lou-dv-reviewed" checked={dvReportReviewed} disabled={!!reportConflicts.length} onCheckedChange={checked => setDvReportReviewed(checked === true)} /><span>I matched this report's VIN/claim and verified the final DV opinion and source. Apply replaces the DV amount/reference for this form only.</span></label>
+          <Button id="lou-dv-apply-report" size="sm" disabled={!dvReportReviewed || !!reportConflicts.length} onClick={applyDvReport}>Apply Reviewed Report to This Form</Button>
+        </div>}
+        {!!dvReviewHistory?.length && <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">Recent team report reviews for this claim ({dvReviewHistory.length})</summary><div className="mt-2 space-y-2">{dvReviewHistory.slice(0, 5).map(review => <p key={review.id}>Review #{review.id} · {review.createdByName || "Team member"} · {new Date(review.createdAt).toLocaleString()} · {review.status} · {review.modelId}. Review results are retained, not the uploaded report.</p>)}</div></details>}
+      </Panel>
       <Panel title="Claim Information">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field label="Whip Claim No." id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="XXX-1234-123456-123456" required />
@@ -6823,17 +6913,20 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           </div>
           <div>
             <label className="block text-xs font-medium text-foreground/70 mb-1">Vehicle Class</label>
-            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={vehicleClass} onChange={e => setVehicleClass(e.target.value)}>
-              <option value="">— Select vehicle class —</option>
-              {vehicleOptions.map(v => <option key={v.model} value={v.model}>{v.model} — ${v.dailyRate.toFixed(2)}/day</option>)}
+            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" id="lou-vehicle-type" value={vehicleClass} onChange={e => { setVehicleClass(e.target.value); setDailyRate(vehicleOptions.find(v => v.model === e.target.value)?.dailyRate.toFixed(2) || ""); }}>
+              <option value="">— Select vehicle type / model year —</option>
+              {vehicleClass && !publishedRate && <option value={vehicleClass} disabled>{vehicleClass} — no published rate; reselect</option>}
+              {vehicleOptions.map(v => <option key={v.model} value={v.model}>{v.model} — ${v.weeklyRate.toFixed(2)}/week · ${v.dailyRate.toFixed(2)}/day</option>)}
             </select>
           </div>
         </div>
         <div className="mt-3">
           <label className="block text-xs font-medium text-foreground/70 mb-1">Market / Location</label>
-          <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={marketCode} onChange={e => setMarketCode(e.target.value)}>
+          <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" id="lou-market" value={marketCode} onChange={e => setMarketCode(e.target.value)}>
             {markets.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
           </select>
+          {currentMarket && <p id="lou-rate-source" className="mt-2 text-xs leading-5 text-muted-foreground">{louRateSourceLabel(currentMarket)} Blank / not-offered cells are excluded. Confirm applicability to this repair period.</p>}
+          {vehicleClass && !publishedRate && <p role="alert" className="mt-2 text-xs text-destructive">No published rate for this vehicle/model-year in this market. Select an offered type or use a documented custom override; no other market's rate is substituted.</p>}
         </div>
       </Panel>
 
@@ -6858,10 +6951,10 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-foreground/70 mb-1">Whip Standard Rate</label>
-            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" value={dailyRate} onChange={e => setDailyRate(e.target.value)}>
+            <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring" id="lou-standard-rate" value={publishedRate ? vehicleClass : ""} onChange={e => { setVehicleClass(e.target.value); const selected = vehicleOptions.find(v => v.model === e.target.value); setDailyRate(selected?.dailyRate.toFixed(2) || ""); }}>
               <option value="">— Select rate —</option>
               {vehicleOptions.map(v => (
-                <option key={v.model} value={v.dailyRate.toFixed(2)}>{v.model} — ${v.dailyRate.toFixed(2)}/day</option>
+                <option key={v.model} value={v.model}>{v.model} — ${v.weeklyRate.toFixed(2)}/week · ${v.dailyRate.toFixed(2)}/day</option>
               ))}
             </select>
           </div>
@@ -6869,20 +6962,25 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
         </div>
         {(dailyRate || customRate) && (
           <div className="mt-3 p-2 rounded-md bg-muted/30 text-xs text-muted-foreground">
-            Rate basis: {ymm || vehicleClass} — Whip Standard Rate, {marketName} market (${(effectiveRate * 7).toFixed(2)}/wk ÷ 7 = ${effectiveRate.toFixed(2)}/day)
+            Rate basis: {vehicleClass || ymm} — {usesPublishedRate ? "Whip Standard Rate" : "Handler-entered custom rate"}, {marketName} market {usesPublishedRate ? `($${publishedRate!.weeklyRate.toFixed(2)}/wk ÷ 7 = $${effectiveRate.toFixed(2)}/day, rounded to cents)` : `($${effectiveRate.toFixed(2)}/day; no published weekly rate represented)`}
           </div>
         )}
         <p className="mt-3 text-xs leading-5 text-muted-foreground">LOU = documented days out of service × selected daily rate. The same calculator amount appears in the demand letter and support schedule. Reported monthly utilization is evidence context, not a multiplier.</p>
       </Panel>}
 
-      {showDemand && hasDv && <Panel title="Diminished Value" tag="MANUAL ENTRY · NO AUTOMATIC TRANSFER">
-        <p className="mb-3 text-xs leading-5 text-muted-foreground">Use the DV Calculator in the Insurance Direct navigation group, review its report, then manually enter the supported amount below. This form does not calculate or import DV.</p>
-        <Field label="Manual DV Demand Amount ($)" id="lou-dv-amount" value={directDraft.dvAmount} onChange={(value) => setDirect("dvAmount", value)} type="number" required />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+      {showDemand && hasDv && <Panel title="Diminished Value" tag="MANUAL OR REVIEWED REPORT · NO FORM DEFAULTS">
+        <div id="lou-dv-field-guide" className="mb-3 space-y-2 rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">
+          <p><strong>Where to look:</strong> On a CarSense report, use <strong>Section 4 · Diminished Value Calculation → TOTAL DIMINISHED VALUE</strong>. The total can continue onto the next page. Use that final dollar opinion—not total repair cost, average comparable value, severity score, or the rounded DV percentage.</p>
+          <p><strong>What to write:</strong> Name the appraisal company/appraiser, report ID/date, stated method, and the final-opinion section/page. These are in the report header and Section 4/5. Use the editable starter below; replace every bracketed item with this claim's facts.</p>
+          <p><strong>Optional values:</strong> Leave pre-loss/post-repair fields blank unless the report expressly states both. Do not manufacture a post-repair value by subtracting DV from an adjusted value. Confirm any separate CarFax enclosure yourself.</p>
+          <div className="flex flex-wrap gap-2"><Button id="lou-dv-use-reference" size="sm" variant="outline" onClick={() => setDirect("dvMethod", DV_REFERENCE_STARTER)}>Use Editable Source Wording</Button><Button id="lou-dv-clear-fields" size="sm" variant="outline" onClick={() => { dvRequestId.current += 1; setDvReportBusy(false); setDvReportError(""); if (dvReportInput.current) dvReportInput.current.value = ""; setDirectDraft(prev => ({ ...prev, dvAmount: "", prelossValue: "", postlossValue: "", dvMethod: "", carfaxReported: false, evidenceConfirmed: false })); setDvReportReview(null); setDvReportReviewed(false); }}>Clear DV Fields</Button></div>
+        </div>
+        <Field label="Report-Supported DV Demand Amount ($)" id="lou-dv-amount" value={directDraft.dvAmount} onChange={(value) => setDirect("dvAmount", value)} type="number" required />
+        <details className="mt-3"><summary className="cursor-pointer text-xs font-medium">Optional appraised values · only if both are expressly stated</summary><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
           <Field label="Optional Appraised Pre-Loss Value ($)" id="lou-dv-pre" value={directDraft.prelossValue} onChange={(value) => setDirect("prelossValue", value)} type="number" />
           <Field label="Optional Appraised Post-Repair Value ($)" id="lou-dv-post" value={directDraft.postlossValue} onChange={(value) => setDirect("postlossValue", value)} type="number" />
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Optional values are for explaining the report only. They never set or change the manual DV amount; if provided, both must agree with it.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Optional values are for explaining the report only. They never set or change the manual DV amount; if provided, both must agree with it.</p></details>
         <div className="mt-3"><TextareaField label="Appraisal Method / Source Reference" id="lou-dv-method" value={directDraft.dvMethod} onChange={(value) => setDirect("dvMethod", value)} placeholder="Method and exhibit/reference from the actual appraisal" rows={2} /></div>
         <div className="mt-3 flex items-center justify-between gap-3"><label className="flex items-center gap-2 text-xs"><Checkbox checked={directDraft.carfaxReported} onCheckedChange={(checked) => setDirect("carfaxReported", checked === true)} />Loss appears on the Carfax history report being enclosed</label><p className="text-sm font-semibold">Documented DV: ${dvAmount.toFixed(2)}</p></div>
       </Panel>}

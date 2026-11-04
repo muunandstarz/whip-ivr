@@ -29,6 +29,7 @@ import { storagePut } from "../storage";
 import { storageGetSignedUrl } from "../storage";
 import { extractPipBillLinesFromUpload } from "../pipBillExtraction";
 import { analyzeCarrierRebuttalUpload } from "../carrierRebuttalAnalysis";
+import { registerInsuranceDirectDvApi } from "../insuranceDirectDvApi";
 import { registerKlutchPolicyApi } from "../klutchPolicyApi";
 import { sdk } from "./sdk";
 import {
@@ -101,6 +102,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerKlutchPolicyApi(app);
+  registerInsuranceDirectDvApi(app);
 
   // ─── Document File Upload Endpoint ─────────────────────────────────────────
   // Used by Medical Bills Review, Carrier Rebuttal, PIP Exhaustion, TL Settlement

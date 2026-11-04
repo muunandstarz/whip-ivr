@@ -913,6 +913,21 @@ export const carrierRebuttalAiReviews = mysqlTable("carrier_rebuttal_ai_reviews"
 ]);
 export type CarrierRebuttalAiReview = typeof carrierRebuttalAiReviews.$inferSelect;
 
+// Structured DV-reader outcomes for all team members. No PDF, raw extracted
+// text, screenshot, filename, document URL, or object-storage key is retained.
+export const insuranceDirectDvReviews = mysqlTable("insurance_direct_dv_reviews", {
+  id: int("id").autoincrement().primaryKey(),
+  claimNumber: varchar("claim_number", { length: 96 }).notNull(),
+  modelId: varchar("model_id", { length: 96 }).notNull(),
+  status: mysqlEnum("status", ["parsed", "failed"]).notNull(),
+  reviewOutput: json("review_output").notNull(),
+  createdByUserId: int("created_by_user_id").notNull(),
+  createdByName: varchar("created_by_name", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("insurance_direct_dv_reviews_claim_created_idx").on(table.claimNumber, table.createdAt),
+]);
+
 // ─── Claim Correspondence: Document Generator ─────────────────────────────────
 // This is a claim-number-scoped internal record for correspondence prepared in
 // Document Generator. It deliberately has no provider message/thread fields and

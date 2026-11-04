@@ -142,6 +142,7 @@ export function validateInsuranceDirectDemand(input: {
       else if (amount > 0 && directMoney(pre - post) !== amount) errors.push("The optional pre-loss minus post-repair values must reconcile to the manually entered diminished-value amount; verify the amount and supporting values.");
     }
     if (!input.draft.dvMethod.trim()) errors.push("Enter the diminished-value method and source reference supporting the manual amount.");
+    if (/[\[\]{}]/.test(input.draft.dvMethod)) errors.push("Replace the source-wording placeholders with this appraisal report’s ID/date, method and final-opinion section/page.");
   }
   if (input.draft.stateAuthority.trim() && !input.draft.authorityVerified) errors.push("Confirm that any optional state authority is verified for the loss state, or leave it blank.");
   if (!input.draft.evidenceConfirmed) errors.push("Confirm repairs are complete and all selected damage items have the listed supporting exhibits.");

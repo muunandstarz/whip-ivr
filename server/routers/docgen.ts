@@ -18,6 +18,7 @@ import {
   listAllUsers, createClaimCorrespondence, getClaimCorrespondence,
   listOemProcedureSources, getOemProcedureSourcesByKeys,
   createCarrierRebuttalAiReview, listCarrierRebuttalAiReviews,
+  listInsuranceDirectDvReviews,
   listCarrierRebuttalClaimSources, getCarrierRebuttalClaimSourceMaterial,
 } from "../db";
 import { lookupClaimForDocgen } from "../db";
@@ -660,6 +661,10 @@ export const docgenRouter = router({
   carrierRebuttalAiReviewHistory: protectedProcedure
     .input(z.object({ claimNumber: z.string().trim().max(96).optional() }))
     .query(async ({ input }) => listCarrierRebuttalAiReviews(input.claimNumber || undefined)),
+
+  insuranceDirectDvReviewHistory: protectedProcedure
+    .input(z.object({ claimNumber: z.string().trim().min(1).max(96) }))
+    .query(async ({ input }) => listInsuranceDirectDvReviews(input.claimNumber)),
 
   parseCccValuation: protectedProcedure
     .input(z.object({

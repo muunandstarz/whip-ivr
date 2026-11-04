@@ -11,6 +11,7 @@ export interface StandaloneLouInput {
   handlerExtension: string; handlerEmail: string; logoBase64: string;
   snapshots: Array<{ reportMonth: string; repairDays: number; fleetCount: number; rentCount: number; availableCount: number; utilization: string; dataStatus?: string }>;
   sourceNote: string; reconciliation: string; verifiedAuthority?: string;
+  weeklyRate?: number; rateSource?: string;
 }
 
 const clean = (v: string) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim();
@@ -100,7 +101,10 @@ export function appendStandaloneLouForm(doc: jsPDF, input: StandaloneLouInput, o
   reserve(48); heading("LOSS OF USE / RENTAL CALCULATION");
   paragraph("Loss of Use Breakdown", 10, true);
   paragraph(`Days Out of Service: ${input.days} × Daily Rate: $${input.dailyRate.toFixed(2)} = $${input.amount.toFixed(2)}`, 8);
-  paragraph(`Rate basis: ${input.customRate ? "Handler-entered custom rate" : "Whip Standard Rate"} — ${input.vehicle || input.vehicleClass || "Vehicle"}, ${input.marketName} market ($${(input.dailyRate * 7).toFixed(2)}/wk ÷ 7 = $${input.dailyRate.toFixed(2)}/day)`, 7);
+  const publishedWeekly = !input.customRate && Number.isFinite(input.weeklyRate) && input.weeklyRate! > 0;
+  if (publishedWeekly && Number((input.weeklyRate! / 7).toFixed(2)) !== input.dailyRate) throw new RangeError("The published weekly rate must match the selected daily rate, rounded to cents.");
+  paragraph(`Rate basis: ${input.customRate ? "Handler-entered custom rate" : "Whip Standard Rate"} — ${input.vehicleClass || input.vehicle || "Vehicle"}, ${input.marketName} market${publishedWeekly ? ` ($${input.weeklyRate!.toFixed(2)}/wk ÷ 7 = $${input.dailyRate.toFixed(2)}/day, rounded to cents)` : ` ($${input.dailyRate.toFixed(2)}/day; no published weekly rate represented)`}`, 7);
+  if (publishedWeekly && input.rateSource) paragraph(`RATE SOURCE: ${input.rateSource}`, 7);
   reserve(14); doc.setFillColor(235, 235, 235); doc.rect(left, y, width, 11, "F");
   font(8, true); doc.text("TOTAL LOSS OF USE / RENTAL REIMBURSEMENT CLAIMED:", left + 2, y + 7);
   font(11, true); doc.text(`$${input.amount.toFixed(2)}`, W - left - 2, y + 7, { align: "right" }); y += 17;

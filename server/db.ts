@@ -27,6 +27,7 @@ import {
   claimCorrespondence,
   oemProcedureSources,
   carrierRebuttalAiReviews,
+  insuranceDirectDvReviews,
   mailItems,
   mailItemFiles,
 } from "../drizzle/schema";
@@ -2530,6 +2531,24 @@ export async function listCarrierRebuttalAiReviews(claimNumber?: string) {
   return claimNumber
     ? query.where(eq(carrierRebuttalAiReviews.claimNumber, claimNumber)).orderBy(desc(carrierRebuttalAiReviews.createdAt)).limit(25)
     : query.orderBy(desc(carrierRebuttalAiReviews.createdAt)).limit(100);
+}
+
+export async function createInsuranceDirectDvReview(input: {
+  claimNumber: string; modelId: string; status: "parsed" | "failed";
+  reviewOutput: Record<string, unknown>; createdByUserId: number; createdByName?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(insuranceDirectDvReviews).values({ ...input, createdByName: input.createdByName || null });
+  return (result[0] as { insertId: number }).insertId;
+}
+
+/** Exact claim scope, including reviews created by other team members. No source file is returned. */
+export async function listInsuranceDirectDvReviews(claimNumber: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(insuranceDirectDvReviews).where(eq(insuranceDirectDvReviews.claimNumber, claimNumber))
+    .orderBy(desc(insuranceDirectDvReviews.createdAt)).limit(20);
 }
 
 // ─── Claim Correspondence: Document Generator ─────────────────────────────────
