@@ -57,7 +57,7 @@ const FIRST_BODY_BASELINE = 36;
 const CONTINUATION_TOP = 18;
 const BASELINE_OFFSET = 3.4;
 const FOOTER_BAND = 24;
-const BODY_SIZE = 10;
+const BODY_SIZE = 9.5;
 const LINE_HEIGHT = 4.6;
 const GENERAL_EMAIL = "claims@drivewhip.com";
 const OWNER = "Metrocars Leasing Corp.";
@@ -118,7 +118,7 @@ class LetterLayout {
   font(bold = false, size = BODY_SIZE): void {
     this.doc.setFont("helvetica", bold ? "bold" : "normal");
     this.doc.setFontSize(size);
-    this.doc.setTextColor(0);
+    this.doc.setTextColor(55);
   }
 
   lines(text: string, width = this.width, bold = false, size = BODY_SIZE): string[] {
@@ -162,7 +162,7 @@ class LetterLayout {
     const firstLines = this.lines(text).length;
     const height = LINE_HEIGHT + 1 + firstLines * LINE_HEIGHT;
     this.reserve(height <= this.bottom - CONTINUATION_TOP ? height : LINE_HEIGHT + 1 + Math.min(firstLines, 2) * LINE_HEIGHT);
-    this.block({ text: title, bold: true, gap: 1 });
+    this.block({ text: title, gap: 1 });
     this.block({ text }, false);
   }
 
@@ -189,7 +189,7 @@ class LetterLayout {
     lines.forEach((line, index) => {
       if (this.y + LINE_HEIGHT > this.bottom) this.newPage();
       if (index === 0) {
-        this.font(true);
+        this.font();
         this.doc.text(label, BODY_MARGIN, this.y + BASELINE_OFFSET);
       }
       this.font();
@@ -203,7 +203,7 @@ class LetterLayout {
     const lineHeight = 4.2;
     const wrap = (cells: string[], bold = false) =>
       cells.map((cell, index) => this.lines(cell, widths[index] - cellGap * 2, bold, size));
-    const headerLines = wrap(headers, true);
+    const headerLines = wrap(headers);
     const headerLineCount = Math.max(...headerLines.map(lines => lines.length));
     const headerHeight = headerLineCount * lineHeight + cellGap * 2;
     const draw = (cells: string[][], offset: number, count: number, bold: boolean, header = false) => {
@@ -212,7 +212,7 @@ class LetterLayout {
       this.doc.setDrawColor(155);
       this.doc.setLineWidth(0.15);
       cells.forEach((lines, column) => {
-        if (header) this.doc.setFillColor(235, 235, 235);
+        if (header) this.doc.setFillColor(245, 245, 245);
         this.doc.rect(x, this.y, widths[column], height, header ? "FD" : "S");
         this.font(bold, size);
         lines.slice(offset, offset + count).forEach((line, index) => {
@@ -228,7 +228,7 @@ class LetterLayout {
       });
       this.y += height;
     };
-    const drawHeader = () => draw(headerLines, 0, headerLineCount, true, true);
+    const drawHeader = () => draw(headerLines, 0, headerLineCount, false, true);
     const nextTablePage = () => {
       this.newPage();
       drawHeader();
@@ -273,15 +273,15 @@ function letterhead(layout: LetterLayout, logoBase64: string): void {
       // jsPDF cannot decode this supplied logo. The letter remains usable.
     }
   }
-  layout.font(true, 9);
-  doc.setTextColor(20);
+  layout.font(false, 9);
+  doc.setTextColor(55);
   doc.text("Whip Claims Management", right, 12, { align: "right" });
   layout.font(false, 8);
   doc.setTextColor(80);
   doc.text("P.O. Box 10622 Rockville, MD 20849-0622", right, 17, { align: "right" });
   doc.text(`(855) 906-5949 | ${GENERAL_EMAIL}`, right, 22, { align: "right" });
   doc.setDrawColor(180);
-  doc.setLineWidth(0.5);
+  doc.setLineWidth(0.25);
   doc.line(HEADER_MARGIN, 30, right, 30);
   doc.setLineWidth(0.2);
   // Subro writes its date at y=36; this engine stores line tops, not baselines.
@@ -408,11 +408,12 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
   if (input.hasDv) enclosures.push("diminished value appraisal");
   if (input.hasDv && input.carfaxReported) enclosures.push("Carfax history report");
   enclosures.push("Direction of Pay and Vehicle Ownership Notice");
+  // Independent sections fill available space. Do not push the entire closing
+  // onto a new page merely because the signature/enclosures also need room.
+  layout.section("Demand", `Pay ${money(total)}. If you value any item differently, send your valuation and the method behind it with your response. A general statement that an item is not owed does not answer a documented item. Please respond within ten (10) days of receipt.`);
+  layout.section("Payment", `${OWNER} owns the vehicle. Issue payment as directed in the enclosed Direction of Pay and Vehicle Ownership Notice.`);
+  // A continuation should include substantive prose, not an isolated signature.
   const closing: TextBlock[] = [
-    { text: "Demand", bold: true, gap: 1 },
-    { text: `Pay ${money(total)}. If you value any item differently, send your valuation and the method behind it with your response. A general statement that an item is not owed does not answer a documented item. Please respond within ten (10) days of receipt.` },
-    { text: "Payment", bold: true, gap: 1 },
-    { text: `${OWNER} owns the vehicle. Issue payment as directed in the enclosed Direction of Pay and Vehicle Ownership Notice.` },
     { text: `Please reference both claim numbers on all correspondence and send it to ${GENERAL_EMAIL}. This letter does not waive any right or remedy of ${OWNER} or Whip Claims Management, and does not concede any position on coverage, liability or the amount of loss.` },
     { text: "Sincerely,", gap: 4 },
   ];
@@ -420,9 +421,9 @@ export function createInsuranceDirectPdf(input: InsuranceDirectPdfInput): jsPDF 
   if (plain(input.handlerTitle)) closing.push({ text: plain(input.handlerTitle), gap: 3 });
   closing.push(
     { text: `Whip Claims Management\nP.O. Box 10622, Rockville, MD 20849\nPhone: (855) 906-5949${plain(input.handlerExtension) ? ` ext. ${plain(input.handlerExtension)}` : ""}\n${handlerEmail}`, gap: 3 },
-    { text: `Enclosures: ${enclosures.join("; ")}`, gap: 0 },
   );
   layout.blocksTogether(closing);
+  layout.block({ text: `Enclosures: ${enclosures.join("; ")}`, gap: 0 });
 
   const lastCoverPage = doc.getNumberOfPages();
   if (input.hasLou && input.attachLouSchedule) {

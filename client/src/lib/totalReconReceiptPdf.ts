@@ -14,17 +14,16 @@ export async function loadTotalReconReceiptTemplate(): Promise<ArrayBuffer> {
 /** The supplied blank PDF is the actual background. Only its blank fields are filled. */
 export async function createTotalReconReceiptPdf(template: ArrayBuffer | Uint8Array, fields: TotalReconReceiptFields, receiptNo: string): Promise<Uint8Array> {
   const v = totalReconReceiptSchema.parse(fields);
-  if (!/^(TR-\d{8}-\d{6,}|PREVIEW)$/.test(receiptNo)) throw new Error("Invalid receipt number");
+  if (!/^(TR-\d{8}-\d{6,}|(?!0+$)\d{8,10}|PREVIEW)$/.test(receiptNo)) throw new Error("Invalid receipt number");
   const doc = await PDFDocument.load(template), page = doc.getPage(0);
   if (doc.getPageCount() !== 1 || Math.abs(page.getWidth() - 595.304) > 1 || Math.abs(page.getHeight() - 841.89) > 1) throw new Error("Unexpected Total Recon template geometry");
-  const font = await doc.embedFont(StandardFonts.Helvetica), bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const write = (value: string, x: number, ruleY: number, width = 147, maxSize = 10, isBold = false) => {
-    const f = isBold ? bold : font;
-    const size = Math.min(maxSize, width * maxSize / Math.max(width, f.widthOfTextAtSize(value, maxSize)));
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const write = (value: string, x: number, ruleY: number, width = 147, maxSize = 9) => {
+    const size = Math.min(maxSize, width * maxSize / Math.max(width, font.widthOfTextAtSize(value, maxSize)));
     if (size < 6.5) throw new Error("A receipt field is too long for this exact template. Shorten it before generating.");
-    page.drawText(value, { x, y: ruleY + 3, size, font: f, color: rgb(0, 0, 0) });
+    page.drawText(value, { x, y: ruleY + 3, size, font, color: rgb(0.24, 0.24, 0.24) });
   };
-  write(receiptNo, 431, 737, 107, 8.5, true);
+  write(receiptNo, 431, 737, 107, 9);
   write(receiptDateLabel(v.receiptDate), 431, 724, 107, 9);
   write(v.owner, 150, 659.739);
   write(v.vehicle, 150, 627.239);
@@ -44,9 +43,9 @@ export async function createTotalReconReceiptPdf(template: ArrayBuffer | Uint8Ar
   page.drawLine({ start: { x: boxX, y: 633.3 }, end: { x: boxX + 3.8, y: 637.1 }, thickness: 0.7 });
   page.drawLine({ start: { x: boxX, y: 637.1 }, end: { x: boxX + 3.8, y: 633.3 }, thickness: 0.7 });
   // Preserve dollar signs and underlines from the supplied summary.
-  write(receiptDollars(b.totalCents), 454, 437.59, 81, 10);
-  write(receiptDollars(b.paymentsCents), 454, 405.59, 81, 10);
-  write(receiptDollars(b.remainingCents), 454, 373.59, 81, 10, true);
+  write(receiptDollars(b.totalCents), 454, 437.59, 81, 9);
+  write(receiptDollars(b.paymentsCents), 454, 405.59, 81, 9);
+  write(receiptDollars(b.remainingCents), 454, 373.59, 81, 9);
   doc.setTitle("Total Recon Payment Receipt");
   doc.setSubject(receiptNo === "PREVIEW" ? "Unissued preview; no receipt number allocated" : `Receipt ${receiptNo}`);
   doc.setAuthor("Total Recon");

@@ -147,7 +147,7 @@ function assertFooterSafe(doc: jsPDF): void {
 }
 
 describe("Insurance Direct jsPDF renderer", () => {
-  it("exports a synchronous pure jsPDF A4 document with Helvetica 10-point body", () => {
+  it("exports a synchronous pure jsPDF A4 document with regular Helvetica 9.5-point body", () => {
     const doc = createInsuranceDirectPdf(input());
     // jsPDF is a factory: even `new jsPDF()` returns an API object rather than
     // an instance of its constructor. Verify the actual API and output.
@@ -158,7 +158,7 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(doc.internal.pageSize.getWidth()).toBeCloseTo(210, 1);
     expect(doc.internal.pageSize.getHeight()).toBeCloseTo(297, 1);
     expect(doc.output()).toContain("/BaseFont /Helvetica");
-    expect(doc.output()).toContain("/F1 10 Tf");
+    expect(doc.output()).toContain("/F1 9.5 Tf");
     assertFooterSafe(doc);
   });
 
@@ -374,14 +374,34 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(empty).not.toContain("Claims Specialist");
   });
 
-  it("keeps Demand, Payment, signature and enclosures on one page whenever the group fits", () => {
-    const pages = pageText(createInsuranceDirectPdf(input()));
-    const demandPage = pages.findIndex(page => page.includes("Pay $4,000.00."));
-    expect(demandPage).toBeGreaterThanOrEqual(0);
-    expect(pages[demandPage]).toContain("Payment");
-    expect(pages[demandPage]).toContain("Sincerely,");
-    expect(pages[demandPage]).toContain("Morgan Handler");
-    expect(pages[demandPage]).toContain("Enclosures:");
+  it("uses the first-page space for Demand and Payment instead of moving the entire closing, while keeping the sign-off intact", () => {
+    const doc = createInsuranceDirectPdf(input());
+    const pages = pageText(doc);
+    expect(pages[0]).toContain("Pay $4,000.00.");
+    expect(pages[0]).toContain("Payment");
+    const body = textGeometry(doc, pageStreams(doc)[0]).filter(t => !t.text.startsWith("Whip Claims Management |") && !/^Page \d+ of/.test(t.text));
+    expect(Math.max(...body.map(t => t.y))).toBeGreaterThan(250);
+    const signPage = pages.findIndex(page => page.includes("Sincerely,"));
+    expect(signPage).toBeGreaterThanOrEqual(0);
+    expect(pages[signPage]).toContain("Morgan Handler Claims Specialist");
+    expect(pages[signPage]).toContain("Phone: (855) 906-5949 ext. 104");
+    expect(pages[signPage]).toContain("Please reference both claim numbers");
+    expect(pages.join(" ")).toContain("Enclosures:");
+    assertFooterSafe(doc);
+  });
+
+  it("uses regular identity labels and lighter charcoal ink without changing paragraph line spacing", () => {
+    const doc = createInsuranceDirectPdf(input());
+    const stream = pageStreams(doc)[0];
+    for (const label of ["Your insured", "Vehicle owner", "Repair facility"]) {
+      const block = Array.from(stream.matchAll(/BT\n([\s\S]*?)\nET/g), m => m[1]).find(b => strings(b).includes(label));
+      expect(block).toContain("/F1 9.5 Tf");
+      expect(Number(/([\d.]+) g/.exec(block!)?.[1])).toBeCloseTo(55 / 255, 3);
+    }
+    const g = textGeometry(doc, stream);
+    const owner = g.find(t => t.text === "Vehicle owner")!;
+    const driver = g.find(t => t.text === "Driver")!;
+    expect(driver.y - owner.y).toBeCloseTo(4.6, 8);
   });
 
   it("appends the full standard LOU request and its supporting basis after the cover letter", () => {

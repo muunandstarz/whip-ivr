@@ -76,7 +76,7 @@ export default function TotalReconReceiptForm({ initialDraft, onDraftChange }: {
   return <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
     <div className="space-y-4">
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">Receipt information</CardTitle></CardHeader><CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">Uses the supplied Total Recon template. Each new receipt receives a unique server-issued number. Preview is unissued and does not reserve a number.</p>
+        <p className="text-xs text-muted-foreground">Uses the supplied Total Recon template. Each new receipt receives a short, unique server-issued number (no more than 10 digits). Preview is unissued and does not reserve a number.</p>
         {field("receiptDate", "Receipt date", "date")}
         <div className="rounded-md bg-muted p-3 text-sm">Receipt number: <strong>{issuedNumber || "Assigned when generated"}</strong></div>
       </CardContent></Card>

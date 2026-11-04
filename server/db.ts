@@ -2564,14 +2564,16 @@ export async function issueTotalReconPaymentReceipt(input: {
   // A database unique key, not a client counter or timestamp, protects concurrency.
   // Identical transport retries return the original immutable receipt.
   await db.insert(totalReconPaymentReceipts).values({ requestKey: input.requestKey,
-    claimNumber: fields.claimNumber, inputSnapshot: fields, inputHash,
+    claimNumber: fields.claimNumber, inputSnapshot: { ...fields, receiptNumberFormat: "compact-v1" }, inputHash,
     createdByUserId: input.userId, createdByName: input.userName || null,
   }).onDuplicateKeyUpdate({ set: { requestKey: input.requestKey } });
   const [row] = await db.select().from(totalReconPaymentReceipts)
     .where(eq(totalReconPaymentReceipts.requestKey, input.requestKey)).limit(1);
   if (!row || row.createdByUserId !== input.userId || row.inputHash !== inputHash)
     throw new Error("Receipt retry does not match the original request. Start a new receipt.");
-  return { receiptNumber: receiptNumber(row.id, row.createdAt), fields: totalReconReceiptSchema.parse(row.inputSnapshot), issuedAt: row.createdAt };
+  // Older snapshots have no marker: preserve their already-printed long number.
+  const format = (row.inputSnapshot as { receiptNumberFormat?: string }).receiptNumberFormat === "compact-v1" ? "compact-v1" : "legacy";
+  return { receiptNumber: receiptNumber(row.id, row.createdAt, format), fields: totalReconReceiptSchema.parse(row.inputSnapshot), issuedAt: row.createdAt };
 }
 
 // ─── Claim Correspondence: Document Generator ─────────────────────────────────

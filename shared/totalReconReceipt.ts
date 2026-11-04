@@ -22,9 +22,10 @@ export function receiptBalances(v: TotalReconReceiptFields) {
   const paymentsCents = usdCents(v.priorPayments) + currentCents;
   return { currentCents, totalCents, paymentsCents, remainingCents: totalCents - paymentsCents };
 }
-export function receiptNumber(id: number, createdAt: Date): string {
-  if (!Number.isSafeInteger(id) || id < 1 || Number.isNaN(createdAt.getTime())) throw new Error("Invalid issued receipt identity");
-  return `TR-${createdAt.toISOString().slice(0, 10).replaceAll("-", "")}-${String(id).padStart(6, "0")}`;
+export function receiptNumber(id: number, createdAt: Date, format: "compact-v1" | "legacy" = "compact-v1"): string {
+  if (!Number.isSafeInteger(id) || id < 1 || id > 9_999_999_999 || Number.isNaN(createdAt.getTime())) throw new Error("Invalid issued receipt identity");
+  if (format === "legacy") return `TR-${createdAt.toISOString().slice(0, 10).replaceAll("-", "")}-${String(id).padStart(6, "0")}`;
+  return String(id).padStart(8, "0");
 }
 export function receiptDollars(cents: number): string { return (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 export function receiptDateLabel(value: string): string { const [y, m, d] = value.split("-"); return `${m}/${d}/${y}`; }
