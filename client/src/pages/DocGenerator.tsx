@@ -1,3 +1,4 @@
+import TotalReconReceiptForm from "@/components/TotalReconReceiptForm";
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
@@ -315,7 +316,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "subro-demand", label: "Subro Demand Letter", icon: Scale },
       { id: "carrier-rebuttal", label: "Carrier Rebuttal", icon: Scale },
-      { id: "payment-receipt", label: "Payment Receipt", icon: Receipt },
+      { id: "payment-receipt", label: "Total Recon Payment Receipt", icon: Receipt },
       { id: "urgently-invoice", label: "Towing Invoice", icon: Truck },
     ],
   },
@@ -5330,193 +5331,6 @@ function CarrierRebuttalTab() {
   </div>;
 }
 
-// ─── Tab: Payment Receipt ─────────────────────────────────────────────────────
-function PaymentReceiptTab() {
-  const [form, setForm] = useState({
-    claimNumber: "",
-    dateOfLoss: "",
-    paymentDate: "",
-    payeeName: "",
-    payeeAddress: "",
-    paymentAmount: "",
-    paymentMethod: "check",
-    checkNumber: "",
-    paymentPurpose: "property_damage",
-    adjusterName: "",
-    notes: "",
-  });
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-
-  const set = (k: keyof typeof form) => (v: string) =>
-    setForm((p) => ({ ...p, [k]: v }));
-
-  const purposeLabels: Record<string, string> = {
-    property_damage: "Property Damage Settlement",
-    bodily_injury: "Bodily Injury Settlement",
-    total_loss: "Total Loss Settlement",
-    rental: "Rental Reimbursement",
-    towing: "Towing & Storage",
-    medical: "Medical Expense Reimbursement",
-    total_recon: "Total Recon — Repair Payment",
-    other: "Other",
-  };
-
-  const methodLabels: Record<string, string> = {
-    check: "Check",
-    ach: "ACH / Direct Deposit",
-    wire: "Wire Transfer",
-    zelle: "Zelle",
-    venmo: "Venmo",
-  };
-
-  const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  const preview = `WHIP CLAIMS MANAGEMENT
-PAYMENT RECEIPT / PROOF OF PAYMENT
-
-Date: ${form.paymentDate || today}
-Claim Number: ${form.claimNumber || "[Claim Number]"}
-Date of Loss: ${form.dateOfLoss || "[Date of Loss]"}
-
-─────────────────────────────────────────────────────────
-PAYEE INFORMATION
-─────────────────────────────────────────────────────────
-Name: ${form.payeeName || "[Payee Name]"}
-Address: ${form.payeeAddress || "[Payee Address]"}
-
-─────────────────────────────────────────────────────────
-PAYMENT DETAILS
-─────────────────────────────────────────────────────────
-Payment Purpose: ${purposeLabels[form.paymentPurpose] || form.paymentPurpose}
-Payment Amount: $${form.paymentAmount || "0.00"}
-Payment Method: ${methodLabels[form.paymentMethod] || form.paymentMethod}${form.checkNumber ? `\nCheck / Reference #: ${form.checkNumber}` : ""}
-
-─────────────────────────────────────────────────────────
-This document confirms that the above payment has been issued by Whip Claims Management / Metrocars Leasing Corp in connection with the referenced claim. This payment is issued in full and final settlement of the above-referenced claim and does not constitute an admission of liability.
-${form.notes ? `\nAdditional Notes:\n${form.notes}` : ""}
-
-─────────────────────────────────────────────────────────
-Authorized By: ${form.adjusterName || "[Adjuster Name]"}
-Whip Claims Management
-P.O. Box 10622, Rockville, MD 20849
-claims@drivewhip.com`;
-
-  const handleDownload = (shouldDownload = true) => {
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = addWhipLetterhead(doc, "PAYMENT RECEIPT", `Claim #${form.claimNumber || "[Claim Number]"} — ${form.paymentDate || today}`);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-
-    // Payee section
-    doc.setFont("helvetica", "bold");
-    doc.text("PAYEE INFORMATION", 14, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text(`Name: ${form.payeeName || "[Payee Name]"}`, 14, y); y += 5;
-    doc.text(`Address: ${form.payeeAddress || "[Payee Address]"}`, 14, y); y += 8;
-
-    // Payment section
-    doc.setFont("helvetica", "bold");
-    doc.text("PAYMENT DETAILS", 14, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text(`Purpose: ${purposeLabels[form.paymentPurpose] || form.paymentPurpose}`, 14, y); y += 5;
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(23, 27, 49);
-    doc.text(`$${form.paymentAmount || "0.00"}`, 14, y); y += 7;
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    doc.text(`Method: ${methodLabels[form.paymentMethod] || form.paymentMethod}`, 14, y); y += 5;
-    if (form.checkNumber) { doc.text(`Check / Reference #: ${form.checkNumber}`, 14, y); y += 5; }
-    y += 4;
-
-    // Disclaimer
-    const disclaimer = "This document confirms that the above payment has been issued by Whip Claims Management / Metrocars Leasing Corp in connection with the referenced claim. This payment is issued in full and final settlement of the above-referenced claim and does not constitute an admission of liability.";
-    y = wrapText(doc, disclaimer, 14, y, W - 28, 6.5);
-    y += 6;
-    if (form.notes) { y = wrapText(doc, `Notes: ${form.notes}`, 14, y, W - 28, 6.5); y += 4; }
-
-    doc.setFont("helvetica", "bold");
-    doc.text(`Authorized By: ${form.adjusterName || "[Adjuster Name]"}`, 14, y); y += 5;
-    doc.setFont("helvetica", "normal");
-    doc.text("Whip Claims Management", 14, y);
-
-    addSOLNotice(doc);
-    addLetterFooter(doc);
-    setPreviewPdfUrl(getPDFDataUrl(doc));
-    if (shouldDownload) downloadPDF(doc, `Whip_PaymentReceipt_${form.claimNumber || "Draft"}.pdf`);
-  };
-  const handlePreviewOnly = () => { handleDownload(false); };
-
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <div>
-        <Panel title="Claim & Payment Details" tag="REQUIRED">
-          <Grid3>
-            <Field label="Claim Number" id="pr-claim" value={form.claimNumber} onChange={set("claimNumber")} placeholder="e.g. PF438367" required />
-            <Field label="Date of Loss" id="pr-dol" value={form.dateOfLoss} onChange={set("dateOfLoss")} type="date" />
-            <Field label="Payment Date" id="pr-date" value={form.paymentDate} onChange={set("paymentDate")} type="date" />
-          </Grid3>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="Payee Name" id="pr-payee" value={form.payeeName} onChange={set("payeeName")} placeholder="Full legal name" required />
-            <Field label="Payee Address" id="pr-addr" value={form.payeeAddress} onChange={set("payeeAddress")} placeholder="123 Main St, City, ST 00000" />
-          </div>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-foreground/80">Payment Purpose</Label>
-              <Select value={form.paymentPurpose} onValueChange={set("paymentPurpose")}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(purposeLabels).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Field label="Payment Amount ($)" id="pr-amount" value={form.paymentAmount} onChange={set("paymentAmount")} placeholder="0.00" type="number" required />
-          </div>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-foreground/80">Payment Method</Label>
-              <Select value={form.paymentMethod} onValueChange={set("paymentMethod")}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(methodLabels).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Field label="Check / Reference #" id="pr-check" value={form.checkNumber} onChange={set("checkNumber")} placeholder="e.g. 10042" />
-          </div>
-          <div className="mt-3">
-            <Field label="Authorized By (Adjuster)" id="pr-adjuster" value={form.adjusterName} onChange={set("adjusterName")} placeholder="Adjuster name" />
-          </div>
-          <div className="mt-3">
-            <TextareaField label="Additional Notes (optional)" id="pr-notes" value={form.notes} onChange={set("notes")} placeholder="Any additional notes about this payment..." rows={3} />
-          </div>
-        </Panel>
-      </div>
-      <PreviewPanel
-        text={preview}
-        onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
-        onDownload={handleDownload}
-      
-        pdfUrl={previewPdfUrl}
-      
-        onPreview={handlePreviewOnly}/>
-    </div>
-  );
-}
-
 // ─── Tab: Towing Invoice (Multi-Provider) ────────────────────────────────────
 interface TowingLineItem {
   description: string;
@@ -9158,7 +8972,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     setActiveTab(normalizeDocGeneratorTab(draft.tabKey));
     setCurrentDraftId(draft.id);
     setCurrentFormData(draft.formData as Record<string, unknown>);
-    if (draft.tabKey === "lou-calculator") setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
     setShowMyDocs(false);
     toast.info("Draft loaded — fill in the form and generate");
   };
@@ -9171,7 +8985,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
     setActiveTab(normalizeDocGeneratorTab(t.tabKey));
     setCurrentFormData(t.formData as Record<string, unknown>);
-    if (t.tabKey === "lou-calculator") setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
     markReadMut.mutate({ templateId: t.id });
     setShowSharedTemplates(false);
     toast.info("Shared template loaded");
@@ -9193,7 +9007,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "tl-settlement": return <TLSettlementTab />;
       case "subro-demand": return <SubroDemandTab onNavigate={setActiveTab} louHandoff={louDemandHandoff} onLouHandoffConsumed={handleLouHandoffConsumed} />;
       case "carrier-rebuttal": return <CarrierRebuttalTab />;
-      case "payment-receipt": return <PaymentReceiptTab />;
+      case "payment-receipt": return <TotalReconReceiptForm initialDraft={currentFormData} onDraftChange={setCurrentFormData} />;
       case "urgently-invoice": return <UrgentlyInvoiceTab />;
       case "pip-exhaustion": return <PIPExhaustionTab />;
       case "limited-liability-bi": return <LimitedLiabilityBITab />;

@@ -50,7 +50,12 @@ export interface InsuranceDirectPdfInput {
   louRecord?: StandaloneLouInput;
 }
 
-const MARGIN = 25.4;
+// Match Subro's header and body frames; the shared LOU form owns its geometry.
+const HEADER_MARGIN = 14;
+const BODY_MARGIN = 18;
+const FIRST_BODY_BASELINE = 36;
+const CONTINUATION_TOP = 18;
+const BASELINE_OFFSET = 3.4;
 const FOOTER_BAND = 24;
 const BODY_SIZE = 10;
 const LINE_HEIGHT = 4.6;
@@ -103,10 +108,10 @@ interface TableRow {
 class LetterLayout {
   readonly width: number;
   readonly bottom: number;
-  y = MARGIN;
+  y = CONTINUATION_TOP;
 
   constructor(readonly doc: jsPDF) {
-    this.width = doc.internal.pageSize.getWidth() - MARGIN * 2;
+    this.width = doc.internal.pageSize.getWidth() - BODY_MARGIN * 2;
     this.bottom = doc.internal.pageSize.getHeight() - FOOTER_BAND;
   }
 
@@ -123,11 +128,11 @@ class LetterLayout {
 
   newPage(): void {
     this.doc.addPage();
-    this.y = MARGIN;
+    this.y = CONTINUATION_TOP;
   }
 
   reserve(height: number): void {
-    if (height <= this.bottom - MARGIN && this.y + height > this.bottom) {
+    if (height <= this.bottom - CONTINUATION_TOP && this.y + height > this.bottom) {
       this.newPage();
     }
   }
@@ -147,7 +152,7 @@ class LetterLayout {
     for (const line of lines) {
       if (this.y + LINE_HEIGHT > this.bottom) this.newPage();
       this.font(block.bold);
-      this.doc.text(line, MARGIN, this.y + 3.4);
+      this.doc.text(line, BODY_MARGIN, this.y + BASELINE_OFFSET);
       this.y += LINE_HEIGHT;
     }
     this.gap(block.gap ?? 3);
@@ -156,7 +161,7 @@ class LetterLayout {
   section(title: string, text: string): void {
     const firstLines = this.lines(text).length;
     const height = LINE_HEIGHT + 1 + firstLines * LINE_HEIGHT;
-    this.reserve(height <= this.bottom - MARGIN ? height : LINE_HEIGHT + 1 + Math.min(firstLines, 2) * LINE_HEIGHT);
+    this.reserve(height <= this.bottom - CONTINUATION_TOP ? height : LINE_HEIGHT + 1 + Math.min(firstLines, 2) * LINE_HEIGHT);
     this.block({ text: title, bold: true, gap: 1 });
     this.block({ text }, false);
   }
@@ -171,7 +176,7 @@ class LetterLayout {
       if (block.bold && blocks[index + 1]) {
         const nextHeight = this.blockHeight(blocks[index + 1]);
         const pairHeight = this.blockHeight(block) + nextHeight;
-        this.reserve(pairHeight <= this.bottom - MARGIN ? pairHeight : this.blockHeight(block) + 2 * LINE_HEIGHT);
+        this.reserve(pairHeight <= this.bottom - CONTINUATION_TOP ? pairHeight : this.blockHeight(block) + 2 * LINE_HEIGHT);
       }
       this.block(block, index === 0 || !blocks[index - 1].bold);
     }
@@ -185,10 +190,10 @@ class LetterLayout {
       if (this.y + LINE_HEIGHT > this.bottom) this.newPage();
       if (index === 0) {
         this.font(true);
-        this.doc.text(label, MARGIN, this.y + 3.4);
+        this.doc.text(label, BODY_MARGIN, this.y + BASELINE_OFFSET);
       }
       this.font();
-      this.doc.text(line, MARGIN + labelWidth, this.y + 3.4);
+      this.doc.text(line, BODY_MARGIN + labelWidth, this.y + BASELINE_OFFSET);
       this.y += LINE_HEIGHT;
     });
   }
@@ -203,7 +208,7 @@ class LetterLayout {
     const headerHeight = headerLineCount * lineHeight + cellGap * 2;
     const draw = (cells: string[][], offset: number, count: number, bold: boolean, header = false) => {
       const height = count * lineHeight + cellGap * 2;
-      let x = MARGIN;
+      let x = BODY_MARGIN;
       this.doc.setDrawColor(155);
       this.doc.setLineWidth(0.15);
       cells.forEach((lines, column) => {
@@ -234,7 +239,7 @@ class LetterLayout {
       const cells = wrap(row.cells, row.bold);
       const lineCount = Math.max(...cells.map(lines => lines.length));
       const rowHeight = lineCount * lineHeight + cellGap * 2;
-      if (this.y + rowHeight > this.bottom && rowHeight <= this.bottom - MARGIN - headerHeight) {
+      if (this.y + rowHeight > this.bottom && rowHeight <= this.bottom - CONTINUATION_TOP - headerHeight) {
         nextTablePage();
       }
       let offset = 0;
@@ -257,28 +262,30 @@ class LetterLayout {
 
 function letterhead(layout: LetterLayout, logoBase64: string): void {
   const { doc } = layout;
-  const right = MARGIN + layout.width;
+  const right = doc.internal.pageSize.getWidth() - HEADER_MARGIN;
   if (plain(logoBase64)) {
     // Only the supplied actual logo is used; never synthesize a replacement.
     // Invalid image data is omitted rather than preventing the demand text.
     try {
       const image = doc.getImageProperties(logoBase64);
-      const scale = Math.min(31 / image.width, 15 / image.height);
-      doc.addImage(logoBase64, image.fileType, MARGIN, MARGIN, image.width * scale, image.height * scale);
+      doc.addImage(logoBase64, image.fileType, HEADER_MARGIN, 8, 29, 19);
     } catch {
       // jsPDF cannot decode this supplied logo. The letter remains usable.
     }
   }
-  layout.font(true, 8);
-  doc.text("Whip Claims Management", right, MARGIN + 3, { align: "right" });
+  layout.font(true, 9);
+  doc.setTextColor(20);
+  doc.text("Whip Claims Management", right, 12, { align: "right" });
   layout.font(false, 8);
-  doc.setTextColor(70);
-  doc.text("P.O. Box 10622 Rockville, MD 20849-0622", right, MARGIN + 7, { align: "right" });
-  doc.text(`(855) 906-5949 | ${GENERAL_EMAIL}`, right, MARGIN + 11, { align: "right" });
-  doc.setDrawColor(165);
+  doc.setTextColor(80);
+  doc.text("P.O. Box 10622 Rockville, MD 20849-0622", right, 17, { align: "right" });
+  doc.text(`(855) 906-5949 | ${GENERAL_EMAIL}`, right, 22, { align: "right" });
+  doc.setDrawColor(180);
+  doc.setLineWidth(0.5);
+  doc.line(HEADER_MARGIN, 30, right, 30);
   doc.setLineWidth(0.2);
-  doc.line(MARGIN, MARGIN + 18, right, MARGIN + 18);
-  layout.y = MARGIN + 22;
+  // Subro writes its date at y=36; this engine stores line tops, not baselines.
+  layout.y = FIRST_BODY_BASELINE - BASELINE_OFFSET;
   layout.font();
 }
 
@@ -286,11 +293,12 @@ function footers(layout: LetterLayout, lastCoverPage = layout.doc.getNumberOfPag
   const { doc } = layout;
   const pages = doc.getNumberOfPages();
   const height = doc.internal.pageSize.getHeight();
+  const right = doc.internal.pageSize.getWidth() - HEADER_MARGIN;
   for (let page = 1; page <= lastCoverPage; page++) {
     doc.setPage(page);
     doc.setDrawColor(165);
     doc.setLineWidth(0.2);
-    doc.line(MARGIN, height - 20, MARGIN + layout.width, height - 20);
+    doc.line(HEADER_MARGIN, height - 20, right, height - 20);
     layout.font(false, 6.5);
     doc.setTextColor(100);
     doc.text(
@@ -299,7 +307,7 @@ function footers(layout: LetterLayout, lastCoverPage = layout.doc.getNumberOfPag
       height - 16,
       { align: "center" },
     );
-    doc.text(`Page ${page} of ${pages}`, MARGIN + layout.width, height - 10, { align: "right" });
+    doc.text(`Page ${page} of ${pages}`, right, height - 10, { align: "right" });
   }
   doc.setPage(1);
 }

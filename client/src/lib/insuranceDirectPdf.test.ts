@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { describe, expect, it, vi } from "vitest";
 import { LIABILITY_STATEMENT_EXAMPLES } from "@shared/insuranceDirect";
 import { createInsuranceDirectPdf, type InsuranceDirectPdfInput } from "./insuranceDirectPdf";
+import { createStandaloneLouPdf, type StandaloneLouInput } from "./standaloneLouPdf";
 
 function input(overrides: Partial<InsuranceDirectPdfInput> = {}): InsuranceDirectPdfInput {
   return {
@@ -78,14 +79,40 @@ function pdfText(doc: jsPDF): string {
   return strings(doc.output()).join(" ");
 }
 
+function textGeometry(doc: jsPDF, stream: string) {
+  const height = doc.internal.pageSize.getHeight();
+  const scale = doc.internal.scaleFactor;
+  return Array.from(stream.matchAll(/BT\n([\s\S]*?)\nET/g), match => {
+    const block = match[1];
+    const position = /(-?[\d.]+) (-?[\d.]+) Td/.exec(block)!;
+    doc.setFont("helvetica", /\/F2 /.test(block) ? "bold" : "normal");
+    doc.setFontSize(Number(/\/F\d+ ([\d.]+) Tf/.exec(block)![1]));
+    const text = strings(block).join(" ");
+    const x = Number(position[1]) / scale;
+    // jsPDF resolves right alignment with unkerned width, unlike getTextWidth.
+    const alignedWidth = doc.getStringUnitWidth(text, { doKerning: false }) * doc.getFontSize() / scale;
+    return { text, x, y: height - Number(position[2]) / scale, right: x + alignedWidth };
+  });
+}
+
+function lineGeometry(doc: jsPDF, stream: string) {
+  const height = doc.internal.pageSize.getHeight();
+  const scale = doc.internal.scaleFactor;
+  return Array.from(stream.matchAll(/(-?[\d.]+) (-?[\d.]+) m\n(-?[\d.]+) (-?[\d.]+) l/g), match => ({
+    x1: Number(match[1]) / scale, y1: height - Number(match[2]) / scale,
+    x2: Number(match[3]) / scale, y2: height - Number(match[4]) / scale,
+  }));
+}
+
 function assertFooterSafe(doc: jsPDF): void {
   const height = doc.internal.pageSize.getHeight();
   const width = doc.internal.pageSize.getWidth();
   const scale = doc.internal.scaleFactor;
-  for (const stream of pageStreams(doc)) {
+  const streams = pageStreams(doc);
+  const firstForm = streams.findIndex(stream => strings(stream).includes("Loss of Use / Rental Reimbursement Request"));
+  for (const [page, stream] of streams.entries()) {
+    const formPage = firstForm >= 0 && page >= firstForm;
     const textBlocks = Array.from(stream.matchAll(/BT\n([\s\S]*?)\nET/g), match => match[1]);
-    const standalonePage = strings(stream).some(text => text.startsWith("Loss of Use / Rental Reimbursement Request") || text === "Loss of Use / Rental Reimbursement Supporting Basis");
-    const margin = standalonePage ? 14 : 25.4;
     for (const block of textBlocks) {
       const text = strings(block).join(" ");
       const position = /(-?[\d.]+) (-?[\d.]+) Td/.exec(block);
@@ -96,7 +123,9 @@ function assertFooterSafe(doc: jsPDF): void {
       const size = Number(/\/F\d+ ([\d.]+) Tf/.exec(block)?.[1] ?? 10);
       const bold = /\/F2 /.test(block);
       const footer = text.startsWith("Whip Claims Management |") || /^Page \d+ of \d+$/.test(text);
-      expect(y, text).toBeGreaterThanOrEqual(standalonePage ? 14 : 25.4);
+      const header = page === 0 && ["Whip Claims Management", "P.O. Box 10622 Rockville, MD 20849-0622", "(855) 906-5949 | claims@drivewhip.com"].includes(text);
+      const margin = formPage || header || footer ? 14 : 18;
+      expect(y, text).toBeGreaterThanOrEqual(header ? 12 : formPage ? 14 : 18);
       if (!footer) expect(y + 1, text).toBeLessThanOrEqual(height - 24);
       else expect(y, text).toBeGreaterThan(height - 24);
       doc.setFont("helvetica", bold ? "bold" : "normal");
@@ -109,6 +138,9 @@ function assertFooterSafe(doc: jsPDF): void {
     for (const match of stream.matchAll(/(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) re/g)) {
       const top = height - Number(match[2]) / scale;
       const cellHeight = -Number(match[4]) / scale;
+      const margin = formPage ? 14 : 18;
+      expect(Number(match[1]) / scale).toBeGreaterThanOrEqual(margin - 0.01);
+      expect((Number(match[1]) + Number(match[3])) / scale).toBeLessThanOrEqual(width - margin + 0.01);
       expect(top + cellHeight).toBeLessThanOrEqual(height - 24 + 0.01);
     }
   }
@@ -127,6 +159,96 @@ describe("Insurance Direct jsPDF renderer", () => {
     expect(doc.internal.pageSize.getHeight()).toBeCloseTo(297, 1);
     expect(doc.output()).toContain("/BaseFont /Helvetica");
     expect(doc.output()).toContain("/F1 10 Tf");
+    assertFooterSafe(doc);
+  });
+
+  it.each([
+    { hasLou: true, hasDv: false },
+    { hasLou: false, hasDv: true },
+    { hasLou: true, hasDv: true },
+  ])("matches Subro's 14 mm header and 18 mm body frame without changing appended LOU geometry (%j)", flags => {
+    const logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+    const source = input({ ...flags, logoBase64: logo, attachLouSchedule: true });
+    const louRecord: StandaloneLouInput = {
+      claimNumber: source.claimNumber, carrierClaimNumber: source.carrierClaimNumber, dateOfLoss: source.dateOfLoss,
+      carrier: source.carrier, adjuster: source.adjuster, vehicle: source.vehicle, vin: source.vin, driver: source.driver,
+      registeredOwner: "Metrocars Leasing Corp.", vehicleStatus: "", vehicleClass: "", repairFacility: source.repairFacility, roNumber: "",
+      repairStart: source.repairStart, repairEnd: source.repairEnd, days: source.louDays, dailyRate: source.dailyRate, amount: source.louAmount,
+      customRate: false, marketName: source.marketName, letterDate: source.letterDate,
+      handlerName: source.handlerName, handlerTitle: source.handlerTitle, handlerExtension: source.handlerExtension,
+      handlerEmail: source.handlerEmail, logoBase64: logo, snapshots: source.snapshots,
+      sourceNote: source.sourceNote, reconciliation: source.reconciliation, verifiedAuthority: source.stateAuthority,
+    };
+    const api = jsPDF.API as unknown as Pick<jsPDF, "addImage">;
+    const imageSpy = vi.spyOn(api, "addImage");
+    try {
+      const doc = createInsuranceDirectPdf({ ...source, louRecord });
+      const width = doc.internal.pageSize.getWidth();
+      const height = doc.internal.pageSize.getHeight();
+      const streams = pageStreams(doc);
+      expect(imageSpy.mock.calls[0]).toEqual([logo, "PNG", 14, 8, 29, 19]);
+      const image = /([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm\n\/I\d+ Do/.exec(streams[0])!;
+      const scale = doc.internal.scaleFactor;
+      expect(Number(image[1]) / scale).toBeCloseTo(29, 8);
+      expect(Number(image[2]) / scale).toBeCloseTo(19, 8);
+      expect(Number(image[3]) / scale).toBeCloseTo(14, 8);
+      expect(height - Number(image[4]) / scale - 19).toBeCloseTo(8, 8);
+      const text = textGeometry(doc, streams[0]);
+      for (const [label, y] of [
+        ["Whip Claims Management", 12],
+        ["P.O. Box 10622 Rockville, MD 20849-0622", 17],
+        ["(855) 906-5949 | claims@drivewhip.com", 22],
+      ] as const) {
+        const contact = text.find(item => item.text === label)!;
+        expect(contact.y).toBeCloseTo(y, 8);
+        expect(contact.right).toBeCloseTo(width - 14, 8);
+      }
+      const date = text.find(item => item.text === source.letterDate)!;
+      expect(date.x).toBeCloseTo(18, 8);
+      // Subro emits a y=36 baseline; compensate for this engine's 3.4 mm offset.
+      expect(date.y).toBeCloseTo(36, 8);
+      const rules = lineGeometry(doc, streams[0]);
+      for (const [rule, y] of [[rules[0], 30], [rules.at(-1)!, height - 20]] as const) {
+        expect(rule.x1).toBeCloseTo(14, 8);
+        expect(rule.x2).toBeCloseTo(width - 14, 8);
+        expect(rule.y1).toBeCloseTo(y, 8);
+        expect(rule.y2).toBeCloseTo(y, 8);
+      }
+      const cells = Array.from(streams[0].matchAll(/(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) re/g));
+      expect(cells.length).toBeGreaterThanOrEqual(4);
+      expect(Number(cells[0][1]) / scale).toBeCloseTo(18, 8);
+      expect((Number(cells[3][1]) + Number(cells[3][3])) / scale).toBeCloseTo(width - 18, 8);
+      if (flags.hasLou) {
+        expect(imageSpy.mock.calls[1]).toEqual([logo, "PNG", 14, 14, 15, 15]);
+        const firstForm = streams.findIndex(stream => strings(stream).includes("Loss of Use / Rental Reimbursement Request"));
+        expect(firstForm).toBeGreaterThan(0);
+        const form = textGeometry(doc, streams[firstForm]);
+        expect(form.find(item => item.text === "Loss of Use / Rental Reimbursement Request")?.y).toBeCloseTo(42, 8);
+        expect(lineGeometry(doc, streams[firstForm])[0].y1).toBeCloseTo(33, 8);
+        const standaloneStreams = pageStreams(createStandaloneLouPdf(louRecord));
+        expect(streams.slice(firstForm)).toHaveLength(standaloneStreams.length);
+        // Compare emitted text/drawing commands, ignoring packet page numbering.
+        const geometryCommands = (stream: string) => Array.from(stream.matchAll(/BT\n[\s\S]*?\nET|[^\n]+ re\n|[^\n]+ m\n[^\n]+ l|[^\n]+ cm\n\/I\d+ Do/g), match => match[0])
+          .filter(command => !strings(command).some(item => /^Page \d+ of \d+$/.test(item)));
+        streams.slice(firstForm).forEach((stream, index) => expect(geometryCommands(stream)).toEqual(geometryCommands(standaloneStreams[index])));
+      } else {
+        expect(imageSpy).toHaveBeenCalledTimes(1);
+      }
+      assertFooterSafe(doc);
+    } finally {
+      imageSpy.mockRestore();
+    }
+  });
+
+  it("starts cover continuation content at 18 mm plus the measured baseline offset without repeating the header", () => {
+    const doc = createInsuranceDirectPdf(input({ liabilityStatement: "Supplied verified claim narrative. ".repeat(250) }));
+    const streams = pageStreams(doc);
+    expect(streams.length).toBeGreaterThan(2);
+    const first = textGeometry(doc, streams[1])[0];
+    expect(first.x).toBeCloseTo(18, 8);
+    expect(first.y).toBeCloseTo(18 + 3.4, 8);
+    expect(strings(streams[1])).not.toContain("P.O. Box 10622 Rockville, MD 20849-0622");
+    expect(lineGeometry(doc, streams[1]).some(rule => Math.abs(rule.y1 - 30) < 0.01)).toBe(false);
     assertFooterSafe(doc);
   });
 

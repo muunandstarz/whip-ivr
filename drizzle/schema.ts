@@ -1495,3 +1495,16 @@ export const klutchPolicyDrafts = mysqlTable('klutch_policy_drafts', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
 });
 export type KlutchPolicyDraft = typeof klutchPolicyDrafts.$inferSelect;
+
+/** Only issued receipt facts; no uploaded file/PDF storage. Auto-increment IDs
+ * guarantee unique printed numbers across handlers and concurrent sessions. */
+export const totalReconPaymentReceipts = mysqlTable('total_recon_payment_receipts', {
+  id: int('id').primaryKey().autoincrement(),
+  requestKey: varchar('request_key', { length: 36 }).notNull().unique(),
+  claimNumber: varchar('claim_number', { length: 96 }).notNull(),
+  inputSnapshot: json('input_snapshot').notNull(),
+  inputHash: varchar('input_hash', { length: 64 }).notNull(),
+  createdByUserId: int('created_by_user_id').notNull(),
+  createdByName: varchar('created_by_name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, t => ({ claimCreated: index('total_recon_receipts_claim_created_idx').on(t.claimNumber, t.createdAt) }));

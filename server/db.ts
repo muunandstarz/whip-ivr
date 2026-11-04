@@ -28,11 +28,14 @@ import {
   oemProcedureSources,
   carrierRebuttalAiReviews,
   insuranceDirectDvReviews,
+  totalReconPaymentReceipts,
   mailItems,
   mailItemFiles,
 } from "../drizzle/schema";
 import { lossIntakeClaims } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { createHash } from "node:crypto";
+import { receiptNumber, totalReconReceiptSchema, type TotalReconReceiptFields } from "../shared/totalReconReceipt";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -2549,6 +2552,26 @@ export async function listInsuranceDirectDvReviews(claimNumber: string) {
   if (!db) return [];
   return db.select().from(insuranceDirectDvReviews).where(eq(insuranceDirectDvReviews.claimNumber, claimNumber))
     .orderBy(desc(insuranceDirectDvReviews.createdAt)).limit(20);
+}
+
+export async function issueTotalReconPaymentReceipt(input: {
+  requestKey: string; fields: TotalReconReceiptFields; userId: number; userName?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable. No receipt was issued; please retry.");
+  const fields = totalReconReceiptSchema.parse(input.fields);
+  const inputHash = createHash('sha256').update(JSON.stringify(fields)).digest('hex');
+  // A database unique key, not a client counter or timestamp, protects concurrency.
+  // Identical transport retries return the original immutable receipt.
+  await db.insert(totalReconPaymentReceipts).values({ requestKey: input.requestKey,
+    claimNumber: fields.claimNumber, inputSnapshot: fields, inputHash,
+    createdByUserId: input.userId, createdByName: input.userName || null,
+  }).onDuplicateKeyUpdate({ set: { requestKey: input.requestKey } });
+  const [row] = await db.select().from(totalReconPaymentReceipts)
+    .where(eq(totalReconPaymentReceipts.requestKey, input.requestKey)).limit(1);
+  if (!row || row.createdByUserId !== input.userId || row.inputHash !== inputHash)
+    throw new Error("Receipt retry does not match the original request. Start a new receipt.");
+  return { receiptNumber: receiptNumber(row.id, row.createdAt), fields: totalReconReceiptSchema.parse(row.inputSnapshot), issuedAt: row.createdAt };
 }
 
 // ─── Claim Correspondence: Document Generator ─────────────────────────────────

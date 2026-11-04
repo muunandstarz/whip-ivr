@@ -20,10 +20,12 @@ import {
   createCarrierRebuttalAiReview, listCarrierRebuttalAiReviews,
   listInsuranceDirectDvReviews,
   listCarrierRebuttalClaimSources, getCarrierRebuttalClaimSourceMaterial,
+  issueTotalReconPaymentReceipt,
 } from "../db";
 import { lookupClaimForDocgen } from "../db";
 import { describeTeslaCoverageGap, sourceMatchesTeslaVehicle } from "../oemEvidenceLibrary";
 import { analyzeCarrierRebuttalClaimTextMaterial, analyzeCarrierRebuttalUpload } from "../carrierRebuttalAnalysis";
+import { totalReconReceiptSchema } from "../../shared/totalReconReceipt";
 
 function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   const message = result.choices?.[0]?.message as (Awaited<ReturnType<typeof invokeLLM>>["choices"][number]["message"] & {
@@ -452,6 +454,12 @@ function getStateCoverageInfo(state: string): string {
 
 
 export const docgenRouter = router({
+  issueTotalReconReceipt: protectedProcedure
+    .input(z.object({ requestKey: z.string().uuid(), fields: totalReconReceiptSchema, paymentVerified: z.literal(true) }))
+    .mutation(({ ctx, input }) => issueTotalReconPaymentReceipt({
+      requestKey: input.requestKey, fields: input.fields, userId: ctx.user.id, userName: ctx.user.name,
+    })),
+
   carrierRebuttalClaudeAvailability: protectedProcedure
     .query(async () => carrierRebuttalClaudeAvailability()),
 
