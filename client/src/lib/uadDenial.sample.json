@@ -1,0 +1,12 @@
+{
+  "letter_date": "2026-11-05",
+  "claimant_name": "Jordan Example",
+  "claimant_company": "Example Property LLC",
+  "claimant_address": "123 Sample Avenue\nRockville, MD 20850",
+  "claim_number": "SYN-UAD-1042",
+  "date_of_loss": "2026-10-15",
+  "property_claimed": "2024 Toyota Camry",
+  "driver_description": "Alex Example, a person other than the member listed on the Membership Agreement",
+  "handler_name": "Taylor Sample",
+  "handler_title": "Claims Specialist"
+}

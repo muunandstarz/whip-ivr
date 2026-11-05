@@ -1,4 +1,9 @@
 import TotalReconReceiptForm from "@/components/TotalReconReceiptForm";
+import UadDenialFields from "@/components/UadDenialFields";
+import UadDenialDraftPreview from "@/components/UadDenialDraftPreview";
+import { useFreshPdfPreview } from "@/hooks/useFreshPdfPreview";
+import { createUadDenialPdf } from "@/lib/uadDenialPdf";
+import { buildUadDenialText, emptyUadDenialFields, restoreUadDenialFields, UAD_DENIAL_HINT, UAD_DENIAL_LABEL, UAD_DENIAL_TYPE, UAD_FIELD_META, validateUadDenialFields, type UadDenialField } from "@shared/uadDenial";
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import WhipLayout from "@/components/WhipLayout";
@@ -733,6 +738,12 @@ const DENIAL_TEMPLATES: Record<
       return `${today}\n\n${f.recipient || "[Claimant/Carrier/Counsel]"}\n\nRe: Claim Number: [Claim #] / Date of Loss: ${f.dol || "[Date of Loss]"} / Vehicle: [Vehicle Info]\n\nDear ${f.recipient || "[Claimant/Carrier/Counsel]"},\n\nWe have completed our review of the coverage available for the above-referenced claim arising from the incident on ${f.dol || "[Date of Loss]"}.\n\nOur investigation has determined that at the time of loss, the vehicle was being operated in connection with ${f.platform || "[Empower/Unauthorized Platform]"}, a transportation network company (TNC) that is not authorized under the applicable Vehicle Membership Agreement with Whip/Metrocars Leasing Corp. The Empower platform operates outside the scope of authorized TNC platforms covered under the membership agreement.\n\nPer the terms of the membership agreement, coverage is not available for losses occurring while the vehicle is being used in connection with unauthorized third-party platforms or services. Accordingly, we are unable to extend coverage for this claim.\n\nIf you believe this determination is in error, please provide documentation demonstrating the vehicle was not engaged in unauthorized platform activity at the time of loss. You may also wish to direct your inquiry to ${f.platform || "[Empower/Unauthorized Platform]"} directly regarding any coverage they may provide for incidents occurring during platform activity.\n\nSincerely,\n${f.adjuster || "[Handler Name]"}\nWhip Claims Management`;
     },
   },
+  [UAD_DENIAL_TYPE]: {
+    label: UAD_DENIAL_LABEL,
+    hint: UAD_DENIAL_HINT,
+    fields: UAD_FIELD_META.map(({ key }) => key),
+    build: (fields) => buildUadDenialText(restoreUadDenialFields(fields)),
+  },
 };
 
 // ─── Shared field helpers ─────────────────────────────────────────────────────
@@ -1150,6 +1161,7 @@ function PreviewPanel({
   extra,
   pdfUrl,
   formattedPreview,
+  allowPreviewDownload = true,
 }: {
   text: string;
   onCopy: () => void;
@@ -1159,6 +1171,7 @@ function PreviewPanel({
   extra?: React.ReactNode;
   pdfUrl?: string | null;
   formattedPreview?: React.ReactNode;
+  allowPreviewDownload?: boolean;
 }) {
   const [showPdf, setShowPdf] = useState(true);
   const [fullScreen, setFullScreen] = useState(false);
@@ -1239,9 +1252,9 @@ function PreviewPanel({
           <div className="flex items-center justify-between px-4 py-2 bg-background/10 border-b border-white/10">
             <span className="text-white text-sm font-medium">{filename || "Document Preview"}</span>
             <div className="flex items-center gap-3">
-              <a href={pdfUrl} download={filename} className="text-white/70 hover:text-white text-xs flex items-center gap-1">
+              {allowPreviewDownload && <a href={pdfUrl} download={filename} className="text-white/70 hover:text-white text-xs flex items-center gap-1">
                 <Download className="w-3.5 h-3.5" /> Download
-              </a>
+              </a>}
               <button onClick={() => setFullScreen(false)} className="text-white/70 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
@@ -2543,18 +2556,29 @@ Email: ${form.adjusterEmail || "[claim email]"}`;
 }
 
 // ─── Tab: Denial & Acknowledgment ────────────────────────────────────────────
-function DenialTab({ onNavigate }: { onNavigate?: (tab: DocGenTab) => void }) {
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("tnc_pip");
-  const [claimNumber, setClaimNumber] = useState("");
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+function DenialTab({ onNavigate, initialDraft, onDraftChange, initialTemplate }: { onNavigate?: (tab: DocGenTab) => void; initialDraft?: Record<string, unknown>; onDraftChange?: (draft: Record<string, unknown>) => void; initialTemplate?: string }) {
+  const saved = initialDraft?.denialDraftVersion === "denial-v1" ? initialDraft : undefined;
+  const savedText = (key: string, fallback = "") => typeof saved?.[key] === "string" ? saved[key] as string : fallback;
+  const [selectedTemplate, setSelectedTemplate] = useState<string>(() => DENIAL_TEMPLATES[savedText("selectedTemplate")] ? savedText("selectedTemplate") : initialTemplate === UAD_DENIAL_TYPE ? UAD_DENIAL_TYPE : "tnc_pip");
+  const [claimNumber, setClaimNumber] = useState(() => savedText("claimNumber"));
   const todayISO = new Date().toISOString().split("T")[0];
-  const [letterDate, setLetterDate] = useState(todayISO);
-  const [dateOfLoss, setDateOfLoss] = useState("");
-  const [vehicle, setVehicle] = useState("");
-  const [vin, setVin] = useState("");
-  const [driverName, setDriverName] = useState("");
-  const [reference, setReference] = useState("");
-  const [fields, setFields] = useState<Record<string, string>>({});
+  const [letterDate, setLetterDate] = useState(() => savedText("letterDate", todayISO));
+  const [dateOfLoss, setDateOfLoss] = useState(() => savedText("dateOfLoss"));
+  const [vehicle, setVehicle] = useState(() => savedText("vehicle"));
+  const [vin, setVin] = useState(() => savedText("vin"));
+  const [driverName, setDriverName] = useState(() => savedText("driverName"));
+  const [reference, setReference] = useState(() => savedText("reference"));
+  const [fields, setFields] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(saved?.fields && typeof saved.fields === "object" ? saved.fields : {}).filter(([, value]) => typeof value === "string")) as Record<string, string>);
+  const [uadFields, setUadFields] = useState(() => restoreUadDenialFields(saved?.uadFields));
+  const [uadErrors, setUadErrors] = useState<string[]>([]);
+  const isUad = selectedTemplate === UAD_DENIAL_TYPE;
+  const draftData = useMemo(() => ({ denialDraftVersion: "denial-v1", selectedTemplate, claimNumber, letterDate, dateOfLoss, vehicle, vin, driverName, reference, fields, uadFields }), [selectedTemplate, claimNumber, letterDate, dateOfLoss, vehicle, vin, driverName, reference, fields, uadFields]);
+  useEffect(() => { onDraftChange?.(draftData); }, [draftData, onDraftChange]);
+  const pdfPreview = useFreshPdfPreview(JSON.stringify(draftData));
+  const previewPdfUrl = pdfPreview.url;
+  const setUadField = (key: UadDenialField, value: string) => { setUadFields(previous => ({ ...previous, [key]: value })); setUadErrors([]); };
+  const selectTemplate = (key: string) => { pdfPreview.clear(); setSelectedTemplate(key); setUadErrors([]); };
+  const resetUad = () => { pdfPreview.clear(); setUadFields(emptyUadDenialFields()); setUadErrors([]); };
 
   const template = DENIAL_TEMPLATES[selectedTemplate];
   const formatHeadingDate = (value: string) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "[Date]";
@@ -2587,11 +2611,22 @@ RE: ${reference || template.label}` : "";
     platform: { label: "Unauthorized Platform", placeholder: "e.g. Empower, Alto" },
   };
 
-  const preview = template
+  const preview = isUad ? buildUadDenialText(uadFields) : template
     ? `${claimHeading}\n\n${template.build({ ...fields, dol: dateOfLoss })}`
     : "";
 
   const handleDownload = (shouldDownload = true) => {
+    if (isUad) {
+      const errors = shouldDownload ? validateUadDenialFields(uadFields) : [];
+      if (errors.length) { setUadErrors(errors); toast.error("Complete the required UAD fields before final download. Partial drafts can still be previewed."); return; }
+      try {
+        const doc = createUadDenialPdf(uadFields, { logoBase64: WHIP_LOGO_B64, draft: !shouldDownload });
+        pdfPreview.replace(doc.output("blob"));
+        setUadErrors([]);
+        if (shouldDownload) downloadPDF(doc, `Whip_UAD_Denial_${uadFields.claim_number.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "Draft"}.pdf`);
+      } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to generate UAD denial."); }
+      return;
+    }
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     let y = addWhipLetterhead(doc);
@@ -2602,7 +2637,7 @@ RE: ${reference || template.label}` : "";
     y = wrapLetterText(doc, body, 14, y, W - 28, 6);
     addSOLNotice(doc);
     addLetterFooter(doc);
-    setPreviewPdfUrl(getPDFDataUrl(doc));
+    pdfPreview.replace(doc.output("blob"));
     if (shouldDownload) downloadPDF(doc, `Whip_Denial_${claimNumber || "Draft"}.pdf`);
   };
   const handlePreviewOnly = () => { handleDownload(false); };
@@ -2624,13 +2659,15 @@ RE: ${reference || template.label}` : "";
                 lor_ack_deny: { title: "LOR — Acknowledge / Deny", sub: "Ack only or include denial language" },
                 empower_member: { title: "Empower Denial — Member", sub: "Empower TNC — member coverage denied" },
                 empower_claimant: { title: "Empower Denial — Claimant", sub: "Empower TNC — claimant liability denied" },
+                uad_denial: { title: "Unauthorized Driver / UAD Denial", sub: "Unauthorized driver — supplied coverage denial" },
               };
               const card = shortLabels[key] || { title: t.label, sub: t.hint };
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setSelectedTemplate(key)}
+                  onClick={() => selectTemplate(key)}
+                  aria-pressed={isSelected}
                   className={`text-left p-3 rounded-lg border transition-all ${
                     isSelected
                       ? "border-[#ff6221] bg-[#ff6221]/5 shadow-sm"
@@ -2667,6 +2704,11 @@ RE: ${reference || template.label}` : "";
             </div>
           )}
         </Panel>
+        {isUad ? <Panel title="Unauthorized Driver / UAD Letter Fields">
+          <UadDenialFields fields={uadFields} onChange={setUadField} />
+          <Button type="button" variant="outline" className="mt-3 h-8 text-xs" onClick={resetUad}><RotateCcw className="w-3 h-3 mr-1" />Reset UAD inputs</Button>
+          {uadErrors.length > 0 && <div role="alert" className="mt-3 text-xs text-destructive"><ul className="list-disc pl-4">{uadErrors.map(error => <li key={error}>{error}</li>)}</ul></div>}
+        </Panel> : <>
         <Panel title="Claim Details" tag="REQUIRED">
           <Grid2>
             <Field label="Letter Date" id="den-letter-date" value={letterDate} onChange={setLetterDate} type="date" />
@@ -2699,14 +2741,17 @@ RE: ${reference || template.label}` : "";
             </div>
           </Panel>
         )}
+        </>}
       </div>
       <PreviewPanel
+        key={selectedTemplate}
         text={preview}
         onCopy={() => { navigator.clipboard.writeText(preview); toast.success("Copied"); }}
         onDownload={handleDownload}
-      
+        allowPreviewDownload={!isUad || validateUadDenialFields(uadFields).length === 0}
+        filename={isUad ? `Whip_UAD_Denial_${uadFields.claim_number || "Draft"}.pdf` : undefined}
+        formattedPreview={isUad && !previewPdfUrl ? <UadDenialDraftPreview fields={uadFields} logoBase64={WHIP_LOGO_B64} /> : undefined}
         pdfUrl={previewPdfUrl}
-      
         onPreview={handlePreviewOnly}/>
     </div>
   );
@@ -8972,7 +9017,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     setActiveTab(normalizeDocGeneratorTab(draft.tabKey));
     setCurrentDraftId(draft.id);
     setCurrentFormData(draft.formData as Record<string, unknown>);
-    if (["lou-calculator", "payment-receipt"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt", "denial"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
     setShowMyDocs(false);
     toast.info("Draft loaded — fill in the form and generate");
   };
@@ -8985,7 +9030,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
     setActiveTab(normalizeDocGeneratorTab(t.tabKey));
     setCurrentFormData(t.formData as Record<string, unknown>);
-    if (["lou-calculator", "payment-receipt"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt", "denial"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
     markReadMut.mutate({ templateId: t.id });
     setShowSharedTemplates(false);
     toast.info("Shared template loaded");
@@ -8999,7 +9044,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "storage-mitigation": return <StorageMitigationTab />;
 
       case "coverage-tnc": return <CoverageTNCTab />;
-      case "denial": return <DenialTab onNavigate={setActiveTab} />;
+      case "denial": return <DenialTab onNavigate={setActiveTab} initialDraft={currentFormData} onDraftChange={setCurrentFormData} initialTemplate={new URLSearchParams(search).get("template") === UAD_DENIAL_TYPE ? UAD_DENIAL_TYPE : undefined} />;
       case "damage-denial": return <DamageDenialTab />;
       case "ror": return <RORTab />;
       case "release-bi": return <ReleaseBITab />;
