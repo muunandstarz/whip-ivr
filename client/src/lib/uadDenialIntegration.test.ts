@@ -48,8 +48,8 @@ describe("UAD selection, saved inputs and no stale preview", () => {
     expect(denial).toContain('denialDraftVersion: "denial-v1"');
     expect(denial).toContain("onDraftChange?.(draftData)");
     expect(source).toContain("<DenialTab onNavigate={setActiveTab} initialDraft={currentFormData} onDraftChange={setCurrentFormData}");
-    expect(source).toContain('["lou-calculator", "payment-receipt", "denial"].includes(draft.tabKey)');
-    expect(source).toContain('["lou-calculator", "payment-receipt", "denial"].includes(t.tabKey)');
+    expect(source).toContain('["lou-calculator", "payment-receipt", "denial", "pending-closure"].includes(draft.tabKey)');
+    expect(source).toContain('["lou-calculator", "payment-receipt", "denial", "pending-closure"].includes(t.tabKey)');
     expect(source).toContain("key={`${activeTab}-${formResetKey}`}");
     expect(denial).toContain("const resetUad = () => { pdfPreview.clear(); setUadFields(emptyUadDenialFields());");
     const data = denial.slice(denial.indexOf("const draftData"), denial.indexOf("useEffect(() => { onDraftChange"));

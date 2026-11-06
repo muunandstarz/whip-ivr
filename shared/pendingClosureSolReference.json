@@ -1,0 +1,512 @@
+[
+  {
+    "state": "Alabama",
+    "abbr": "AL",
+    "bodily_injury_years": 2,
+    "property_damage_years": 6,
+    "citation": "Ala. Code § 6-2-38",
+    "notes": "PD: sources split (2 vs 6 yrs); § 6-2-34 trespass to personal property cited for 6.",
+    "status": "VERIFY",
+    "letter_language": "Under Alabama law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within six years."
+  },
+  {
+    "state": "Alaska",
+    "abbr": "AK",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Alaska Stat. § 09.10.070",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Alaska law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Arizona",
+    "abbr": "AZ",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "A.R.S. § 12-542",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Arizona law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Arkansas",
+    "abbr": "AR",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "Ark. Code § 16-56-105",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Arkansas law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "California",
+    "abbr": "CA",
+    "bodily_injury_years": 2,
+    "property_damage_years": 3,
+    "citation": "Cal. Code Civ. Proc. § 335.1",
+    "notes": "10 CCR § 2695.7(f): unrepresented claimants must get written notice of the limitation period at least 60 days before it expires (30 days for first-party UM). Not met by this form letter alone. Public-entity claims: written claim generally within 6 months.",
+    "status": "CA RULE",
+    "letter_language": "Under California law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within three years."
+  },
+  {
+    "state": "Colorado",
+    "abbr": "CO",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "C.R.S. § 13-80-101 / 102",
+    "notes": "3 yrs for motor vehicle injury (§ 13-80-101); 2 yrs general.",
+    "status": "OK",
+    "letter_language": "Under Colorado law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Connecticut",
+    "abbr": "CT",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Conn. Gen. Stat. § 52-584",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Connecticut law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Delaware",
+    "abbr": "DE",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "10 Del. C. § 8119",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Delaware law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "District of Columbia",
+    "abbr": "DC",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "D.C. Code § 12-301",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under District of Columbia law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Florida",
+    "abbr": "FL",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Fla. Stat. § 95.11",
+    "notes": "Negligence period cut from 4 yrs to 2 yrs for causes accruing after 3/24/2023. Earlier losses: 4 yrs. Some sources still list PD as 4.",
+    "status": "RECENT CHANGE",
+    "letter_language": "Under Florida law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss, for losses occurring after March 24, 2023."
+  },
+  {
+    "state": "Georgia",
+    "abbr": "GA",
+    "bodily_injury_years": 2,
+    "property_damage_years": 4,
+    "citation": "O.C.G.A. § 9-3-33",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Georgia law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within four years."
+  },
+  {
+    "state": "Hawaii",
+    "abbr": "HI",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Haw. Rev. Stat. § 657-7",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Hawaii law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Idaho",
+    "abbr": "ID",
+    "bodily_injury_years": 2,
+    "property_damage_years": 3,
+    "citation": "Idaho Code § 5-219",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Idaho law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within three years."
+  },
+  {
+    "state": "Illinois",
+    "abbr": "IL",
+    "bodily_injury_years": 2,
+    "property_damage_years": 5,
+    "citation": "735 ILCS 5/13-202",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Illinois law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within five years."
+  },
+  {
+    "state": "Indiana",
+    "abbr": "IN",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Ind. Code § 34-11-2-4",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Indiana law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Iowa",
+    "abbr": "IA",
+    "bodily_injury_years": 2,
+    "property_damage_years": 5,
+    "citation": "Iowa Code § 614.1(2)",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Iowa law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within five years."
+  },
+  {
+    "state": "Kansas",
+    "abbr": "KS",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "K.S.A. § 60-513",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Kansas law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Kentucky",
+    "abbr": "KY",
+    "bodily_injury_years": 1,
+    "property_damage_years": 2,
+    "citation": "KRS § 413.140",
+    "notes": "BI: 1 yr general; 2 yrs from injury or last no-fault payment for motor vehicle claims (KRS § 304.39-230). Sources split on BI.",
+    "status": "VERIFY",
+    "letter_language": "Under Kentucky law, a lawsuit for bodily injury generally must be filed within one year of the date of loss, and a lawsuit for property damage generally within two years; the period for bodily injury may be longer in certain motor vehicle claims."
+  },
+  {
+    "state": "Louisiana",
+    "abbr": "LA",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "La. Civ. Code art. 3493.1",
+    "notes": "2 yrs for losses on/after 7/1/2024; 1 yr for earlier losses.",
+    "status": "RECENT CHANGE",
+    "letter_language": "Under Louisiana law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss, for losses occurring on or after July 1, 2024."
+  },
+  {
+    "state": "Maine",
+    "abbr": "ME",
+    "bodily_injury_years": 6,
+    "property_damage_years": 6,
+    "citation": "14 M.R.S. § 752",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Maine law, a lawsuit for bodily injury or property damage generally must be filed within six years of the date of loss."
+  },
+  {
+    "state": "Maryland",
+    "abbr": "MD",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "Md. Code, Cts. & Jud. Proc. § 5-101",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Maryland law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Massachusetts",
+    "abbr": "MA",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "M.G.L. ch. 260, § 2A",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Massachusetts law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Michigan",
+    "abbr": "MI",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "MCL § 600.5805",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Michigan law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Minnesota",
+    "abbr": "MN",
+    "bodily_injury_years": 6,
+    "property_damage_years": 6,
+    "citation": "Minn. Stat. § 541.05",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Minnesota law, a lawsuit for bodily injury or property damage generally must be filed within six years of the date of loss."
+  },
+  {
+    "state": "Mississippi",
+    "abbr": "MS",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "Miss. Code § 15-1-49",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Mississippi law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Missouri",
+    "abbr": "MO",
+    "bodily_injury_years": 5,
+    "property_damage_years": 5,
+    "citation": "RSMo § 516.120",
+    "notes": "A 2025 bill to cut BI to 2 yrs did not become law.",
+    "status": "OK",
+    "letter_language": "Under Missouri law, a lawsuit for bodily injury or property damage generally must be filed within five years of the date of loss."
+  },
+  {
+    "state": "Montana",
+    "abbr": "MT",
+    "bodily_injury_years": 3,
+    "property_damage_years": 2,
+    "citation": "Mont. Code § 27-2-204",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Montana law, a lawsuit for bodily injury generally must be filed within three years of the date of loss, and a lawsuit for property damage generally within two years."
+  },
+  {
+    "state": "Nebraska",
+    "abbr": "NE",
+    "bodily_injury_years": 4,
+    "property_damage_years": 4,
+    "citation": "Neb. Rev. Stat. § 25-207",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Nebraska law, a lawsuit for bodily injury or property damage generally must be filed within four years of the date of loss."
+  },
+  {
+    "state": "Nevada",
+    "abbr": "NV",
+    "bodily_injury_years": 2,
+    "property_damage_years": 3,
+    "citation": "NRS § 11.190",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Nevada law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within three years."
+  },
+  {
+    "state": "New Hampshire",
+    "abbr": "NH",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "RSA 508:4",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under New Hampshire law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "New Jersey",
+    "abbr": "NJ",
+    "bodily_injury_years": 2,
+    "property_damage_years": 6,
+    "citation": "N.J.S.A. 2A:14-2",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under New Jersey law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within six years."
+  },
+  {
+    "state": "New Mexico",
+    "abbr": "NM",
+    "bodily_injury_years": 3,
+    "property_damage_years": 4,
+    "citation": "NMSA § 37-1-8",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under New Mexico law, a lawsuit for bodily injury generally must be filed within three years of the date of loss, and a lawsuit for property damage generally within four years."
+  },
+  {
+    "state": "New York",
+    "abbr": "NY",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "CPLR § 214",
+    "notes": "Municipal defendants: notice of claim generally within 90 days.",
+    "status": "OK",
+    "letter_language": "Under New York law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "North Carolina",
+    "abbr": "NC",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "N.C. Gen. Stat. § 1-52",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under North Carolina law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "North Dakota",
+    "abbr": "ND",
+    "bodily_injury_years": 6,
+    "property_damage_years": 6,
+    "citation": "N.D.C.C. § 28-01-16",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under North Dakota law, a lawsuit for bodily injury or property damage generally must be filed within six years of the date of loss."
+  },
+  {
+    "state": "Ohio",
+    "abbr": "OH",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Ohio Rev. Code § 2305.10",
+    "notes": "PD: sources split (2 vs 4 yrs; § 2305.09(D) cited for 4).",
+    "status": "VERIFY",
+    "letter_language": "Under Ohio law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Oklahoma",
+    "abbr": "OK",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "12 O.S. § 95",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Oklahoma law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Oregon",
+    "abbr": "OR",
+    "bodily_injury_years": 2,
+    "property_damage_years": 6,
+    "citation": "ORS § 12.110",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Oregon law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within six years."
+  },
+  {
+    "state": "Pennsylvania",
+    "abbr": "PA",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "42 Pa.C.S. § 5524",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Pennsylvania law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Rhode Island",
+    "abbr": "RI",
+    "bodily_injury_years": 3,
+    "property_damage_years": 10,
+    "citation": "R.I. Gen. Laws § 9-1-14",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Rhode Island law, a lawsuit for bodily injury generally must be filed within three years of the date of loss, and a lawsuit for property damage generally within ten years."
+  },
+  {
+    "state": "South Carolina",
+    "abbr": "SC",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "S.C. Code § 15-3-530",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under South Carolina law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "South Dakota",
+    "abbr": "SD",
+    "bodily_injury_years": 3,
+    "property_damage_years": 6,
+    "citation": "SDCL § 15-2-14",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under South Dakota law, a lawsuit for bodily injury generally must be filed within three years of the date of loss, and a lawsuit for property damage generally within six years."
+  },
+  {
+    "state": "Tennessee",
+    "abbr": "TN",
+    "bodily_injury_years": 1,
+    "property_damage_years": 3,
+    "citation": "Tenn. Code § 28-3-104",
+    "notes": "BI becomes 2 yrs if criminal charges are brought and other conditions are met.",
+    "status": "OK",
+    "letter_language": "Under Tennessee law, a lawsuit for bodily injury generally must be filed within one year of the date of loss, and a lawsuit for property damage generally within three years."
+  },
+  {
+    "state": "Texas",
+    "abbr": "TX",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "Tex. Civ. Prac. & Rem. Code § 16.003",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Texas law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Utah",
+    "abbr": "UT",
+    "bodily_injury_years": 4,
+    "property_damage_years": 3,
+    "citation": "Utah Code § 78B-2-307",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Utah law, a lawsuit for bodily injury generally must be filed within four years of the date of loss, and a lawsuit for property damage generally within three years."
+  },
+  {
+    "state": "Vermont",
+    "abbr": "VT",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "12 V.S.A. § 512",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Vermont law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "Virginia",
+    "abbr": "VA",
+    "bodily_injury_years": 2,
+    "property_damage_years": 5,
+    "citation": "Va. Code § 8.01-243",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Virginia law, a lawsuit for bodily injury generally must be filed within two years of the date of loss, and a lawsuit for property damage generally within five years."
+  },
+  {
+    "state": "Washington",
+    "abbr": "WA",
+    "bodily_injury_years": 3,
+    "property_damage_years": 3,
+    "citation": "RCW 4.16.080",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Washington law, a lawsuit for bodily injury or property damage generally must be filed within three years of the date of loss."
+  },
+  {
+    "state": "West Virginia",
+    "abbr": "WV",
+    "bodily_injury_years": 2,
+    "property_damage_years": 2,
+    "citation": "W. Va. Code § 55-2-12",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under West Virginia law, a lawsuit for bodily injury or property damage generally must be filed within two years of the date of loss."
+  },
+  {
+    "state": "Wisconsin",
+    "abbr": "WI",
+    "bodily_injury_years": 3,
+    "property_damage_years": 6,
+    "citation": "Wis. Stat. § 893.54",
+    "notes": "PD: 6 yrs general (§ 893.52(1)); 3 yrs for damage to a building caused by an automobile.",
+    "status": "OK",
+    "letter_language": "Under Wisconsin law, a lawsuit for bodily injury generally must be filed within three years of the date of loss, and a lawsuit for property damage generally within six years."
+  },
+  {
+    "state": "Wyoming",
+    "abbr": "WY",
+    "bodily_injury_years": 4,
+    "property_damage_years": 4,
+    "citation": "Wyo. Stat. § 1-3-105",
+    "notes": "",
+    "status": "OK",
+    "letter_language": "Under Wyoming law, a lawsuit for bodily injury or property damage generally must be filed within four years of the date of loss."
+  }
+]

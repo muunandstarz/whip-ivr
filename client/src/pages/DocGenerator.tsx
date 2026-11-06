@@ -1,4 +1,5 @@
 import TotalReconReceiptForm from "@/components/TotalReconReceiptForm";
+import PendingClosureForm from "@/components/PendingClosureForm";
 import UadDenialFields from "@/components/UadDenialFields";
 import UadDenialDraftPreview from "@/components/UadDenialDraftPreview";
 import { useFreshPdfPreview } from "@/hooks/useFreshPdfPreview";
@@ -80,6 +81,7 @@ import {
 type DocGenTab =
   | "blank-letterhead"
   | "claimant-contact"
+  | "pending-closure"
   | "failed-contact"
   | "storage-mitigation"
   | "coverage-tnc"
@@ -295,6 +297,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "blank-letterhead", label: "Blank Letterhead", icon: FileText },
       { id: "claimant-contact", label: "Claimant Contact", icon: Phone },
+      { id: "pending-closure", label: "Pending Closure Letter", icon: Mail },
       { id: "failed-contact", label: "Failed Contact (PD only)", icon: Phone },
       { id: "storage-mitigation", label: "Storage Mitigation", icon: AlertTriangle },
     ],
@@ -346,7 +349,7 @@ const LEGACY_KLUTCH_TAB_IDS = new Set(["coverage-tnc", "coi-whip", "coi-klutch",
 
 function normalizeDocGeneratorTab(tab: string | null | undefined): DocGenTab {
   if (LEGACY_KLUTCH_TAB_IDS.has(tab ?? "")) return "klutch-policy-documents";
-  const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","klutch-policy-documents","dv-calculator"];
+  const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","pending-closure","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","klutch-policy-documents","dv-calculator"];
   return valid.includes(tab as DocGenTab) ? tab as DocGenTab : "blank-letterhead";
 }
 
@@ -9017,7 +9020,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     setActiveTab(normalizeDocGeneratorTab(draft.tabKey));
     setCurrentDraftId(draft.id);
     setCurrentFormData(draft.formData as Record<string, unknown>);
-    if (["lou-calculator", "payment-receipt", "denial"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt", "denial", "pending-closure"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
     setShowMyDocs(false);
     toast.info("Draft loaded — fill in the form and generate");
   };
@@ -9030,7 +9033,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
     setActiveTab(normalizeDocGeneratorTab(t.tabKey));
     setCurrentFormData(t.formData as Record<string, unknown>);
-    if (["lou-calculator", "payment-receipt", "denial"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt", "denial", "pending-closure"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
     markReadMut.mutate({ templateId: t.id });
     setShowSharedTemplates(false);
     toast.info("Shared template loaded");
@@ -9040,6 +9043,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     switch (activeTab) {
       case "blank-letterhead": return <BlankLetterheadTab />;
       case "claimant-contact": return <ClaimantContactTab />;
+      case "pending-closure": return <PendingClosureForm initialDraft={currentFormData} onDraftChange={setCurrentFormData} logoBase64={WHIP_LOGO_B64} />;
       case "failed-contact": return <FailedContactTab />;
       case "storage-mitigation": return <StorageMitigationTab />;
 
