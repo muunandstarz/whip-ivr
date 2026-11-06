@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const normalizeText = (v: string) => v.trim().replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, "-");
+const normalizeText = (v: string) => v.normalize("NFC").trim().replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, "-");
 const text = (max = 96) => z.string().transform(normalizeText).pipe(z.string().min(1, "Required").max(max).regex(/^[\x20-\x7E\u00A0-\u00FF]*$/, "Use standard Latin characters for this receipt template"));
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date").refine(v => { const d = new Date(v + "T00:00:00Z"); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v; }, "Invalid calendar date");
 const money = z.string().trim().regex(/^\d{1,7}(?:\.\d{1,2})?$/, "Enter a nonnegative USD amount with up to two decimals");

@@ -9,6 +9,7 @@ import { Download, Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { totalReconReceiptSchema, receiptBalances, receiptDollars, type TotalReconReceiptFields } from "@shared/totalReconReceipt";
 import { createTotalReconReceiptPdf, loadTotalReconReceiptTemplate } from "@/lib/totalReconReceiptPdf";
+import { createReceiptRequestKey, downloadReceipt } from "@/lib/receiptBrowser";
 
 function blankReceipt(): TotalReconReceiptFields {
   const now = new Date(); const receiptDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -22,7 +23,6 @@ function initialFields(draft?: Record<string, unknown>): TotalReconReceiptFields
   return fields;
 }
 function fileUrl(bytes: Uint8Array): string { return URL.createObjectURL(new Blob([Uint8Array.from(bytes).buffer], { type: "application/pdf" })); }
-function download(url: string, name: string) { const a = document.createElement("a"); a.href = url; a.download = name; a.click(); }
 
 export default function TotalReconReceiptForm({ initialDraft, onDraftChange }: {
   initialDraft?: Record<string, unknown>; onDraftChange?: (draft: Record<string, unknown>) => void;
@@ -54,15 +54,19 @@ export default function TotalReconReceiptForm({ initialDraft, onDraftChange }: {
       let number: string | null = null;
       if (issueReceipt) {
         const fingerprint = JSON.stringify(parsed.data);
-        if (!pendingRequest.current || pendingRequest.current.fingerprint !== fingerprint) pendingRequest.current = { key: crypto.randomUUID(), fingerprint };
+        if (!pendingRequest.current || pendingRequest.current.fingerprint !== fingerprint) pendingRequest.current = { key: createReceiptRequestKey(), fingerprint };
         const result = await issue.mutateAsync({ requestKey: pendingRequest.current.key, fields: parsed.data, paymentVerified: true });
         number = result.receiptNumber;
         bytes = await createTotalReconReceiptPdf(template, result.fields, number);
-        // Clear only after PDF generation succeeds. A failed retry reuses the allocated number.
-        pendingRequest.current = null;
       }
       const url = fileUrl(bytes); setPreviewUrl(url); setIssuedNumber(number);
-      if (number) { download(url, `Total_Recon_Payment_Receipt_${number}.pdf`); toast.success(`Receipt ${number} generated`); }
+      if (number) {
+        // Keep the retry identity through PDF/Blob creation. Delivery retries use Re-download.
+        pendingRequest.current = null;
+        try { downloadReceipt(url, `Total_Recon_Payment_Receipt_${number}.pdf`); }
+        catch { setError(`Receipt ${number} was generated, but the browser blocked the automatic download. Use Re-download this receipt below; do not generate another receipt.`); }
+        toast.success(`Receipt ${number} generated`);
+      }
     } catch (e) { setError(e instanceof Error ? e.message : "The receipt could not be generated. Please retry."); }
     finally { locked.current = false; setBusy(false); }
   };
@@ -92,13 +96,18 @@ export default function TotalReconReceiptForm({ initialDraft, onDraftChange }: {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{field("totalBalanceDue", "Total balance due before payments ($)", "number")}{field("priorPayments", "Prior payments, excluding this payment ($)", "number")}</div>
         <p className="text-xs text-muted-foreground">Payments received = prior payments + this payment. Remaining balance = total balance due − payments received.</p>
         <dl className="grid grid-cols-2 gap-2 text-sm"><dt>Payments received</dt><dd className="text-right">{balances ? `$${receiptDollars(balances.paymentsCents)}` : "—"}</dd><dt className="font-semibold">Remaining balance</dt><dd className="text-right font-semibold">{balances ? `$${receiptDollars(balances.remainingCents)}` : "—"}</dd></dl>
-        <div className="flex items-start gap-2"><Checkbox id="tr-verified" checked={paymentVerified} onCheckedChange={v => setPaymentVerified(v === true)} disabled={busy} /><Label htmlFor="tr-verified" className="text-xs leading-relaxed">I verified that Total Recon actually received this payment and that the payer, reference, amounts and receiver are correct. This receipt does not initiate a payment or verify bank settlement.</Label></div>
       </CardContent></Card>
     </div>
     <div className="space-y-3 xl:sticky xl:top-4 self-start">
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => render(false)} disabled={busy}><Eye className="size-4 mr-2" />Preview receipt</Button><Button onClick={() => render(true)} disabled={busy || !paymentVerified}>{busy ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Download className="size-4 mr-2" />}Generate new receipt & download</Button></div>
+      <div id="tr-receipt-actions" className="space-y-3 rounded-lg border bg-card text-card-foreground p-4">
+        <h3 className="text-sm font-semibold">Preview or generate receipt</h3>
+        <div className="flex items-start gap-2"><Checkbox id="tr-verified" checked={paymentVerified} onCheckedChange={v => setPaymentVerified(v === true)} disabled={busy} aria-describedby="tr-generation-status" /><Label htmlFor="tr-verified" className="text-xs leading-relaxed cursor-pointer">I verified that Total Recon actually received this payment and that the payer, reference, amounts and receiver are correct.</Label></div>
+        <p id="tr-generation-status" role="status" aria-live="polite" className="text-xs text-muted-foreground">{busy ? "Preparing the receipt. Please wait; do not generate again." : !paymentVerified ? "To enable Generate, check the payment confirmation above. Preview does not issue a receipt or assign a number." : "Payment confirmed. Generate creates a numbered receipt; Preview remains unissued."}</p>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => render(false)} disabled={busy}><Eye className="size-4 mr-2" />Preview receipt</Button><Button onClick={() => render(true)} disabled={busy || !paymentVerified} aria-describedby="tr-generation-status">{busy ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Download className="size-4 mr-2" />}Generate new receipt & download</Button></div>
+        <p className="text-xs text-muted-foreground">This receipt does not initiate a payment or verify bank settlement. Changing any receipt field clears the confirmation; review and confirm the updated details again.</p>
+      </div>
       {error && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 text-destructive p-3 text-sm">{error}</div>}
-      {issuedNumber && <p className="text-xs text-muted-foreground">{issuedNumber}. Generating again creates a different receipt number. <button className="underline" onClick={() => previewUrl && download(previewUrl, `Total_Recon_Payment_Receipt_${issuedNumber}.pdf`)}>Re-download this receipt</button></p>}
+      {issuedNumber && <p className="text-xs text-muted-foreground">Receipt {issuedNumber} was generated. If the browser did not save it, use <button className="underline" onClick={() => previewUrl && downloadReceipt(previewUrl, `Total_Recon_Payment_Receipt_${issuedNumber}.pdf`)}>Re-download this receipt</button> without creating another number. Generating again creates a different receipt number.</p>}
       {previewUrl ? <iframe title="Total Recon Payment Receipt PDF preview" src={previewUrl} className="w-full h-[75vh] min-h-[480px] rounded-lg border bg-white" /> : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Fill the template fields, then preview the one-page receipt. The PDF preserves the supplied Total Recon logo, contact block, tables and footer.</div>}
     </div>
   </div>;
