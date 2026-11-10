@@ -1,3 +1,5 @@
+import { parseMarylandPipHistory, validateMarylandPipHistory, pipSelectionAt } from "@shared/klutchMarylandPip";
+import type { MarylandPipHistory } from "@shared/klutchMarylandPip";
 import crypto from "node:crypto";
 import mysql, { type RowDataPacket } from "mysql2/promise";
 import {
@@ -267,12 +269,35 @@ async function latestTermsForPolicy(conn: mysql.Connection, policyId: number) {
   return terms;
 }
 
+function claimsCalendarToday() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const part = (key: string) => parts.find(p => p.type === key)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+function assertMarylandHistory(state: KlutchState, terms: KlutchPolicyTerms, expiresOn = terms.expiresOn, referenceOn = claimsCalendarToday()) {
+  if (terms.pipSelection === "limited" && (state !== "MD" || !terms.pipSelectionDetails?.trim())) throw new Error("A limited PIP election requires a Maryland policy and confirmed signed scope.");
+  if (terms.marylandPipHistory === undefined) return;
+  const history = parseMarylandPipHistory(terms.marylandPipHistory);
+  const errors = validateMarylandPipHistory(state, history, { effectiveOn: terms.effectiveOn, expiresOn, referenceOn, cancelledOn: terms.leaseStatus === "terminated" ? terms.cancellationDate : undefined });
+  if (errors.length) throw new Error(errors.join("; "));
+  if (!history?.changes.length) throw new Error("At least one documented PIP change is required.");
+}
+function selectionDetails(history: MarylandPipHistory, on: string) {
+  let details = history.initialElectionDetails || "";
+  for (const change of history.changes) if (change.effectiveOn <= on) details = change.electionDetails || "";
+  return details;
+}
+
 function normalizedTerms(input: { terms: KlutchPolicyTerms; state: KlutchState; effectiveOn: string; expiresOn: string; leaseId: string; type: KlutchPolicyTransactionType }) {
+  const history = input.terms.marylandPipHistory === undefined ? undefined : parseMarylandPipHistory(input.terms.marylandPipHistory);
+  if (history?.initialSelection === "unconfirmed" && input.effectiveOn < history.changes[0].effectiveOn) throw new Error("The earlier PIP status is unconfirmed. Retain existing issued declarations; do not create a new original declaration until its PIP status is verified.");
+  const selection = history ? pipSelectionAt(history, input.effectiveOn, input.terms.pipWaived ? "waived" : "elected") : input.terms.pipSelection || (input.terms.pipWaived ? "waived" : "elected");
+  const details = history ? selectionDetails(history, input.effectiveOn) : input.terms.pipSelectionDetails;
   const premium = calculateKlutchPremium({
     state: input.state,
     effectiveOn: input.effectiveOn,
     expiresOn: input.expiresOn,
-    pipWaived: input.terms.pipWaived,
+    pipWaived: selection === "waived",
     umRejected: input.terms.umRejected,
     comprehensiveDeductible: input.terms.comprehensiveDeductible,
     collisionDeductible: input.terms.collisionDeductible,
@@ -284,11 +309,13 @@ function normalizedTerms(input: { terms: KlutchPolicyTerms; state: KlutchState; 
     effectiveOn: input.effectiveOn,
     expiresOn: input.expiresOn,
     transactionType: input.type,
-    coverages: premium.coverages,
+    pipSelection: input.state === "MD" ? selection : undefined,
+    ...(history ? { marylandPipHistory: history } : {}),
+    coverages: premium.coverages.map(c => c.label === "Personal Injury Protection" && input.state === "MD" && selection === "limited" ? { ...c, limit: `Limited election — ${details || "see signed source form"}` } : c),
     totalPremium: premium.totalPremium,
     weeklyMembershipFee: premium.weeklyMembershipFee,
     coverageWeeks: premium.coverageWeeks,
-    pipWaived: Boolean(KLUTCH_COVERAGE_RULES[input.state].pip?.waivable && input.terms.pipWaived),
+    pipWaived: Boolean(KLUTCH_COVERAGE_RULES[input.state].pip?.waivable && selection === "waived"),
   } satisfies KlutchPolicyTerms;
 }
 
@@ -311,6 +338,7 @@ export async function issueKlutchPolicy(input: {
   if (!referenceOn || referenceOn < input.effectiveOn) throw new Error("The issuance reference date must be on or after the policy effective date.");
   const annualPlan = planKlutchTermsThrough(input.effectiveOn, referenceOn, input.terms.termMonths);
   if (!annualPlan.length || annualPlan[0].expiresOn !== input.expiresOn) throw new Error("The original declaration must use its selected calendar term before automatic renewals can be planned.");
+  assertMarylandHistory(state, input.terms, annualPlan[annualPlan.length - 1].expiresOn, referenceOn < claimsCalendarToday() ? referenceOn : claimsCalendarToday());
   const fingerprint = issueFingerprint({ ...input, referenceOn, state });
   const conn = await mysql.createConnection(databaseUrl());
   try {
@@ -382,6 +410,7 @@ export async function renewKlutchPolicy(policyId: number, effectiveOn: string, e
     if (normalizeKlutchVin(termsInput.vin) !== policy.vin_normalized) throw new Error("A renewal must keep the same VIN. Use New for a new lease.");
     const prior = await latestTerm(conn, policyId);
     if (effectiveOn !== toDateOnly(prior.expires_on)) throw new Error("A renewal must begin on the immediately prior term's expiration date.");
+    assertMarylandHistory(policy.state, termsInput);
     const terms = normalizedTerms({ terms: termsInput, state: policy.state, effectiveOn, expiresOn, leaseId: policy.lease_id, type: "renewal" });
     const [term] = await conn.execute<mysql.ResultSetHeader>(
       `INSERT INTO klutch_policy_terms (policy_id, term_number, revision_number, term_months, transaction_type, effective_on, expires_on, terms, created_by_user_id, created_by_name)
@@ -419,6 +448,7 @@ export async function correctKlutchPolicy(policyId: number, termsInput: KlutchPo
     if (!policy || policy.status !== "active") throw new Error("Only an active Klutch policy can be corrected.");
     if (normalizeKlutchVin(termsInput.vin) !== policy.vin_normalized) throw new Error("A correction must keep the same VIN. Use New for a new lease.");
     const prior = await latestTerm(conn, policyId);
+    assertMarylandHistory(policy.state, termsInput);
     const terms = normalizedTerms({ terms: termsInput, state: policy.state, effectiveOn: termsInput.effectiveOn, expiresOn: termsInput.expiresOn, leaseId: policy.lease_id, type: "correction" });
     const [term] = await conn.execute<mysql.ResultSetHeader>(
       `INSERT INTO klutch_policy_terms (policy_id, term_number, revision_number, term_months, transaction_type, effective_on, expires_on, terms, created_by_user_id, created_by_name)
@@ -443,6 +473,35 @@ export async function correctKlutchPolicy(policyId: number, termsInput: KlutchPo
   } finally {
     await conn.end();
   }
+}
+
+export async function documentMarylandPipHistory(policyId: number, rawHistory: unknown, actor: KlutchActor) {
+  const history = parseMarylandPipHistory(rawHistory);
+  if (!history || !history.changes.length) throw new Error("At least one confirmed Maryland PIP change is required.");
+  const conn = await mysql.createConnection(databaseUrl());
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [policyId]);
+    const policy = rows[0];
+    if (!policy || policy.state !== "MD") throw new Error("PIP change history is available only for an existing Maryland policy.");
+    const [terms] = await conn.execute<DbTerm[]>("SELECT * FROM klutch_policy_terms WHERE policy_id = ? ORDER BY term_number, revision_number DESC", [policyId]);
+    if (!terms.length) throw new Error("The issued rental / policy term history is required.");
+    const first = terms[0], last = terms.reduce((a, b) => toDateOnly(a.expires_on) >= toDateOnly(b.expires_on) ? a : b);
+    const errors = validateMarylandPipHistory(policy.state, history, { effectiveOn: toDateOnly(first.effective_on), expiresOn: toDateOnly(last.expires_on), referenceOn: claimsCalendarToday(), cancelledOn: policy.cancelled_on ? toDateOnly(policy.cancelled_on) : undefined });
+    if (errors.length) throw new Error(errors.join("; "));
+    if (history.rentalEffectiveOn !== toDateOnly(first.effective_on)) throw new Error("The PIP history must use this policy's original issued rental / policy start date.");
+    const current = parseTerms(policy.terms), prior = current.marylandPipHistory;
+    if (prior) {
+      const canonical = parseMarylandPipHistory(prior)!;
+      if (JSON.stringify(canonical) === JSON.stringify(history)) { await conn.commit(); return publicPolicy(policy); }
+      if (canonical.initialSelection !== history.initialSelection || (canonical.initialElectionDetails || "") !== (history.initialElectionDetails || "") || canonical.changes.some((c, i) => JSON.stringify(c) !== JSON.stringify(history.changes[i]))) throw new Error("Previously documented PIP changes cannot be replaced or removed. Use a policy correction for a verified record error.");
+    }
+    const updatedTerms = { ...current, marylandPipHistory: history };
+    await conn.execute("UPDATE klutch_policies SET terms = ?, updated_by_user_id = ?, updated_by_name = ? WHERE id = ?", [JSON.stringify(updatedTerms), actor.userId, actor.name, policyId]);
+    await conn.execute("INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata) VALUES (?, 'terms_amended', ?, ?, ?)", [policyId, actor.userId, actor.name, JSON.stringify({ formId: "MD-PIP-HISTORY", purpose: "documented_signed_election_or_waiver", history, previousHistory: prior || null, issuedDeclarationsUnchanged: true })]);
+    await conn.commit();
+    return publicPolicy({ ...policy, terms: updatedTerms });
+  } catch (error) { await conn.rollback(); throw error; } finally { await conn.end(); }
 }
 
 export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn: string; claimNumber?: string; documentSnapshot: Record<string, unknown> }, actor: KlutchActor) {
@@ -501,6 +560,11 @@ export async function recordKlutchDocument(input: {
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [input.policyId]);
     const policy = policies[0];
     if (!policy) throw new Error("Klutch policy not found.");
+    if (input.snapshot.formId === "MD-PIP-HISTORY") {
+      if (input.documentType !== "endorsement" || policy.state !== "MD") throw new Error("Maryland PIP history must be recorded as a Maryland endorsement.");
+      const recorded = parseTerms(policy.terms).marylandPipHistory;
+      if (!recorded || JSON.stringify(parseMarylandPipHistory(recorded)) !== JSON.stringify(parseMarylandPipHistory(input.snapshot.marylandPipHistory))) throw new Error("Confirm and save the matching Maryland PIP history before creating this endorsement.");
+    }
     const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
     const term = input.termId
       ? (await conn.execute<DbTerm[]>("SELECT * FROM klutch_policy_terms WHERE id = ? AND policy_id = ? FOR UPDATE", [input.termId, input.policyId]))[0][0]
@@ -512,7 +576,7 @@ export async function recordKlutchDocument(input: {
       `INSERT INTO klutch_policy_documents
        (policy_id, claim_id, term_id, document_type, document_version, delivery_status, policy_transaction_type, policy_number, klutch_claim_number, member_name, handler_title, input_snapshot, created_by_user_id, created_by_name)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [input.policyId, claim?.id ?? null, term.id, input.documentType, POLICY_DOCUMENT_VERSION, KLUTCH_CREATED_NOT_SENT, transactionType, policy.policy_number,
+      [input.policyId, claim?.id ?? null, term.id, input.documentType, input.snapshot.formId === "MD-PIP-HISTORY" ? "MD-PIP-HISTORY-2026.11" : POLICY_DOCUMENT_VERSION, KLUTCH_CREATED_NOT_SENT, transactionType, policy.policy_number,
        claim?.klutch_claim_number ?? null, policy.member_name, handler.title, JSON.stringify(input.snapshot), actor.userId, actor.name],
     );
     await conn.execute(

@@ -3,6 +3,7 @@ import { sdk } from "./_core/sdk";
 import {
   cancelKlutchPolicy,
   correctKlutchPolicy,
+  documentMarylandPipHistory,
   findKlutchPoliciesByVin,
   getKlutchPolicy,
   issueKlutchPolicy,
@@ -26,6 +27,7 @@ const DOCUMENT_TYPE_BY_SOURCE_ID: Record<string, KlutchDocumentType> = {
   can: "cancellation_notice",
   end: "endorsement",
   dop: "direction_of_pay",
+  pip_history: "endorsement",
 };
 
 function isState(value: unknown): value is KlutchState {
@@ -187,6 +189,13 @@ export function registerKlutchPolicyApi(app: Express) {
     }
   });
 
+  app.post(`${base}/pip-history`, async (req, res) => {
+    const user = await authenticatedUser(req, res);
+    if (!user) return;
+    try { res.json({ policy: await documentMarylandPipHistory(requiredNumber(req.body?.policyId, "Policy"), req.body?.history, actorFor(user)) }); }
+    catch (error) { res.status(400).json({ error: messageOf(error) }); }
+  });
+
   app.post(`${base}/document`, async (req, res) => {
     const user = await authenticatedUser(req, res);
     if (!user) return;
@@ -198,6 +207,7 @@ export function registerKlutchPolicyApi(app: Express) {
       const result = await recordKlutchDocument({
         policyId: requiredNumber(body.policyId, "Policy"),
         documentType: type,
+        termId: body.termId === undefined ? undefined : requiredNumber(body.termId, "Policy term"),
         claimNumber: stringValue(body.claimNumber) || undefined,
         snapshot: snapshot as Record<string, unknown>,
       }, actorFor(user));

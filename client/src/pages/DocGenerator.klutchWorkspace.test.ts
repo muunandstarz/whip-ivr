@@ -53,7 +53,7 @@ describe("Klutch policy documents source integration", () => {
   it("makes every form previewable in All forms without manager or claim-document gates", () => {
     expect(sourcePage).toContain('const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]]');
     expect(sourcePage).toContain('const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"]');
-    expect(sourcePage).toContain('return [...new Set([...packet,...NON_PDF_REFERENCE_IDS])]');
+    expect(sourcePage).toContain('return [...new Set([...packet.filter(id=>id!=="pip_history"),...(F.st==="MD"&&F.mdPipSame==="no"?["pip_history"]:[]),...NON_PDF_REFERENCE_IDS])]');
     expect(sourcePage).toContain('const denialClaim=claim||{kc:s.kc||"[Klutch claim number]"');
     expect(sourcePage).toContain('if(d==="end")h+=sec("Endorsement")');
     expect(sourcePage).toContain('This form is available for preview and creation without a manager-approval or carrier-evidence field.');
@@ -93,7 +93,7 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('I confirm that ${esc(R.n)} is the vehicle’s correct garaging state.');
     expect(sourcePage).toContain("Confirm garaging state to continue.");
     expect(sourcePage).toContain('F.confirmedState=F.stateConfirmed?F.st:"";save();buildForm();preview();return');
-    expect(sourcePage).toContain('if(F.st!==priorState){F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}');
+    expect(sourcePage).toContain('if(F.st!==priorState){F.mdPipSame="";F.mdPipChanges=[];F.mdPipInitial="";F.mdPipInitialDetails="";F.mdPipRentalStart="";F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}');
     expect(sourcePage).toContain('Confirm the garaging state before preparing a draft policy number.');
     expect(sourcePage).toContain('Confirm the garaging state before creating or printing a policy document.');
     expect(sourcePage).toContain('Garaging state is locked after a shared policy number is issued. Start a correction workflow for a verified policy-record issue.');
@@ -150,7 +150,7 @@ describe("Klutch policy documents source integration", () => {
 
   it("does not render PIP controls or declaration rows for Virginia", () => {
     expect(sourcePage).toContain('VA:{n:"Virginia",bi:[50000,100000],pd:25000,pip:null,umReject:false}');
-    expect(sourcePage).toContain('if(R.pip)h+=`<div class="s3"><label>PIP</label>');
+    expect(sourcePage).toContain('if(R.pip&&!(F.st==="MD"&&F.mdPipSame==="no"))h+=`<div class="s3"><label>PIP</label>');
     expect(sourcePage).toContain('RULES[s.st]?.pip?rowv("pip","Personal injury protection"):""');
     expect(sourcePage).toContain('...(z.R.pip ? { "Personal Injury Protection": z.cov.pip } : {})');
   });
@@ -302,7 +302,7 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('if(d==="carrier_guide")');
     expect(sourcePage).toContain('Editable email preview · not a PDF packet document');
     expect(sourcePage).toContain('On-screen reference · not a PDF packet document');
-    expect(sourcePage).toContain('const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop"]');
+    expect(sourcePage).toContain('const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop","pip_history"]');
     expect(sourcePage).toContain('const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"]');
     expect(sourcePage).toContain('const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];');
     expect(sourcePage).toContain('const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;');

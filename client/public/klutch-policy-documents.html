@@ -79,6 +79,7 @@ input:focus,select:focus{outline:2px solid var(--lime);border-color:var(--teal)}
 .ltr .q{margin-left:36px;margin-right:36px}
 .ltr .ol{margin-left:36px;margin-bottom:3px}
 .ltr+.foot{font-family:Arial;left:72px;right:72px;border:0;bottom:30px;font-size:10px}
+.pip-history-doc{font-size:12px;line-height:1.45;padding:40px 56px 0;overflow-wrap:anywhere}.pip-history-doc .ln{line-height:1.4}.pip-history-doc img.lg{height:48px;margin-bottom:14px}
 /* MetroCars Direction of Pay: owner-supplied plain two-page carrier form. */
 .dopdoc{font-family:Arial,Helvetica,sans-serif;color:#000;padding:42px 68px 0;font-size:10.5px;line-height:1.48}
 .dop-brand{font-size:9px;margin-bottom:22px}.dop-title{text-align:center;font-size:14px;font-weight:700;line-height:1.2}.dop-subtitle{text-align:center;font-size:11px;font-weight:700;margin-top:2px}.dop-instruction{text-align:center;font-size:9px;margin:8px 0 18px}.dop-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid #111}.dop-cell{min-height:39px;padding:3px 6px;border-right:1px solid #111;border-bottom:1px solid #111}.dop-cell:nth-child(2n){border-right:0}.dop-cell:nth-last-child(-n+2){border-bottom:0}.dop-label{font-size:7.5px;line-height:1.1}.dop-value{font-size:10px;line-height:1.2;margin-top:2px;min-height:14px}.dop-salutation{font-weight:700;margin:17px 0 9px}.dopdoc p{margin:0 0 10px}.dop-section-title{font-weight:700;margin:16px 0 9px}.dop-check{display:flex;gap:12px;margin:0 0 7px;line-height:1.35}.dop-check>span:first-child{font-size:13px;line-height:1}.dop-footer{position:absolute;left:68px;right:68px;bottom:22px;text-align:center;font-size:8px}.dopdoc-p2{font-size:9.5px;line-height:1.35}.dop-disclaimer{font-style:italic;margin-top:0!important}.dop-department{font-size:10.5px;font-weight:700;margin-top:18px}.dop-signatures{display:grid;grid-template-columns:1fr 0.68fr;gap:26px 30px;margin-top:78px;font-size:8px}.dop-line{border-top:1px solid #111;padding-top:4px;height:19px;position:relative}.dop-line-spaced{margin-top:2px}.dop-sign-line{border-top:1px solid #111;height:36px;display:flex;align-items:flex-end;position:relative}.dop-sign-image{display:block;max-width:210px;max-height:32px;object-fit:contain;object-position:left bottom;margin:0 0 1px 4px}.dop-typed-sign{font-family:"Brush Script MT","Segoe Script",cursive;font-size:22px;line-height:1;color:#111;margin:0 0 2px 5px;white-space:nowrap}.dop-sign-placeholder{font-style:italic;color:#666;margin:0 0 4px 5px}.dop-line-value{position:absolute;left:5px;bottom:3px;font-size:8.6px;line-height:1.1;white-space:nowrap;max-width:95%;overflow:hidden;text-overflow:ellipsis}.dop-cert{border:1px solid #54767a;background:#f4f9f9;color:#16383c;margin-top:4px;padding:3px 5px;font-size:6.9px;line-height:1.25;min-height:23px;box-sizing:border-box}.dop-cert-status{font-weight:700;letter-spacing:.28px;font-size:7px}.dop-cert.pending{background:#fafafa;border-color:#aaa;color:#666}.dop-sign-label{margin-top:3px}.dop-sign-pad{width:100%;height:104px;display:block;border:1px solid #aab8b8;border-radius:7px;background:#fff;touch-action:none;cursor:crosshair}.dop-sign-pad:focus{outline:3px solid rgba(1,51,57,.25);outline-offset:2px}.dop-sign-tools{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:6px}.dop-sign-tools .note{margin:0;flex:1}.dop-sign-attest{display:flex;align-items:flex-start;gap:8px;font-weight:500;text-transform:none;letter-spacing:0;border:1px solid #dbe4e6;border-radius:8px;padding:10px;background:#fff;line-height:1.35}.dop-sign-attest input{width:16px;height:16px;margin-top:1px;accent-color:#013339;flex:0 0 auto}
@@ -224,10 +225,10 @@ const RULES={
 const W={bi:30,pd:12,coll:25,comp:13,um:7,uim:5,pip:8};
 /* -------------------------------------- */
 const COVS=[["bi","Bodily injury liability"],["pd","Property damage liability"],["pip","Personal injury protection"],["um","Uninsured motorist bodily injury"],["uim","Underinsured motorist bodily injury"],["comp","Comprehensive"],["coll","Collision"]];
-const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["dop","Direction of Pay & Vehicle Ownership Notice"],["carrier_email","Carrier Coverage Request Email"],["carrier_guide","Carrier Communication Guide"]];
-const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop"];
+const DOCS=[["dec","Declarations page"],["den","TNC coverage denial"],["car","Carrier coverage position"],["can","Cancellation notice"],["end","Endorsement KIC-END-002"],["pip_history","Maryland PIP change endorsement"],["dop","Direction of Pay & Vehicle Ownership Notice"],["carrier_email","Carrier Coverage Request Email"],["carrier_guide","Carrier Communication Guide"]];
+const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop","pip_history"];
 const isPrintablePdf=id=>PRINTABLE_PDF_IDS.includes(id);
-const DOCNOTE={dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest.",carrier_email:"Editable non-PDF carrier communication. Copy it into the current claim delivery workflow; email templates and the Carrier Communication Guide are excluded from PDF print packets.",carrier_guide:"On-screen call scripts and objection handling for carrier conversations. Personalize before use, document the contact in Snapsheet, and escalate when directed. It is not a PDF packet document."};
+const DOCNOTE={pip_history:"Documents confirmed Maryland PIP changes only. It does not create a signed election/waiver or establish legal effectiveness. The signed source form remains required.",dec:"For carriers and coverage investigations. Never sent to the member.",den:"Written to the member, cc Metrocars. Never sent to the member. It goes to the claim file and the TNC or other insurer.",car:"Use when another carrier asks about or declines on coverage.",can:"Goes to the member, cc Metrocars. The cancellation date is the effective date.",end:"Use this policy endorsement form whenever the selected policy requires it.",dop:"Use to direct covered physical-damage repair, total-loss, or subrogation payments and identify Metrocars’ vehicle interest.",carrier_email:"Editable non-PDF carrier communication. Copy it into the current claim delivery workflow; email templates and the Carrier Communication Guide are excluded from PDF print packets.",carrier_guide:"On-screen call scripts and objection handling for carrier conversations. Personalize before use, document the contact in Snapsheet, and escalate when directed. It is not a PDF packet document."};
 const PERIODS={1:"waiting for a ride request",2:"traveling to pick up a passenger",3:"transporting a passenger"};
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -241,13 +242,57 @@ function weeks(eff,exp){if(!eff||!exp)return 0;const a=new Date(eff+"T00:00:00")
 const money=n=>"$"+Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const usd=n=>"$"+Number(n).toLocaleString("en-US");
 function total(cov){return COVS.reduce((a,[k])=>a+(parseFloat(cov[k+"P"])||0),0)}
+/* Maryland PIP: documentary history, never an inferred waiver or backdated signature. */
+function mdPipHistory(s=F){
+ if(s.st!=="MD"||s.mdPipSame!=="no")return undefined;
+ return {rentalEffectiveOn:s.mdPipRentalStart||s.eff||"",initialSelection:s.mdPipInitial||"",initialElectionDetails:s.mdPipInitialDetails||"",changes:(s.mdPipChanges||[]).map(c=>({...c}))};
+}
+const mdPipLabel=v=>({unconfirmed:"Earlier PIP selection not confirmed — no waiver / election inferred",elected:"PIP elected — $2,500 each person",limited:"Limited PIP election — see signed form",waived:"PIP waived — see signed form"}[v]||"Selection not confirmed");
+function mdPipAt(s,on){const h=mdPipHistory(s);let v=h?.initialSelection||(s.pip==="w"?"waived":s.pip==="l"?"limited":"elected");if(h)for(const c of h.changes)if(c.effectiveOn&&c.effectiveOn<=on)v=c.selection;return v}
+function mdPipDetailsAt(s,on){const h=mdPipHistory(s);let v=h?.initialElectionDetails||s.mdPipInitialDetails||"";if(h)for(const c of h.changes)if(c.effectiveOn&&c.effectiveOn<=on)v=c.electionDetails||"";return v}
+function validMdDate(v){if(!/^\d{4}-\d{2}-\d{2}$/.test(v||""))return false;const d=new Date(v+"T00:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v}
+function mdPipErrors(s=F){
+ if(s.st!=="MD")return [];
+ if(!["yes","no"].includes(s.mdPipSame))return ["confirm whether Maryland PIP stayed the same throughout the rental"];
+ if(s.mdPipSame==="yes")return s.pip==="l"&&!String(s.mdPipInitialDetails||"").trim()?["signed limited-election details"]:[];
+ const h=mdPipHistory(s),errors=[],choices=["elected","limited","waived"];
+ if(!validMdDate(h.rentalEffectiveOn)||h.rentalEffectiveOn>s.eff)errors.push("original rental / policy effective date");
+ if(![...choices,"unconfirmed"].includes(h.initialSelection))errors.push("confirmed original PIP selection");
+ if(h.initialSelection==="limited"&&!h.initialElectionDetails.trim())errors.push("original limited-election details");
+ if(!h.changes.length||h.changes.length>10)errors.push("one to ten documented PIP changes");
+ let previousDate=h.rentalEffectiveOn,previousSelection=h.initialSelection;
+ const reference=s.lease==="t"&&s.cdate?s.cdate:today(),planThrough=reference>=s.eff?reference:s.eff;let packetEnd=addMonths(s.eff,+(s.term||6));
+ if(s.ptype==="n")while(packetEnd<=planThrough)packetEnd=addMonths(packetEnd,+(s.term||6));
+ h.changes.forEach((c,i)=>{const label="PIP change "+(i+1)+": ";
+ if(!choices.includes(c.selection)||c.selection===previousSelection)errors.push(label+"a different election / waiver");
+ if(!validMdDate(c.effectiveOn)||c.effectiveOn<h.rentalEffectiveOn||c.effectiveOn<previousDate||(i>0&&c.effectiveOn===previousDate)||c.effectiveOn>=packetEnd||c.effectiveOn>today()||(s.lease==="t"&&s.cdate&&c.effectiveOn>s.cdate))errors.push(label+"confirmed effective date in the rental period, in chronological order");
+ if(!validMdDate(c.signedOn)||c.signedOn>c.effectiveOn)errors.push(label+"signed source-form date on or before the effective date");
+ if(String(c.sourceReference||"").length>300||String(c.electionDetails||"").length>800)errors.push(label+"shorten the source reference / details to the field limit");
+ if(!String(c.sourceReference||"").trim())errors.push(label+"signed-form file / exhibit reference");
+ if(c.selection==="limited"&&!String(c.electionDetails||"").trim())errors.push(label+"signed limited-election details");
+ if(c.confirmed!==true)errors.push(label+"handler confirmation of signed source and effective date");
+ previousDate=c.effectiveOn;previousSelection=c.selection;
+ });return errors;
+}
+function mdPipForm(){
+ const h=mdPipHistory(F),changes=h?.changes||[];
+ const cf=(i,k,label,type="text")=>`<div class="s3"><label for="mdpip-${i}-${k}">${label}</label><input id="mdpip-${i}-${k}" data-pip-index="${i}" data-pip-key="${k}" type="${type}" ${k==="sourceReference"?"maxlength=300":k==="electionDetails"?"maxlength=800":""} value="${esc(changes[i][k]||"")}"></div>`;
+ let out=`${sec("Maryland PIP during this rental")}<div class="s6"><label>Was PIP the same throughout the rental?</label>${seg("mdPipSame",[["yes","Yes — unchanged"],["no","No — document changes"]])}</div><div class="s6 note">Use the signed election / waiver and confirmed effective date. Do not infer a waiver from an address, enrollment date, missing form, or today's date. This documents the record; it does not obtain a signature or validate a waiver's legal effectiveness.</div>`;
+ if(F.mdPipSame!=="no")return out;
+ out+=fld("mdPipRentalStart","Original rental / policy effective date",3,{t:"date"})+fld("mdPipInitial","Confirmed PIP at the start of the rental",3,{sel:[["","Select original status"],["unconfirmed","Earlier selection not confirmed / form missing"],["elected","Elected"],["limited","Limited election"],["waived","Waived"]]});
+ if(F.mdPipInitial==="limited")out+=fld("mdPipInitialDetails","Original limited election — scope from signed form",6);
+ changes.forEach((c,i)=>{out+=`<div class="s6" style="border:1px solid #dbe4e6;border-radius:9px;padding:14px"><div class="f"><div class="s6" style="display:flex;justify-content:space-between;gap:8px"><b>Documented change ${i+1}</b><button type="button" class="b ghost" data-act="mdPipRemove" data-v="${i}">Remove</button></div><div class="s6"><label for="mdpip-${i}-selection">New PIP selection</label><select id="mdpip-${i}-selection" data-pip-index="${i}" data-pip-key="selection">${[["","Select election / waiver"],["elected","Elected — $2,500 each person"],["limited","Limited election — use signed scope"],["waived","Waived — signed source required"]].map(([v,l])=>`<option value="${v}" ${c.selection===v?"selected":""}>${l}</option>`).join("")}</select></div>${cf(i,"effectiveOn","Confirmed effective date","date")}${cf(i,"signedOn","Signed election / waiver date","date")}${cf(i,"sourceReference","Signed source-form file / exhibit reference")}${cf(i,"electionDetails",c.selection==="limited"?"Limited election — scope from signed form":"Election / waiver details (optional)")}<div class="s6"><label style="display:flex;gap:8px;text-transform:none"><input type="checkbox" data-pip-index="${i}" data-pip-key="confirmed" ${c.confirmed?"checked":""} style="width:18px;height:18px"><span>I reviewed the signed source and confirmed this effective date and selection. The endorsement does not replace the signed form.</span></label></div></div></div>`});
+ out+=`<div class="s6"><button type="button" class="b ghost" data-act="mdPipAdd" ${changes.length>=10?"disabled":""}>Add PIP change</button></div>`;return out;
+}
+function hydrateMdPip(r){const h=r.mdPipHistory||r.raw?.terms?.marylandPipHistory;F.mdPipSame=h?"no":"";F.mdPipRentalStart=h?.rentalEffectiveOn||"";F.mdPipInitial=h?.initialSelection||"";F.mdPipInitialDetails=h?.initialElectionDetails||r.raw?.terms?.pipSelectionDetails||"";F.mdPipChanges=h?JSON.parse(JSON.stringify(h.changes)):[]}
+
 /* ---- derive coverage, limits and premiums from the intake ---- */
 function derive(F){
  const R=RULES[F.st];if(!R)return null;
- const pipOn=!!(R.pip&&F.pip==="a"),umOn=!(R.umReject&&F.um==="r");
+ const pipSelection=F.st==="MD"?mdPipAt(F,F.eff):(F.pip==="a"?"elected":"waived");const pipOn=!!(R.pip&&pipSelection!=="waived"),umOn=!(R.umReject&&F.um==="r");
  const bi=usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident";
  const cov={bi,pd:usd(R.pd)+" each accident",um:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED",uim:umOn?usd(R.bi[0])+" each person / "+usd(R.bi[1])+" each accident":"REJECTED",comp:"",coll:"",compD:F.compD||"$500",collD:F.collD||"$500"};
- if(R.pip)cov.pip=pipOn?usd(R.pip.lim)+" each person":"Waived";
+ if(R.pip)cov.pip=pipOn?(pipSelection==="limited"?"Limited election — "+(mdPipDetailsAt(F,F.eff)||"see signed form"):usd(R.pip.lim)+" each person"):"Waived";
  const wk=weeks(F.eff,F.exp),tot=Math.round(WEEKLY*wk*100);
  const act=["bi","pd","coll","comp"].concat(umOn?["um","uim"]:[]).concat(pipOn?["pip"]:[]);
  const sw=act.reduce((a,k)=>a+W[k],0);
@@ -347,7 +392,7 @@ Whip Claims Management`;
 }
 function buildForm(){
  const d=F.sel,R=RULES[F.st];
- const full=(d==="dec"||d==="den"||d==="can"||d==="dop");
+ const full=(d==="dec"||d==="den"||d==="can"||d==="dop"||d==="pip_history");
  const issuedPolicy=/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"");
  if(d==="carrier_email"){ $("#form").innerHTML=carrierEmailForm();return; }
  if(d==="carrier_guide"){ $("#form").innerHTML=carrierGuideForm();return; }
@@ -382,10 +427,12 @@ function buildForm(){
   h+=`<div class="s6"><label>VIN</label><div class="pb"><input data-k="vin" value="${esc(F.vin||"")}" maxlength="17" style="text-transform:uppercase"><button class="b ghost" data-act="decode">Decode</button></div><div id="vinmsg" class="note" style="margin-top:4px"></div></div>`;
   h+=fld("vehicle","Year, make, model",6);
  }
- if(d==="dec"){
+ if(d==="dec"||d==="pip_history"){
   h+=sec("Coverage elections");
-  if(R.pip)h+=`<div class="s3"><label>PIP</label>${seg("pip",[["a","Accepted"],["w","Waived"]],R.pip&&!R.pip.waive?["w"]:[])}</div>`;
+  if(R.pip&&!(F.st==="MD"&&F.mdPipSame==="no"))h+=`<div class="s3"><label>PIP</label>${seg("pip",F.st==="MD"?[["a","Elected"],["l","Limited election"],["w","Waived"]]:[["a","Accepted"],["w","Waived"]],R.pip&&!R.pip.waive?["w"]:[])}</div>`;
   h+=`<div class="s3"><label>UM / UIM</label>${seg("um",[["a","Accepted"],["r","Rejected"]],R.umReject?[]:["r"])}</div>`;
+  if(F.st==="MD")h+=mdPipForm();
+  if(F.st==="MD"&&F.mdPipSame==="yes"&&F.pip==="l")h+=fld("mdPipInitialDetails","Limited election — scope from signed form",6);
   h+=`<div class="s6" id="calc"></div>`;
   h+=`<div class="s6"><details><summary>Adjust deductibles</summary><div class="f" style="margin-top:8px">${fld("compD","Comprehensive deductible",3)+fld("collD","Collision deductible",3)}</div></details></div>`;
   h+=sec("Policy number");
@@ -452,12 +499,12 @@ function ctx(){
     (t.coverages||[]).forEach(coverage=>{const key=keyByLabel[coverage.label];if(!key)return;cov[key]=coverage.limit||"";cov[key+"P"]=Number(coverage.premium||0);if(coverage.deductible)cov[key+"D"]=coverage.deductible});
     const memberState=t.memberState||t.state||F.cst||F.st, memberCity=[t.memberCity,memberState?", "+String(memberState).toUpperCase():"",t.memberZip?" "+t.memberZip:""].filter(Boolean).join("").replace(/^, /,"");
     const pol={number:entry.policyNumber,member:t.memberName||F.member||"",address:t.memberStreet||t.memberAddress||F.address||"",city:memberCity,vehicle:t.vehicle||F.vehicle||"",vin:t.vin||F.vin||"",terms:[{eff:entry.effectiveOn,exp:entry.expiresOn,cov}]};
-    const state=Object.assign({},F,{pn:entry.policyNumber,ptype:entry.transactionType==="renewal"?"r":"n",member:t.memberName||F.member,mno:t.memberNumber||F.mno,address:t.memberStreet||t.memberAddress||F.address,city:t.memberCity||F.city,cst:memberState,zip:t.memberZip||F.zip,vehicle:t.vehicle||F.vehicle,vin:t.vin||F.vin});
+    const state=Object.assign({},F,{issuedTermRendering:true,st:t.state||F.st,eff:entry.effectiveOn,exp:entry.expiresOn,pn:entry.policyNumber,ptype:entry.transactionType==="renewal"?"r":"n",member:t.memberName||F.member,mno:t.memberNumber||F.mno,address:t.memberStreet||t.memberAddress||F.address,city:t.memberCity||F.city,cst:memberState,zip:t.memberZip||F.zip,vehicle:t.vehicle||F.vehicle,vin:t.vin||F.vin});
     return buildDoc("dec",pol,null,state);
   }
 const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]];
 const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"];
-function setDocs(){const t=F.set||"all";const packet=t==="liab"?(F.lease==="t"?["dec","can"]:["dec"]):DOCS.map(x=>x[0]);return [...new Set([...packet,...NON_PDF_REFERENCE_IDS])]}
+function setDocs(){const t=F.set||"all";const packet=t==="liab"?(F.lease==="t"?["dec","can"]:["dec"]):DOCS.map(x=>x[0]);return [...new Set([...packet.filter(id=>id!=="pip_history"),...(F.st==="MD"&&F.mdPipSame==="no"?["pip_history"]:[]),...NON_PDF_REFERENCE_IDS])]}
 function renderDocs(rs){$("#docs").innerHTML=DOCS.filter(([k])=>setDocs().includes(k)).map(([k,l])=>`<button data-act="doc" data-v="${k}" class="${F.sel===k?"on":""} ${rs&&!rs[k].err&&!rs[k].miss.length?"rdy":""}"><span class="chip"></span>${l}</button>`).join("")}
 function rsearch(){const el=$("#rsr");if(!el)return;const q=(F.rq||"").trim().toLowerCase();if(q.length<2){el.innerHTML="";return}
  const rows=Object.values(K.pols).filter(r=>(r.pn+" "+r.member+" "+(r.mno||"")).toLowerCase().includes(q)).slice(0,6);
@@ -497,11 +544,23 @@ function fit(){const pv=$("#pv");if(!pv)return;const k=Math.min(1,(pv.clientWidt
 window.addEventListener("resize",fit);
 const FOOT=`<div class="foot">Klutch Insurance Company  |  424 Church Street, Suite 800, Nashville, Tennessee 37219</div>`;
 const L=(t)=>`<div class="ln">${t}</div>`,P=t=>`<p>${t}</p>`,G=`<div class="gap"></div>`;
+function paginateMdPip(html,policyNumber){
+ const box=document.createElement("div");box.style.cssText="position:fixed;left:-30000px;top:0;visibility:hidden;width:816px";box.innerHTML=html;document.body.appendChild(box);
+ for(const original of [...box.querySelectorAll(".sheet")]){
+  let sheet=original,body=sheet.querySelector(".pip-history-doc"),footer=body.querySelector(".foot"),blocks=[...body.children].filter(el=>el!==footer);
+  if(footer)sheet.appendChild(footer);body.innerHTML="";
+  for(const block of blocks){body.appendChild(block);const bottom=block.getBoundingClientRect().bottom-sheet.getBoundingClientRect().top;
+   if(bottom>980&&body.children.length>1){block.remove();const next=document.createElement("div");next.className="sheet";next.innerHTML=`<div class="ltr pip-history-doc"><h2 style="font-size:14px;margin:0 0 8px">MARYLAND PIP CHANGE ENDORSEMENT — CONTINUED</h2>${L("Policy: "+esc(policyNumber))}${G}</div>${FOOT}`;sheet.after(next);sheet=next;body=next.querySelector(".pip-history-doc");body.appendChild(block)}
+  }
+ }
+ const output=box.innerHTML;box.remove();return output;
+}
 function buildDoc(d,pol,claim,s){
  const LBL={pn:"policy number",member:"named insured",mno:"member number",address:"street address",city:"city",cst:"state",zip:"ZIP",vehicle:"year, make, model",vin:"VIN"};
- const REQ={dec:["pn","member","mno","address","city","cst","zip","vehicle","vin"],den:["pn","member","mno","address","city","cst","zip","vehicle","vin"],can:["pn","member","mno","address","city","cst","zip","vehicle","vin"],car:["pn","member","mno","vehicle","vin"],end:["pn"],dop:[]};
+ const REQ={pip_history:["pn","member","mno","vehicle","vin"],dec:["pn","member","mno","address","city","cst","zip","vehicle","vin"],den:["pn","member","mno","address","city","cst","zip","vehicle","vin"],can:["pn","member","mno","address","city","cst","zip","vehicle","vin"],car:["pn","member","mno","vehicle","vin"],end:["pn"],dop:[]};
  const miss0=(REQ[d]||[]).filter(k=>!String(s[k]||"").trim()).map(k=>LBL[k]);
  const miss=[...miss0];
+ if((d==="dec"||d==="pip_history")&&s.st==="MD"&&!s.issuedTermRendering)miss.push(...mdPipErrors(s));
  const T=pol.terms[0];if(d==="dec"&&!T.eff)miss.push("effective date");
  const nm=pol.member,veh=pol.vehicle+" ("+pol.vin+")";
  const dt=ld((d==="den"?s.dden:s.date)||today());
@@ -538,6 +597,11 @@ function buildDoc(d,pol,claim,s){
    <div class="secx"><h2>Policy Documents</h2><div class="fine">These declarations summarize your coverage. Refer to your policy for complete terms, conditions, limits, and exclusions. For policy documents or to report a claim, email claims@klutchinsurance.com.</div></div>
    <div style="margin-top:40px;font-size:9px;line-height:1.5;color:#777">Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms and conditions.</div>${FOOT}</div>`;
   return{html:sheet(p1)+sheet(p2),miss:[...new Set(miss)]};
+ }
+ if(d==="pip_history"){
+  if(s.st!=="MD"||s.mdPipSame!=="no")return {html:"",miss:["Maryland documented PIP changes"]};
+  const h=mdPipHistory(s),rows=h.changes.map((c,i)=>{const before=i?h.changes[i-1].selection:h.initialSelection;return `<div class="sheet"><div class="ltr pip-history-doc"><img class="lg" src="${LOGO}">${P(ld(s.date||today()))}<h2 style="font-size:16px;margin:12px 0">MARYLAND PIP ELECTION / WAIVER CHANGE ENDORSEMENT</h2>${L("Document reference: MD-PIP-HISTORY · Change "+(i+1)+" of "+h.changes.length)}${L("Policy number: "+esc(pol.number))}${L("Named insured: "+esc(pol.member))}${L("Member number: "+esc(s.mno))}${L("Vehicle: "+esc(pol.vehicle))}${L("VIN: "+esc(pol.vin))}${G}${L("Original rental / policy effective date: "+ld(h.rentalEffectiveOn))}${L("PIP immediately before this change: "+mdPipLabel(before))}${L("Confirmed change effective date: "+ld(c.effectiveOn))}${L("PIP from this effective date: "+mdPipLabel(c.selection))}${L("Signed source-form date: "+ld(c.signedOn))}${L("Signed source reference: "+esc(c.sourceReference))}${c.electionDetails?P("Confirmed election / waiver details: "+esc(c.electionDetails)):""}${G}${P("This endorsement documents the confirmed change shown above, as supported by the referenced signed election or waiver. "+(before==="unconfirmed"?"The earlier PIP selection has not been confirmed; no election, waiver, or earlier coverage position is inferred. ":"The prior documented selection is recorded for the period before this change. ")+"This record does not replace earlier declarations or alter any earlier period by inference.")}${P("This document is not the insured’s signed PIP election or waiver. It does not obtain a signature, cure a missing form, create a waiver, or independently establish its legal effectiveness. Any limited election applies only to the scope supported by the signed source form. Retain that source in the policy / claim file.")}${P("No premium adjustment or coverage determination is made by this document. All other policy terms remain unchanged, subject to the policy, the signed source, and applicable law.")}${FOOT}</div></div>`});
+  return {html:paginateMdPip(rows.join(""),pol.number),miss:[...new Set(miss)]};
  }
  if(d==="dop"){
   const bracket=(v,placeholder)=>esc(v||placeholder);
@@ -646,9 +710,11 @@ async function clearFlow(){if(!await ask("Reset the form? This clears everything
  F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
 document.addEventListener("click",e=>{
  const sg=e.target.closest("[data-seg]");
- if(sg){const k=sg.dataset.seg;const prevPt=F.ptype;F[k]=sg.dataset.v;save();if(k==="ptype"&&F.ptype==="n"&&(prevPt==="r"||prevPt==="c")){F.pn="";F.rq=""}if(k==="set"&&!setDocs().includes(F.sel))F.sel=setDocs()[0];if(k==="set"||k==="term"||k==="pip"||k==="um"||k==="lease"||k==="ptype"||k==="dopSignatureMode"){if(k==="dopSignatureMode"){F.dopSignatureData="";clearDopCertification()}buildForm();if(k==="ptype")rsearch()}preview();return}
+ if(sg){const k=sg.dataset.seg;const prevPt=F.ptype;F[k]=sg.dataset.v;save();if(k==="ptype"&&F.ptype==="n"&&(prevPt==="r"||prevPt==="c")){F.pn="";F.rq=""}if(k==="set"&&!setDocs().includes(F.sel))F.sel=setDocs()[0];if(k==="set"||k==="term"||k==="pip"||k==="um"||k==="lease"||k==="ptype"||k==="dopSignatureMode"||k==="mdPipSame"){if(k==="dopSignatureMode"){F.dopSignatureData="";clearDopCertification()}buildForm();if(k==="ptype")rsearch()}preview();return}
  const b=e.target.closest("[data-act]");if(!b)return;const a=b.dataset.act;
- if(a==="guideFocus"){F.guideFocus=b.dataset.v;save();buildForm();preview();setTimeout(()=>document.querySelector("#guideScript")?.focus(),0)}
+ if(a==="mdPipAdd"){F.mdPipChanges=F.mdPipChanges||[];if(F.mdPipChanges.length<10)F.mdPipChanges.push({selection:"",effectiveOn:"",signedOn:"",sourceReference:"",electionDetails:"",confirmed:false});save();buildForm();preview()}
+ else if(a==="mdPipRemove"){F.mdPipChanges.splice(+b.dataset.v,1);save();buildForm();preview()}
+ else if(a==="guideFocus"){F.guideFocus=b.dataset.v;save();buildForm();preview();setTimeout(()=>document.querySelector("#guideScript")?.focus(),0)}
  else if(a==="doc"){F.sel=b.dataset.v;save();buildForm();preview()}
  else if(a==="genpol"){genpolFlow()}
  else if(a==="genclm"){const sn=(F.snap||"").trim();if(!sn){say("Enter the Snapsheet claim number first.");return}if(!K.map[sn])K.map[sn]=newClaim();F.kc=K.map[sn];if(!K.clms.some(c=>c.kc===F.kc))K.clms.push({kc:F.kc,snap:sn,pn:F.pn||"",dol:F.dol||""});save();buildForm();preview()}
@@ -658,26 +724,29 @@ document.addEventListener("click",e=>{
  else if(a==="decode"){decodeVin()}
  else if(a==="reg"){openReg()}
  else if(a==="regtab"){regTab=b.dataset.v;openReg()}
- else if(a==="loadren"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"r",pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:"a",cdate:"",compD:r.compD,collD:r.collD,eff:t.exp||today(),term:t.term||"6",rq:r.member});save();buildForm();preview()}}
+ else if(a==="loadren"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"r",pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:"a",cdate:"",compD:r.compD,collD:r.collD,eff:t.exp||today(),term:t.term||"6",rq:r.member});hydrateMdPip(r);save();buildForm();preview()}}
  else if(a==="ackdup"){F.ack=(F.vin||"").trim().toUpperCase();save();preview()}
  else if(a==="regx"){$("#reg").classList.add("hide")}
- else if(a==="loadpol"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
- else if(a==="loadcor"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"c",rq:r.member,pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
+ else if(a==="loadpol"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});hydrateMdPip(r);$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
+ else if(a==="loadcor"){const r=K.pols[b.dataset.v];if(r){const t=r.terms[r.terms.length-1]||{};Object.assign(F,{ptype:"c",rq:r.member,pn:r.pn,st:r.st,stateConfirmed:true,confirmedState:r.st,mno:r.mno||"",member:r.member,address:r.address,city:r.city,cst:r.cst||"",zip:r.zip||"",vehicle:r.vehicle,vin:r.vin,pip:r.pip||"w",um:r.um||"a",lease:r.lease||"a",cdate:r.cdate||"",compD:r.compD,collD:r.collD,eff:t.eff||today(),term:t.term||"6"});hydrateMdPip(r);$("#reg").classList.add("hide");save();buildForm();preview();window.scrollTo(0,0)}}
  else if(a==="export"){const x=new Blob([JSON.stringify(K,null,1)],{type:"application/json"});const l=document.createElement("a");l.href=URL.createObjectURL(x);l.download="klutch-policy-register-"+today()+".json";l.click()}
  else if(a==="import"){$("#imp").click()}
  else if(a==="clear"){clearFlow()}
 });
-document.addEventListener("input",e=>{if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn")F.handlerNameEntered=true;
+function inputMdPip(e){if(e.target.dataset.pipIndex===undefined)return false;const c=F.mdPipChanges?.[+e.target.dataset.pipIndex],k=e.target.dataset.pipKey;if(!c)return true;c[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;if(k!=="confirmed"){c.confirmed=false;const box=document.querySelector(`[data-pip-index="${e.target.dataset.pipIndex}"][data-pip-key="confirmed"]`);if(box)box.checked=false}save();if(k==="selection")buildForm();preview();return true}
+document.addEventListener("input",e=>{if(inputMdPip(e))return;if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn")F.handlerNameEntered=true;
+ if(["mdPipInitial","mdPipInitialDetails","mdPipRentalStart","eff","lease","cdate","st","member","mno","vin"].includes(k)){for(const c of F.mdPipChanges||[])c.confirmed=false;document.querySelectorAll('[data-pip-key="confirmed"]').forEach(box=>box.checked=false)}
  if(k==="stateConfirmed"){F.confirmedState=F.stateConfirmed?F.st:"";save();buildForm();preview();return}
  if(["dopSignerName","dopSignerTitle","dopSignerDate"].includes(k)&&F.dopSignatureAccepted)clearDopCertification();
  if(k==="dopSignatureAccepted"){if(F.dopSignatureAccepted){F.dopSignatureCertifiedAt=new Date().toISOString();F.dopSignatureCertificateId=F.dopSignatureCertificateId||dopSignatureCertificateId()}else{F.dopSignatureCertifiedAt="";F.dopSignatureCertificateId=""}}
  if(k==="filed"&&!F.ddenManual){F.dden=nextBiz(F.filed);const x=document.querySelector('[data-k="dden"]');if(x)x.value=F.dden}
  if(k==="dden"){if(F.dden){F.ddenManual=true}else{F.ddenManual=false;F.dden=nextBiz(F.filed);e.target.value=F.dden}}
+ if(k==="mdPipInitial"&&F.mdPipInitial!=="unconfirmed"){F.pip=F.mdPipInitial==="waived"?"w":F.mdPipInitial==="limited"?"l":"a";buildForm()}
  save();preview()});
-document.addEventListener("change",e=>{if(e.target.id==="imp"){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.pols)throw 0;K=j;K.clms=K.clms||[];save();$("#regb").innerHTML=regHtml("")}catch(x){say("That file isn't a policy register backup.")}};r.readAsText(f);return}const k=e.target.dataset.k;if(!k)return;const priorState=F.st;F[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;
+document.addEventListener("change",e=>{if(inputMdPip(e))return;if(e.target.id==="imp"){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.pols)throw 0;K=j;K.clms=K.clms||[];save();$("#regb").innerHTML=regHtml("")}catch(x){say("That file isn't a policy register backup.")}};r.readAsText(f);return}const k=e.target.dataset.k;if(!k)return;const priorState=F.st;F[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;
  if(k==="st"){
   if(/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.st=priorState;say("Garaging state is locked after a shared policy number is issued. Start a correction workflow for a verified policy-record issue.");buildForm();save();preview();return}
-  if(F.st!==priorState){F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}
+  if(F.st!==priorState){F.mdPipSame="";F.mdPipChanges=[];F.mdPipInitial="";F.mdPipInitialDetails="";F.mdPipRentalStart="";F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}
   const R=RULES[F.st];if(!R.pip)F.pip="w";else if(!R.pip.waive)F.pip="a";if(!R.umReject)F.um="a";buildForm()
  }
  save();preview()});
@@ -695,7 +764,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
    convenience and is never used as a policy register. */
 (() => {
   const API = "/api/klutch-policy-documents";
-  const srcDocType = { dec: "declarations", den: "tnc_denial", car: "carrier_position", can: "cancellation_notice", end: "endorsement", dop: "direction_of_pay" };
+  const srcDocType = { dec: "declarations", den: "tnc_denial", car: "carrier_position", can: "cancellation_notice", end: "endorsement", dop: "direction_of_pay", pip_history: "endorsement" };
   let serverPolicies = new Map();
   let automaticDeclarationTerms = [];
   let draftTimer = null;
@@ -718,13 +787,14 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       id: p.id, pn: p.policyNumber, member: t.memberName || p.memberName || "", mno: t.memberNumber || p.memberNumber || "",
       address: t.memberStreet || t.memberAddress || "", city: t.memberCity || "", cst: t.memberState || p.state || "", zip: t.memberZip || "",
       vehicle: t.vehicle || p.vehicle || "", vin: t.vin || p.vin || "", st: p.state || t.state || "MD",
-      pip: t.pipWaived ? "w" : "a", um: t.umRejected ? "r" : "a", lease: t.leaseStatus === "terminated" ? "t" : "a",
+      mdPipHistory: t.marylandPipHistory, pip: t.pipWaived ? "w" : "a", um: t.umRejected ? "r" : "a", lease: t.leaseStatus === "terminated" ? "t" : "a",
       cdate: t.cancellationDate || p.cancelledOn || "", terms: [{ eff: p.effectiveOn, exp: p.expiresOn, term: String(t.termMonths || 6) }],
       upd: Date.parse(p.updatedAt || p.createdAt || "") || Date.now(), status: p.status, raw: p,
     };
   };
   const policyTerms = () => {
     if (!isStateConfirmed()) throw new Error("Confirm the garaging state before creating or printing a policy document.");
+    if(F.st==="MD"&&["dec","pip_history"].includes(F.sel)&&mdPipErrors(F).length)throw new Error(mdPipErrors(F).join("; "));
     const d = derive(F); if (!d) throw new Error("Choose a supported garaging state and complete the policy dates.");
     F.exp = addMonths(F.eff, +(F.term || 6));
     const z = derive(F);
@@ -742,7 +812,8 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       effectiveOn: F.eff, expiresOn: F.exp, termMonths: Number(F.term || 6), transactionType: F.ptype === "r" ? "renewal" : F.ptype === "c" ? "correction" : "new",
       coverages: Object.entries(limits).map(([label, limit]) => ({ label, limit, deductible: label === "Comprehensive" ? (F.compD || "$500") : label === "Collision" ? (F.collD || "$500") : undefined, premium: Number(z.cov[(premiumKey[label] || "") + "P"] || 0) })),
       totalPremium: z.tot, weeklyMembershipFee: 35, coverageWeeks: z.wk,
-      pipWaived: F.pip === "w", umRejected: F.um === "r", comprehensiveDeductible: F.compD || "$500", collisionDeductible: F.collD || "$500",
+      marylandPipHistory: mdPipHistory(F), pipSelection: F.st==="MD"?mdPipAt(F,F.eff):undefined, pipSelectionDetails: F.st==="MD"&&mdPipAt(F,F.eff)==="limited"?mdPipDetailsAt(F,F.eff):undefined,
+      pipWaived: F.st==="MD"?mdPipAt(F,F.eff)==="waived":F.pip === "w", umRejected: F.um === "r", comprehensiveDeductible: F.compD || "$500", collisionDeductible: F.collD || "$500",
       leaseStatus: F.lease === "t" ? "terminated" : "active", cancellationDate: F.cdate || undefined,
       tncUseNote: clean(F.rec),
     };
@@ -801,6 +872,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) return issueCurrent();
     const existing = serverPolicies.get(F.pn) || (await plain(`/vin/${encodeURIComponent(terms.vin)}`)).policies?.find(policy => policy.policyNumber === F.pn);
     if (!existing) return issueCurrent();
+    if(existing.state==="MD"&&existing.terms?.marylandPipHistory&&!terms.marylandPipHistory)throw new Error("This policy has documented PIP changes. Keep its confirmed history in the packet; use a correction for a verified error.");
     if (F.ptype === "r") {
       const { policy } = await plain("/renew", { method: "POST", body: JSON.stringify({ policyId: existing.id, effectiveOn: terms.effectiveOn, expiresOn: terms.expiresOn, terms }) });
       K.pols[policy.policyNumber] = asLegacy(policy); serverPolicies.set(policy.policyNumber, policy); automaticDeclarationTerms = []; return { policy, declarationTerms: [], replayed: false };
@@ -809,11 +881,19 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       const { policy } = await plain("/correct", { method: "POST", body: JSON.stringify({ policyId: existing.id, terms }) });
       K.pols[policy.policyNumber] = asLegacy(policy); serverPolicies.set(policy.policyNumber, policy); automaticDeclarationTerms = []; return { policy, declarationTerms: [], replayed: false };
     }
+    if(terms.marylandPipHistory){
+      const {policy}=await plain("/pip-history",{method:"POST",body:JSON.stringify({policyId:existing.id,history:terms.marylandPipHistory})});
+      serverPolicies.set(policy.policyNumber,policy);K.pols[policy.policyNumber]=asLegacy(policy);
+      const detail=(await plain(`/policy/${policy.id}`)).policy;
+      const byTerm=new Map();(detail.termsHistory||[]).forEach(t=>{if(!byTerm.has(t.termNumber))byTerm.set(t.termNumber,{...t,termId:t.id,policyNumber:policy.policyNumber})});
+      return {policy,declarationTerms:[...byTerm.values()],replayed:false};
+    }
     return { policy: existing, declarationTerms: automaticDeclarationTerms, replayed: false };
   }
   async function recordDocumentForSource(sourceId, policy, termId) {
     const type = srcDocType[sourceId];
     const snap = snapshot();
+    if(sourceId==="pip_history"){snap.formId="MD-PIP-HISTORY";snap.marylandPipHistory=mdPipHistory(F)}
     const claimNumber = clean(F.snap);
     if (type === "cancellation_notice") {
       const { result } = await plain("/cancel", { method: "POST", body: JSON.stringify({ policyId: policy.id, cancelledOn: F.cdate, claimNumber: claimNumber || undefined, snapshot: snap }) });
@@ -827,13 +907,16 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   async function durablePrint(all) {
     const label = all ? "document packet" : (DOCS.find(([id]) => id === F.sel)?.[1] || "Klutch document");
     try {
-      const rs = preview();
+      let rs = preview();
       const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];
+      if(F.st==="MD"&&F.mdPipSame==="no"&&(F.sel==="dec"||all)){if(rs.pip_history?.miss.length)throw new Error("Complete the Maryland PIP history before preparing the full packet.");if(!candidates.includes("pip_history"))candidates.push("pip_history")}
+      if(!all&&(rs[F.sel]?.err||rs[F.sel]?.miss.length))throw new Error("Complete the selected document’s marked required fields before printing.");
       if (!all && !isPrintablePdf(F.sel)) throw new Error(F.sel === "carrier_guide" ? "This is an on-screen communication guide. Use Copy guide; it is not a printable PDF." : "This is an email template. Use Copy Email; it is not a printable PDF.");
       const printable = candidates.filter(sourceId => { const item = rs[sourceId]; return item && !item.err && !item.miss.length; });
       if (!printable.length) throw new Error(all ? "No completed printable PDFs are ready. Complete the marked required fields; email templates and communication scripts are not included in print packets." : "Complete the marked required fields before printing.");
       const issued = await persistTermIfNeeded();
       const policy = issued.policy;
+      rs = preview();
       const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;
       const printItems = [];
       ordered.forEach(sourceId => {

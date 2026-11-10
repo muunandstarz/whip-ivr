@@ -1,3 +1,4 @@
+import type { MarylandPipHistory } from "./klutchMarylandPip";
 export const KLUTCH_STATES = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"] as const;
 export type KlutchState = (typeof KLUTCH_STATES)[number];
 
@@ -129,6 +130,9 @@ export function calculateKlutchPremium(input: {
   state: KlutchState;
   effectiveOn: string;
   expiresOn: string;
+  marylandPipHistory?: MarylandPipHistory;
+  pipSelection?: "elected" | "limited" | "waived";
+  pipSelectionDetails?: string;
   pipWaived?: boolean;
   umRejected?: boolean;
   comprehensiveDeductible?: string;
@@ -200,6 +204,9 @@ export type KlutchPolicyTerms = {
   totalPremium: number;
   weeklyMembershipFee?: number;
   coverageWeeks?: number;
+  marylandPipHistory?: MarylandPipHistory;
+  pipSelection?: "elected" | "limited" | "waived";
+  pipSelectionDetails?: string;
   pipWaived?: boolean;
   umRejected?: boolean;
   comprehensiveDeductible?: string;
