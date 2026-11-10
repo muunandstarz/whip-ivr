@@ -564,7 +564,7 @@ describe("Standalone MetroCars rental interface", () => {
     expect(container.textContent).toContain("Pickup condition photos");
     expect(container.querySelectorAll(".r-condition")).toHaveLength(12);
     expect(container.querySelectorAll(".r-pickup-card .r-photo")).toHaveLength(
-      5
+      6
     );
     expect(container.querySelector(".r-sticky-footer")?.textContent).toContain(
       "Continue"

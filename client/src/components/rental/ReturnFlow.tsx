@@ -3,7 +3,6 @@ import { trpc } from "@/lib/trpc";
 import { createReceiptRequestKey } from "@/lib/receiptBrowser";
 import {
   CONDITION_AREAS,
-  FUEL_LEVELS,
   calculateRentalCharges,
   type RentalReturn,
 } from "@shared/rentalHandoff";
@@ -13,7 +12,6 @@ import {
   ErrorNotice,
   Field,
   Note,
-  Select,
   money,
   dateDisplay,
   errorMessage,
@@ -21,6 +19,7 @@ import {
   localDateTime,
 } from "./Controls";
 import { PhotoUpload, SignaturePad, type UploadAsset } from "./Media";
+import { FuelGauge } from "./FuelGauge";
 import { Walkaround } from "./Steps";
 import type { RentalRecord, RentalSession } from "./types";
 import { useRentalAutosave } from "./useRentalAutosave";
@@ -45,7 +44,7 @@ export function ReturnFlow({
   const [initialData] = useState<RentalReturn>(
     record.returnData || {
       returnedAt: new Date().toISOString(),
-      odometer: record.draft.odometerOut || 0,
+      odometer: 0,
       fuel: record.draft.fuelOut,
       condition: CONDITION_AREAS.map(area => ({ area, ok: false, note: "" })),
       noticeAt: "",
@@ -63,11 +62,28 @@ export function ReturnFlow({
       representativeName: "",
     }
   );
+  // The API remains numeric; a new return must not present pickup mileage as measured.
+  const [odometerInput, setOdometerInput] = useState(
+    record.returnData ? String(record.returnData.odometer) : ""
+  );
+  const pickupOdometer = record.draft.odometerOut;
+  const measuredOdometer = odometerInput.trim() === "" ? null : Number(odometerInput);
+  const odometerError = measuredOdometer === null
+    ? "Enter the measured return odometer (miles)."
+    : !Number.isFinite(measuredOdometer) || measuredOdometer < 0 || measuredOdometer > 2000000
+      ? "Enter a valid return odometer between 0 and 2,000,000 miles."
+      : pickupOdometer !== null && measuredOdometer < pickupOdometer
+        ? "Return odometer cannot be lower than pickup."
+        : "";
+  const milesDriven = !odometerError && pickupOdometer !== null && Number.isFinite(pickupOdometer)
+    ? measuredOdometer! - pickupOdometer
+    : null;
   const autosave = useRentalAutosave<RentalReturn>({
     id: record.id,
     initialDraft: initialData,
     initialRevision: record.revision,
     locked,
+    validationError: odometerError,
     save: async input => {
       const result = await saveReturn.mutateAsync({ id: input.id, revision: input.revision, data: input.draft });
       await refresh();
@@ -79,6 +95,7 @@ export function ReturnFlow({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const uploadReturnSignature: UploadAsset = async (...args) => {
+    if (odometerError) throw new Error(odometerError);
     await autosave.flush();
     return upload(...args);
   };
@@ -88,12 +105,13 @@ export function ReturnFlow({
   const currentAssets = record.assets.filter(a => !a.kind.endsWith("Signature") || a.id > signatureCutoff);
   const set = <K extends keyof RentalReturn>(
     key: K,
-    value: RentalReturn[K]
+    value: RentalReturn[K],
+    forceSave = false
   ) => {
     if (locked) return;
     requestId.current = null;
     setSignatureCutoff(Math.max(signatureCutoff, ...record.assets.filter(a => a.kind.startsWith("return") && a.kind.endsWith("Signature")).map(a => a.id), 0));
-    autosave.update({ ...data, [key]: value });
+    autosave.update({ ...data, [key]: value }, forceSave);
   };
   const zone =
     session.locations.find(l => l.id === record.draft.locationId)?.timezone ||
@@ -110,25 +128,34 @@ export function ReturnFlow({
     "returnRear",
     "returnDriver",
     "returnPassenger",
+    "returnDashboard",
     "returnRenterSignature",
     "returnRepresentativeSignature",
   ] as const;
+  const evidenceLabels = {
+    returnFront: "the return front photo",
+    returnRear: "the return rear photo",
+    returnDriver: "the return driver-side photo",
+    returnPassenger: "the return passenger-side photo",
+    returnDashboard: "the required return dashboard photo (odometer, fuel and warning lights)",
+    returnRenterSignature: "the renter return signature",
+    returnRepresentativeSignature: "the representative return signature",
+  };
   const missing = [
     ...requiredKinds
       .filter(kind => !currentAssets.some(a => a.kind === kind))
-      .map(kind => `Add ${kind.replace(/^return/, "return ")} evidence.`),
+      .map(kind => `Add ${evidenceLabels[kind]}.`),
     ...(!data.representativeName.trim()
       ? ["Enter the representative’s full name."]
       : []),
-    ...(data.odometer < (record.draft.odometerOut || 0)
-      ? ["Return odometer cannot be lower than pickup."]
-      : []),
+    ...(odometerError ? [odometerError] : []),
     ...(data.condition.some(c => !c.ok && !c.note.trim())
       ? ["Complete every return walkaround area."]
       : []),
     ...(calculationError ? [calculationError] : []),
   ];
   const finish = async () => {
+    if (locked || busy || missing.length) return;
     setBusy(true);
     setError("");
     try {
@@ -169,6 +196,7 @@ export function ReturnFlow({
       <ErrorNotice message={error} />
       <ErrorNotice message={autosave.error} />
       {!locked && <p role="status" className="r-guidance">Return draft: {autosave.state === "saved" ? "All changes saved" : autosave.state === "saving" ? "Saving changes…" : autosave.state === "unsaved" ? "Unsaved changes…" : "Save failed — review before continuing"}</p>}
+      {!locked && odometerError && <p className="r-guidance">Enter a valid measured return odometer to save this draft. Other edits remain on this page until then.</p>}
       {autosave.state === "error" && <button type="button" className="r-button" onClick={() => void autosave.retry().catch(e => setError(errorMessage(e)))}>Retry return save</button>}
       {autosave.state === "conflict" && <p className="r-guidance">Another user changed this rental. Your edits have not overwritten their work. Reload the latest record before continuing.</p>}
       {notice && (
@@ -183,7 +211,7 @@ export function ReturnFlow({
       )}
       <Card
         title="Return readings"
-        detail={`Pickup: ${dateDisplay(record.draft.pickupAt)} · ${record.draft.odometerOut?.toLocaleString() || "Not recorded"} miles · ${record.draft.fuelOut} fuel`}
+        detail={`Pickup: ${dateDisplay(record.draft.pickupAt)} · ${pickupOdometer?.toLocaleString() ?? "Not recorded"} miles · ${record.draft.fuelOut} fuel`}
       >
         <fieldset disabled={locked || busy} className="r-grid">
           <Field
@@ -195,20 +223,30 @@ export function ReturnFlow({
           <Field
             label="Return odometer (miles)"
             type="number"
-            min={record.draft.odometerOut || 0}
+            min={pickupOdometer ?? 0}
             max="2000000"
-            value={data.odometer}
-            onChange={e => set("odometer", Number(e.target.value))}
+            value={odometerInput}
+            required
+            aria-invalid={!!odometerError}
+            hint={odometerError || "Enter the reading shown on the return dashboard."}
+            onChange={e => {
+              setOdometerInput(e.target.value);
+              const reading = Number(e.target.value);
+              set("odometer", e.target.value !== "" && Number.isFinite(reading) ? reading : data.odometer, !record.returnData);
+            }}
           />
-          <Select
+          <Field
+            label="Miles driven"
+            value={milesDriven === null ? "" : milesDriven.toLocaleString()}
+            readOnly
+            hint="Calculated from valid pickup and return odometer readings."
+          />
+          <FuelGauge
             label="Fuel at return"
             value={data.fuel}
-            onChange={e => set("fuel", e.target.value as RentalReturn["fuel"])}
-          >
-            {FUEL_LEVELS.map(f => (
-              <option key={f}>{f}</option>
-            ))}
-          </Select>
+            onChange={value => set("fuel", value)}
+            disabled={locked || busy}
+          />
           <Field
             label="Actual return notice date & time"
             type="datetime-local"
@@ -220,7 +258,7 @@ export function ReturnFlow({
       </Card>
       <Card
         title="Return photos"
-        detail="Four exterior views are required for the return copy."
+        detail="Four exterior views and a dedicated dashboard photo are required for the return copy. Extra photos do not replace the dashboard photo."
       >
         <div className="r-grid">
           {(
@@ -229,6 +267,7 @@ export function ReturnFlow({
               "returnRear",
               "returnDriver",
               "returnPassenger",
+              "returnDashboard",
               "returnExtra",
             ] as const
           ).map(kind => (
@@ -241,9 +280,11 @@ export function ReturnFlow({
                   returnRear: "Return rear",
                   returnDriver: "Return driver side",
                   returnPassenger: "Return passenger side",
+                  returnDashboard: "Return dashboard (required)",
                   returnExtra: "Additional return photos",
                 }[kind]
               }
+              guidance={kind === "returnDashboard" ? "While parked, turn ignition on and capture entire instrument cluster clearly: odometer, fuel and warning lights." : undefined}
               assets={record.assets}
               upload={upload}
               disabled={locked || busy}

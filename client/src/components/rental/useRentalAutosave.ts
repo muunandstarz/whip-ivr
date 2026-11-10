@@ -7,12 +7,14 @@ export function useRentalAutosave<T = RentalDraft>({
   initialDraft,
   initialRevision,
   locked,
+  validationError = "",
   save,
 }: {
   id: number;
   initialDraft: T;
   initialRevision: number;
   locked: boolean;
+  validationError?: string;
   save: (input: {
     id: number;
     revision: number;
@@ -32,6 +34,8 @@ export function useRentalAutosave<T = RentalDraft>({
   lockedRef.current = locked;
   const saveRef = useRef(save);
   saveRef.current = save;
+  const validationRef = useRef(validationError);
+  validationRef.current = validationError;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const flush = useCallback(async (): Promise<number> => {
     clearTimeout(timer.current);
@@ -46,6 +50,7 @@ export function useRentalAutosave<T = RentalDraft>({
       JSON.stringify(current.current) === persisted.current
     )
       return revision.current;
+    if (validationRef.current) throw new Error(validationRef.current);
     const snapshot = current.current;
     const serialized = JSON.stringify(snapshot);
     if (mounted.current) setState("saving");
@@ -88,11 +93,13 @@ export function useRentalAutosave<T = RentalDraft>({
     return revision.current;
   }, [id]);
   const update = useCallback(
-    (next: T) => {
+    (next: T, forceSave = false) => {
       if (lockedRef.current) return;
+      // An explicit first measurement may equal an unsaved numeric placeholder (zero).
+      if (forceSave) persisted.current = "";
       current.current = next;
       setDraft(next);
-      if (!stopped.current) setState("unsaved");
+      if (!stopped.current) setState(JSON.stringify(next) === persisted.current && !running.current ? "saved" : "unsaved");
       clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         void flush().catch(() => {});

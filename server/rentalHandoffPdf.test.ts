@@ -350,4 +350,66 @@ describe.skipIf(!originalsAvailable)("rental PDF exact-original integration", ()
     await expect(buildRentalReturnPacket({ ...input, returnData, charges: { ...charges, total: charges.total + 1 } })).rejects.toThrow(/server calculation/);
     const settled = { ...returnData, chargesSettled: true }; const settledText = extract(await buildRentalReturnPacket({ ...input, returnData: settled, charges }),"settled"); expect(settledText[1]).toContain("release not confirmed");
   });
+  it("appends pickup and return dashboards with readable captions and counts only the correct phase", async () => {
+    const input = fittingFixture(); input.draft.odometerOut = 42610;
+    input.assets = ["front", "rear", "driver", "passenger", "dashboard", "returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "licenseFront", "licenseBack"].map((kind, n) => ({ id: n + 1, kind, bytes: image(), createdAt: Date.parse(kind.startsWith("return") ? "2026-11-13T15:00:00Z" : input.draft.pickupAt) }));
+    const pickupBytes = await buildRentalPacket(input); const pickup = extract(pickupBytes, "pickup-dashboard");
+    expect(pickup).toHaveLength(14); expect(normalize(pickup[8])).toContain("5 attached");
+    expect(normalize(pickup[13])).toContain("Pickup dashboard / instrument cluster");
+    expect(normalize(pickup[13])).toContain("Pickup odometer: 42,610 miles | Fuel: Full");
+    expect(pickup[13]).toContain("Alerts: see dashboard photo");
+    expect(pickup.slice(9).join(" ")).not.toMatch(/Return dashboard|licenseFront|licenseBack/);
+    const returnData = returned(); returnData.odometer = 42734;
+    const charges = calculateRentalCharges(input.draft, returnData, input.rates, input.location.timezone);
+    const returnBytes = await buildRentalReturnPacket({ ...input, returnData, charges }); const ret = extract(returnBytes, "return-dashboard");
+    expect(ret).toHaveLength(7); expect(normalize(ret[0]).match(/5 attached/g)).toHaveLength(2);
+    expect(normalize(ret[6])).toContain("Return dashboard / instrument cluster");
+    expect(normalize(ret[6])).toContain("Return odometer: 42,734 miles | Fuel: 3/4");
+    expect(normalize(ret[1])).toContain("Pickup odometer (miles) 42,610");
+    expect(normalize(ret[1])).toContain("Return odometer (miles) 42,734");
+    expect(normalize(ret[1])).toContain("Miles driven 124");
+    expect(ret.slice(2).join(" ")).not.toMatch(/Pickup dashboard|licenseFront|licenseBack/);
+    // Both actual dashboard pages embed a photo, not merely captions.
+    for (const [bytes, n] of [[pickupBytes, 13], [returnBytes, 6]] as const) {
+      const doc = await PDFDocument.load(bytes); expect(await rawPage(doc.getPage(n))).toMatch(/ Do\b/);
+    }
+    expectPrintFrame(wordBoxes(pickupBytes, "pickup-dashboard-frame"));
+    expectPrintFrame(wordBoxes(returnBytes, "return-dashboard-frame"));
+  });
+  it("never derives negative or invalid miles and explicitly handles missing or equal pickup readings", async () => {
+    const input = fittingFixture(); input.draft.odometerOut = 42610;
+    const returnData = returned(); returnData.odometer = 42610;
+    const charges = calculateRentalCharges(input.draft, returnData, input.rates, input.location.timezone);
+    expect(normalize(extract(await buildRentalReturnPacket({ ...input, returnData, charges }), "zero-miles")[1])).toContain("Miles driven 0");
+    returnData.odometer = 42609;
+    await expect(buildRentalReturnPacket({ ...input, returnData, charges })).rejects.toThrow(/lower than pickup/);
+    for (const invalid of [NaN, Infinity, -1, 2000001]) {
+      returnData.odometer = invalid;
+      await expect(buildRentalReturnPacket({ ...input, returnData, charges })).rejects.toThrow();
+      input.draft.odometerOut = invalid; returnData.odometer = 42734;
+      await expect(buildRentalReturnPacket({ ...input, returnData, charges })).rejects.toThrow();
+    }
+    input.draft.odometerOut = null;
+    const missing = normalize(extract(await buildRentalReturnPacket({ ...input, returnData, charges }), "missing-miles")[1]);
+    expect(missing).toContain("Pickup odometer (miles) Not recorded");
+    expect(missing).toContain("Miles driven Not available (pickup not recorded)");
+    expect(missing).not.toContain("Miles driven 42,734");
+  });
+  it("paginates long return statement values while retaining all miles, charges and legal notes within physical margins", async () => {
+    const input = fittingFixture(); input.draft.renterName = Array.from({ length: 95 }, () => "Long Name").join(" "); input.draft.payment.cardholderName = input.draft.renterName;
+    input.draft.odometerOut = 42610;
+    const returnData = returned(); returnData.odometer = 42734;
+    const charges = calculateRentalCharges(input.draft, returnData, input.rates, input.location.timezone);
+    const bytes = await buildRentalReturnPacket({ ...input, returnData, charges });
+    const pages = extract(bytes, "paginated-statement");
+    const statements = pages.filter(page => page.includes("RENTAL RETURN CHARGES STATEMENT"));
+    expect(statements.length).toBeGreaterThan(1);
+    const text = normalize(statements.join(" "));
+    expect(text).toContain(input.draft.renterName); expect(text).toContain("Miles driven 124");
+    expect(text).toContain(`TOTAL CALCULATED CHARGES $${charges.total.toFixed(2)}`);
+    expect(text).toContain("No payment or hold action is performed here.");
+    expect(text).toContain("Any claim requires notice and its stated basis under RP1/RP2.");
+    expect(pages).toHaveLength((await PDFDocument.load(bytes)).getPageCount());
+    expectPrintFrame(wordBoxes(bytes, "paginated-statement-frame"));
+  });
 });

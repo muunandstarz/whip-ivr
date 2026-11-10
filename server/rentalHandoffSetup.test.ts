@@ -118,6 +118,14 @@ describe("rental manual setup", () => {
     expect(repo.rows.vehicles).toHaveLength(1); expect(repo.rows.records).toHaveLength(2);
     await expect(service.create(admin, { ...draft(), locationId: 2, vehicleId: 5 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
+  it("does not fill missing pickup mileage from inventory and retains genuine zero readings", async () => {
+    await repo.insert("vehicles", { ...manual, id: 5, locationId: 1, lastOdometer: 12345, active: true });
+    await service.create(admin, { ...draft(), vehicleId: 5, odometerOut: null });
+    expect(decryptRental<any>(repo.rows.records[0].payload).odometerOut).toBeNull();
+    await service.create(admin, { ...draft(), odometerOut: 0 }, { ...manual, vin: "1HGCM82633A004356", plate: "ZERO" });
+    expect(decryptRental<any>(repo.rows.records[1].payload).odometerOut).toBe(0);
+    expect(repo.rows.vehicles[1].lastOdometer).toBe(0); expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
   it("serializes competing manual setup and translates a unique VIN race into a safe conflict", async () => {
     const results = await Promise.allSettled([service.create(admin, draft(), manual), service.create(claims, draft(), manual)]);
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1); expect(repo.rows.vehicles).toHaveLength(1); expect(repo.rows.records).toHaveLength(1);
@@ -146,6 +154,48 @@ describe("authenticated VIN decoder", () => {
     await expect(service.decodeVin(claims, manual.vin)).rejects.toMatchObject({ code: "NOT_FOUND" });
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("synthetic outage"); }));
     await expect(service.decodeVin(shop, manual.vin)).rejects.toMatchObject({ code: "BAD_GATEWAY", message: expect.stringContaining("manually") });
+  });
+});
+
+describe("dedicated dashboard image uploads", () => {
+  it("accepts pickup and return dashboards through the image-only endpoint without a signatory", async () => {
+    const rental = await service.create(admin, draft(), manual);
+    const before = structuredClone(repo.rows.records[0]);
+    const caller = createRentalHandoffRouter(service).createCaller(context());
+    const pickup = await caller.upload({ id: rental.id, kind: "dashboard", base64: `data:image/png;base64,${png}` });
+    const replacement = await service.upload(shop, { id: rental.id, kind: "dashboard", base64: png }, audit);
+    expect(repo.rows.records[0]).toEqual(before);
+    expect(pickup).toMatchObject({ kind: "dashboard", signerName: null, url: `/api/rental-handoff/files/asset/${pickup.id}` });
+    expect((await service.versionAssets(repo, rental.id)).filter(a => a.kind === "dashboard").map(a => a.id)).toEqual([replacement.id]);
+    expect(repo.rows.assets.filter(a => a.kind === "dashboard")).toHaveLength(2);
+    repo.rows.records[0].status = "Out"; repo.rows.records[0].activePacketId = 88;
+    const returned = await caller.upload({ id: rental.id, kind: "returnDashboard", base64: png });
+    expect(returned).toMatchObject({ kind: "returnDashboard", signerName: null });
+    expect(repo.rows.assets.every(a => a.mime === "image/png" && a.storageKey.endsWith(".png"))).toBe(true);
+    expect(deps.put).toHaveBeenCalledTimes(3); expect(deps.sendEmail).not.toHaveBeenCalled();
+    expect(JSON.stringify([pickup, replacement, returned])).not.toContain("PRIVATE");
+  });
+  it.each(["dashboard", "returnDashboard"] as const)("rejects PDF, HTML and spoofed MIME for %s before storing assets", async kind => {
+    const rental = await service.create(admin, draft(), manual);
+    if (kind === "returnDashboard") { repo.rows.records[0].status = "Out"; repo.rows.records[0].activePacketId = 88; }
+    const before = structuredClone(repo.rows);
+    for (const base64 of [await pdfBase64(), `data:application/pdf;base64,${await pdfBase64()}`, `data:image/png;base64,${await pdfBase64()}`, `data:image/jpeg;base64,${png}`, Buffer.from("<html>not an image</html>").toString("base64")]) {
+      await expect(service.upload(shop, { id: rental.id, kind, base64 }, audit)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    await expect(service.uploadSupport(admin, { id: rental.id, kind, base64: png } as any, audit)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(repo.rows).toEqual(before); expect(deps.put).not.toHaveBeenCalled(); expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+  it("keeps dashboard upload phase restrictions and completed legacy records locked", async () => {
+    const rental = await service.create(admin, draft(), manual);
+    await expect(service.upload(shop, { id: rental.id, kind: "returnDashboard", base64: png }, audit)).rejects.toMatchObject({ code: "CONFLICT" });
+    repo.rows.records[0].status = "Out"; repo.rows.records[0].activePacketId = 88;
+    await expect(service.upload(shop, { id: rental.id, kind: "dashboard", base64: png }, audit)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(service.upload({ ...shop, locationIds: [2] }, { id: rental.id, kind: "returnDashboard", base64: png }, audit)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    for (const status of ["Returned", "Closed"]) {
+      repo.rows.records[0].status = status;
+      for (const kind of ["dashboard", "returnDashboard"] as const) await expect(service.upload(shop, { id: rental.id, kind, base64: png }, audit)).rejects.toMatchObject({ code: "CONFLICT" });
+    }
+    expect(repo.rows.assets).toEqual([]); expect(deps.put).not.toHaveBeenCalled(); expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 });
 

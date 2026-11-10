@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { Camera, CheckCircle2, Upload, Eraser } from "lucide-react";
 import type { RentalAsset } from "@shared/rentalHandoff";
 import { ErrorNotice, errorMessage } from "./Controls";
@@ -49,16 +49,19 @@ export async function compressedPhoto(file: File): Promise<string> {
 export function PhotoUpload({
   kind,
   label,
+  guidance,
   assets,
   upload,
   disabled = false,
 }: {
   kind: RentalAsset["kind"];
   label: string;
+  guidance?: string;
   assets: AssetWithUrl[];
   upload: UploadAsset;
   disabled?: boolean;
 }) {
+  const id = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const matching = assets.filter(a => a.kind === kind);
@@ -82,6 +85,7 @@ export function PhotoUpload({
         <strong>{label}</strong>
         {asset && <CheckCircle2 size={16} className="r-teal" />}
       </div>
+      {guidance && <small id={`${id}-guidance`}>{guidance}</small>}
       {asset && (
         <a
           href={asset.url}
@@ -100,6 +104,8 @@ export function PhotoUpload({
             type="file"
             accept="image/jpeg,image/png"
             capture="environment"
+            aria-label={`Take photo: ${label}`}
+            aria-describedby={guidance ? `${id}-guidance` : undefined}
             disabled={disabled || busy}
             onChange={e => {
               void choose(e.target.files?.[0]);
@@ -113,6 +119,8 @@ export function PhotoUpload({
           <input
             type="file"
             accept="image/jpeg,image/png"
+            aria-label={`Choose file: ${label}`}
+            aria-describedby={guidance ? `${id}-guidance` : undefined}
             disabled={disabled || busy}
             onChange={e => {
               void choose(e.target.files?.[0]);

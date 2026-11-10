@@ -9,7 +9,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  FUEL_LEVELS,
   eligibleOptions,
   type RentalDraft,
   type RentalLocation,
@@ -36,6 +35,7 @@ import {
   type AssetWithUrl,
   type UploadAsset,
 } from "./Media";
+import { FuelGauge } from "./FuelGauge";
 export const AGREEMENT_PDF =
   "/manus-storage/ClaimantRentalPacket-DRAFTv7_68b8dad8.pdf";
 export type ManualRentalVehicle = {
@@ -790,7 +790,7 @@ export function Pickup({
         />
         <fieldset disabled={disabled} className="r-grid r-pickup-readings">
           <Field
-            label="Odometer out (miles)"
+            label="Pickup odometer (miles)"
             type="number"
             min="0"
             max="2000000"
@@ -802,17 +802,12 @@ export function Pickup({
               )
             }
           />
-          <Select
-            label="Fuel out"
+          <FuelGauge
+            label="Fuel at pickup"
             value={d.fuelOut}
-            onChange={e =>
-              set("fuelOut", e.target.value as RentalDraft["fuelOut"])
-            }
-          >
-            {FUEL_LEVELS.map(f => (
-              <option key={f}>{f}</option>
-            ))}
-          </Select>
+            onChange={value => set("fuelOut", value)}
+            disabled={disabled}
+          />
         </fieldset>
         <section
           className="r-pickup-photos"
@@ -820,11 +815,11 @@ export function Pickup({
         >
           <h3 id="pickup-photos-title">Pickup condition photos</h3>
           <p>
-            Four exterior views required. Add extra photos for gauges, interior
-            or damage.
+            Four exterior views and a dedicated dashboard photo are required.
+            Add extra photos for interior or damage; extras do not replace the dashboard photo.
           </p>
           <div className="r-grid r-pickup-photo-grid">
-            {(["front", "rear", "driver", "passenger", "extra"] as const).map(
+            {(["front", "rear", "driver", "passenger", "dashboard", "extra"] as const).map(
               kind => (
                 <PhotoUpload
                   key={kind}
@@ -835,9 +830,11 @@ export function Pickup({
                       rear: "Rear",
                       driver: "Driver side",
                       passenger: "Passenger side",
+                      dashboard: "Pickup dashboard (required)",
                       extra: "Additional condition photos",
                     }[kind]
                   }
+                  guidance={kind === "dashboard" ? "While parked, turn ignition on and capture entire instrument cluster clearly: odometer, fuel and warning lights." : undefined}
                   assets={assets}
                   upload={upload}
                   disabled={disabled}

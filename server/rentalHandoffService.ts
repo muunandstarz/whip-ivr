@@ -409,6 +409,7 @@ export class RentalHandoffService {
       const replay = (await tx.find("packets", { eq: { requestId: input.requestId }, lock: true }))[0];
       if (replay) { if (replay.rentalId !== r.id || replay.kind !== "return") fail("CONFLICT", "Request ID was already used for another operation."); return replay.id; }
       checkRevision(r, input.revision);
+      // Evidence requirements apply only to new issuance, never immutable packet retries.
       if (!vehicle || vehicle.id !== r.vehicleId || r.status !== "Out" || !r.activePacketId) fail("CONFLICT", "An issued, locked Out packet is required before return.");
       const original = (await tx.find("packets", { eq: { id: r.activePacketId } }))[0]; if (!original || original.kind !== "pickup") fail("CONFLICT", "Original signed packet is missing.");
       const snapshot = decryptRental<RentalPdfInput>(original.snapshot); const draft = snapshot.draft; const data = input.data;
@@ -416,9 +417,11 @@ export class RentalHandoffService {
         const saved = rentalReturnSchema.parse(decryptRental<RentalReturn>(r.returnPayload));
         if (Object.keys(saved).some(k => k !== "chargesSettled" && JSON.stringify(saved[k as keyof RentalReturn]) !== JSON.stringify(data[k as keyof RentalReturn]))) fail("BAD_REQUEST", "Return facts changed. Save the return draft and capture fresh return signatures before completion.");
       }
-      if (data.odometer < draft.odometerOut! || data.odometer < vehicle.lastOdometer) fail("BAD_REQUEST", "Return odometer cannot be below pickup or fleet odometer.");
+      // Legacy pickup snapshots can lack mileage; never replace that fact with zero.
+      if ((draft.odometerOut !== null && data.odometer < draft.odometerOut) || data.odometer < vehicle.lastOdometer) fail("BAD_REQUEST", "Return odometer cannot be below pickup or fleet odometer.");
       if (!Number.isFinite(Date.parse(data.returnedAt)) || Date.parse(data.returnedAt) > this.deps.now() + 300000 || !data.representativeName.trim() || !CONDITION_AREAS.every(area => data.condition.some(c => c.area === area && (c.ok || c.note.trim())))) fail("BAD_REQUEST", "Complete return time, representative and all 12 condition areas.");
       const all = await tx.find("assets", { eq: { rentalId: r.id }, limit: 2000 }); const assets = await this.returnAssets(tx, r.id, original.createdAt);
+      if (!assets.some(a => a.kind === "returnDashboard")) fail("BAD_REQUEST", "Add the return dashboard / instrument-cluster photo showing alerts, fuel level, and odometer (mileage).");
       const required = ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnRenterSignature", "returnRepresentativeSignature"];
       if (required.some(k => !assets.some(a => a.kind === k))) fail("BAD_REQUEST", "All four return photos and renter/representative signatures are required.");
       const charges = (() => { try { return calculateRentalCharges(draft, data, snapshot.rates, snapshot.location.timezone); } catch (error) { return fail("BAD_REQUEST", error instanceof Error ? error.message : "Invalid return charges."); } })();

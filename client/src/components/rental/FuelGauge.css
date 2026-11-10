@@ -1,0 +1,124 @@
+.rental-app .r-fuel-gauge {
+  min-width: 0;
+  align-self: start;
+  padding: 12px;
+  border: 1px solid var(--r-border);
+  border-radius: 8px;
+  background: var(--r-card);
+  color: var(--r-fg);
+}
+.r-fuel-gauge legend {
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.r-fuel-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.r-fuel-dial {
+  display: block;
+  width: min(48%, 150px);
+  flex-shrink: 0;
+  color: var(--r-primary);
+  overflow: visible;
+}
+.r-fuel-track {
+  fill: none;
+  stroke: var(--r-border);
+  stroke-width: 10px;
+  stroke-linecap: round;
+}
+.r-fuel-ticks {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2px;
+}
+.r-fuel-needle {
+  fill: var(--r-teal);
+  transform-origin: 100px 94px;
+  transform: rotate(var(--fuel-angle));
+}
+.r-fuel-hub { fill: currentColor; }
+.r-fuel-dial text { fill: currentColor; font-size: 12px; font-weight: 700; }
+.r-fuel-reading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  font-size: 11px;
+}
+.r-fuel-reading > svg { color: var(--r-teal); }
+.r-fuel-reading strong { font-size: 17px; white-space: nowrap; }
+.r-fuel-reading strong span { font-size: 12px; font-weight: 500; }
+.r-fuel-reading > span { color: var(--r-muted); }
+.r-fuel-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(44px, 1fr));
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.r-fuel-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 56px;
+  min-width: 44px;
+  padding: 6px 2px;
+  border: 1px solid var(--r-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--r-fg);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--r-input);
+}
+.r-fuel-option input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--r-primary);
+}
+.r-fuel-option:has(input:checked) {
+  background: var(--r-callout);
+  border-color: var(--r-primary);
+  box-shadow: inset 0 0 0 1px var(--r-primary);
+}
+.r-fuel-option:has(input:focus-visible) {
+  outline: 3px solid var(--r-teal);
+  outline-offset: 2px;
+}
+.r-fuel-option:has(input:disabled) { cursor: not-allowed; color: var(--r-muted); }
+.r-fuel-gauge > small { display: block; }
+@media (max-width: 1050px) {
+  .r-grid > .r-fuel-gauge { grid-column: 1 / -1; }
+}
+/* Stack choices only in unusually narrow containers; keep every touch target >=44px. */
+@media (max-width: 360px) {
+  .r-fuel-options { grid-template-columns: repeat(3, minmax(44px, 1fr)); }
+}
+@media (prefers-contrast: more) {
+  .r-fuel-track { stroke: var(--r-muted); }
+  .r-fuel-option { border-color: var(--r-fg); }
+  .r-fuel-option:has(input:checked) { outline: 2px solid var(--r-fg); outline-offset: -3px; }
+}
+@media (forced-colors: active) {
+  .r-fuel-track, .r-fuel-ticks { stroke: CanvasText; }
+  .r-fuel-needle, .r-fuel-hub { fill: CanvasText; }
+  .r-fuel-dial text { fill: CanvasText; }
+  .r-fuel-option:has(input:checked) { border: 3px solid Highlight; }
+  .r-fuel-option:has(input:focus-visible) { outline-color: Highlight; }
+}
+/* Needle movement is intentionally immediate, including keyboard and reduced-motion use. */
+@media (prefers-reduced-motion: reduce) {
+  .r-fuel-gauge *, .r-fuel-gauge *::before, .r-fuel-gauge *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

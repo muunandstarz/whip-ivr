@@ -434,7 +434,7 @@ function conditionOverlay(o: Overlay, p: PDFPage, input: RentalPacketInput, retu
   });
   grid(o,p,0,509.75,"RP4.odometerOut",d.odometerOut ?? "","RP4.odometerReturn",returned?.odometer ?? "",20,false,false);
   grid(o,p,1,509.75,"RP4.fuelOut",d.fuelOut,"RP4.fuelReturn",returned?.fuel ?? "",20,false,false);
-  const count = (prefix: string) => input.assets.filter(a => prefix === "return" ? /^return(Front|Rear|Driver|Passenger|Extra)$/.test(a.kind) : /^(front|rear|driver|passenger|extra)$/.test(a.kind)).length;
+  const count = (prefix: string) => input.assets.filter(a => prefix === "return" ? /^return(Front|Rear|Driver|Passenger|Dashboard|Extra)$/.test(a.kind) : /^(front|rear|driver|passenger|dashboard|extra)$/.test(a.kind)).length;
   grid(o,p,2,509.75,"RP4.pickupPhotos",count("pickup") ? `${count("pickup")} attached` : "","RP4.returnPhotos",returned && count("return") ? `${count("return")} attached` : "");
 }
 async function conditionSignatures(o: Overlay,p: PDFPage,input: RentalPacketInput,returned?: RentalReturn) {
@@ -538,49 +538,88 @@ export async function buildRentalPacket(input: RentalPacketInput): Promise<Buffe
   o.appendContinuations(input); await appendAssets(o,input,false);
   return Buffer.from(await doc.save());
 }
+const formatMiles = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 20 });
+const evidenceCaptions: Record<string, string> = {
+  signedPayment: "Signed payment authorization (retained-original scan)",
+  front: "Pickup - front exterior", rear: "Pickup - rear exterior",
+  driver: "Pickup - driver-side exterior", passenger: "Pickup - passenger-side exterior",
+  dashboard: "Pickup dashboard / instrument cluster", extra: "Pickup - additional condition photo",
+  declarations: "Renter insurance declarations page", coverageConfirmation: "Insurer coverage verification support",
+  returnFront: "Return - front exterior", returnRear: "Return - rear exterior",
+  returnDriver: "Return - driver-side exterior", returnPassenger: "Return - passenger-side exterior",
+  returnDashboard: "Return dashboard / instrument cluster", returnExtra: "Return - additional condition photo",
+};
 async function appendAssets(o:Overlay,input:RentalPacketInput,returnOnly:boolean) {
   // Each scan/photo is evidence, never represented as a substitute for original ink.
   // License front/back remain private verification records, not claimant packet pages.
-  const kinds=returnOnly?["returnFront","returnRear","returnDriver","returnPassenger","returnExtra"]:["signedPayment","front","rear","driver","passenger","extra","declarations","coverageConfirmation"];
+  const kinds=returnOnly?["returnFront","returnRear","returnDriver","returnPassenger","returnDashboard","returnExtra"]:["signedPayment","front","rear","driver","passenger","dashboard","extra","declarations","coverageConfirmation"];
   const selected=input.assets.filter(a=>kinds.includes(a.kind)).sort((a,b)=>kinds.indexOf(a.kind)-kinds.indexOf(b.kind)||a.id-b.id);
   for(const asset of selected) {
     const page=o.doc.addPage([612,792]);header(page,o.font,asset.kind==="signedPayment"?"SIGNED AUTHORIZATION APPENDIX":"RENTAL EVIDENCE APPENDIX",input);
-    const label=`Asset ${asset.id} | ${asset.kind}${asset.createdAt!==undefined?` | ${date(asset.createdAt,input.location.timezone,true)}`:""}`;
+    const label=`Asset ${asset.id} | ${evidenceCaptions[asset.kind]}${asset.createdAt!==undefined?` | ${date(asset.createdAt,input.location.timezone,true)}`:""}`;
     if(o.font.widthOfTextAtSize(label,10)>FRAME_WIDTH)fail("asset.label","exceeds physical margins");
     page.drawText(label,{x:MARGIN,y:702,size:10,font:o.font,color:BLACK});
+    const isDashboard=asset.kind==="dashboard"||asset.kind==="returnDashboard";
+    if(isDashboard) {
+      const returned=asset.kind==="returnDashboard"?(input as RentalReturnPacketInput).returnData:undefined;
+      const odometer=returned?.odometer??input.draft.odometerOut;
+      const caption=`${returned?"Return":"Pickup"} odometer: ${odometer===null?"Not recorded":`${formatMiles(odometer)} miles`} | Fuel: ${returned?.fuel??input.draft.fuelOut}`;
+      page.drawText(caption,{x:MARGIN,y:685,size:10,font:o.font,color:BLACK});
+      // A photo is the alerts evidence; no OCR-derived or invented alert status.
+      page.drawText("Alerts: see dashboard photo; recorded vehicle condition is on RP4.",{x:MARGIN,y:670,size:10,font:o.font,color:BLACK});
+    }
     if(asset.kind==="signedPayment") {
       page.drawText("Retained-original evidence only. This scan is not an electronic authorization.",{x:MARGIN,y:685,size:10,font:o.font,color:BLACK});
       page.drawText("The original ink form must remain retained; RP2 signature rules are unchanged.",{x:MARGIN,y:670,size:10,font:o.font,color:BLACK});
     }
-    const image=await embedGrayImage(o.doc,asset);const imageHeight=asset.kind==="signedPayment"?620:650;const size=image.scaleToFit(FRAME_WIDTH,imageHeight);
+    const image=await embedGrayImage(o.doc,asset);const imageHeight=asset.kind==="signedPayment"||isDashboard?620:650;const size=image.scaleToFit(FRAME_WIDTH,imageHeight);
     page.drawImage(image,{x:MARGIN+(FRAME_WIDTH-size.width)/2,y:MARGIN+imageHeight-size.height,...size});
   }
 }
 function chargesStatement(o:Overlay,input:RentalReturnPacketInput) {
-  const page=o.doc.addPage([612,792]);header(page,o.font,"RENTAL RETURN CHARGES STATEMENT",input);const c=input.charges;
+  let page:PDFPage;let y=0;const c=input.charges;
+  const newPage=()=>{page=o.doc.addPage([612,792]);header(page,o.font,y?"RENTAL RETURN CHARGES STATEMENT (CONTINUED)":"RENTAL RETURN CHARGES STATEMENT",input);y=697;};
+  newPage();
+  const pickupOdometer=input.draft.odometerOut;
   const rows:[string,string][]=[
     ["Renter",input.draft.renterName],["Claim",input.draft.claimNumber],["Returned",date(input.returnData.returnedAt,input.location.timezone,true)],
+    ["Pickup odometer (miles)",pickupOdometer===null?"Not recorded":formatMiles(pickupOdometer)],
+    ["Return odometer (miles)",formatMiles(input.returnData.odometer)],
+    ["Miles driven",pickupOdometer===null?"Not available (pickup not recorded)":formatMiles(input.returnData.odometer-pickupOdometer)],
     [`Protection (${c.days} day(s) x ${money(c.daily)})`,money(c.protection)],[`Late return (${c.lateDays} calendar day(s))`,money(c.late)],
     ["Tolls",money(c.tolls)],["Parking",money(c.parking)],["Tickets / citations / fines",money(c.fines)],[`Research / processing (${input.returnData.researchEvents} event(s))`,money(c.research)],
     ["Cleaning / deodorizing (entered actual cost)",money(c.cleaning)],["Renter-caused roadside service (entered cost)",money(c.roadside)],[`Loss of use (${input.returnData.lossOfUseResponsible?input.returnData.lossOfUseDays:0} responsible day(s))`,money(c.lossOfUse)],
     ["Damage automatically charged",money(c.damageAutoCharged)],["TOTAL CALCULATED CHARGES",money(c.total)],["Security hold (not included in total)",money(c.securityHold)],
     ["Charges settled (staff record)",input.returnData.chargesSettled?"Yes":"No"],
-  ];let y=697;
+  ];
   for(const [label,value] of rows) {
-    const lines=o.wrap(sanitizeRentalPdfText(value,label),236,10,label);if(lines.length>2||lines.some(l=>o.font.widthOfTextAtSize(l,10)>236))fail(label,"charges statement value exceeds two lines");
-    if(o.font.widthOfTextAtSize(label,10)>290)fail(label,"charges statement label exceeds physical column");
-    page.drawText(label,{x:MARGIN,y,size:10,font:o.font,color:BLACK});lines.forEach((l,n)=>page.drawText(l,{x:340,y:y-n*12,size:10,font:o.font,color:BLACK}));
-    y-=lines.length>1?32:24;
+    const labels=o.wrap(label,290,10,label);const values=o.wrap(sanitizeRentalPdfText(value,label),236,10,label);
+    if(labels.some(l=>o.font.widthOfTextAtSize(l,10)>290)||values.some(l=>o.font.widthOfTextAtSize(l,10)>236))fail(label,"single word exceeds charges statement column");
+    const lines=Math.max(labels.length,values.length);const height=lines*12+12;
+    // Keep a row together when it fits on one page; exceptionally long rows can
+    // continue line-by-line. Never clip text or force content below the frame.
+    if(height<=651&&y-height<MARGIN+10)newPage();
+    for(let n=0;n<lines;n++) {
+      if(y<MARGIN+10)newPage();
+      if(labels[n])page!.drawText(labels[n],{x:MARGIN,y,size:10,font:o.font,color:BLACK});
+      if(values[n])page!.drawText(values[n],{x:340,y,size:10,font:o.font,color:BLACK});
+      y-=12;
+    }
+    y-=12;
   }
   const notes=[
     input.returnData.chargesSettled?"Hold eligible for release after settlement; release not confirmed by this PDF.":"Hold remains pending settlement; no release is confirmed by this PDF.",
     "Bank timing controls availability after release. No payment or hold action is performed here.",
     "Damage is not automatically charged. Any claim requires notice and its stated basis under RP1/RP2.",
   ];y-=10;
-  for(const text of notes)for(const line of o.wrap(text,FRAME_WIDTH,10,"charges.notes")){if(y<MARGIN+10)fail("charges.notes","exceeds physical page");page.drawText(line,{x:MARGIN,y,size:10,font:o.font,color:BLACK});y-=14;}
+  for(const text of notes)for(const line of o.wrap(text,FRAME_WIDTH,10,"charges.notes")){if(y<MARGIN+10)newPage();page!.drawText(line,{x:MARGIN,y,size:10,font:o.font,color:BLACK});y-=14;}
 }
 export async function buildRentalReturnPacket(input:RentalReturnPacketInput):Promise<Buffer> {
   rentalReturnSchema.parse(input.returnData);validateTextTree(input.returnData,"returnData");
+  // Validate the baseline independently before deriving distance. Missing older
+  // pickup readings produce an explicit unavailable value, never an assumed 0.
+  const pickupOdometer=rentalDraftSchema.parse(input.draft).odometerOut;
+  if(pickupOdometer!==null&&input.returnData.odometer<pickupOdometer)fail("returnData.odometer","must not be lower than pickup odometer");
   if (CONDITION_AREAS.some(area => input.returnData.condition.filter(c => c.area === area).length !== 1)) fail("returnData.condition", "requires exactly one record for each source area");
   const calculated=calculateRentalCharges(input.draft,input.returnData,input.rates,input.location.timezone);
   for(const key of Object.keys(calculated) as (keyof typeof calculated)[]) if(!Number.isFinite(input.charges[key])||input.charges[key]!==calculated[key])fail(`charges.${key}`,"does not match the server calculation");

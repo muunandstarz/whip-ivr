@@ -66,7 +66,7 @@ function expectNoExternalCalls() {
   for (const fn of [deps.put, deps.read, deps.buildPickup, deps.buildReturn, deps.sendEmail, ...Object.values(live)]) expect(fn).not.toHaveBeenCalled();
 }
 async function returnEvidence() {
-  for (const kind of ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: 1, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now });
+  for (const kind of ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: 1, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now });
 }
 async function finishReturn() {
   await returnEvidence();
@@ -124,11 +124,11 @@ describe("return draft lifecycle", () => {
     await expect(service.returnComplete(shop, { id: 1, revision: 3, requestId: "changed-return", data: changed })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const oldAssets = structuredClone(repo.rows.assets); await service.saveReturn(shop, { id: 1, revision: 3, data: changed });
     const current = await service.get(shop, 1);
-    expect(current.assets.filter(a => a.kind.startsWith("return"))).toHaveLength(4);
+    expect(current.assets.filter(a => a.kind.startsWith("return"))).toHaveLength(5);
     expect(current.assets.filter(a => a.kind === "renterSignature" || a.kind === "representativeSignature")).toHaveLength(2);
     expect(repo.rows.assets).toEqual(oldAssets);
     const audit = decryptRental<any>(repo.rows.audit.at(-1).detail);
-    expect(audit).toMatchObject({ fields: ["cleaning"], assetCutoffId: 8, resignRequired: true });
+    expect(audit).toMatchObject({ fields: ["cleaning"], assetCutoffId: 9, resignRequired: true });
     await expect(service.returnComplete(shop, { id: 1, revision: 4, requestId: "changed-return", data: changed })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     for (const kind of ["returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: 1, kind, createdAt: now, storageKey: "private/new-signature" });
     await service.saveReturn(shop, { id: 1, revision: 4, data: changed }); // No-op save retains fresh evidence.
@@ -151,6 +151,65 @@ describe("return draft lifecycle", () => {
     const results = await Promise.allSettled([service.saveReturn(shop, { id: 1, revision: 3, data: { ...data(), cleaning: 25 } }), service.returnComplete(shop, { id: 1, revision: 3, requestId: "racing-return", data: data() })]);
     expect(results[0].status).toBe("fulfilled"); expect(results[1]).toMatchObject({ status: "rejected", reason: { code: "CONFLICT" } });
     expect(repo.rows.records[0]).toMatchObject({ status: "Out", revision: 4 }); expect(repo.rows.packets).toEqual([pickup]); expectNoExternalCalls();
+  });
+});
+
+describe("required return instrument-cluster evidence", () => {
+  it("blocks direct service completion without a dashboard even when four photos and signatures are present", async () => {
+    await returnEvidence(); repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "returnDashboard");
+    const before = structuredClone(repo.rows);
+    await expect(service.returnComplete(shop, { id: 1, revision: 2, requestId: "direct-return-missing-dashboard", data: data() })).rejects.toMatchObject({ code: "BAD_REQUEST", message: "Add the return dashboard / instrument-cluster photo showing alerts, fuel level, and odometer (mileage)." });
+    expect(repo.rows).toEqual(before); expectNoExternalCalls();
+  });
+  it.each(["extra", "returnExtra", "dashboard", "claimPhoto"])("does not treat %s as return dashboard evidence", async kind => {
+    await returnEvidence(); repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "returnDashboard");
+    await repo.insert("assets", { rentalId: 1, kind, storageKey: "private/substitute", mime: "image/png", createdAt: now });
+    await expect(service.returnComplete(shop, { id: 1, revision: 2, requestId: `return-dashboard-substitute-${kind}`, data: data() })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("return dashboard / instrument-cluster") });
+    expect(repo.rows.records[0]).toMatchObject({ status: "Out", revision: 2 }); expect(repo.rows.packets).toHaveLength(1); expectNoExternalCalls();
+  });
+  it("blocks an authenticated router completion bypass when a dashboard is missing", async () => {
+    await returnEvidence(); repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "returnDashboard");
+    await expect(createRentalHandoffRouter(service).createCaller(ctx({ id: 1, name: "Admin", role: "admin" })).returnComplete({ id: 1, revision: 2, requestId: "router-missing-dashboard", data: data() })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("odometer (mileage)") });
+    expectNoExternalCalls();
+  });
+  it("requires return dashboard evidence from the issued pickup or later, selecting the newest image append-only", async () => {
+    await returnEvidence(); const old = repo.rows.assets.find(a => a.kind === "returnDashboard"); old.createdAt = repo.rows.packets[0].createdAt - 1;
+    await expect(service.returnComplete(shop, { id: 1, revision: 2, requestId: "stale-return-dashboard", data: data() })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("return dashboard") });
+    const first = await repo.insert("assets", { rentalId: 1, kind: "returnDashboard", storageKey: "private/return-dashboard-first", mime: "image/png", createdAt: now });
+    const newest = await repo.insert("assets", { rentalId: 1, kind: "returnDashboard", storageKey: "private/return-dashboard-newest", mime: "image/jpeg", createdAt: now });
+    const originals = structuredClone(repo.rows.assets);
+    vi.spyOn(service, "buildPacket").mockResolvedValue("immutable-return.pdf"); vi.spyOn(service, "resend").mockResolvedValue({ status: "sent" });
+    expect((await service.returnComplete(shop, { id: 1, revision: 2, requestId: "stale-return-dashboard", data: data() })).status).toBe("Returned");
+    expect(repo.rows.assets).toEqual(originals);
+    const snapshot = decryptRental<RentalPdfInput>(repo.rows.packets[1].snapshot);
+    expect(snapshot.assets.filter(a => a.kind === "returnDashboard")).toEqual([expect.objectContaining({ id: newest })]);
+    expect(snapshot.assets.some(a => a.id === first)).toBe(false); expectNoExternalCalls();
+  });
+  it.each([NaN,Infinity,-Infinity,-1,2000001,null,undefined,"1100"])("rejects invalid return mileage %s before completion or any external write", async odometer => {
+    await returnEvidence();
+    await expect(service.returnComplete(shop, { id: 1, revision: 2, requestId: "invalid-return-mileage", data: { ...data(), odometer } as any })).rejects.toThrow();
+    expect(repo.rows.records[0]).toMatchObject({ status: "Out", revision: 2 }); expect(repo.rows.packets).toHaveLength(1); expectNoExternalCalls();
+  });
+  it("allows genuine zero return mileage while preserving lower-than-pickup and fleet guards", async () => {
+    await returnEvidence();
+    await expect(service.returnComplete(shop, { id: 1, revision: 2, requestId: "zero-return", data: { ...data(), odometer: 0 } })).rejects.toMatchObject({ code: "BAD_REQUEST", message: "Return odometer cannot be below pickup or fleet odometer." });
+    const snapshot = decryptRental<RentalPdfInput>(repo.rows.packets[0].snapshot); snapshot.draft.odometerOut = 0;
+    repo.rows.packets[0].snapshot = encryptRental(snapshot);
+    await expect(service.returnComplete(shop, { id: 1, revision: 2, requestId: "zero-return", data: { ...data(), odometer: 0 } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    repo.rows.vehicles[0].lastOdometer = 0;
+    vi.spyOn(service, "buildPacket").mockResolvedValue("immutable-return.pdf"); vi.spyOn(service, "resend").mockResolvedValue({ status: "sent" });
+    expect((await service.returnComplete(shop, { id: 1, revision: 2, requestId: "zero-return", data: { ...data(), odometer: 0 } })).status).toBe("Returned");
+    expect(decryptRental<any>(repo.rows.records[0].returnPayload).odometer).toBe(0); expect(repo.rows.vehicles[0].lastOdometer).toBe(0); expectNoExternalCalls();
+  });
+  it.each(["Returned", "Closed"])("replays a legacy %s return without new evidence or snapshot/fleet mutations", async status => {
+    const returned = await finishReturn();
+    repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "returnDashboard");
+    const snapshot = decryptRental<RentalPdfInput>(repo.rows.packets[1].snapshot); snapshot.assets = snapshot.assets.filter(a => a.kind !== "returnDashboard");
+    repo.rows.packets[1].snapshot = encryptRental(snapshot); repo.rows.records[0].status = status;
+    const immutable = structuredClone(repo.rows);
+    expect((await service.get(admin, 1)).status).toBe(status);
+    expect(await service.returnComplete(admin, { id: 1, revision: 2, requestId: "return-finished", data: { ...data(), odometer: 0 } })).toEqual(returned);
+    expect(repo.rows).toEqual(immutable); expect(service.buildPacket).toHaveBeenCalledTimes(1); expectNoExternalCalls();
   });
 });
 

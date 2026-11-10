@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { emptyRentalDraft, rentalDraftSchema, handoffMissing, eligibleOptions, launchMissing, calculateRentalCharges, DEFAULT_RENTAL_RATES, CONDITION_AREAS, safeLocation, type RentalAsset, type RentalReturn, type LaunchSettings } from "../shared/rentalHandoff";
+import { emptyRentalDraft, rentalDraftSchema, rentalReturnSchema, handoffMissing, eligibleOptions, launchMissing, calculateRentalCharges, DEFAULT_RENTAL_RATES, CONDITION_AREAS, safeLocation, type RentalAsset, type RentalReturn, type LaunchSettings } from "../shared/rentalHandoff";
 const NOW=Date.parse("2026-11-10T21:00:00Z");
 function fixture(){const d=emptyRentalDraft();Object.assign(d,{renterName:"SYNTHETIC RENTER",mobile:"555-0100",email:"synthetic@example.test",claimEmail:"claim@example.test",claimNumber:"CLM-DEMO-1042",locationId:1,vehicleId:1,scheduledPickup:"2026-11-10T19:00:00Z",expectedReturn:"2026-11-13T19:00:00Z",renterVehicleYmm:"2023 Toyota Camry",renterVehicleVin:"4T1C11AK8PU915672",renterVehiclePlate:"DEMO",pickupAt:"2026-11-10T19:00:00Z",odometerOut:42610,dob:"1989-05-10",license:"SYNTHETIC-ID",licenseState:"MD",licenseExpiration:"2028-01-01",representativeName:"Synthetic Representative"});d.condition.forEach(c=>c.ok=true);d.election="B";d.insurance.noOtherLiability=true;d.insurance.noneProvided=true;for(const k of ["election","5","6","7","8","9","10"])d.initials[k]="SR";Object.assign(d.payment,{cardholderName:d.renterName,billingAddress:"123 Synthetic Street",zip:"20850",phone:"555-0100",cardType:"Visa",lastFour:"1234",expiration:"11/2028",holdEntered:true,witness:"Synthetic Witness",photoIdChecked:true,authorizationAcknowledged:true});return d;}
-const assets:RentalAsset[]=["front","rear","driver","passenger","licenseFront","licenseBack","signedPayment","renterSignature","representativeSignature"].map((kind,i)=>({id:i+1,kind:kind as RentalAsset["kind"]}));
+const assets:RentalAsset[]=["front","rear","driver","passenger","dashboard","licenseFront","licenseBack","signedPayment","renterSignature","representativeSignature"].map((kind,i)=>({id:i+1,kind:kind as RentalAsset["kind"]}));
 const settings:LaunchSettings={counselApproved:false,registrationConfirmed:false,financialResponsibilityReference:"",omitFinancialReference:false,retentionYears:7,senderEmail:"",emailProviderReady:false,rates:DEFAULT_RENTAL_RATES,rateVersion:1};
 function ret():RentalReturn{return{ returnedAt:"2026-11-12T20:00:00Z",odometer:43000,fuel:"Full",condition:CONDITION_AREAS.map(area=>({area,ok:true,note:""})),noticeAt:"",tolls:0,parking:0,fines:0,researchEvents:0,cleaning:0,roadside:0,lossOfUseDays:0,lossOfUseResponsible:false,damageNoticeNotes:"",notes:"",chargesSettled:false,representativeName:"Synthetic Representative"};}
 describe("rental handoff source-faithful rules",()=>{
@@ -16,6 +16,28 @@ describe("rental handoff source-faithful rules",()=>{
  it("requires insurer confirmation of the renter's liability before Option A release",()=>{const d=fixture();d.insurance.level="liability";d.election="A";expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("applicable liability"))).toBe(true);});
  it("does not allow an additional driver under Option B",()=>{const d=fixture();d.additionalDrivers=[{name:"Extra",license:"ID2",state:"MD",expiration:"2028-01-01",onPolicy:true,verified:true}];expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("does not allow"))).toBe(true);});
  it("reports each missing condition photo with the correct step",()=>{for(const kind of ["front","rear","driver","passenger"]){const m=handoffMissing(fixture(),assets.filter(a=>a.kind!==kind),NOW);expect(m).toContainEqual({step:2,message:`Add the ${kind} condition photo.`});}});
+ it("requires a dedicated pickup instrument-cluster photo, not extras or return evidence",()=>{
+   const withoutDashboard=assets.filter(a=>a.kind!=="dashboard");
+   const gap={step:2,message:"Add the pickup dashboard / instrument-cluster photo showing alerts, fuel level, and odometer (mileage)."};
+   expect(handoffMissing(fixture(),withoutDashboard,NOW)).toEqual([gap]);
+   for(const kind of ["extra","returnExtra","returnDashboard","claimPhoto"] as const){
+     expect(handoffMissing(fixture(),[...withoutDashboard,{id:100,kind}],NOW)).toEqual([gap]);
+   }
+ });
+ it("keeps mileage explicit: pickup can be unset only in drafts and numeric zero is valid",()=>{
+   expect(emptyRentalDraft().odometerOut).toBeNull();
+   expect(rentalDraftSchema.safeParse({...fixture(),odometerOut:null}).success).toBe(true);
+   expect(handoffMissing({...fixture(),odometerOut:null},assets,NOW)).toEqual([{step:2,message:"Record pickup odometer (mileage) from 0 to 2,000,000."}]);
+   expect(rentalDraftSchema.parse({...fixture(),odometerOut:0}).odometerOut).toBe(0);
+   expect(rentalReturnSchema.parse({...ret(),odometer:0}).odometer).toBe(0);
+   expect(handoffMissing({...fixture(),odometerOut:0},assets,NOW)).toEqual([]);
+ });
+ it.each([NaN,Infinity,-Infinity,-1,2000001,"12345",undefined])("rejects invalid mileage %s without coercion",odometer=>{
+   expect(rentalDraftSchema.safeParse({...fixture(),odometerOut:odometer}).success).toBe(false);
+   expect(rentalReturnSchema.safeParse({...ret(),odometer}).success).toBe(false);
+   expect(handoffMissing({...fixture(),odometerOut:odometer} as any,assets,NOW).some(g=>g.step===2&&g.message.includes("odometer"))).toBe(true);
+ });
+ it("rejects null return mileage instead of silently replacing it with zero",()=>expect(rentalReturnSchema.safeParse({...ret(),odometer:null}).success).toBe(false));
  it("requires initials on applicable sections and does not force Section 6 for A",()=>{const d=fixture();delete d.initials["6"];expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("Section 6"))).toBe(true);d.election="A";d.insurance.level="liability";expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("Section 6"))).toBe(false);});
  it("allows electronic authorization for renter-cardholders only when expressly acknowledged",()=>{const d=fixture();d.payment.witness="";expect(handoffMissing(d,assets.filter(a=>a.kind!=="signedPayment"),NOW)).toEqual([]);d.payment.authorizationAcknowledged=false;expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("authorization"))).toBe(true);});
  it("allows an administrator to require ink again without silently changing eligibility",()=>{expect(handoffMissing(fixture(),assets.filter(a=>a.kind!=="signedPayment"),NOW,"America/New_York",true).some(x=>x.message.includes("original ink"))).toBe(true);});

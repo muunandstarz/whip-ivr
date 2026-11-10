@@ -52,7 +52,7 @@ beforeEach(async () => {
 });
 async function createReady(d = draftReady()) {
   const created = await service.create(admin, d);
-  for (const kind of ["front", "rear", "driver", "passenger", "licenseFront", "licenseBack", "signedPayment", "renterSignature", "representativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now, device: "hashed", ipHash: "hashed" });
+  for (const kind of ["front", "rear", "driver", "passenger", "dashboard", "licenseFront", "licenseBack", "signedPayment", "renterSignature", "representativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now, device: "hashed", ipHash: "hashed" });
   return created;
 }
 
@@ -77,6 +77,49 @@ describe("rental service security and lifecycle", () => {
     repo.rows.settings[0].payload = encryptRental({ ...readySettings, counselApproved: false });
     await expect(service.complete(shop, { ...created, requestId: "handoff-test-1" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
+  it.each(["extra", "returnExtra", "returnDashboard", "claimPhoto"])("blocks direct pickup completion when %s replaces the dedicated dashboard", async kind => {
+    const created = await createReady();
+    repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "dashboard");
+    await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", uploadedBy: shop.key, createdAt: now });
+    const before = structuredClone(repo.rows);
+    await expect(service.complete(shop, { ...created, requestId: `missing-dashboard-${kind}` })).rejects.toMatchObject({ code: "BAD_REQUEST", message: "Step 2: Add the pickup dashboard / instrument-cluster photo showing alerts, fuel level, and odometer (mileage)." });
+    expect(repo.rows).toEqual(before);
+    expect(deps.buildPickup).not.toHaveBeenCalled(); expect(deps.put).not.toHaveBeenCalled(); expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+  it("requires pickup mileage independently of the dashboard photo and permits a genuine zero reading", async () => {
+    const created = await createReady({ ...draftReady(), odometerOut: null });
+    await expect(service.complete(shop, { ...created, requestId: "missing-pickup-mileage" })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Record pickup odometer (mileage)") });
+    expect(decryptRental<RentalDraft>(repo.rows.records[0].payload).odometerOut).toBeNull();
+    expect(deps.buildPickup).not.toHaveBeenCalled();
+    repo.rows.vehicles[0].lastOdometer = 0;
+    const saved = await service.save(shop, created.id, 1, { ...draftReady(), odometerOut: 0 });
+    for (const kind of ["renterSignature", "representativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: "private/fresh", mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now });
+    expect((await service.complete(shop, { id: created.id, revision: saved.revision, requestId: "zero-pickup-mileage" })).status).toBe("Out");
+    expect(decryptRental<any>(repo.rows.packets[0].snapshot).draft.odometerOut).toBe(0);
+  });
+  it("retains dashboard originals but uses only the newest dedicated image in a new packet", async () => {
+    const created = await createReady(); const old = structuredClone(repo.rows.assets.find(a => a.kind === "dashboard"));
+    const id = await repo.insert("assets", { rentalId: created.id, kind: "dashboard", storageKey: "private/dashboard-new", mime: "image/jpeg", uploadedBy: shop.key, createdAt: now + 1 });
+    await service.complete(shop, { ...created, requestId: "new-dashboard-snapshot" });
+    expect(repo.rows.assets.find(a => a.id === old.id)).toEqual(old);
+    expect(decryptRental<any>(repo.rows.packets[0].snapshot).assets.filter((a: any) => a.kind === "dashboard")).toEqual([expect.objectContaining({ id, kind: "dashboard" })]);
+    expect(deps.read).not.toHaveBeenCalledWith(old.storageKey, 5 * 1024 * 1024);
+  });
+  it("replays and resends legacy issued pickup packets without retroactive dashboard or mileage gates", async () => {
+    const created = await createReady(); const request = { ...created, requestId: "legacy-pickup-replay" };
+    const issued = await service.complete(shop, request);
+    // Model a packet issued before dedicated dashboard evidence was required.
+    const snapshot = decryptRental<any>(repo.rows.packets[0].snapshot);
+    snapshot.assets = snapshot.assets.filter((a: any) => a.kind !== "dashboard"); snapshot.draft.odometerOut = null;
+    repo.rows.packets[0].snapshot = encryptRental(snapshot);
+    repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "dashboard");
+    repo.rows.records[0].payload = encryptRental({ ...draftReady(), odometerOut: null });
+    const immutable = structuredClone({ records: repo.rows.records, packets: repo.rows.packets, assets: repo.rows.assets });
+    expect(await service.complete(shop, request)).toEqual(issued);
+    expect(await service.resend(admin, { packetId: issued.packetId, requestId: "legacy-pickup-resend" })).toMatchObject({ status: "sent" });
+    expect({ records: repo.rows.records, packets: repo.rows.packets, assets: repo.rows.assets }).toEqual(immutable);
+    expect(deps.buildPickup).toHaveBeenCalledTimes(1);
+  });
   it("allows owner-approved electronic renter signatures but not a different cardholder without ink", async () => {
     const d = draftReady(); d.payment.witness = ""; const created = await createReady(d); repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "signedPayment");
     expect((await service.complete(shop, { ...created, requestId: "e-sign-test-1" })).status).toBe("Out");
@@ -91,10 +134,10 @@ describe("rental service security and lifecycle", () => {
   });
   it("invalidates prior signatures after changed facts without deleting historical objects", async () => {
     const created = await createReady(); await service.save(shop, created.id, 1, { ...draftReady(), keysOut: 2 });
-    expect(repo.rows.assets).toHaveLength(9); expect((await service.get(shop, created.id)).assets.some(a => a.kind.endsWith("Signature"))).toBe(false);
+    expect(repo.rows.assets).toHaveLength(10); expect((await service.get(shop, created.id)).assets.some(a => a.kind.endsWith("Signature"))).toBe(false);
     await expect(service.complete(shop, { id: created.id, revision: 2, requestId: "invalidate-test-1" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     for (const kind of ["renterSignature", "representativeSignature", "signedPayment"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: "private/new", mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now });
-    expect((await service.complete(shop, { id: created.id, revision: 2, requestId: "invalidate-test-1" })).status).toBe("Out"); expect(repo.rows.assets).toHaveLength(12);
+    expect((await service.complete(shop, { id: created.id, revision: 2, requestId: "invalidate-test-1" })).status).toBe("Out"); expect(repo.rows.assets).toHaveLength(13);
   });
   it("issues one immutable packet with replay, locks edits, and never returns storage keys", async () => {
     const created = await createReady(); const request = { ...created, requestId: "handoff-test-2" };
@@ -169,13 +212,13 @@ describe("rental service security and lifecycle", () => {
   it("preserves original assets and requires new signatures for a replacement version", async () => {
     const created = await createReady(); await service.complete(shop, { ...created, requestId: "version-test-1" }); const original = structuredClone(repo.rows.packets[0]);
     await expect(service.newVersion(shop, created.id, 2, "Correction")).rejects.toMatchObject({ code: "FORBIDDEN" }); expect(await service.newVersion(admin, created.id, 2, "Correction")).toEqual({ revision: 3 });
-    expect(repo.rows.records[0]).toMatchObject({ status: "Out", activePacketId: null }); expect(repo.rows.assets).toHaveLength(9);
+    expect(repo.rows.records[0]).toMatchObject({ status: "Out", activePacketId: null }); expect(repo.rows.assets).toHaveLength(10);
     expect((await service.get(shop, created.id)).assets.some(a => a.kind.endsWith("Signature"))).toBe(false);
     await expect(service.complete(shop, { id: created.id, revision: 3, requestId: "version-test-2" })).rejects.toMatchObject({ code: "BAD_REQUEST" }); expect(repo.rows.packets[0]).toEqual(original);
   });
   it("makes a separate return packet, releases fleet availability, restricts closed licenses", async () => {
     const created = await createReady(); await service.complete(shop, { ...created, requestId: "return-test-1" });
-    for (const kind of ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now + 1 });
+    for (const kind of ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now + 1 });
     deps.now = () => now + 86400000;
     await expect(service.returnComplete(shop, { id: created.id, revision: 2, requestId: "return-test-2", data: { ...returnReady(), odometer: 999 } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const returned = await service.returnComplete(shop, { id: created.id, revision: 2, requestId: "return-test-2", data: returnReady() }); expect(returned.status).toBe("Returned"); expect(repo.rows.packets).toHaveLength(2); expect(repo.rows.vehicles[0].lastOdometer).toBe(1100);
