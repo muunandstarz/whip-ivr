@@ -13,6 +13,9 @@ import {
   index,
 } from "drizzle-orm/mysql-core";
 
+export * from "./rentalSchema";
+export * from "./rentalSenderSchema";
+
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),

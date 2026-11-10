@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ImpersonationProvider } from "./contexts/ImpersonationContext";
@@ -45,6 +45,8 @@ import Tickets from "./pages/Tickets";
 import { useErrorReporter } from "./hooks/useErrorReporter";
 import MailFeaturePaused from "./components/MailFeaturePaused";
 import { trpc } from "@/lib/trpc";
+import RentalHandoff from "./pages/RentalHandoff";
+import RentalHandoffPwa from "./components/RentalHandoffPwa";
 
 function MailFeatureGate({
   feature,
@@ -65,6 +67,10 @@ function MailFeatureGate({
 // mid-keystroke while background softphone state updated.
 function DocumentGeneratorRoute() {
   return <DocGenerator />;
+}
+
+function RentalHandoffRoute() {
+  return <RentalHandoffPwa><RentalHandoff /></RentalHandoffPwa>;
 }
 
 function MedicalBillReviewRoute() {
@@ -117,6 +123,8 @@ function Router() {
       <Route path="/callback-log" component={CallbackLog} />
       <Route path="/reports" component={Reports} />
       <Route path="/loss-intake" component={LossIntake} />
+      <Route path="/rental-handoff/:id" component={RentalHandoffRoute} />
+      <Route path="/rental-handoff" component={RentalHandoffRoute} />
       <Route path="/doc-generator" component={DocumentGeneratorRoute} />
       <Route path="/medical-bill-review" component={MedicalBillReviewRoute} />
       <Route path="/pip-bill-review" component={MedicalBillReviewRoute} />
@@ -145,14 +153,18 @@ function Router() {
 /** Inner component so hooks run inside tRPC + auth providers */
 function AppInner() {
   useErrorReporter();
+  const [location] = useLocation();
+  const rentalWorkspace = location === "/rental-handoff" || location.startsWith("/rental-handoff/");
   return (
     <>
       <Router />
       {/* Persistent floating softphone — lives outside the router so it
           survives all page navigations. The Aircall SDK iframe is mounted
           once here and never destroyed. */}
-      <FloatingSoftphone />
-      <FloatingClaimsWorkspace />
+      <div style={{ display: rentalWorkspace ? "none" : "contents" }} aria-hidden={rentalWorkspace || undefined}>
+        <FloatingSoftphone />
+        <FloatingClaimsWorkspace />
+      </div>
     </>
   );
 }

@@ -16,6 +16,7 @@ import { claimsQaRouter } from "./routers/claimsQa";
 import { ticketsRouter } from "./routers/tickets";
 import { klutchPoliciesRouter } from "./routers/klutchPolicies";
 import { getCallPerformanceDashboard } from "./callPerformance";
+import { rentalHandoffRouter } from "./routers/rentalHandoff";
 import { AGENT_EXTENSIONS, getHandlerExtension } from "./aircallExtensions";
 import { createHeartbeatJob, deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
 import {
@@ -129,6 +130,7 @@ export const appRouter = router({
   claimsQa: claimsQaRouter,
   tickets: ticketsRouter,
   klutchPolicies: klutchPoliciesRouter,
+  rentalHandoff: rentalHandoffRouter,
   announcements: announcementsRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),

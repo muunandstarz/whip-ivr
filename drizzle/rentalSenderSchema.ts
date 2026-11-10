@@ -1,0 +1,3 @@
+import { int, mysqlTable, varchar, text, bigint } from "drizzle-orm/mysql-core";
+export const rentalSenderTokens = mysqlTable("rental_sender_tokens", { id:int().autoincrement().primaryKey(),actorKey:varchar({length:100}).notNull().unique(),email:varchar({length:254}).notNull(),tokenPayload:text().notNull(),updatedAt:bigint({mode:"number"}).notNull() });
+export const rentalOauthStates = mysqlTable("rental_oauth_states", { id:int().autoincrement().primaryKey(),stateHash:varchar({length:64}).notNull().unique(),actorKey:varchar({length:100}).notNull(),redirectUri:varchar({length:300}).notNull(),expiresAt:bigint({mode:"number"}).notNull(),createdAt:bigint({mode:"number"}).notNull() });
