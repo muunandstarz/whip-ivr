@@ -16,15 +16,43 @@ beforeEach(() => {
   h.writes.push({ sql, args }); return [{ insertId: 77 }, []];
  }) };
 });
-describe("Maryland PIP durable documentation integration", () => {
- it("keeps original and renewal term records and amounts immutable when documenting a later change", async () => {
-  const before = JSON.stringify(h.terms); const result = await documentMarylandPipHistory(998, history, actor);
-  expect(result.terms.marylandPipHistory).toEqual(history); expect(result.terms.totalPremium).toBe(1820);
-  expect(JSON.stringify(h.terms)).toBe(before);
-  expect(h.writes.some(w => w.sql.includes("UPDATE klutch_policy_terms"))).toBe(false);
-  expect(h.writes).toHaveLength(2); expect(h.writes[1].sql).toContain("terms_amended");
-  expect(JSON.parse(h.writes[1].args[3])).toMatchObject({ history, issuedDeclarationsUnchanged: true });
- });
+	describe("Maryland PIP durable documentation integration", () => {
+	 it("keeps original and renewal term records and amounts immutable when documenting a later change", async () => {
+	  const policyDatesBefore = { effective_on: h.policy.effective_on, expires_on: h.policy.expires_on };
+	  const termBoundariesBefore = h.terms.map(term => ({ term_number: term.term_number, revision_number: term.revision_number, effective_on: term.effective_on, expires_on: term.expires_on }));
+	  const termCountBefore = h.terms.length; const before = JSON.stringify(h.terms); const result = await documentMarylandPipHistory(998, history, actor);
+	  expect(result.terms.marylandPipHistory).toEqual(history); expect(result.terms.totalPremium).toBe(1820);
+	  expect({ effective_on: h.policy.effective_on, expires_on: h.policy.expires_on }).toEqual(policyDatesBefore);
+	  expect(h.terms[0].effective_on).toBe(history.rentalEffectiveOn);
+	  expect(h.terms).toHaveLength(termCountBefore);
+	  expect(h.terms.map(term => ({ term_number: term.term_number, revision_number: term.revision_number, effective_on: term.effective_on, expires_on: term.expires_on }))).toEqual(termBoundariesBefore);
+	  expect(JSON.stringify(h.terms)).toBe(before);
+	  expect(h.writes.some(w => w.sql.includes("UPDATE klutch_policy_terms"))).toBe(false);
+	  expect(h.writes.some(w => w.sql.includes("INSERT INTO klutch_policy_terms") || w.sql.includes("renewed"))).toBe(false);
+	  expect(h.writes).toHaveLength(2); expect(h.writes[1].sql).toContain("terms_amended");
+	  expect(JSON.parse(h.writes[1].args[3])).toMatchObject({ history, issuedDeclarationsUnchanged: true });
+	 });
+	 it("rejects a documented change at the current policy end without changing dates, terms, or issuing a renewal", async () => {
+	  const policyBefore = { effective_on: h.policy.effective_on, expires_on: h.policy.expires_on };
+	  const termsBefore = JSON.stringify(h.terms); const writesBefore = h.writes.length;
+	  const atCurrentEnd = { ...history, changes: [{ ...history.changes[0] }, { selection: "elected" as const, effectiveOn: h.policy.expires_on, signedOn: "2026-07-31", sourceReference: "SYNTHETIC signed election — exhibit B", electionDetails: "", confirmed: true }] };
+	  await expect(documentMarylandPipHistory(998, atCurrentEnd, actor)).rejects.toThrow(/must precede.*expiresOn|packet expiresOn/i);
+	  expect(h.policy).toMatchObject(policyBefore);
+	  expect(JSON.stringify(h.terms)).toBe(termsBefore); expect(h.terms).toHaveLength(2);
+	  expect(h.writes).toHaveLength(writesBefore); expect(h.writes.some(w => w.sql.includes("INSERT INTO klutch_policy_terms") || w.sql.includes("renewed"))).toBe(false);
+	 });
+	 it("appends a valid election after a waiver while preserving the original rental and all issued term boundaries", async () => {
+	  const afterWaiver = { ...history, changes: [{ ...history.changes[0] }, { selection: "elected" as const, effectiveOn: "2026-06-01", signedOn: "2026-05-31", sourceReference: "SYNTHETIC signed election — exhibit B", electionDetails: "", confirmed: true }] };
+	  const policyDatesBefore = { effective_on: h.policy.effective_on, expires_on: h.policy.expires_on };
+	  const boundariesBefore = h.terms.map(term => [term.term_number, term.revision_number, term.effective_on, term.expires_on]);
+	  const result = await documentMarylandPipHistory(998, afterWaiver, actor);
+	  expect(result.terms.marylandPipHistory).toEqual(afterWaiver);
+	  expect(afterWaiver.rentalEffectiveOn).toBe("2025-08-01");
+	  expect({ effective_on: h.policy.effective_on, expires_on: h.policy.expires_on }).toEqual(policyDatesBefore);
+	  expect(h.terms).toHaveLength(2);
+	  expect(h.terms.map(term => [term.term_number, term.revision_number, term.effective_on, term.expires_on])).toEqual(boundariesBefore);
+	  expect(h.writes.some(w => w.sql.includes("INSERT INTO klutch_policy_terms") || w.sql.includes("renewed"))).toBe(false);
+	 });
  it("rejects a non-Maryland policy without writes", async () => {
   h.policy.state = "VA"; await expect(documentMarylandPipHistory(998, history, actor)).rejects.toThrow(/only.*Maryland/);
   expect(h.writes).toHaveLength(0); expect(h.conn.rollback).toHaveBeenCalledOnce();
