@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Car, ShieldCheck, FileText, Plus, Trash2 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import {
   localDateTime,
   isoDateTime,
 } from "./Controls";
+import { ErrorNotice, errorMessage } from "./Controls";
 import {
   PhotoUpload,
   SignaturePad,
@@ -36,6 +38,359 @@ import {
 } from "./Media";
 export const AGREEMENT_PDF =
   "/manus-storage/ClaimantRentalPacket-DRAFTv7_68b8dad8.pdf";
+export type ManualRentalVehicle = {
+  ymm: string;
+  vin: string;
+  plate: string;
+  lastOdometer: number;
+};
+export type UploadRentalSupport = (
+  kind: "claimEstimate" | "claimPhoto",
+  base64: string,
+  fileName: string
+) => Promise<unknown>;
+function RentalSupport({
+  assets,
+  upload,
+  disabled,
+}: {
+  assets: AssetWithUrl[];
+  upload: UploadRentalSupport;
+  disabled?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const uploading = useRef(false);
+  const choose = async (
+    files: File[],
+    forcedKind?: "claimEstimate" | "claimPhoto"
+  ) => {
+    if (uploading.current || disabled || !files.length) return;
+    setError("");
+    setNotice("");
+    if (files.length > 10) {
+      setError("Choose up to 10 files at a time.");
+      return;
+    }
+    uploading.current = true;
+    setBusy(true);
+    let count = 0;
+    try {
+      for (const file of files) {
+        if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type))
+          throw new Error("Choose an estimate PDF or JPEG/PNG vehicle photos.");
+        if (forcedKind === "claimPhoto" && file.type === "application/pdf")
+          throw new Error("Choose JPEG or PNG for renter vehicle photos.");
+        if (file.size > 10 * 1024 * 1024 || !file.size)
+          throw new Error("Each file must be between 1 byte and 10 MB.");
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () =>
+            reject(new Error("This file could not be opened."));
+          reader.readAsDataURL(file);
+        });
+        await upload(
+          forcedKind ||
+            (file.type === "application/pdf" ? "claimEstimate" : "claimPhoto"),
+          base64,
+          file.name
+        );
+        count++;
+      }
+      setNotice(
+        `${count} original ${count === 1 ? "file" : "files"} saved to this rental.`
+      );
+    } catch (e) {
+      setError(`${count ? `${count} files saved. ` : ""}${errorMessage(e)}`);
+    } finally {
+      uploading.current = false;
+      setBusy(false);
+    }
+  };
+  const support = assets.filter(
+    a => a.kind === "claimEstimate" || a.kind === "claimPhoto"
+  );
+  return (
+    <Card
+      title="Renter vehicle estimate & photos"
+      detail="Original claim files stay on this rental. No automatic analysis or packet inclusion."
+    >
+      <div
+        className="r-support-drop"
+        aria-busy={busy}
+        onDragOver={e => {
+          e.preventDefault();
+        }}
+        onDrop={e => {
+          e.preventDefault();
+          void choose(Array.from(e.dataTransfer.files));
+        }}
+      >
+        <p>
+          {busy
+            ? "Saving original files…"
+            : "Drop an estimate PDF or renter vehicle photos here."}
+        </p>
+        <div className="r-actions">
+          {(["claimEstimate", "claimPhoto"] as const).map(kind => (
+            <label
+              className={`r-button ${disabled || busy ? "r-disabled" : ""}`}
+              key={kind}
+            >
+              {kind === "claimEstimate"
+                ? "Upload initial estimate"
+                : "Upload renter vehicle photos"}
+              <input
+                type="file"
+                multiple
+                accept={
+                  kind === "claimEstimate"
+                    ? "application/pdf,image/jpeg,image/png"
+                    : "image/jpeg,image/png"
+                }
+                disabled={disabled || busy}
+                onChange={e => {
+                  void choose(Array.from(e.target.files || []), kind);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <small>
+          PDF, JPEG or PNG · 10 MB per file · up to 10 files at once.
+        </small>
+      </div>
+      <ErrorNotice message={error} />
+      {notice && (
+        <p className="r-success" role="status">
+          {notice}
+        </p>
+      )}
+      {support.length > 0 && (
+        <ul className="r-support-list">
+          {support.map(asset => (
+            <li key={asset.id}>
+              <span>
+                {asset.kind === "claimEstimate"
+                  ? "Initial estimate"
+                  : "Renter vehicle photo"}{" "}
+                #{asset.id}
+              </span>
+              <a
+                className="r-button"
+                href={asset.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View original
+              </a>
+              <a className="r-button" href={asset.url} download>
+                Download
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+/** Location wall clock, independent of the device's timezone. */
+export function rentalWallClock(value: string, zone: string) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (name: string) => parts.find(p => p.type === name)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+export function rentalDateDisplay(value: string, zone: string) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "Not entered";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: zone, month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(new Date(value));
+}
+export function rentalInstant(wallClock: string, zone: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(wallClock)) return "";
+  const desired = Date.parse(`${wallClock}:00Z`);
+  if (!Number.isFinite(desired)) return "";
+  let instant = desired;
+  for (let i = 0; i < 4; i++) {
+    const displayed = rentalWallClock(new Date(instant).toISOString(), zone);
+    const difference = desired - Date.parse(`${displayed}:00Z`);
+    instant += difference;
+    if (!difference) return new Date(instant).toISOString();
+  }
+  return ""; // Reject nonexistent daylight-saving times instead of moving them.
+}
+export function hasExplicitReturnTime(draft: RentalDraft, zone: string) {
+  const pickup = rentalWallClock(
+    draft.pickupAt || draft.scheduledPickup,
+    zone
+  ).slice(11);
+  const due = rentalWallClock(draft.expectedReturn, zone).slice(11);
+  return !!due && !!pickup && due !== pickup;
+}
+export function withPickupTime(
+  draft: RentalDraft,
+  key: "scheduledPickup" | "pickupAt",
+  value: string,
+  zone: string,
+  returnTimeEdited: boolean
+): RentalDraft {
+  const pickupClock = rentalWallClock(value, zone).slice(11);
+  const dueDay = rentalWallClock(draft.expectedReturn, zone).slice(0, 10);
+  return {
+    ...draft,
+    [key]: value,
+    ...(!returnTimeEdited && pickupClock && dueDay
+      ? {
+          expectedReturn: rentalInstant(`${dueDay}T${pickupClock}`, zone),
+        }
+      : {}),
+  };
+}
+function VinEntry({
+  label,
+  vin,
+  disabled,
+  onChange,
+  onDecoded,
+}: {
+  label: string;
+  vin: string;
+  disabled?: boolean;
+  onChange: (vin: string) => void;
+  onDecoded: (ymm: string) => void;
+}) {
+  const decode = trpc.rentalHandoff.decodeVin.useMutation();
+  const [error, setError] = useState("");
+  const latestVin = useRef(vin);
+  latestVin.current = vin;
+  const latestDecoded = useRef(onDecoded);
+  latestDecoded.current = onDecoded;
+  return (
+    <div className="r-vin-entry r-wide">
+      <Field
+        label={label}
+        value={vin}
+        maxLength={17}
+        autoComplete="off"
+        disabled={disabled}
+        hint="Enter the actual 17-character VIN. Year, make and model remain editable."
+        onChange={e => {
+          setError("");
+          onChange(e.target.value.toUpperCase());
+        }}
+      />
+      <button
+        type="button"
+        className="r-button"
+        disabled={
+          disabled || decode.isPending || !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)
+        }
+        onClick={async () => {
+          setError("");
+          const requestedVin = vin;
+          try {
+            const result = await decode.mutateAsync({ vin: requestedVin });
+            if (latestVin.current === requestedVin)
+              latestDecoded.current(
+                `${result.year} ${result.make} ${result.model}`
+              );
+          } catch (e) {
+            setError(errorMessage(e));
+          }
+        }}
+      >
+        {decode.isPending ? "Decoding…" : "Decode VIN"}
+      </button>
+      <ErrorNotice message={error} />
+    </div>
+  );
+}
+function RentalDateTime({
+  label,
+  value,
+  zone,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  zone: string;
+  onChange: (value: string, part: "date" | "time") => void;
+}) {
+  const wallClock = rentalWallClock(value, zone);
+  const [day, setDay] = useState(wallClock.slice(0, 10));
+  const [clock, setClock] = useState(wallClock.slice(11) || "10:00");
+  const [invalidTime, setInvalidTime] = useState(false);
+  useEffect(() => {
+    if (wallClock) {
+      setDay(wallClock.slice(0, 10));
+      setClock(wallClock.slice(11));
+    } else setDay("");
+  }, [wallClock]);
+  const options = Array.from(
+    { length: 96 },
+    (_, i) =>
+      `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`
+  );
+  if (!options.includes(clock)) options.push(clock);
+  options.sort();
+  const apply = (nextDay: string, nextClock: string, part: "date" | "time") => {
+    const instant = nextDay
+      ? rentalInstant(`${nextDay}T${nextClock}`, zone)
+      : "";
+    setInvalidTime(!!nextDay && !instant);
+    if (instant || !nextDay) onChange(instant, part);
+  };
+  return (
+    <div className="r-date-time">
+      <Field
+        label={`${label} date`}
+        type="date"
+        value={day}
+        onChange={e => {
+          setDay(e.target.value);
+          apply(e.target.value, clock, "date");
+        }}
+      />
+      <Select
+        label={`${label} time`}
+        value={clock}
+        onChange={e => {
+          setClock(e.target.value);
+          apply(day, e.target.value, "time");
+        }}
+      >
+        {options.map(time => {
+          const [hour, minute] = time.split(":");
+          return (
+            <option key={time} value={time}>
+              {Number(hour) % 12 || 12}:{minute}{" "}
+              {Number(hour) >= 12 ? "PM" : "AM"}
+            </option>
+          );
+        })}
+      </Select>
+      {invalidTime && (
+        <small className="r-date-error" role="alert">
+          This time is unavailable due to a daylight-saving change. Choose
+          another time.
+        </small>
+      )}
+    </div>
+  );
+}
 export type StepProps = {
   draft: RentalDraft;
   update: (d: RentalDraft) => void;
@@ -45,6 +400,7 @@ export type StepProps = {
   locations: RentalLocation[];
   vehicles: RentalVehicle[];
   forceInkForRenter?: boolean;
+  returnTimeState?: { current: boolean };
 };
 export function Details({
   draft: d,
@@ -52,13 +408,33 @@ export function Details({
   disabled,
   locations,
   vehicles,
+  vehicleMode,
+  onVehicleModeChange,
+  manualVehicle,
+  onManualVehicleChange,
+  supportAssets,
+  uploadSupport,
+  supportDisabled,
+  returnTimeState,
 }: Pick<
   StepProps,
-  "draft" | "update" | "disabled" | "locations" | "vehicles"
->) {
+  "draft" | "update" | "disabled" | "locations" | "vehicles" | "returnTimeState"
+> & {
+  vehicleMode?: "inventory" | "manual";
+  onVehicleModeChange?: (mode: "inventory" | "manual") => void;
+  manualVehicle?: ManualRentalVehicle;
+  onManualVehicleChange?: (vehicle: ManualRentalVehicle) => void;
+  supportAssets?: AssetWithUrl[];
+  uploadSupport?: UploadRentalSupport;
+  supportDisabled?: boolean;
+}) {
   const set = <K extends keyof RentalDraft>(key: K, value: RentalDraft[K]) =>
     update({ ...d, [key]: value });
   const vehicle = vehicles.find(v => v.id === d.vehicleId);
+  const zone =
+    locations.find(l => l.id === d.locationId)?.timezone || "America/New_York";
+  const localReturnTimeEdited = useRef(hasExplicitReturnTime(d, zone));
+  const returnTimeEdited = returnTimeState || localReturnTimeEdited;
   return (
     <>
       <Card
@@ -116,45 +492,142 @@ export function Details({
                 </option>
               ))}
           </Select>
-          <Field
+          <RentalDateTime
             label="Scheduled pickup"
-            type="datetime-local"
-            value={localDateTime(d.scheduledPickup)}
-            onChange={e => set("scheduledPickup", isoDateTime(e.target.value))}
+            value={d.scheduledPickup}
+            zone={zone}
+            onChange={value =>
+              update(
+                withPickupTime(
+                  d,
+                  "scheduledPickup",
+                  value,
+                  zone,
+                  returnTimeEdited.current
+                )
+              )
+            }
           />
-          <Field
+          <RentalDateTime
             label="Expected return"
-            type="datetime-local"
-            value={localDateTime(d.expectedReturn)}
-            onChange={e => set("expectedReturn", isoDateTime(e.target.value))}
+            value={d.expectedReturn}
+            zone={zone}
+            onChange={(value, part) => {
+              if (part === "time") returnTimeEdited.current = true;
+              const next = { ...d, expectedReturn: value };
+              update(
+                part === "date" && !returnTimeEdited.current
+                  ? withPickupTime(
+                      next,
+                      "scheduledPickup",
+                      d.scheduledPickup,
+                      zone,
+                      false
+                    )
+                  : next
+              );
+            }}
           />
         </fieldset>
       </Card>
       <Card
         title="Assigned rental vehicle"
-        detail="Select a real vehicle from the location inventory."
+        detail={
+          onVehicleModeChange
+            ? "Choose inventory or enter the actual rental vehicle to add it when scheduling."
+            : "Select a real vehicle from the location inventory."
+        }
       >
-        <fieldset disabled={disabled} className="r-grid">
-          <Select
-            label="Rental vehicle"
-            value={d.vehicleId || ""}
-            onChange={e => set("vehicleId", Number(e.target.value))}
+        {onVehicleModeChange && (
+          <div
+            className="r-filters r-vehicle-modes"
+            aria-label="Vehicle entry method"
           >
-            <option value="">Choose a vehicle</option>
-            {vehicles
-              .filter(
-                v =>
-                  v.locationId === d.locationId &&
-                  (v.status === "Available" || v.id === d.vehicleId)
-              )
-              .map(v => (
-                <option value={v.id} key={v.id}>
-                  {v.ymm} · {v.plate} · VIN {v.vin.slice(-6)}
-                </option>
-              ))}
-          </Select>
-        </fieldset>
-        {vehicle && (
+            {(["manual", "inventory"] as const).map(mode => (
+              <button
+                type="button"
+                className={`r-chip ${vehicleMode === mode ? "r-chip-active" : ""}`}
+                key={mode}
+                aria-pressed={vehicleMode === mode}
+                disabled={disabled}
+                onClick={() => onVehicleModeChange(mode)}
+              >
+                {mode === "inventory"
+                  ? "Choose previously used vehicle"
+                  : "Enter rental vehicle"}
+              </button>
+            ))}
+          </div>
+        )}
+        {vehicleMode === "manual" && manualVehicle && onManualVehicleChange ? (
+          <fieldset disabled={disabled} className="r-grid">
+            <VinEntry
+              label="Rental VIN"
+              vin={manualVehicle.vin}
+              disabled={disabled}
+              onChange={vin => onManualVehicleChange({ ...manualVehicle, vin })}
+              onDecoded={ymm =>
+                onManualVehicleChange({ ...manualVehicle, ymm })
+              }
+            />
+            <Field
+              label="Rental year, make and model"
+              value={manualVehicle.ymm}
+              maxLength={120}
+              required
+              onChange={e =>
+                onManualVehicleChange({ ...manualVehicle, ymm: e.target.value })
+              }
+            />
+            <Field
+              label="Rental license plate"
+              value={manualVehicle.plate}
+              maxLength={30}
+              required
+              onChange={e =>
+                onManualVehicleChange({
+                  ...manualVehicle,
+                  plate: e.target.value,
+                })
+              }
+            />
+            <Field
+              label="Last known odometer (miles)"
+              type="number"
+              min="0"
+              max="2000000"
+              value={manualVehicle.lastOdometer}
+              onChange={e =>
+                onManualVehicleChange({
+                  ...manualVehicle,
+                  lastOdometer: Number(e.target.value),
+                })
+              }
+            />
+          </fieldset>
+        ) : (
+          <fieldset disabled={disabled} className="r-grid">
+            <Select
+              label="Rental vehicle"
+              value={d.vehicleId || ""}
+              onChange={e => set("vehicleId", Number(e.target.value))}
+            >
+              <option value="">Choose a vehicle</option>
+              {vehicles
+                .filter(
+                  v =>
+                    v.locationId === d.locationId &&
+                    (v.status === "Available" || v.id === d.vehicleId)
+                )
+                .map(v => (
+                  <option value={v.id} key={v.id}>
+                    {v.ymm} · {v.plate} · VIN {v.vin.slice(-6)}
+                  </option>
+                ))}
+            </Select>
+          </fieldset>
+        )}
+        {vehicleMode !== "manual" && vehicle && (
           <div className="r-vehicle-banner">
             <Car size={38} />
             <div>
@@ -170,26 +643,25 @@ export function Details({
         )}
         {!vehicles.some(v => v.locationId === d.locationId) && (
           <p className="r-guidance">
-            An administrator needs to configure this location’s vehicle
-            inventory. No sample vehicles are supplied.
+            {onVehicleModeChange
+              ? "No inventory at this location yet. Enter the actual vehicle manually to add it when scheduling. No sample vehicles are supplied."
+              : "An administrator needs to configure this location’s vehicle inventory. No sample vehicles are supplied."}
           </p>
         )}
       </Card>
       <Card title="Renter’s own vehicle">
         <fieldset disabled={disabled} className="r-grid">
+          <VinEntry
+            label="VIN"
+            vin={d.renterVehicleVin}
+            disabled={disabled}
+            onChange={vin => set("renterVehicleVin", vin)}
+            onDecoded={ymm => set("renterVehicleYmm", ymm)}
+          />
           <Field
             label="Year, make and model"
             value={d.renterVehicleYmm}
             onChange={e => set("renterVehicleYmm", e.target.value)}
-          />
-          <Field
-            label="VIN"
-            value={d.renterVehicleVin}
-            maxLength={17}
-            onChange={e =>
-              set("renterVehicleVin", e.target.value.toUpperCase())
-            }
-            hint="Enter the actual 17-character VIN; no automatic scan is performed."
           />
           <Field
             label="License plate"
@@ -203,6 +675,18 @@ export function Details({
           />
         </fieldset>
       </Card>
+      {uploadSupport ? (
+        <RentalSupport
+          assets={supportAssets || []}
+          upload={uploadSupport}
+          disabled={supportDisabled}
+        />
+      ) : (
+        <p className="r-guidance">
+          Schedule this rental first to attach the initial estimate and renter
+          vehicle photos.
+        </p>
+      )}
     </>
   );
 }
@@ -278,18 +762,21 @@ export function Pickup({
   assets,
   upload,
   vehicles,
+  locations,
+  returnTimeState,
 }: StepProps) {
   const set = <K extends keyof RentalDraft>(key: K, value: RentalDraft[K]) =>
     update({ ...d, [key]: value });
   const vehicle = vehicles.find(v => v.id === d.vehicleId);
+  const zone =
+    locations.find(l => l.id === d.locationId)?.timezone || "America/New_York";
+  const localReturnTimeEdited = useRef(hasExplicitReturnTime(d, zone));
+  const returnTimeEdited = returnTimeState || localReturnTimeEdited;
   return (
     <>
-      <Card
-        title="Confirm the vehicle"
-        detail="Compare the actual vehicle with the inventory record before pickup."
-      >
-        <div className="r-vehicle-banner">
-          <Car size={38} />
+      <Card title="Vehicle & pickup" className="r-pickup-card">
+        <div className="r-vehicle-banner r-pickup-vehicle">
+          <Car size={28} aria-hidden="true" />
           <div>
             <h3>{vehicle?.ymm || "No vehicle assigned"}</h3>
             <p>Plate {vehicle?.plate || "Not configured"}</p>
@@ -299,22 +786,9 @@ export function Pickup({
           label="Inventory VIN — read only"
           value={vehicle?.vin || ""}
           readOnly
-          hint="VIN corrections belong in Admin → Vehicles. This field does not scan or alter the inventory."
+          hint="Compare with the vehicle. Ask an administrator for VIN corrections."
         />
-        <fieldset disabled={disabled} className="r-grid">
-          <Field
-            label="Actual pickup date & time"
-            type="datetime-local"
-            value={localDateTime(d.pickupAt)}
-            onChange={e => set("pickupAt", isoDateTime(e.target.value))}
-          />
-          <button
-            type="button"
-            className="r-button r-align-end"
-            onClick={() => set("pickupAt", new Date().toISOString())}
-          >
-            Use current pickup time
-          </button>
+        <fieldset disabled={disabled} className="r-grid r-pickup-readings">
           <Field
             label="Odometer out (miles)"
             type="number"
@@ -339,6 +813,73 @@ export function Pickup({
               <option key={f}>{f}</option>
             ))}
           </Select>
+        </fieldset>
+        <section
+          className="r-pickup-photos"
+          aria-labelledby="pickup-photos-title"
+        >
+          <h3 id="pickup-photos-title">Pickup condition photos</h3>
+          <p>
+            Four exterior views required. Add extra photos for gauges, interior
+            or damage.
+          </p>
+          <div className="r-grid r-pickup-photo-grid">
+            {(["front", "rear", "driver", "passenger", "extra"] as const).map(
+              kind => (
+                <PhotoUpload
+                  key={kind}
+                  kind={kind}
+                  label={
+                    {
+                      front: "Front",
+                      rear: "Rear",
+                      driver: "Driver side",
+                      passenger: "Passenger side",
+                      extra: "Additional condition photos",
+                    }[kind]
+                  }
+                  assets={assets}
+                  upload={upload}
+                  disabled={disabled}
+                />
+              )
+            )}
+          </div>
+        </section>
+        <fieldset disabled={disabled} className="r-grid r-pickup-time">
+          <RentalDateTime
+            label="Actual pickup"
+            value={d.pickupAt}
+            zone={zone}
+            onChange={value =>
+              update(
+                withPickupTime(
+                  d,
+                  "pickupAt",
+                  value,
+                  zone,
+                  returnTimeEdited.current
+                )
+              )
+            }
+          />
+          <button
+            type="button"
+            className="r-button r-align-end"
+            onClick={() =>
+              update(
+                withPickupTime(
+                  d,
+                  "pickupAt",
+                  new Date().toISOString(),
+                  zone,
+                  returnTimeEdited.current
+                )
+              )
+            }
+          >
+            Use current pickup time
+          </button>
           <Field
             label="Keys / fobs handed over"
             type="number"
@@ -348,33 +889,6 @@ export function Pickup({
             onChange={e => set("keysOut", Number(e.target.value))}
           />
         </fieldset>
-      </Card>
-      <Card
-        title="Pickup condition photos"
-        detail="Four exterior views are required. Extra photos may show the interior, odometer, fuel gauge or existing damage."
-      >
-        <div className="r-grid">
-          {(["front", "rear", "driver", "passenger", "extra"] as const).map(
-            kind => (
-              <PhotoUpload
-                key={kind}
-                kind={kind}
-                label={
-                  {
-                    front: "Front",
-                    rear: "Rear",
-                    driver: "Driver side",
-                    passenger: "Passenger side",
-                    extra: "Additional condition photos",
-                  }[kind]
-                }
-                assets={assets}
-                upload={upload}
-                disabled={disabled}
-              />
-            )
-          )}
-        </div>
       </Card>
       <Card
         title="Renter identification"
@@ -1069,7 +1583,7 @@ export function Summary({
   const vehicle = vehicles.find(v => v.id === d.vehicleId);
   return (
     <aside className="r-summary">
-      <Card title="Rental summary">
+      <Card title="Summary">
         <span className="r-tag">Added by Claims</span>
         <h3>{d.renterName || "New rental"}</h3>
         <dl>
@@ -1086,9 +1600,9 @@ export function Summary({
           <dt>Location</dt>
           <dd>{location?.name || "Not selected"}</dd>
           <dt>Scheduled pickup</dt>
-          <dd>{dateDisplay(d.scheduledPickup)}</dd>
+          <dd>{rentalDateDisplay(d.scheduledPickup, location?.timezone || "America/New_York")}</dd>
           <dt>Expected return</dt>
-          <dd>{dateDisplay(d.expectedReturn)}</dd>
+          <dd>{rentalDateDisplay(d.expectedReturn, location?.timezone || "America/New_York")}</dd>
           <dt>Rental vehicle</dt>
           <dd>
             {vehicle?.ymm || "Not assigned"}

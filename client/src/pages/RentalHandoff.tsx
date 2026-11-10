@@ -15,6 +15,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ShieldCheck,
+  Mail,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -40,10 +41,13 @@ import {
   Protection,
   Signatures,
   Summary,
+  hasExplicitReturnTime,
+  rentalDateDisplay,
+  type ManualRentalVehicle,
+  type UploadRentalSupport,
 } from "@/components/rental/Steps";
 import { Admin } from "@/components/rental/Admin";
 import { ReturnFlow } from "@/components/rental/ReturnFlow";
-import { Sender } from "@/components/rental/Sender";
 import { useRentalAutosave } from "@/components/rental/useRentalAutosave";
 import type { UploadAsset } from "@/components/rental/Media";
 import type {
@@ -54,7 +58,14 @@ import type {
 import "@/components/rental/rental.css";
 
 type View = "Rentals" | "Vehicles" | "Documents" | "Settings";
-const stepNames = ["Details", "Pickup", "Protection", "Signatures", "Packet"];
+const RENTAL_LOGO = "/manus-storage/metrocars-leasing-original_0b89b3d7.webp";
+const stepNames = [
+  "Details",
+  "Vehicle & pickup",
+  "Protection",
+  "Signatures",
+  "Packet",
+];
 export default function RentalHandoff() {
   const [, navigate] = useLocation();
   const [, params] = useRoute<{ id: string }>("/rental-handoff/:id");
@@ -95,7 +106,7 @@ export default function RentalHandoff() {
             move("Rentals");
           }}
         >
-          MetroCars<span>LEASING</span>
+          <img src={RENTAL_LOGO} alt="MetroCars Leasing" />
         </a>
         <p className="r-nav-label">RENTAL OPERATIONS</p>
         <nav aria-label="Rental navigation">
@@ -159,6 +170,16 @@ export default function RentalHandoff() {
           >
             <Menu size={21} />
           </button>
+          <a
+            className="r-mobile-brand"
+            href="/rental-handoff"
+            onClick={e => {
+              e.preventDefault();
+              move("Rentals");
+            }}
+          >
+            <img src={RENTAL_LOGO} alt="MetroCars Leasing" />
+          </a>
           <span className="r-topbar-label">
             Rental operations{" "}
             <span>/ {id || newRental ? "Handoff" : view}</span>
@@ -187,9 +208,7 @@ export default function RentalHandoff() {
         </header>
         <main className="r-main">
           <ErrorNotice message={error} />
-          {data?.actor && (
-            <Sender session={data} refresh={() => session.refetch()} />
-          )}
+          {data?.actor && <SharedSenderStatus session={data} />}
           {session.isLoading ? (
             <div className="r-loading" role="status">
               Loading secure rental session…
@@ -221,7 +240,8 @@ export default function RentalHandoff() {
           ) : newRental ? (
             <NewRental
               session={data}
-              onCreated={createdId => {
+              onCreated={async createdId => {
+                await session.refetch();
                 setNewRental(false);
                 navigate(`/rental-handoff/${createdId}`);
               }}
@@ -252,6 +272,32 @@ export default function RentalHandoff() {
     </div>
   );
 }
+function SharedSenderStatus({ session }: { session: RentalSession }) {
+  const ready = session.sender
+    ? session.sender.configured === true && session.sender.connected
+    : session.settings.emailProviderReady === true &&
+      !!session.settings.senderEmail;
+  return (
+    <div
+      className={`r-sender-status ${ready ? "" : "r-sender-pending"}`}
+      role="status"
+    >
+      <Mail size={15} aria-hidden="true" />
+      <span>
+        {ready
+          ? "Packet copies go to renter + claim email"
+          : "Shared email is not configured."}
+        {!ready && (
+          <small>
+            {session.actor?.role === "admin"
+              ? " Administrator: arrange shared sender setup before packet delivery."
+              : " Ask your rental administrator to set up packet delivery."}
+          </small>
+        )}
+      </span>
+    </div>
+  );
+}
 function ShopLogin({
   onAuthenticated,
 }: {
@@ -260,7 +306,10 @@ function ShopLogin({
   const signIn = trpc.rentalHandoff.signIn.useMutation();
   const activate = trpc.rentalHandoff.activate.useMutation();
   const [token, setToken] = useState(
-    () => new URLSearchParams(window.location.hash.slice(1)).get("activate") || new URLSearchParams(window.location.search).get("activate") || ""
+    () =>
+      new URLSearchParams(window.location.hash.slice(1)).get("activate") ||
+      new URLSearchParams(window.location.search).get("activate") ||
+      ""
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -290,7 +339,9 @@ function ShopLogin({
     <div className="r-login">
       <div className="r-page-heading">
         <div>
-          <p className="r-eyebrow">METROCARS LEASING</p>
+          <div className="r-login-brand">
+            <img src={RENTAL_LOGO} alt="MetroCars Leasing" />
+          </div>
           <h1>
             {token
               ? "Activate your shop account"
@@ -611,14 +662,32 @@ function NewRental({
   onCancel,
 }: {
   session: RentalSession;
-  onCreated: (id: number) => void;
+  onCreated: (id: number) => Promise<void>;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(emptyRentalDraft);
+  const [vehicleMode, setVehicleMode] = useState<"inventory" | "manual">(
+    "manual"
+  );
+  const [manualVehicle, setManualVehicle] = useState<ManualRentalVehicle>({
+    ymm: "",
+    vin: "",
+    plate: "",
+    lastOdometer: 0,
+  });
   const [error, setError] = useState("");
   const create = trpc.rentalHandoff.create.useMutation();
+  const vehicleReady =
+    vehicleMode === "manual"
+      ? /^(?:19|20)\d{2}\s+\S+\s+\S.*$/.test(manualVehicle.ymm.trim()) &&
+        /^[A-HJ-NPR-Z0-9]{17}$/.test(manualVehicle.vin) &&
+        !!manualVehicle.plate.trim() &&
+        Number.isInteger(manualVehicle.lastOdometer) &&
+        manualVehicle.lastOdometer >= 0 &&
+        manualVehicle.lastOdometer <= 2000000
+      : draft.vehicleId > 0;
   const ready =
-    !!draft.renterName.trim() && draft.locationId > 0 && draft.vehicleId > 0;
+    !!draft.renterName.trim() && draft.locationId > 0 && vehicleReady;
   return (
     <>
       <HandoffHeading draft={draft} session={session} />
@@ -627,15 +696,32 @@ function NewRental({
         <div>
           <p className="r-guidance">
             New setup is not yet saved. Enter at least renter name, location and
-            an available vehicle, then select Schedule rental. All subsequent
-            changes autosave.
+            an available or manually entered vehicle, then select Schedule
+            rental. All subsequent changes autosave.
           </p>
           <ErrorNotice message={error} />
           <Details
             draft={draft}
-            update={setDraft}
+            update={next => {
+              if (
+                next.locationId !== draft.locationId &&
+                !session.vehicles.some(
+                  v =>
+                    v.locationId === next.locationId && v.status === "Available"
+                )
+              )
+                setVehicleMode("manual");
+              setDraft(next);
+            }}
             locations={session.locations}
             vehicles={session.vehicles}
+            vehicleMode={vehicleMode}
+            onVehicleModeChange={mode => {
+              setVehicleMode(mode);
+              if (mode === "manual") setDraft({ ...draft, vehicleId: 0 });
+            }}
+            manualVehicle={manualVehicle}
+            onManualVehicleChange={setManualVehicle}
           />
         </div>
         <Summary
@@ -657,8 +743,13 @@ function NewRental({
             onClick={async () => {
               setError("");
               try {
-                const result = await create.mutateAsync({ draft });
-                onCreated(result.id);
+                const result = await create.mutateAsync({
+                  draft,
+                  ...(vehicleMode === "manual"
+                    ? { vehicle: manualVehicle }
+                    : {}),
+                });
+                await onCreated(result.id);
               } catch (e) {
                 setError(errorMessage(e));
               }
@@ -720,6 +811,7 @@ function RentalEditor({
 }) {
   const save = trpc.rentalHandoff.save.useMutation();
   const uploadMutation = trpc.rentalHandoff.upload.useMutation();
+  const supportMutation = trpc.rentalHandoff.uploadSupport.useMutation();
   const complete = trpc.rentalHandoff.complete.useMutation();
   const version = trpc.rentalHandoff.newVersion.useMutation();
   const locked =
@@ -748,6 +840,10 @@ function RentalEditor({
   const [localAssetCutoff, setLocalAssetCutoff] = useState(0);
   const requestId = useRef<string | null>(null);
   const d = autosave.draft;
+  const returnTimeState = useRef(hasExplicitReturnTime(
+    record.draft,
+    session.locations.find(l => l.id === record.draft.locationId)?.timezone || "America/New_York"
+  ));
   const assetCutoff = Math.max(
     localAssetCutoff,
     0,
@@ -814,6 +910,17 @@ function RentalEditor({
       await refresh();
     }
   };
+  const uploadSupport: UploadRentalSupport = async (kind, base64, fileName) => {
+    if (["Returned", "Closed"].includes(record.status)) return;
+    if (!locked) await autosave.flush();
+    await supportMutation.mutateAsync({
+      id: record.id,
+      kind,
+      base64,
+      fileName,
+    });
+    await refresh();
+  };
   const props = {
     draft: d,
     update: change,
@@ -823,6 +930,7 @@ function RentalEditor({
     assets: currentAssets,
     forceInkForRenter: session.settings.forceInkForRenter || false,
     upload,
+    returnTimeState,
   };
   const move = async (target: number) => {
     if (target === step) return;
@@ -948,6 +1056,11 @@ function RentalEditor({
             <Details
               {...props}
               disabled={locked || busy || session.actor?.role === "shop"}
+              supportAssets={record.assets}
+              uploadSupport={uploadSupport}
+              supportDisabled={
+                busy || ["Returned", "Closed"].includes(record.status)
+              }
             />
           )}
           {step === 2 && <Pickup {...props} />}
@@ -1146,21 +1259,18 @@ function HandoffHeading({
   draft: RentalDraft;
   session: RentalSession;
 }) {
+  const location = session.locations.find(l => l.id === draft.locationId);
   return (
-    <div className="r-page-heading">
+    <div className="r-page-heading r-handoff-heading">
       <div>
-        <p className="r-eyebrow">METROCARS LEASING</p>
         <h1>Rental handoff</h1>
-        <p>
+        <p className="r-handoff-context">
           <strong>{draft.renterName || "New rental"}</strong>
-          {draft.claimNumber ? ` · Claim ${draft.claimNumber}` : ""} ·{" "}
-          {session.locations.find(l => l.id === draft.locationId)?.name ||
-            "Choose pickup location"}
+          {" | "}Claim {draft.claimNumber || "not entered"}
+          {" | "}
+          {location?.name || "Choose pickup location"}
+          {" | "}Pickup {rentalDateDisplay(draft.scheduledPickup, location?.timezone || "America/New_York")}
         </p>
-      </div>
-      <div className="r-pickup-heading">
-        <small>SCHEDULED PICKUP</small>
-        <strong>{dateDisplay(draft.scheduledPickup)}</strong>
       </div>
     </div>
   );
@@ -1178,7 +1288,7 @@ function Stepper({
     <div className="r-stepper">
       <div className="r-mobile-progress">
         <span>
-          Step {step} of 5 · {stepNames[step - 1]}
+          Step {step} of 5 • {stepNames[step - 1]}
         </span>
         <progress max={5} value={step} aria-label="Rental handoff progress" />
       </div>
@@ -1197,6 +1307,7 @@ function Stepper({
             <button
               type="button"
               aria-current={i + 1 === step ? "step" : undefined}
+              aria-label={`Step ${i + 1} · ${name}`}
               disabled={disabled && i > 0}
               onClick={() => onChange(i + 1)}
             >
@@ -1233,9 +1344,9 @@ function PacketHistory({
       <ErrorNotice message={error} />
       {deliveryUncertain && (
         <div className="r-error" role="alert">
-          A previous Gmail delivery has an uncertain result. Check the sender’s
-          Sent mail and reconcile the delivery before requesting another send,
-          to avoid duplicate emails.
+          A previous email delivery has an uncertain result. Ask your rental
+          administrator to reconcile the delivery before requesting another
+          send, to avoid duplicate emails.
         </div>
       )}
       {notice && (

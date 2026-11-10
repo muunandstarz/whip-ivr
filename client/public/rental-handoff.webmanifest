@@ -9,7 +9,7 @@
   "background_color": "#f5f7fa",
   "theme_color": "#071d43",
   "icons": [
-    { "src": "/manus-storage/metrocars-icon-192_6fb503e7.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/manus-storage/metrocars-icon-512_80c8df20.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/manus-storage/metrocars-actual-icon-192_59bbbf43.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/manus-storage/metrocars-actual-icon-512_1a98b38f.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

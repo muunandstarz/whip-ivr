@@ -1,8 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, publicProcedure } from "../_core/trpc";
-import { RentalHandoffService, rentalHandoffService, rentalSettingsSchema } from "../rentalHandoffService";
-import { connectRentalSender, disconnectRentalSender } from "../rentalHandoffGmail";
+import { RentalHandoffService, rentalHandoffService, rentalSettingsSchema, rentalCreateDraftSchema, rentalManualVehicleSchema, RENTAL_SUPPORT_KINDS, RENTAL_SUPPORT_MAX_BYTES } from "../rentalHandoffService";
 import { ASSET_KINDS, RENTAL_STATUS, rentalDraftSchema, rentalReturnSchema } from "../../shared/rentalHandoff";
 import { resolveRentalActor, requireSameOrigin, rateLimitRental, requestAudit, issueShopSession, cookieToken, tokenHash, RENTAL_COOKIE, rentalCookieOptions } from "../rentalHandoffSecurity";
 
@@ -23,21 +22,25 @@ export function createRentalHandoffRouter(service: RentalHandoffService) {
   });
   return router({
     session: resolve.query(({ ctx }) => service.session(ctx.rentalActor)),
-    connectSender: authenticated.mutation(async ({ ctx }) => {
+    connectSender: authenticated.mutation(async ({ ctx }): Promise<{ url: string }> => {
       requireSameOrigin(ctx.req);
-      try { return await connectRentalSender(ctx.rentalActor, new URL(String(ctx.req.headers.origin)).origin); }
-      catch { throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Gmail sending is not configured. Ask an administrator to confirm the OAuth callback registration." }); }
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Rental packets use the shared Mailgun sender. An administrator must configure its credentials and verified sending domain in server secret settings; individual Gmail connections are not used." });
     }),
-    disconnectSender: authenticated.mutation(async ({ ctx }) => {
+    disconnectSender: authenticated.mutation(async ({ ctx }): Promise<{ success: boolean }> => {
       requireSameOrigin(ctx.req);
-      try { await disconnectRentalSender(ctx.rentalActor.key); return { success: true }; }
-      catch { throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Gmail could not be disconnected. Try again." }); }
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The shared Mailgun sender cannot be disconnected by an individual rental user. An administrator manages it through server secret settings." });
+    }),
+    saveSharedSender: authenticated.input(z.object({ domain: z.string().min(1).max(253), fromEmail: z.string().min(1).max(254), apiKey: z.string().min(1).max(512), region: z.enum(["US", "EU"]), replyToEmail: z.string().min(1).max(254).optional() }).strict()).mutation(({ ctx, input }) => {
+      requireSameOrigin(ctx.req);
+      return service.saveSharedSender(ctx.rentalActor, input);
     }),
     list: authenticated.input(z.object({ search: z.string().max(180).optional(), status: z.enum(RENTAL_STATUS).optional() }).strict().optional()).query(({ ctx, input }) => service.list(ctx.rentalActor, input)),
     get: authenticated.input(z.object({ id }).strict()).query(({ ctx, input }) => service.get(ctx.rentalActor, input.id)),
-    create: authenticated.input(z.object({ draft: rentalDraftSchema }).strict()).mutation(({ ctx, input }) => service.create(ctx.rentalActor, input.draft)),
+    create: authenticated.input(z.object({ draft: rentalCreateDraftSchema, vehicle: rentalManualVehicleSchema.optional() }).strict()).mutation(({ ctx, input }) => service.create(ctx.rentalActor, input.draft, input.vehicle)),
+    decodeVin: authenticated.input(z.object({ vin: rentalManualVehicleSchema.shape.vin }).strict()).mutation(({ ctx, input }) => service.decodeVin(ctx.rentalActor, input.vin)),
     save: authenticated.input(recordInput.extend({ draft: rentalDraftSchema }).strict()).mutation(({ ctx, input }) => service.save(ctx.rentalActor, input.id, input.revision, input.draft)),
     upload: authenticated.input(z.object({ id, kind: z.enum(ASSET_KINDS), base64: z.string().max(6990600), signerName: z.string().trim().min(1).max(120).optional() }).strict()).mutation(({ ctx, input }) => service.upload(ctx.rentalActor, input, requestAudit(ctx.req))),
+    uploadSupport: authenticated.input(z.object({ id, kind: z.enum(RENTAL_SUPPORT_KINDS), base64: z.string().max(Math.ceil(RENTAL_SUPPORT_MAX_BYTES / 3) * 4 + 64), fileName: z.string().max(255).optional() }).strict()).mutation(({ ctx, input }) => service.uploadSupport(ctx.rentalActor, input, requestAudit(ctx.req))),
     complete: authenticated.input(recordInput.extend({ requestId }).strict()).mutation(({ ctx, input }) => service.complete(ctx.rentalActor, input)),
     saveReturn: authenticated.input(recordInput.extend({ data: rentalReturnSchema }).strict()).mutation(({ ctx, input }) => service.saveReturn(ctx.rentalActor, input)),
     returnComplete: authenticated.input(recordInput.extend({ requestId, data: rentalReturnSchema }).strict()).mutation(({ ctx, input }) => service.returnComplete(ctx.rentalActor, input)),

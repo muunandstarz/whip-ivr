@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   activate: vi.fn(),
   connectSender: vi.fn(),
   disconnectSender: vi.fn(),
+  decodeVin: vi.fn(),
+  uploadSupport: vi.fn(),
   navigate: vi.fn(),
   routeId: "",
 }));
@@ -69,7 +71,16 @@ vi.mock("@/contexts/ThemeContext", () => ({
   useTheme: () => ({ theme: "light", setTheme: vi.fn() }),
 }));
 import RentalHandoff from "./RentalHandoff";
-import { Protection, Signatures, Details } from "@/components/rental/Steps";
+import {
+  Protection,
+  Signatures,
+  Details,
+  Pickup,
+  rentalWallClock,
+  rentalInstant,
+  withPickupTime,
+  hasExplicitReturnTime,
+} from "@/components/rental/Steps";
 import { useRentalAutosave } from "@/components/rental/useRentalAutosave";
 let root: Root;
 let container: HTMLDivElement;
@@ -117,6 +128,15 @@ async function input(label: string, value: string) {
     el.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+async function select(label: string, value: string) {
+  const el = Array.from(container.querySelectorAll<HTMLLabelElement>("label"))
+    .find(l => l.querySelector("span")?.textContent === label)
+    ?.querySelector("select")!;
+  await act(async () => {
+    el.value = value;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
 beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -132,6 +152,9 @@ beforeEach(() => {
     mocks.activate,
     mocks.connectSender,
     mocks.disconnectSender,
+    mocks.decodeVin,
+    mocks.uploadSupport,
+    mocks.session.refetch,
     mocks.navigate,
   ])
     fn.mockReset();
@@ -152,17 +175,49 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("Standalone MetroCars rental interface", () => {
-  it("shows Gmail setup errors with the required OAuth callback URI", async () => {
-    mocks.connectSender.mockRejectedValueOnce(
-      Error("Gmail OAuth is not configured")
-    );
+  it("shows shared email setup guidance without personal sender controls", async () => {
     await mount(React.createElement(RentalHandoff));
-    await click(button("Connect Gmail"));
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "not configured"
+    expect(container.querySelector(".r-sender-status")?.textContent).toContain(
+      "Shared email is not configured."
     );
-    expect(container.textContent).toContain(
-      "/api/rental-handoff/gmail/callback"
+    expect(container.querySelector(".r-sender-status")?.textContent).toContain(
+      "Ask your rental administrator"
+    );
+    expect(container.textContent).not.toMatch(
+      /Gmail|OAuth|callback|client secret/
+    );
+    expect(button("Connect Gmail")).toBeUndefined();
+    expect(mocks.connectSender).not.toHaveBeenCalled();
+    expect(mocks.disconnectSender).not.toHaveBeenCalled();
+  });
+  it("uses the shared ready sender for a shop without exposing a personal email", async () => {
+    mocks.session.data = {
+      ...session("shop"),
+      sender: {
+        configured: true,
+        connected: true,
+        email: "shared@example.test",
+        provider: "mailgun",
+      },
+    };
+    await mount(React.createElement(RentalHandoff));
+    expect(container.querySelector(".r-sender-status")?.textContent).toBe(
+      "Packet copies go to renter + claim email"
+    );
+    expect(container.textContent).not.toContain("shared@example.test");
+    expect(container.querySelector(".r-sender-status button")).toBeNull();
+  });
+  it("gives administrators setup guidance rather than developer OAuth details", async () => {
+    mocks.session.data = {
+      ...session("admin"),
+      sender: { configured: false, connected: false },
+    };
+    await mount(React.createElement(RentalHandoff));
+    expect(container.querySelector(".r-sender-status")?.textContent).toContain(
+      "Administrator: arrange shared sender setup"
+    );
+    expect(container.textContent).not.toMatch(
+      /OAuth|Google Cloud|callback|client secret/
     );
   });
   it("exposes real administrative configuration only to an admin", async () => {
@@ -211,7 +266,17 @@ describe("Standalone MetroCars rental interface", () => {
   });
   it("shows an honest empty state and pending launch requirements without seeded records", async () => {
     await mount(React.createElement(RentalHandoff));
-    expect(container.textContent).toContain("MetroCars");
+    const logos = container.querySelectorAll<HTMLImageElement>(
+      'img[alt="MetroCars Leasing"]'
+    );
+    expect(logos).toHaveLength(2);
+    expect(
+      [...logos].every(
+        image =>
+          image.getAttribute("src") ===
+          "/manus-storage/metrocars-leasing-original_0b89b3d7.webp"
+      )
+    ).toBe(true);
     expect(container.textContent).toContain("No rentals yet");
     expect(container.textContent).toContain("Launch approval pending");
     expect(button("New rental")).toBeDefined();
@@ -223,8 +288,146 @@ describe("Standalone MetroCars rental interface", () => {
     await mount(React.createElement(RentalHandoff));
     await click(button("New rental"));
     expect(button("Schedule rental").disabled).toBe(true);
+    expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
+    expect(container.textContent).toContain("Rental VIN");
     expect(container.textContent).toContain("No sample vehicles are supplied");
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("schedules a directly entered vehicle and refreshes inventory before opening its record", async () => {
+    mocks.session.data = {
+      ...session(),
+      locations: [
+        {
+          id: 1,
+          name: "Actual shop",
+          active: true,
+          timezone: "America/New_York",
+        },
+      ],
+    };
+    mocks.create.mockResolvedValue({ id: 8 });
+    mocks.decodeVin.mockResolvedValue({
+      year: "2025",
+      make: "Honda",
+      model: "Accord",
+    });
+    await mount(React.createElement(RentalHandoff));
+    await click(button("New rental"));
+    expect(button("Enter rental vehicle").getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    await input("Renter full name", "Actual renter");
+    await select("Pickup location", "1");
+    await input("Rental VIN", "1HGCM82633A004352");
+    await click(button("Decode VIN"));
+    expect(mocks.decodeVin).toHaveBeenCalledWith({ vin: "1HGCM82633A004352" });
+    await input("Rental license plate", "REAL123");
+    expect(button("Schedule rental").disabled).toBe(false);
+    await click(button("Schedule rental"));
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draft: expect.objectContaining({ vehicleId: 0, locationId: 1 }),
+        vehicle: {
+          ymm: "2025 Honda Accord",
+          vin: "1HGCM82633A004352",
+          plate: "REAL123",
+          lastOdometer: 0,
+        },
+      })
+    );
+    expect(mocks.session.refetch).toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/rental-handoff/8");
+    expect(mocks.session.refetch.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.navigate.mock.invocationCallOrder.at(-1)!
+    );
+  });
+  it("decodes the renter's own VIN before editable year, make and model", async () => {
+    mocks.decodeVin.mockResolvedValue({
+      year: "2020",
+      make: "Toyota",
+      model: "Camry",
+    });
+    const update = vi.fn();
+    await mount(
+      React.createElement(Details, {
+        draft: { ...emptyRentalDraft(), renterVehicleVin: "1HGCM82633A004352" },
+        update,
+        locations: [],
+        vehicles: [],
+      })
+    );
+    const own = [...container.querySelectorAll(".r-card")].find(
+      card => card.querySelector("h2")?.textContent === "Renter’s own vehicle"
+    )!;
+    expect(own.querySelector("label > span")?.textContent).toBe("VIN");
+    await click(button("Decode VIN"));
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ renterVehicleYmm: "2020 Toyota Camry" })
+    );
+    expect(
+      [...own.querySelectorAll<HTMLInputElement>("input")].find(
+        el => el.value === ""
+      )?.readOnly
+    ).toBe(false);
+  });
+  it("saves estimate PDFs and claimant photos to the rental as originals, not packet evidence", async () => {
+    const uploadSupport = vi.fn().mockResolvedValue({});
+    await mount(
+      React.createElement(Details, {
+        draft: emptyRentalDraft(),
+        update: vi.fn(),
+        locations: [],
+        vehicles: [],
+        supportAssets: [
+          {
+            id: 30,
+            kind: "claimEstimate",
+            url: "/api/rental-handoff/files/asset/30",
+          },
+        ],
+        uploadSupport,
+      })
+    );
+    const support = [...container.querySelectorAll(".r-card")].find(
+      card =>
+        card.querySelector("h2")?.textContent ===
+        "Renter vehicle estimate & photos"
+    )!;
+    const file = new File(["%PDF-1.7\noriginal"], "estimate.pdf", {
+      type: "application/pdf",
+    });
+    const photo = new File(["original photo"], "claim.jpg", {
+      type: "image/jpeg",
+    });
+    const fileInput =
+      support.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(fileInput, "files", {
+      value: [file, photo],
+      configurable: true,
+    });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(uploadSupport).toHaveBeenCalledTimes(2);
+    expect(uploadSupport.mock.calls[0]).toEqual([
+      "claimEstimate",
+      expect.stringContaining("data:application/pdf;base64,"),
+      "estimate.pdf",
+    ]);
+    expect(uploadSupport.mock.calls[1]).toEqual([
+      "claimEstimate",
+      expect.stringContaining("data:image/jpeg;base64,"),
+      "claim.jpg",
+    ]);
+    expect(support.querySelector("a[download]")?.getAttribute("href")).toBe(
+      "/api/rental-handoff/files/asset/30"
+    );
+    expect(support.textContent).toContain(
+      "No automatic analysis or packet inclusion"
+    );
   });
   it("hides create and settings from shop staff", async () => {
     mocks.session.data = session("shop");
@@ -334,8 +537,76 @@ describe("Standalone MetroCars rental interface", () => {
     expect(button("Complete handoff & email packet").disabled).toBe(true);
     expect(container.textContent).toContain("front condition photo");
     await click(button("Step 2"));
+    expect(container.querySelector("h1")?.textContent).toBe("Rental handoff");
+    expect(
+      container.querySelector(".r-mobile-progress")?.textContent
+    ).toContain("Step 2 of 5 • Vehicle & pickup");
+    expect(container.querySelector(".r-pickup-card h2")?.textContent).toBe(
+      "Vehicle & pickup"
+    );
+    expect(container.querySelector(".r-summary h2")?.textContent).toBe(
+      "Summary"
+    );
     expect(container.textContent).toContain("Pickup condition photos");
+    expect(container.querySelectorAll(".r-condition")).toHaveLength(12);
+    expect(container.querySelectorAll(".r-pickup-card .r-photo")).toHaveLength(
+      5
+    );
+    expect(container.querySelector(".r-sticky-footer")?.textContent).toContain(
+      "Continue"
+    );
+    expect(container.querySelector(".r-sticky-footer")?.textContent).toContain(
+      "Back"
+    );
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+});
+describe("Location wall-clock time defaults", () => {
+  const zone = "America/New_York";
+  it("round-trips date/time without depending on the device timezone", () => {
+    expect(rentalInstant("2026-11-10T10:00", zone)).toBe(
+      "2026-11-10T15:00:00.000Z"
+    );
+    expect(rentalWallClock("2026-11-10T15:00:00Z", zone)).toBe(
+      "2026-11-10T10:00"
+    );
+    expect(rentalInstant("2026-07-10T10:00", zone)).toBe(
+      "2026-07-10T14:00:00.000Z"
+    );
+    expect(rentalInstant("2026-03-08T02:30", zone)).toBe("");
+  });
+  it("copies pickup clock time but keeps the return date and its daylight-saving offset", () => {
+    const draft = {
+      ...emptyRentalDraft(),
+      scheduledPickup: "2026-10-30T14:00:00Z",
+      expectedReturn: "2026-11-03T15:00:00Z",
+    };
+    expect(hasExplicitReturnTime(draft, zone)).toBe(false);
+    const next = withPickupTime(
+      draft,
+      "scheduledPickup",
+      "2026-10-30T17:15:00Z",
+      zone,
+      false
+    );
+    expect(next.expectedReturn).toBe("2026-11-03T18:15:00.000Z");
+    expect(rentalWallClock(next.expectedReturn, zone)).toBe("2026-11-03T13:15");
+  });
+  it("preserves a saved explicit return time or a user-edited time", () => {
+    const draft = {
+      ...emptyRentalDraft(),
+      scheduledPickup: "2026-11-10T15:00:00Z",
+      expectedReturn: "2026-11-13T19:00:00Z",
+    };
+    expect(hasExplicitReturnTime(draft, zone)).toBe(true);
+    const next = withPickupTime(
+      draft,
+      "pickupAt",
+      "2026-11-10T16:15:00Z",
+      zone,
+      true
+    );
+    expect(next.expectedReturn).toBe(draft.expectedReturn);
   });
 });
 describe("Protection and payment guardrails", () => {

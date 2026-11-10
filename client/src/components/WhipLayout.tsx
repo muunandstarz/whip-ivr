@@ -46,6 +46,7 @@ import { useTheme, type Theme } from "@/contexts/ThemeContext";
 
 // ── Nav items for admin users ────────────────────────────────────────────────
 const ADMIN_NAV_ITEMS = [
+  { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
   { href: "/handler-queue", label: "Handler Queue", icon: Users },
@@ -53,12 +54,8 @@ const ADMIN_NAV_ITEMS = [
   { href: "/call-tracking", label: "Call Tracking", icon: PhoneCall },
   { href: "/claims-qa", label: "Claims QA", icon: Star },
   { href: "/loss-intake", label: "Loss Intake", icon: ClipboardCheck },
-  { href: "/rental-handoff", label: "Rental Handoff", icon: Car },
-  { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/mailroom", label: "Mailroom", icon: Inbox },
-  { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
   { href: "/tickets", label: "Tickets", icon: Ticket },
-  { href: "https://claude.ai/artifact/D4cSrZQwaMKCtiooyq8EQg", label: "Handler Productivity Dashboard", icon: BarChart3, external: true },
   { href: "/mail-bot", label: "Mail / Fax Bot", icon: Bot },
 ];
 
@@ -77,8 +74,15 @@ const KB_NAV_ITEMS = [
 const KB_NAV_EXTRA = [
   { href: "/kb/reference-hub", label: "Reference Hub", icon: Database },
   { href: "/kb/glossary", label: "Glossary", icon: Library },
-  { href: "/kb/resources", label: "Resources & Links", icon: Link2 },
   { href: "/kb/vehicle-anatomy", label: "Vehicle Anatomy", icon: Car },
+];
+
+// Shared resources retain their own routes and access controls for every viewer.
+const RESOURCE_NAV_ITEMS = [
+  { href: "/rental-handoff", label: "Rental Handoff", icon: Car, external: false },
+  { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen, external: false },
+  { href: "https://claude.ai/artifact/D4cSrZQwaMKCtiooyq8EQg", label: "Handler Productivity Dashboard", icon: BarChart3, external: true },
+  { href: "/kb/resources", label: "Resources & Links", icon: Link2, external: false },
 ];
 
 // Claude artifacts cannot be safely framed here. Open the owner-managed training
@@ -91,14 +95,11 @@ const TRAINING_NAV_ITEMS = [
 // Claims QA is first-class for handlers: each signed-in handler sees only their
 // own released evaluations through the server-side row-level rule.
 const HANDLER_NAV_ITEMS_BASE = [
+  { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-dashboard", label: "My Dashboard", icon: LayoutGrid },
   { href: "/claims-qa", label: "Claims QA", icon: Star },
-  { href: "/claims-workspace", label: "Claims Workspace", icon: NotebookPen },
-  { href: "/rental-handoff", label: "Rental Handoff", icon: Car },
   { href: "/tickets", label: "My Tickets", icon: Ticket },
-  { href: "https://claude.ai/artifact/D4cSrZQwaMKCtiooyq8EQg", label: "Handler Productivity Dashboard", icon: BarChart3, external: true },
   { href: "/intake", label: "Intake Records", icon: PhoneIncoming },
-  { href: "/softphone", label: "Softphone", icon: Phone },
   { href: "/my-mailroom", label: "myMailroom", icon: Inbox },
 ];
 
@@ -195,7 +196,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
   const canAccessMetroCarsCOI = isAdmin || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
   // Insert Loss Intake after Intake Records when the handler is authorized.
   const handlerNavItems = showLossIntake
-    ? [...HANDLER_NAV_ITEMS_BASE.slice(0, 4), LOSS_INTAKE_NAV, ...HANDLER_NAV_ITEMS_BASE.slice(4)]
+    ? HANDLER_NAV_ITEMS_BASE.flatMap(item => item.href === "/intake" ? [item, LOSS_INTAKE_NAV] : [item])
     : HANDLER_NAV_ITEMS_BASE;
   const navItems: { href: string; label: string; icon: React.ElementType; external?: boolean }[] =
     (isAdmin && !isImpersonating ? ADMIN_NAV_ITEMS : handlerNavItems).filter((item) => {
@@ -397,6 +398,34 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
                     {label}
+                  </button>
+                </Link>
+              );
+            })}
+          </div>
+          {/* ── Resources section ── */}
+          <div className="pt-3 mt-1 border-t border-white/10" data-sidebar-section="resources">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 mb-1.5">
+              Resources
+            </p>
+            {RESOURCE_NAV_ITEMS.map(({ href, label, icon: Icon, external }) => {
+              if (external) {
+                return (
+                  <a key={href} href={href} target="_blank" rel="noreferrer"
+                    onClick={() => setMobileOpen(false)}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-white/60 hover:bg-background/8 hover:text-white">
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-left flex-1">{label}</span>
+                    <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-70" aria-hidden="true" />
+                  </a>
+                );
+              }
+              const active = location.startsWith(href);
+              return (
+                <Link key={href} href={href}>
+                  <button onClick={() => setMobileOpen(false)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg text-sm transition-colors ${active ? "bg-background/15 text-white font-medium" : "text-white/60 hover:bg-background/8 hover:text-white"}`}>
+                    <Icon className="w-4 h-4 flex-shrink-0" />{label}
                   </button>
                 </Link>
               );

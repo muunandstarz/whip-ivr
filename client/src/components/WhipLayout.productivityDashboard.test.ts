@@ -6,11 +6,26 @@ const source = readFileSync(resolve(process.cwd(), "client/src/components/WhipLa
 
 describe("Handler Productivity Dashboard navigation", () => {
   it("is visible in both admin and handler navigation and opens the Claude source independently", () => {
-    expect(source.match(/label: "Handler Productivity Dashboard"/g)).toHaveLength(2);
+    expect(source.match(/label: "Handler Productivity Dashboard"/g)).toHaveLength(1);
+    expect(source).toContain("const RESOURCE_NAV_ITEMS");
+    expect(source).toContain("RESOURCE_NAV_ITEMS.map");
     expect(source).toContain('href: "https://claude.ai/artifact/D4cSrZQwaMKCtiooyq8EQg"');
     expect(source).toContain('target="_blank"');
     expect(source).toContain('rel="noreferrer"');
     expect(source).toContain("if (external)");
+  });
+
+  it("groups the three workspace tools under Resources and keeps Softphone first for both roles", () => {
+    const resources = source.split("const RESOURCE_NAV_ITEMS = [")[1].split("];", 1)[0];
+    for (const label of ["Rental Handoff", "Claims Workspace", "Handler Productivity Dashboard"]) {
+      expect(resources).toContain(`label: "${label}"`);
+      expect(source.match(new RegExp(`label: "${label}"`, "g"))).toHaveLength(1);
+    }
+    const admin = source.split("const ADMIN_NAV_ITEMS = [")[1].split("];", 1)[0];
+    const handler = source.split("const HANDLER_NAV_ITEMS_BASE = [")[1].split("];", 1)[0];
+    expect(admin.trimStart()).toMatch(/^\{ href: "\/softphone"/);
+    expect(handler.trimStart()).toMatch(/^\{ href: "\/softphone"/);
+    expect(source).toContain("Resources");
   });
 
   it("keeps the restored MetroCars COI limited to the active Liability handler context", () => {

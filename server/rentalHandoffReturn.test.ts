@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const live = vi.hoisted(() => ({ db: vi.fn(), put: vi.fn(), signedUrl: vi.fn(), gmail: vi.fn(), sender: vi.fn() }));
+const live = vi.hoisted(() => ({ db: vi.fn(), put: vi.fn(), signedUrl: vi.fn(), mailgun: vi.fn(), sender: vi.fn() }));
 vi.mock("./db", () => ({ getDb: live.db }));
 vi.mock("./storage", () => ({ storagePut: live.put, storageGetSignedUrl: live.signedUrl }));
-vi.mock("./rentalHandoffGmail", () => ({ rentalSenderStatus: live.sender, sendRentalPacketGmail: live.gmail, RentalGmailDeliveryUncertainError: class extends Error {} }));
+vi.mock("./rentalHandoffMailgun", () => ({ rentalSenderStatus: live.sender, sendRentalPacketMailgun: live.mailgun, RentalMailgunDeliveryUncertainError: class extends Error {}, RENTAL_MAILGUN_MAX_PDF_BYTES: 16 * 1024 * 1024, RENTAL_MAILGUN_SETTINGS_ID: 2, RENTAL_MAILGUN_SETTINGS_KEY: "mailgun_sender", verifyRentalSharedSenderConfig: vi.fn() }));
 
 import { RentalHandoffService, type RentalDependencies, type RentalRepository, type RentalQuery, type RentalTable, type RentalPdfInput } from "./rentalHandoffService";
 import { createRentalHandoffRouter } from "./routers/rentalHandoff";

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Mail, Plus, Settings2, UserX } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { SharedSenderForm } from "./SharedSenderForm";
 import {
   DEFAULT_RENTAL_RATES,
   type LaunchSettings,
@@ -190,7 +191,7 @@ export function Admin({
       </Card>
       <Card
         title="Vehicle inventory"
-        detail="Only administrators may correct the inventory VIN. No VIN OCR or scan is performed."
+        detail="New rentals add vehicles automatically. You can optionally manage saved vehicles here; no preloaded inventory is required."
       >
         <div className="r-record-list">
           {vehicles.map(v => (
@@ -377,7 +378,10 @@ export function Admin({
                 onChange={e => setInviteEmail(e.target.value)}
               />
             </div>
-            <h3>Assigned locations</h3>
+            <h3>Assigned locations · choose at least one</h3>
+            {!locations.some(l => l.active) && (
+              <p className="r-guidance" role="status">Add an active Total Recon location above before inviting a technician.</p>
+            )}
             {locations
               .filter(l => l.active)
               .map(l => (
@@ -393,6 +397,9 @@ export function Admin({
                 />
               ))}
           </fieldset>
+          {locations.some(l => l.active) && !scope.length && (
+            <p className="r-guidance" role="status">Select Rockville, Laurel, or both to enable this invitation.</p>
+          )}
           <button
             type="submit"
             className="r-button r-primary"
@@ -442,6 +449,7 @@ export function Admin({
           </div>
         )}
       </Card>
+      <SharedSenderForm refresh={refresh} />
       <Card
         title="Launch approvals & delivery"
         detail="Only the owner administrator may intentionally confirm these items. Pending prerequisites block completed handoffs."
@@ -511,12 +519,9 @@ export function Admin({
               {settings.emailProviderReady
                 ? "Server configuration ready"
                 : "Not configured"}
-              . Connect the sending technician’s Gmail account using the action
-              above. Packets go to the renter and the claim-specific email.
-              Never enter a provider secret in this app. A deployment
-              administrator configures OAuth on the server;{" "}
-              <code>RENTAL_RESEND_API_KEY</code> is a server-only legacy
-              fallback, not a client setting.
+              . One shared Mailgun sender sends packets to the renter and the
+              claim-specific email. Technicians do not connect personal email accounts.
+              The API key is protected server-side and is never included in a rental packet.
             </p>
             <p className="r-guidance">
               Retention is metadata only. Records are retained for the life of

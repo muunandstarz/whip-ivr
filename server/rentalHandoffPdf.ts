@@ -60,23 +60,29 @@ const fail = (field: string, message: string): never => { throw new RentalPdfVal
 const LIMITS = { templateBytes: 2 * 1024 * 1024, assetBytes: 10 * 1024 * 1024, totalAssetBytes: 64 * 1024 * 1024, assetCount: 48, imagePixels: 20_000_000 };
 /** All text is measured, never clipped or silently truncated. Coordinates are
  * original A4 points, top-left origin, from pdftotext -bbox + PDF border paths.
- * A4 originals are uniformly transformed onto Letter; all original visible
- * content (including footers and logo) remains within physical 72pt margins. */
+ * The original CONTENT frame (not the A4 media box) maps onto half-inch Letter
+ * margins. Text matrices compensate the frame transform: embedded source fonts
+ * keep their original point sizes and proportions, and no legal text is retyped. */
 export const RENTAL_PDF_FILL_LIMITS = {
-  ...LIMITS, pageWidth: 612, pageHeight: 792, margin: 72,
-  fieldFontPoints: 9, minimumFieldFontPoints: 8.5,
+  ...LIMITS, pageWidth: 612, pageHeight: 792, margin: 36,
+  fieldFontPoints: 10, minimumFieldFontPoints: 8.5,
   leftCell: { x: 186, width: 116, maxLines: 1 },
   rightCell: { x: 410, width: 126, maxLines: 1 },
   vehicleInfoCell: { x: 220, width: 309, maxLines: 1 },
-  initials: { x: 462, width: 75, maxLines: 1 },
+  initials: { x: 483, width: 57, maxLines: 1, labelGapPoints: 4 },
   printedName: { x: 307, width: 105, maxLines: 2 },
   conditionNote: { width: 111, maxLines: 1 },
   overflowPolicy: "Names and narrative fields use a referenced continuation schedule; other overflows throw. No font auto-shrinking.",
 } as const;
-const SOURCE = { width: 595.303937, height: 841.889764, scale: 648 / 772 };
-const X = (612 - SOURCE.width * SOURCE.scale) / 2;
-const TOP = 72 - 35 * SOURCE.scale;
-const Y = 792 - TOP - SOURCE.height * SOURCE.scale;
+// Include outer table strokes and the source fonts' actual ascent/descent.
+const SOURCE = { width: 595.303937, height: 841.889764, left: 71.5, top: 34.5, widthInside: 469, heightInside: 773 };
+const MARGIN = RENTAL_PDF_FILL_LIMITS.margin;
+const FRAME_WIDTH = 612 - 2 * MARGIN;
+const SCALE_X = FRAME_WIDTH / SOURCE.widthInside;
+const SCALE_Y = (792 - 2 * MARGIN) / SOURCE.heightInside;
+const sourceLeft = new WeakMap<PDFPage, number>();
+const pageX = (page: PDFPage, x: number) => MARGIN + (x - (sourceLeft.get(page) ?? SOURCE.left)) * SCALE_X;
+const pageY = (top: number) => 792 - MARGIN - (top - SOURCE.top) * SCALE_Y;
 const BLACK = rgb(0, 0, 0);
 const blankTemplateCache = new Map<string, Buffer>(); // Only checksum-pinned blank templates.
 
@@ -177,17 +183,28 @@ class Overlay {
   constructor(readonly doc: PDFDocument, readonly font: PDFFont) {}
   cell(page: PDFPage, field: string, value: unknown, x: number, top: number, width: number, height: number, options: CellOptions = {}): void {
     const text = sanitizeRentalPdfText(value, field); if (!text.trim()) return;
-    const size = options.size ?? 9; const nativeSize = size / SOURCE.scale;
-    const maxLines = options.lines ?? 1; const leading = (size + 1) / SOURCE.scale;
-    const lines = this.wrap(text, width, nativeSize, field);
-    if (lines.length > maxLines || nativeSize + (lines.length - 1) * leading > height - 2) {
+    const size = options.size ?? RENTAL_PDF_FILL_LIMITS.fieldFontPoints;
+    const maxLines = options.lines ?? 1; const leading = size + 1;
+    const lines = this.wrap(text, width * SCALE_X, size, field);
+    const physicalHeight = height * SCALE_Y;
+    if (lines.length > maxLines || size + (lines.length - 1) * leading > physicalHeight - 2) {
       if (!options.continuation) fail(field, `value exceeds ${width.toFixed(1)}pt source cell / ${maxLines} line(s); use a shorter value or an approved continuation field`);
       const id = this.continuations.length + 1; this.continuations.push({ id, field, text });
       const reference = `See schedule ${id}`;
       return this.cell(page, field, reference, x, top, width, height, { size });
     }
-    const baseline = top + (height - (nativeSize + (lines.length - 1) * leading)) / 2 + nativeSize * 0.8;
-    lines.forEach((line, i) => page.drawText(line, { x: X + x * SOURCE.scale, y: 792 - TOP - (baseline + i * leading) * SOURCE.scale, size, font: this.font, color: BLACK }));
+    const baseline = (physicalHeight - (size + (lines.length - 1) * leading)) / 2 + size * 0.8;
+    lines.forEach((line, i) => page.drawText(line, { x: pageX(page, x), y: pageY(top) - baseline - i * leading, size, font: this.font, color: BLACK }));
+  }
+  /** The pinned source label is 8pt Helvetica, 22.656pt wide. Use its actual
+   * text baseline, not the separate underline or a vertically centered cell. */
+  initials(page: PDFPage, field: string, value: unknown, labelX: number, baselineTop: number) {
+    const text = sanitizeRentalPdfText(value, field); if (!text.trim()) return;
+    const x = pageX(page, labelX) + 22.656 + RENTAL_PDF_FILL_LIMITS.initials.labelGapPoints;
+    const right = pageX(page, 540) - 2;
+    const size = RENTAL_PDF_FILL_LIMITS.fieldFontPoints;
+    if (text.includes("\n") || this.font.widthOfTextAtSize(text, size) > right - x) fail(field, "initials value exceeds the space beside the original Initials label");
+    page.drawText(text, { x, y: pageY(baselineTop), size, font: this.font, color: BLACK });
   }
   wrap(text: string, width: number, size: number, field: string): string[] {
     const lines: string[] = [];
@@ -210,7 +227,7 @@ class Overlay {
   }
   check(page: PDFPage, x: number, top: number, checked: boolean, edge = 8) {
     if (!checked) return; const inset = 1;
-    const point = (px: number, py: number) => ({ x: X + px * SOURCE.scale, y: 792 - TOP - py * SOURCE.scale });
+    const point = (px: number, py: number) => ({ x: pageX(page, px), y: pageY(py) });
     page.drawLine({ start: point(x + inset, top + inset), end: point(x + edge - inset, top + edge - inset), thickness: 0.8, color: BLACK });
     page.drawLine({ start: point(x + inset, top + edge - inset), end: point(x + edge - inset, top + inset), thickness: 0.8, color: BLACK });
   }
@@ -220,17 +237,19 @@ class Overlay {
     if (kind === "renterSignature" && input.samePacketSigning?.renter === false) fail(kind, "signature not authorized for this packet");
     if (kind === "representativeSignature" && input.samePacketSigning?.representative === false) fail(kind, "signature not authorized for this packet");
     const image = await embedGrayImage(this.doc, asset);
-    const fit = image.scaleToFit(width * SOURCE.scale, height * SOURCE.scale);
-    page.drawImage(image, { x: X + x * SOURCE.scale, y: 792 - TOP - (top + height) * SOURCE.scale, ...fit });
+    const fit = image.scaleToFit(width * SCALE_X, height * SCALE_Y);
+    page.drawImage(image, { x: pageX(page, x), y: pageY(top + height), ...fit });
   }
   appendContinuations(input: RentalPacketInput) {
     let page: PDFPage | undefined; let y = 0;
-    const newPage = () => { page = this.doc.addPage([612, 792]); y = 684; header(page, this.font, "RENTAL FIELD CONTINUATION SCHEDULE", input); };
+    const newPage = () => { page = this.doc.addPage([612, 792]); y = 703; header(page, this.font, "RENTAL FIELD CONTINUATION SCHEDULE", input); };
     for (const item of this.continuations) {
-      const lines = this.wrap(item.text, 468, 9, item.field);
-      if (!page || y < 120) newPage();
-      page!.drawText(`Schedule ${item.id} - ${item.field}`, { x: 72, y, size: 9, font: this.font, color: BLACK }); y -= 17;
-      for (const line of lines) { if (y < 84) newPage(); if (this.font.widthOfTextAtSize(line, 9) > 468) fail(item.field, "single word exceeds continuation width"); page!.drawText(line, { x: 72, y, size: 9, font: this.font, color: BLACK }); y -= 12; } y -= 14;
+      const lines = this.wrap(item.text, FRAME_WIDTH, 10, item.field);
+      if (!page || y < 80) newPage();
+      const label = `Schedule ${item.id} - ${item.field}`;
+      if (this.font.widthOfTextAtSize(label, 10) > FRAME_WIDTH) fail(item.field, "schedule heading exceeds physical margins");
+      page!.drawText(label, { x: MARGIN, y, size: 10, font: this.font, color: BLACK }); y -= 17;
+      for (const line of lines) { if (y < MARGIN + 10) newPage(); if (this.font.widthOfTextAtSize(line, 10) > FRAME_WIDTH) fail(item.field, "single word exceeds continuation width"); page!.drawText(line, { x: MARGIN, y, size: 10, font: this.font, color: BLACK }); y -= 14; } y -= 14;
     }
   }
 }
@@ -273,11 +292,11 @@ async function embedGrayImage(doc: PDFDocument, asset: RentalPdfAsset): Promise<
   } finally { copy.fill(0); pixels?.data.fill(0); encoded?.fill(0); canvas.width = 1; canvas.height = 1; }
 }
 function header(page: PDFPage, font: PDFFont, title: string, input: RentalPacketInput) {
-  page.drawText(title, { x: 72, y: 710, size: 12, font, color: BLACK });
+  page.drawText(title, { x: MARGIN, y: 746, size: 12, font, color: BLACK });
   const subtitle = sanitizeRentalPdfText(`Rental ${input.rentalId} | Packet version ${input.version} | ${RENTAL_PDF_FORM_VERSION}`, "header");
-  if (font.widthOfTextAtSize(subtitle, 9) > 468) fail("version", "header exceeds physical margins");
-  page.drawText(subtitle, { x: 72, y: 693, size: 9, font, color: BLACK });
-  page.drawLine({ start: { x: 72, y: 685 }, end: { x: 540, y: 685 }, thickness: 0.6, color: BLACK });
+  if (font.widthOfTextAtSize(subtitle, 10) > FRAME_WIDTH) fail("version", "header exceeds physical margins");
+  page.drawText(subtitle, { x: MARGIN, y: 729, size: 10, font, color: BLACK });
+  page.drawLine({ start: { x: MARGIN, y: 720 }, end: { x: 612 - MARGIN, y: 720 }, thickness: 0.6, color: BLACK });
 }
 /** Remove only the exact approved BT/ET blocks, not merely hide searchable
  * contradictory text under white rectangles. SHA256 + expected block counts
@@ -295,6 +314,33 @@ function removeAuthorizedText(page: PDFPage, kind: "registration" | "signature")
   if (removed !== (kind === "registration" ? 1 : 4)) fail("authorizedRevision", "approved source text-zone count mismatch");
   page.node.set(PDFName.of("Contents"), page.doc.context.register(page.doc.context.flateStream(Buffer.from(text,"latin1"))));
 }
+/** Move source origins/table paths into the wider Letter frame, but counteract
+ * the anisotropic frame transform in EACH text matrix and logo matrix. This is
+ * positioning/re-spacing only: original glyph strings, TJ kerning, font sizes,
+ * clauses, footers and resources are retained. Checksum validation happens first.
+ * The only source Tm overrides are unit matrices for the original checkboxes. */
+function preserveSourceTypography(page: PDFPage) {
+  const contents = page.node.Contents();
+  const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+  const number = "(-?\\d+(?:\\.\\d+)?)";
+  const td = new RegExp(`${number} ${number} Td`);
+  const tm = new RegExp(`1 0 0 1 ${number} ${number} Tm`, "g");
+  let blocks = 0;
+  const text = refs.map(ref => Buffer.from(decodePDFRawStream(page.doc.context.lookup(ref) as PDFRawStream).decode()).toString("latin1")).join("\n").replace(/BT\s[\s\S]*?ET/g, block => {
+    if ((block.match(/\bTd\b/g) ?? []).length !== 1 || !td.test(block)) fail("template", "unexpected original text positioning");
+    if ((block.match(/\bTm\b/g) ?? []).length !== (block.match(tm) ?? []).length) fail("template", "unexpected original text matrix");
+    blocks++;
+    const compensated = block.replace(tm, (_, x, y) => `${1 / SCALE_X} 0 0 ${1 / SCALE_Y} ${x} ${y} Tm`);
+    return compensated.replace(td, (operator, x, y) => `${operator}\n${1 / SCALE_X} 0 0 ${1 / SCALE_Y} ${x} ${y} Tm`);
+  }).replace(/q (127\.5) 0 0 (43\.5) (65|72) ([\d.]+) cm\n(\/Im\d+ Do Q)/g,
+    // RP0's source logo sits five points higher than the packet's logos. Move
+    // this image and its clip down 4 physical points; never crop the logo.
+    (_, w, h, x, y, draw) => `q ${Number(w) / SCALE_X} 0 0 ${Number(h) / SCALE_Y} ${x} ${Number(y) - (x === "65" ? 4 / SCALE_Y : 0)} cm\n${draw}`)
+    .replace(/(65|72) (760\.389|765\.389) 127\.5 43\.5 re/g,
+      (_, x, y) => `${x} ${Number(y) - (x === "65" ? 4 / SCALE_Y : 0)} ${127.5 / SCALE_X} ${43.5 / SCALE_Y} re`);
+  if (!blocks) fail("template", "missing original text blocks");
+  page.node.set(PDFName.of("Contents"), page.doc.context.register(page.doc.context.flateStream(Buffer.from(text, "latin1"))));
+}
 async function sourcePages(input: RentalPacketInput, returnOnly: boolean) {
   validateInput(input);
   const templates = input.templates ?? await (input.templateLoader ?? loadRentalPdfTemplates)();
@@ -304,15 +350,19 @@ async function sourcePages(input: RentalPacketInput, returnOnly: boolean) {
   const doc = await PDFDocument.create(); doc.setTitle(returnOnly ? "Rental return packet" : "Claimant rental handoff packet"); doc.setAuthor("Metrocars Leasing Corp.");
   if (!returnOnly) { removeAuthorizedText(vehicle.getPage(0), "registration"); removeAuthorizedText(packet.getPage(5), "signature"); }
   const source = returnOnly ? [packet.getPage(7)] : [vehicle.getPage(0), ...packet.getPages()];
-  // Copy original content streams/resources rather than rasterizing or rewriting.
-  // Contents remain searchable; original signature rules remain on their pages.
+  // Modify new packet copies only. No originals/cache/stored signed PDFs change.
+  // Text stays searchable; original signature rules remain on their pages.
   for (const src of source) {
     const [page] = await doc.copyPages(src.doc, [src.doc.getPages().indexOf(src)]); doc.addPage(page);
     if (Math.abs(page.getWidth() - SOURCE.width) > 0.1 || Math.abs(page.getHeight() - SOURCE.height) > 0.1) fail("templates", "unexpected original page geometry");
+    const left = src.doc === vehicle ? 64.5 : SOURCE.left;
+    sourceLeft.set(page, left); preserveSourceTypography(page);
     page.setSize(612, 792); page.setCropBox(0, 0, 612, 792);
     // wrapContentStreams only handles arrays; originals have a single stream.
     page.node.normalize();
-    if (!page.node.wrapContentStreams(doc.context.register(doc.context.contentStream([pushGraphicsState(), concatTransformationMatrix(SOURCE.scale, 0, 0, SOURCE.scale, X, Y)])), doc.context.register(doc.context.contentStream([popGraphicsState()])))) fail("template", "unable to transform source content");
+    const x = MARGIN - left * SCALE_X;
+    const y = 792 - MARGIN - (SOURCE.height - SOURCE.top) * SCALE_Y;
+    if (!page.node.wrapContentStreams(doc.context.register(doc.context.contentStream([pushGraphicsState(), concatTransformationMatrix(SCALE_X, 0, 0, SCALE_Y, x, y)])), doc.context.register(doc.context.contentStream([popGraphicsState()])))) fail("template", "unable to transform source content");
     // A copied original must not carry stale metadata annotations/forms into the generated packet.
     page.node.delete(PDFName.of("Annots"));
   }
@@ -378,10 +428,11 @@ export async function buildRentalPacket(input: RentalPacketInput): Promise<Buffe
     ["location",input.location.name,"fuel",d.fuelOut],["pickup",startTime,"expected",expected],
     ["insurer",d.insurance.insurer,"policy",d.insurance.policy],["verifiedWith",d.insurance.contact,"verifiedByDate",[d.insurance.verifiedBy,date(d.insurance.verifiedAt,zone)].filter(Boolean).join(" / ")],
   ];rows.forEach(([lf,lv,rf,rv],n)=>grid(o,p[1],n,128.85,`RP1.${lf}`,lv,`RP1.${rf}`,rv,20,true,rf!=="VIN"));
-  const electionTop={A:552,B:625.15,Decline:698.3}; const initialsLine={A:615.6,B:688.8,Decline:777.5};
+  const electionTop={A:552,B:625.15,Decline:698.3};
+  const electionBaseline={A:SOURCE.height-232.489,B:SOURCE.height-159.339,Decline:SOURCE.height-70.589};
   o.check(p[1],72.1,electionTop[d.election as "A"|"B"|"Decline"],true,10);
-  o.cell(p[1],"RP1.electionInitials",d.initials.election,462,initialsLine[d.election as "A"|"B"|"Decline"]-16,75,14);
-  for(const [page,key,line,applies] of [[p[2],"5",528.7,d.election!=="Decline"],[p[2],"6",663,d.election==="B"],[p[2],"7",797.3,true],[p[3],"8",159,true],[p[3],"9",426.8,true],[p[3],"10",639.6,true]] as const) if(applies)o.cell(page,`RP1.section${key}Initials`,d.initials[key],462,line-16,75,14);
+  o.initials(p[1],"RP1.electionInitials",d.initials.election,460.1,electionBaseline[d.election as "A"|"B"|"Decline"]);
+  for(const [page,key,labelX,sourceY,applies] of [[p[2],"5",460.1,319.439,d.election!=="Decline"],[p[2],"6",460.1,185.139,d.election==="B"],[p[2],"7",460.1,50.839,true],[p[3],"8",460.1,689.139,true],[p[3],"9",460.35,421.339,true],[p[3],"10",460.1,208.539,true]] as const) if(applies)o.initials(page,`RP1.section${key}Initials`,d.initials[key],labelX,SOURCE.height-sourceY);
   d.additionalDrivers.forEach((a,n)=>{
     const top=355.35+n*26;o.cell(p[3],`RP1.additionalDriver${n+1}.name`,a.name,76,top+1,152,24,{lines:2,continuation:true});
     o.cell(p[3],`RP1.additionalDriver${n+1}.licenseState`,[a.license,a.state].filter(Boolean).join(" / "),236,top+1,127,24,{lines:2,continuation:true});
@@ -452,13 +503,14 @@ async function appendAssets(o:Overlay,input:RentalPacketInput,returnOnly:boolean
   for(const asset of selected) {
     const page=o.doc.addPage([612,792]);header(page,o.font,asset.kind==="signedPayment"?"SIGNED AUTHORIZATION APPENDIX":"RENTAL EVIDENCE APPENDIX",input);
     const label=`Asset ${asset.id} | ${asset.kind}${asset.createdAt!==undefined?` | ${date(asset.createdAt,input.location.timezone,true)}`:""}`;
-    page.drawText(label,{x:72,y:667,size:9,font:o.font,color:BLACK});
+    if(o.font.widthOfTextAtSize(label,10)>FRAME_WIDTH)fail("asset.label","exceeds physical margins");
+    page.drawText(label,{x:MARGIN,y:702,size:10,font:o.font,color:BLACK});
     if(asset.kind==="signedPayment") {
-      page.drawText("Retained-original evidence only. This scan is not an electronic authorization.",{x:72,y:652,size:9,font:o.font,color:BLACK});
-      page.drawText("The original ink form must remain retained; RP2 signature rules are unchanged.",{x:72,y:639,size:9,font:o.font,color:BLACK});
+      page.drawText("Retained-original evidence only. This scan is not an electronic authorization.",{x:MARGIN,y:685,size:10,font:o.font,color:BLACK});
+      page.drawText("The original ink form must remain retained; RP2 signature rules are unchanged.",{x:MARGIN,y:670,size:10,font:o.font,color:BLACK});
     }
-    const image=await embedGrayImage(o.doc,asset);const size=image.scaleToFit(468,asset.kind==="signedPayment"?551:570);
-    page.drawImage(image,{x:72+(468-size.width)/2,y:72+(asset.kind==="signedPayment"?551:570)-size.height,...size});
+    const image=await embedGrayImage(o.doc,asset);const imageHeight=asset.kind==="signedPayment"?620:650;const size=image.scaleToFit(FRAME_WIDTH,imageHeight);
+    page.drawImage(image,{x:MARGIN+(FRAME_WIDTH-size.width)/2,y:MARGIN+imageHeight-size.height,...size});
   }
 }
 function chargesStatement(o:Overlay,input:RentalReturnPacketInput) {
@@ -470,18 +522,19 @@ function chargesStatement(o:Overlay,input:RentalReturnPacketInput) {
     ["Cleaning / deodorizing (entered actual cost)",money(c.cleaning)],["Renter-caused roadside service (entered cost)",money(c.roadside)],[`Loss of use (${input.returnData.lossOfUseResponsible?input.returnData.lossOfUseDays:0} responsible day(s))`,money(c.lossOfUse)],
     ["Damage automatically charged",money(c.damageAutoCharged)],["TOTAL CALCULATED CHARGES",money(c.total)],["Security hold (not included in total)",money(c.securityHold)],
     ["Charges settled (staff record)",input.returnData.chargesSettled?"Yes":"No"],
-  ];let y=662;
+  ];let y=697;
   for(const [label,value] of rows) {
-    const lines=o.wrap(sanitizeRentalPdfText(value,label),205,9,label);if(lines.length>2||lines.some(l=>o.font.widthOfTextAtSize(l,9)>205))fail(label,"charges statement value exceeds two lines");
-    page.drawText(label,{x:72,y,size:9,font:o.font,color:BLACK});lines.forEach((l,n)=>page.drawText(l,{x:335,y:y-n*11,size:9,font:o.font,color:BLACK}));
-    y-=lines.length>1?30:23;
+    const lines=o.wrap(sanitizeRentalPdfText(value,label),236,10,label);if(lines.length>2||lines.some(l=>o.font.widthOfTextAtSize(l,10)>236))fail(label,"charges statement value exceeds two lines");
+    if(o.font.widthOfTextAtSize(label,10)>290)fail(label,"charges statement label exceeds physical column");
+    page.drawText(label,{x:MARGIN,y,size:10,font:o.font,color:BLACK});lines.forEach((l,n)=>page.drawText(l,{x:340,y:y-n*12,size:10,font:o.font,color:BLACK}));
+    y-=lines.length>1?32:24;
   }
   const notes=[
     input.returnData.chargesSettled?"Hold eligible for release after settlement; release not confirmed by this PDF.":"Hold remains pending settlement; no release is confirmed by this PDF.",
     "Bank timing controls availability after release. No payment or hold action is performed here.",
     "Damage is not automatically charged. Any claim requires notice and its stated basis under RP1/RP2.",
   ];y-=10;
-  for(const text of notes)for(const line of o.wrap(text,468,9,"charges.notes")){page.drawText(line,{x:72,y,size:9,font:o.font,color:BLACK});y-=13;}
+  for(const text of notes)for(const line of o.wrap(text,FRAME_WIDTH,10,"charges.notes")){if(y<MARGIN+10)fail("charges.notes","exceeds physical page");page.drawText(line,{x:MARGIN,y,size:10,font:o.font,color:BLACK});y-=14;}
 }
 export async function buildRentalReturnPacket(input:RentalReturnPacketInput):Promise<Buffer> {
   rentalReturnSchema.parse(input.returnData);validateTextTree(input.returnData,"returnData");

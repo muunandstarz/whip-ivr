@@ -114,17 +114,57 @@ describe("rental service security and lifecycle", () => {
     const result = await service.complete(shop, { ...created, requestId: "failure-test-1" }); expect(result.emailStatus).toBe("failed"); expect(repo.rows.records[0]).toMatchObject({ status: "Out", activePacketId: result.packetId }); expect(repo.rows.emails[0].status).toBe("failed");
     deps.sendEmail = vi.fn(async () => ({ providerId: "retry-confirmed" })); expect(await service.resend(shop, { packetId: result.packetId, requestId: "failure-retry-1" })).toMatchObject({ status: "sent" });
   });
-  it("derives sender per actor and sends to renter plus the signed claim-specific recipient", async () => {
-    deps.senderStatus = vi.fn(async key => ({ connected: key === shop.key, configured: true, email: key === shop.key ? "staff@example.test" : null }));
-    expect((await service.session(shop)).settings?.senderEmail).toBe("staff@example.test"); expect((await service.session(admin)).settings?.emailProviderReady).toBe(false);
-    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "gmail-recipients-1" }); expect(result.emailStatus).toBe("sent");
-    expect(deps.sendEmail).toHaveBeenCalledWith(expect.objectContaining({ actorKey: shop.key, sender: "staff@example.test", recipient: "renter@example.test", claimEmail: "claim@example.test" }));
+  it("uses the shared sender for every actor and only the signed renter plus claim-specific recipient", async () => {
+    deps.senderStatus = vi.fn(async () => ({ connected: true, configured: true, email: "shared@example.test", provider: "mailgun" as const }));
+    expect((await service.session(shop)).settings?.senderEmail).toBe("shared@example.test"); expect((await service.session(admin)).sender).toEqual((await service.session(shop)).sender);
+    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "mailgun-recipients-1" }); expect(result.emailStatus).toBe("sent");
+    expect(deps.sendEmail).toHaveBeenCalledWith(expect.objectContaining({ actorKey: shop.key, sender: "shared@example.test", recipient: "renter@example.test", claimEmail: "claim@example.test" }));
     expect(decryptRental(repo.rows.emails[0].recipient)).toEqual({ renterEmail: "renter@example.test", claimEmail: "claim@example.test" });
   });
-  it("blocks blind resend after Gmail delivery is uncertain even with a new request key", async () => {
+  it("blocks blind resend after Mailgun delivery is uncertain even with a new request key", async () => {
     deps.sendEmail = vi.fn(async () => { throw Object.assign(new Error("uncertain"), { deliveryUncertain: true }); });
-    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "gmail-uncertain-1" }); expect(result.emailStatus).toBe("uncertain");
-    expect(await service.resend(shop, { packetId: result.packetId, requestId: "gmail-uncertain-2" })).toEqual({ status: "uncertain" }); expect(deps.sendEmail).toHaveBeenCalledTimes(1); expect(repo.rows.emails).toHaveLength(1);
+    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "mailgun-uncertain-1" }); expect(result.emailStatus).toBe("uncertain");
+    expect(await service.resend(shop, { packetId: result.packetId, requestId: "mailgun-uncertain-2" })).toEqual({ status: "uncertain" }); expect(deps.sendEmail).toHaveBeenCalledTimes(1); expect(repo.rows.emails).toHaveLength(1);
+  });
+  it("retains immutable recipient selection even if the editable record changes", async () => {
+    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "immutable-email-1" });
+    repo.rows.records[0].payload = encryptRental({ ...draftReady(), email: "replacement@example.test", claimEmail: "other-claim@example.test" });
+    await service.resend(admin, { packetId: result.packetId, requestId: "immutable-email-2" });
+    expect(deps.sendEmail).toHaveBeenLastCalledWith(expect.objectContaining({ recipient: "renter@example.test", claimEmail: "claim@example.test" }));
+  });
+  it("reserves one pending POST despite concurrent actors and different request IDs", async () => {
+    const created = await createReady(); const issued = await service.complete(shop, { ...created, requestId: "concurrent-email-initial" });
+    let release!: (value: { providerId: string }) => void;
+    deps.sendEmail = vi.fn(() => new Promise(resolve => { release = resolve; }));
+    const first = service.resend(shop, { packetId: issued.packetId, requestId: "concurrent-email-A" });
+    await vi.waitFor(() => expect(deps.sendEmail).toHaveBeenCalledTimes(1));
+    expect(await service.resend(admin, { packetId: issued.packetId, requestId: "concurrent-email-B" })).toEqual({ status: "pending" });
+    release({ providerId: "single-confirmed" }); expect(await first).toEqual({ status: "sent", providerId: "single-confirmed" });
+    expect(deps.sendEmail).toHaveBeenCalledTimes(1); expect(repo.rows.emails).toHaveLength(2);
+  });
+  it("marks a missing acceptance ID uncertain and blocks the next request", async () => {
+    deps.sendEmail = vi.fn(async () => ({ providerId: "" }));
+    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "missing-confirmation-1" });
+    expect(result.emailStatus).toBe("uncertain");
+    expect(await service.resend(admin, { packetId: result.packetId, requestId: "missing-confirmation-2" })).toEqual({ status: "uncertain" });
+    expect(deps.sendEmail).toHaveBeenCalledTimes(1);
+  });
+  it("keeps provider acceptance uncertain when post-send DB persistence fails and wipes PDF bytes", async () => {
+    const update = repo.update.bind(repo);
+    repo.update = async (table, query, values) => { if (table === "emails" && values.status === "sent") throw new Error("DB write failed"); return update(table, query, values); };
+    const bytes = Buffer.from("%PDF-private-test"); deps.read = vi.fn(async () => bytes);
+    const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "persist-failure-1" });
+    expect(result.emailStatus).toBe("uncertain"); expect(bytes.every(b => b === 0)).toBe(true);
+    expect(await service.resend(admin, { packetId: result.packetId, requestId: "persist-failure-2" })).toEqual({ status: "uncertain" });
+    expect(deps.sendEmail).toHaveBeenCalledTimes(1);
+  });
+  it("rejects invalid immutable recipients and cross-location resend before transport", async () => {
+    const created = await createReady(); const issued = await service.complete(shop, { ...created, requestId: "address-test-initial" });
+    vi.mocked(deps.sendEmail).mockClear();
+    await expect(service.resend({ ...shop, locationIds: [2] }, { packetId: issued.packetId, requestId: "outsider-email" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const snapshot = decryptRental<any>(repo.rows.packets[0].snapshot); snapshot.draft.email = "renter@example.test\r\nBcc:evil@example.test"; repo.rows.packets[0].snapshot = encryptRental(snapshot);
+    await expect(service.resend(admin, { packetId: issued.packetId, requestId: "invalid-snapshot-email" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
   it("preserves original assets and requires new signatures for a replacement version", async () => {
     const created = await createReady(); await service.complete(shop, { ...created, requestId: "version-test-1" }); const original = structuredClone(repo.rows.packets[0]);
@@ -151,6 +191,52 @@ describe("rental service security and lifecycle", () => {
   it("rejects unapproved background PDF prices and client-forged provider readiness", async () => {
     await expect(service.saveSettings(admin, { ...readySettings, rates: { ...DEFAULT_RENTAL_RATES, optionA: 99 } })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" }); deps.providerReady = () => false;
     const settings = await service.saveSettings(admin, { ...readySettings, emailProviderReady: true }); expect(settings.emailProviderReady).toBe(false); expect((await service.session(shop)).launchGaps).not.toEqual([]);
+  });
+});
+
+describe("shared Mailgun sender configuration API", () => {
+  const config = { domain: "mg.example.test", fromEmail: "shared@example.test", apiKey: "mock-secret-never-live", region: "US" as const };
+  function verifier() {
+    deps.verifySharedSender = vi.fn(async value => ({ config: value, status: { configured: true, connected: true, email: value.fromEmail, provider: "mailgun" as const } }));
+  }
+  it("stores only encrypted credentials in separate numeric settings row and returns no key", async () => {
+    verifier(); const launchRow = structuredClone(repo.rows.settings[0]);
+    const response = await service.saveSharedSender(admin, config);
+    expect(response).toEqual({ success: true, sender: { configured: true, connected: true, email: config.fromEmail, provider: "mailgun" } });
+    const row = repo.rows.settings.find(r => r.id === 2);
+    expect(row.payload).not.toContain(config.apiKey);
+    expect(decryptRental(row.payload)).toEqual({ key: "mailgun_sender", formatVersion: 1, ...config });
+    expect(repo.rows.settings[0]).toEqual(launchRow);
+    expect(JSON.stringify(response)).not.toContain(config.apiKey);
+    expect(JSON.stringify(decryptRental(repo.rows.audit.at(-1).detail))).not.toContain(config.apiKey);
+    expect(JSON.stringify(await service.session(admin))).not.toContain(config.apiKey);
+    await service.saveSharedSender(admin, { ...config, apiKey: "rotated-test-key" });
+    expect(repo.rows.settings.filter(r => r.id === 2)).toHaveLength(1); expect(repo.rows.settings.find(r => r.id === 2).version).toBe(2);
+    expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+  it("rejects Claims/shop before verification and failed verification before saving without key leakage", async () => {
+    verifier();
+    for (const actor of [shop, { ...admin, role: "claims" as const }]) await expect(service.saveSharedSender(actor, config)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(deps.verifySharedSender).not.toHaveBeenCalled();
+    deps.verifySharedSender = vi.fn(async () => { throw new Error(config.apiKey); });
+    await expect(service.saveSharedSender(admin, config)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(repo.rows.settings).toHaveLength(1); expect(repo.rows.audit).toHaveLength(0); expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+  it("enforces same-origin, authenticated admin and strict mutation schema", async () => {
+    verifier(); const router = createRentalHandoffRouter(service);
+    await expect(router.createCaller(context().ctx).saveSharedSender(config)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(router.createCaller(context({ id: 2, role: "user" }).ctx).saveSharedSender(config)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(router.createCaller(context({ id: 1, role: "admin" }, "", "https://evil.test").ctx).saveSharedSender(config)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(router.createCaller(context({ id: 1, role: "admin" }).ctx).saveSharedSender({ ...config, extraRecipient: "evil@example.test" } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(deps.verifySharedSender).not.toHaveBeenCalled();
+    expect(await router.createCaller(context({ id: 1, role: "admin" }).ctx).saveSharedSender(config)).toMatchObject({ success: true });
+  });
+  it("deprecates Gmail connect/disconnect without OAuth or per-actor shared account mutation", async () => {
+    const router = createRentalHandoffRouter(service), caller = router.createCaller(context({ id: 1, role: "admin" }).ctx);
+    await expect(caller.connectSender()).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(caller.disconnectSender()).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(router.createCaller(context().ctx).connectSender()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(repo.rows.settings).toHaveLength(1); expect(repo.rows.audit).toHaveLength(0);
   });
 });
 

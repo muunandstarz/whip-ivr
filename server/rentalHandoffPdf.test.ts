@@ -45,6 +45,33 @@ async function rawPage(page: any) {
   return refs.map((ref: any) => Buffer.from(decodePDFRawStream(page.doc.context.lookup(ref) as PDFRawStream).decode()).toString("latin1")).join("\n");
 }
 function saveSample(name: string, bytes: Buffer) { if (outputDirectory) { mkdirSync(outputDirectory, { recursive: true }); writeFileSync(join(outputDirectory, name), bytes); } }
+type WordBox = { text: string; left: number; top: number; right: number; bottom: number };
+function wordBoxes(bytes: Buffer, name: string): WordBox[][] {
+  const path = join(temp, `${name}-geometry.pdf`); writeFileSync(path, bytes);
+  const xml = execFileSync("pdftotext", ["-bbox", path, "-"], { encoding: "utf8" });
+  return [...xml.matchAll(/<page\b[^>]*>([\s\S]*?)<\/page>/g)].map(page =>
+    [...page[1].matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)].map(w =>
+      ({ text: w[5], left: Number(w[1]), top: Number(w[2]), right: Number(w[3]), bottom: Number(w[4]) })));
+}
+function expectPrintFrame(pages: WordBox[][]) {
+  for (const [n, words] of pages.entries()) {
+    expect(words.length, `page ${n + 1} has searchable text`).toBeGreaterThan(0);
+    // Test ACTUAL final content, not just the media box or outer cm operator.
+    expect(Math.min(...words.map(w => w.left)), `page ${n + 1} left edge`).toBeGreaterThanOrEqual(36);
+    expect(Math.min(...words.map(w => w.left)), `page ${n + 1} uses half-inch left frame`).toBeLessThan(37);
+    expect(Math.min(...words.map(w => w.top)), `page ${n + 1} top edge`).toBeGreaterThanOrEqual(36);
+    expect(Math.max(...words.map(w => w.right)), `page ${n + 1} right edge`).toBeLessThanOrEqual(576);
+    expect(Math.max(...words.map(w => w.bottom)), `page ${n + 1} bottom edge`).toBeLessThanOrEqual(756);
+  }
+}
+function textPayloads(stream: string) {
+  // Coordinates may change; every original glyph string, font size and TJ
+  // kerning operand must remain byte-for-byte, except the five approved blocks.
+  return (stream.match(/BT\s[\s\S]*?ET/g) ?? []).map(block => block
+    .replace(/[\d.-]+ [\d.-]+ Td/g, "")
+    .replace(/[\d.-]+ [\d.-]+ [\d.-]+ [\d.-]+ [\d.-]+ [\d.-]+ Tm/g, "")
+    .replace(/\s+/g, " ").trim());
+}
 
 describe("rental PDF input text validation", () => {
   it("sanitizes NUL but rejects unsupported Unicode and controls visibly", () => {
@@ -54,7 +81,8 @@ describe("rental PDF input text validation", () => {
     expect(sanitizeRentalPdfText("Renée — Example")).toBe("Renée — Example");
   });
   it("exposes all measurable limits and the continuation policy", () => {
-    expect(RENTAL_PDF_FILL_LIMITS.margin).toBe(72); expect(RENTAL_PDF_FILL_LIMITS.fieldFontPoints).toBe(9);
+    expect(RENTAL_PDF_FILL_LIMITS.margin).toBe(36); expect(RENTAL_PDF_FILL_LIMITS.fieldFontPoints).toBe(10);
+    expect(RENTAL_PDF_FILL_LIMITS.initials.labelGapPoints).toBe(4);
     expect(RENTAL_PDF_FILL_LIMITS.overflowPolicy).toMatch(/throw/);
   });
   it("provides all 13 original RP1 sections and the exact seven-row coverage chart", () => {
@@ -87,12 +115,20 @@ describe.skipIf(!originalsAvailable)("rental PDF exact-original integration", ()
     expect(normalize(pages[6])).toContain(RENTAL_PDF_AUTHORIZED_REVISIONS.signatureInstructions);
     expect(pages[6]).not.toContain("Electronic, typed, stamped");
     expect(pages[2]).not.toContain("NOTSIX");
-    const originalStreams = await rawPage(doc.getPage(1)); expect(originalStreams).toContain("0.839378");
+    const originalStreams = await rawPage(doc.getPage(1));
+    expect(originalStreams).not.toContain("0.839378");
+    // Counter-transform each text matrix; source 10.5pt body is neither stretched
+    // to fake narrow margins nor shrunk to the former 8.81pt print typography.
+    expect(originalStreams).toContain("/F1 10.5 Tf");
+    const sourceMatrix = originalStreams.match(/([\d.]+) 0 0 ([\d.]+) 72\.1 [\d.]+ Tm/);
+    expect(sourceMatrix).not.toBeNull();
+    expect(Number(sourceMatrix![1])).toBeCloseTo(469 / 540, 12);
+    expect(Number(sourceMatrix![2])).toBeCloseTo(773 / 720, 12);
     const path = join(temp,"margins.pdf"); writeFileSync(path,bytes);
     const bbox = execFileSync("pdftotext",["-bbox",path,"-"],{encoding:"utf8"});
     for(const word of bbox.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)"/g)) {
-      expect(Number(word[1])).toBeGreaterThanOrEqual(72);expect(Number(word[2])).toBeGreaterThanOrEqual(72);
-      expect(Number(word[3])).toBeLessThanOrEqual(540);expect(Number(word[4])).toBeLessThanOrEqual(720);
+      expect(Number(word[1])).toBeGreaterThanOrEqual(36);expect(Number(word[2])).toBeGreaterThanOrEqual(36);
+      expect(Number(word[3])).toBeLessThanOrEqual(576);expect(Number(word[4])).toBeLessThanOrEqual(756);
     }
   });
   it("fetches the deployed keys through signed storage URLs, never local source paths", async () => {
@@ -138,11 +174,76 @@ describe.skipIf(!originalsAvailable)("rental PDF exact-original integration", ()
   });
   it("places initials only on the elected option and applicable Sections 5/6",async()=>{
     const b=fixture();b.draft.election="B";b.draft.insurance.level="none";b.draft.insurance.noOtherLiability=true;b.draft.initials["6"]="SIX";
-    const bt=extract(await buildRentalPacket(b),"option-b");expect(bt[2]).toContain("SIX");
+    const bb=await buildRentalPacket(b);saveSample("synthetic-option-b.pdf",bb);const bt=extract(bb,"option-b");expect(bt[2]).toContain("SIX");
     const decline=fixture();decline.draft.election="Decline";decline.draft.insurance.level="full";decline.draft.insurance.verified=true;
     Object.assign(decline.draft.insurance.checks,{active:true,liability:true,comprehensive:true,notRestricted:true});decline.draft.initials["5"]="FIVE";decline.draft.initials["6"]="SIX";
-    const dt=extract(await buildRentalPacket(decline),"decline");expect(dt[2]).not.toContain("FIVE");expect(dt[2]).not.toContain("SIX");
+    const db=await buildRentalPacket(decline);saveSample("synthetic-decline.pdf",db);const dt=extract(db,"decline");expect(dt[2]).not.toContain("FIVE");expect(dt[2]).not.toContain("SIX");
     expect(dt[1]).toContain("AE");
+  });
+  it("prints all elected/applicable initials four points beside the original label on its exact baseline", async () => {
+    for (const option of ["A", "B", "Decline"] as const) {
+      const input = fixture(); input.draft.election = option; input.draft.initials["6"] = "AE";
+      if (option === "B") { input.draft.insurance.level = "none"; input.draft.insurance.noOtherLiability = true; }
+      if (option === "Decline") {
+        input.draft.insurance.level = "full"; input.draft.insurance.verified = true;
+        Object.assign(input.draft.insurance.checks, { active: true, liability: true, comprehensive: true, notRestricted: true });
+      }
+      const boxes = wordBoxes(await buildRentalPacket(input), `initials-${option}`);
+      const applicable = [[option === "A" ? 0 : option === "B" ? 1 : 2], option === "A" ? [0, 2] : option === "B" ? [0, 1, 2] : [2], [0, 1, 2]];
+      for (const [n, indices] of applicable.entries()) {
+        const labels = boxes[n + 1].filter(w => w.text === "Initials").sort((a, b) => a.top - b.top);
+        const initials = boxes[n + 1].filter(w => w.text === "AE");
+        expect(labels).toHaveLength(3); expect(initials).toHaveLength(indices.length);
+        for (const index of indices) {
+          const label = labels[index]; const value = initials.find(w => Math.abs(w.top - label.top) < 1);
+          expect(value, `${option} page ${n + 2} label ${index + 1}`).toBeDefined();
+          expect(value!.left - label.right).toBeCloseTo(4, 3);
+          // pdftotext: source Helvetica 8pt ascent 7.24; native Helvetica 10pt ascent 7.18.
+          expect(value!.top + 7.18).toBeCloseTo(label.top + 7.24, 3);
+        }
+      }
+    }
+  });
+  it("retains every original legal glyph/font payload, never mutates templates, and uses the frame on pickup/return/evidence pages", async () => {
+    const input = fixture(); const pinnedPacket = Buffer.from(input.templates!.packet); const pinnedVehicle = Buffer.from(input.templates!.vehicleInformation);
+    const original = await PDFDocument.load(pinnedPacket); const vehicle = await PDFDocument.load(pinnedVehicle);
+    input.assets = [{ id: 1, kind: "front", bytes: image() }, { id: 2, kind: "returnFront", bytes: image() }];
+    const pickup = await buildRentalPacket(input); saveSample("synthetic-pickup-evidence.pdf", pickup);
+    const output = await PDFDocument.load(pickup);
+    for (let n = 0; n < 9; n++) {
+      const originalPayloads = textPayloads(await rawPage(n === 0 ? vehicle.getPage(0) : original.getPage(n - 1)));
+      const outputPayloads = textPayloads(await rawPage(output.getPage(n)));
+      const missing = originalPayloads.filter(payload => !outputPayloads.includes(payload));
+      expect(missing, `page ${n + 1} approved removals only`).toHaveLength(n === 0 ? 1 : n === 6 ? 4 : 0);
+    }
+    expect(Buffer.from(input.templates!.packet)).toEqual(pinnedPacket);
+    expect(Buffer.from(input.templates!.vehicleInformation)).toEqual(pinnedVehicle);
+    expectPrintFrame(wordBoxes(pickup, "pickup-frame"));
+    const returnData = returned(); const charges = calculateRentalCharges(input.draft, returnData, input.rates, input.location.timezone);
+    const returnedBytes = await buildRentalReturnPacket({ ...input, returnData, charges }); saveSample("synthetic-return-evidence.pdf", returnedBytes);
+    expectPrintFrame(wordBoxes(returnedBytes, "return-frame"));
+    // Replay of a new generation cannot have altered any earlier signed packet bytes.
+    expect(textPayloads(await rawPage(output.getPage(8))).slice(0, 74)).toEqual(textPayloads(await rawPage(original.getPage(7))));
+  });
+  it("keeps rendered ink including the RP0 logo, table strokes and footers inside the half-inch frame", async () => {
+    const bytes = await buildRentalPacket(fixture()); const path = join(temp, "ink-frame.pdf"); writeFileSync(path, bytes);
+    const prefix = join(temp, "ink-frame"); execFileSync("pdftoppm", ["-r", "72", "-gray", path, prefix]);
+    const doc = await PDFDocument.load(bytes);
+    for (let n = 1; n <= doc.getPageCount(); n++) {
+      const file = `${prefix}-${String(n).padStart(String(doc.getPageCount()).length, "0")}.pgm`;
+      const pgm = readFileSync(file); const head = pgm.subarray(0, 64).toString("latin1").match(/^P5\s+612\s+792\s+255\n/);
+      expect(head).not.toBeNull(); const pixels = pgm.subarray(head![0].length);
+      let left = 612, right = 0, top = 792, bottom = 0;
+      for (let y = 0; y < 792; y++) for (let x = 0; x < 612; x++) if (pixels[y * 612 + x] < 192) {
+        left = Math.min(left, x); right = Math.max(right, x + 1); top = Math.min(top, y); bottom = Math.max(bottom, y + 1);
+      }
+      // One point of raster rounding tolerance; word geometry above is exact.
+      expect(left, `page ${n} ink left`).toBeGreaterThanOrEqual(35);
+      expect(left, `page ${n} actual half-inch frame`).toBeLessThanOrEqual(37);
+      expect(right, `page ${n} ink right`).toBeLessThanOrEqual(577);
+      expect(top, `page ${n} ink top/logo`).toBeGreaterThanOrEqual(35);
+      expect(bottom, `page ${n} ink bottom/footer`).toBeLessThanOrEqual(757);
+    }
   });
   it("does not distribute license images, bounds assets, or allow ambiguous signer names", async () => {
     const input = fixture(); const baseline = await PDFDocument.load(await buildRentalPacket(input)); input.assets = [{ id: 1, kind: "licenseFront", bytes: image() }, { id: 2, kind: "licenseBack", bytes: image() }];

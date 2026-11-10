@@ -5,22 +5,14 @@ import { TRPCError } from "@trpc/server";
 import { sdk } from "./_core/sdk";
 import { resolveRentalActor } from "./rentalHandoffSecurity";
 import { RentalHandoffService, rentalHandoffService } from "./rentalHandoffService";
-import { finishRentalSender } from "./rentalHandoffGmail";
 import { storageGetSignedUrl } from "./storage";
 
 /** Only a streaming download route; shop auth is intentionally not global middleware. */
 export function registerRentalHandoffApi(app: Express, service: RentalHandoffService = rentalHandoffService) {
-  app.get("/api/rental-handoff/gmail/callback", async (req, res) => {
+  app.get("/api/rental-handoff/gmail/callback", (_req, res) => {
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
-    try {
-      let user = null;
-      try { user = await sdk.authenticateRequest(req); } catch { /* Isolated shop authentication below. */ }
-      const actor = await resolveRentalActor({ req, user }, service.repo, service.deps.now());
-      if (!actor || typeof req.query.code !== "string" || typeof req.query.state !== "string" || req.query.error) throw new Error("Invalid callback");
-      await finishRentalSender(actor, req.query.code, req.query.state);
-      res.redirect(303, "/rental-handoff?gmail=connected");
-    } catch { res.redirect(303, "/rental-handoff?gmail=failed"); }
+    res.status(410).json({ error: "Rental emails now use the shared Mailgun sender. Personal Gmail connections are no longer required." });
   });
   app.get("/api/rental-handoff/files/:type/:id", async (req, res) => {
     const abort = new AbortController();
@@ -30,6 +22,7 @@ export function registerRentalHandoffApi(app: Express, service: RentalHandoffSer
       res.setHeader("Cache-Control", "private, no-store, max-age=0");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Referrer-Policy", "no-referrer");
       res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
       if (!/^[1-9]\d{0,9}$/.test(req.params.id) || !["asset", "packet"].includes(req.params.type)) throw new TRPCError({ code: "NOT_FOUND", message: "Rental file not found." });
       let user = null;
@@ -40,11 +33,11 @@ export function registerRentalHandoffApi(app: Express, service: RentalHandoffSer
       const file = await service.authorizeFile(actor, req.params.type as "asset" | "packet", Number(req.params.id));
       const signedUrl = await storageGetSignedUrl(file.storageKey);
       const upstream = await fetch(signedUrl, { signal: abort.signal, redirect: "error" });
-      const limit = req.params.type === "asset" ? 5 * 1024 * 1024 : 30 * 1024 * 1024;
+      const limit = req.params.type === "asset" ? 10 * 1024 * 1024 : 30 * 1024 * 1024;
       const length = Number(upstream.headers.get("content-length") || 0);
       if (!upstream.ok || !upstream.body || length > limit) throw new TRPCError({ code: "BAD_GATEWAY", message: "Rental file storage is unavailable." });
       res.setHeader("Content-Type", file.mime);
-      res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+      res.setHeader("Content-Disposition", `${req.query.download === "1" ? "attachment" : "inline"}; filename="${file.filename}"`);
       if (length > 0) res.setHeader("Content-Length", length);
       let total = 0;
       const bounded = new Transform({ transform(chunk, _encoding, callback) { total += chunk.length; callback(total > limit ? new Error("Rental file exceeds limit.") : null, chunk); } });

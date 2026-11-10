@@ -2,10 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, inArray, like, or, desc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { PDFDocument } from "pdf-lib";
 import * as tables from "../drizzle/rentalSchema";
 import { getDb } from "./db";
 import { storagePut, storageGetSignedUrl } from "./storage";
-import { rentalSenderStatus, sendRentalPacketGmail, RentalGmailDeliveryUncertainError } from "./rentalHandoffGmail";
+import { rentalSenderStatus, sendRentalPacketMailgun, RentalMailgunDeliveryUncertainError, RENTAL_MAILGUN_MAX_PDF_BYTES, RENTAL_MAILGUN_SETTINGS_ID, RENTAL_MAILGUN_SETTINGS_KEY, verifyRentalSharedSenderConfig, type RentalMailgunSenderStatus, type RentalMailgunSharedConfig } from "./rentalHandoffMailgun";
 import { ASSET_KINDS, DEFAULT_RENTAL_RATES, RENTAL_FORM_VERSION, CONDITION_AREAS, rentalDraftSchema, rentalReturnSchema, handoffMissing, launchMissing, calculateRentalCharges, type RentalActor, type RentalDraft, type RentalReturn, type LaunchSettings, type RentalRates, type RentalVehicle, type RentalLocation } from "../shared/rentalHandoff";
 import { encryptRental, decryptRental, enforceDraftCardSafety, decodeRentalImage, hashPassword, verifyPassword, randomToken, tokenHash } from "./rentalHandoffSecurity";
 
@@ -57,8 +58,9 @@ export interface RentalDependencies {
   buildPickup: (input: RentalPdfInput) => Promise<Buffer>;
   buildReturn: (input: RentalPdfInput & { returnData: RentalReturn; charges: ReturnType<typeof calculateRentalCharges> }) => Promise<Buffer>;
   sendEmail: (input: { actorKey: string; sender: string; recipient: string; claimEmail: string; kind: string; bytes: Buffer; idempotencyKey: string }) => Promise<{ providerId: string }>;
-  senderStatus?: (actorKey: string) => Promise<{ connected: boolean; email: string | null; configured: boolean }>;
+  senderStatus?: (actorKey: string) => Promise<RentalMailgunSenderStatus>;
   providerReady: (sender: string) => boolean;
+  verifySharedSender?: typeof verifyRentalSharedSenderConfig;
 }
 export async function readRentalStorage(key: string, maxBytes = 30 * 1024 * 1024): Promise<Buffer> {
   const url = await storageGetSignedUrl(key);
@@ -69,23 +71,9 @@ export async function readRentalStorage(key: string, maxBytes = 30 * 1024 * 1024
   catch { throw new TRPCError({ code: "BAD_GATEWAY", message: "Rental file could not be read." }); }
   finally { for (const b of chunks) b.fill(0); }
 }
-export function rentalProviderReady(sender: string) {
-  return Boolean(process.env.RENTAL_RESEND_API_KEY && process.env.RENTAL_VERIFIED_SENDER_EMAIL && sender.toLowerCase() === process.env.RENTAL_VERIFIED_SENDER_EMAIL.toLowerCase());
-}
-export async function sendRentalEmail(input: Parameters<RentalDependencies["sendEmail"]>[0]) {
-  if (!rentalProviderReady(input.sender)) throw new Error("Verified rental sender or provider key is not configured.");
-  const isReturn = input.kind === "return";
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST", signal: AbortSignal.timeout(30000), headers: { Authorization: `Bearer ${process.env.RENTAL_RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
-    body: JSON.stringify({ from: `Metrocars Leasing Corp. <${input.sender}>`, to: [input.recipient], subject: isReturn ? "Your Metrocars rental return copy" : "Your Metrocars rental packet", text: `${isReturn ? "Your rental return condition report and charges" : "Your signed rental packet"} are attached. Roadside and towing: (855) 861-9875.`, attachments: [{ filename: isReturn ? "metrocars-rental-return.pdf" : "metrocars-rental-packet.pdf", content: input.bytes.toString("base64") }] }),
-  });
-  const data = await response.json().catch(() => ({})) as { id?: string; message?: string };
-  if (!response.ok || !data.id) throw new Error(`Email provider rejected request (${response.status}).`);
-  return { providerId: data.id };
-}
 export const defaultRentalDependencies: RentalDependencies = {
-  repo: createDrizzleRentalRepository(), now: Date.now, put: storagePut, read: readRentalStorage, senderStatus: rentalSenderStatus, providerReady: () => false,
-  sendEmail: async input => { const sent = await sendRentalPacketGmail({ actorKey: input.actorKey, renterEmail: input.recipient, claimEmail: input.claimEmail, pdf: input.bytes, kind: input.kind === "return" ? "return" : "handoff", requestId: input.idempotencyKey }); return { providerId: sent.providerId }; },
+  repo: createDrizzleRentalRepository(), now: Date.now, put: storagePut, read: readRentalStorage, senderStatus: rentalSenderStatus, providerReady: () => false, verifySharedSender: verifyRentalSharedSenderConfig,
+  sendEmail: async input => { const sent = await sendRentalPacketMailgun({ actorKey: input.actorKey, renterEmail: input.recipient, claimEmail: input.claimEmail, pdf: input.bytes, kind: input.kind === "return" ? "return" : "handoff", requestId: input.idempotencyKey }); return { providerId: sent.providerId }; },
   buildPickup: async input => { const pdf = await import("./rentalHandoffPdf"); return pdf.buildRentalPacket(input as any); },
   buildReturn: async input => { const pdf = await import("./rentalHandoffPdf"); return pdf.buildRentalReturnPacket(input as any); },
 };
@@ -109,20 +97,92 @@ function selectCurrentAssets(assets: RentalRows["assets"][]) {
   // Uploads are append-only; current signatures/photos select the newest item,
   // while old objects stay available to immutable signed snapshots.
   const current = new Map<string, RentalRows["assets"]>();
+  const support = assets.filter(a => isRentalSupport(a.kind));
   const extra = assets.filter(a => a.kind === "extra" || a.kind === "returnExtra");
-  for (const a of assets) if (a.kind !== "extra" && a.kind !== "returnExtra" && (!current.has(a.kind) || current.get(a.kind)!.id < a.id)) current.set(a.kind, a);
+  for (const a of assets) if (!isRentalSupport(a.kind) && a.kind !== "extra" && a.kind !== "returnExtra" && (!current.has(a.kind) || current.get(a.kind)!.id < a.id)) current.set(a.kind, a);
   const selected = [...Array.from(current.values()), ...extra];
   if (selected.length > 48) fail("BAD_REQUEST", "Limit selected packet evidence to 48 images.");
-  return selected;
+  return [...selected, ...support];
+}
+// Only setup accepts an empty inventory selection; persisted drafts always have a real ID.
+export const rentalCreateDraftSchema = rentalDraftSchema.extend({
+  vehicleId: z.union([z.number().int().nonnegative(), z.literal(""), z.null()]).optional().transform(value => typeof value === "number" ? value : 0),
+}).strict();
+export const rentalManualVehicleSchema = z.object({
+  ymm: z.string().trim().min(1).max(120).regex(/^(?:19|20)\d{2}\s+\S+\s+\S.*$/, "Enter the vehicle year, make and model.").regex(/^[^\u0000-\u001f\u007f]+$/),
+  vin: z.string().trim().length(17).regex(/^[A-HJ-NPR-Z0-9]{17}$/i, "VIN must contain 17 valid characters (no I, O or Q).").transform(value => value.toUpperCase()),
+  plate: z.string().trim().min(1).max(30).regex(/^[^\u0000-\u001f\u007f]+$/),
+  lastOdometer: z.number().int().nonnegative().max(2000000).optional(),
+}).strict();
+type RentalCreateDraft = z.input<typeof rentalCreateDraftSchema>;
+type RentalManualVehicle = z.input<typeof rentalManualVehicleSchema>;
+export const RENTAL_SUPPORT_KINDS = ["claimEstimate", "claimPhoto"] as const;
+export const RENTAL_SUPPORT_MAX_BYTES = 10 * 1024 * 1024;
+const isRentalSupport = (kind: string) => (RENTAL_SUPPORT_KINDS as readonly string[]).includes(kind);
+async function decodeRentalSupport(base64: string, kind: typeof RENTAL_SUPPORT_KINDS[number]): Promise<{ bytes: Buffer; mime: string; extension: string }> {
+  if (typeof base64 !== "string" || base64.length > Math.ceil(RENTAL_SUPPORT_MAX_BYTES / 3) * 4 + 64) fail("BAD_REQUEST", "Support files must be no larger than 10 MB.");
+  const match = /^(?:data:(application\/pdf|image\/(?:png|jpeg));base64,)?([A-Za-z0-9+/]*={0,2})$/.exec(base64);
+  if (!match || !match[2] || match[2].length % 4 !== 0) return fail("BAD_REQUEST", "Upload a PDF estimate or a PNG/JPEG vehicle photo.");
+  const bytes = Buffer.from(match[2], "base64");
+  try {
+    if (!bytes.length || bytes.length > RENTAL_SUPPORT_MAX_BYTES || bytes.toString("base64") !== match[2]) fail("BAD_REQUEST", "Invalid support file encoding or size.");
+    const pdf = bytes.subarray(0, 5).toString("ascii") === "%PDF-";
+    const png = bytes.length >= 24 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) && bytes.toString("ascii", 12, 16) === "IHDR";
+    const jpeg = bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 && bytes[bytes.length - 2] === 255 && bytes[bytes.length - 1] === 217;
+    const mime = pdf ? "application/pdf" : png ? "image/png" : jpeg ? "image/jpeg" : null;
+    if (!mime || (match[1] && match[1] !== mime) || (kind === "claimPhoto" && pdf)) return fail("BAD_REQUEST", "Support file content does not match an allowed PDF or photo format.");
+    if (pdf) {
+      const document = await PDFDocument.load(bytes, { throwOnInvalidObject: true });
+      if (!document.getPageCount()) fail("BAD_REQUEST", "Estimate PDF must contain at least one page.");
+    } else {
+      if (png && (!bytes.readUInt32BE(16) || !bytes.readUInt32BE(20) || bytes.readUInt32BE(16) * bytes.readUInt32BE(20) > 40000000)) fail("BAD_REQUEST", "Photo dimensions exceed the supported limit.");
+      const document = await PDFDocument.create();
+      const image = png ? await document.embedPng(bytes) : await document.embedJpg(bytes);
+      if (!image.width || !image.height || image.width * image.height > 40000000) fail("BAD_REQUEST", "Photo dimensions exceed the supported limit.");
+    }
+    return { bytes, mime, extension: pdf ? "pdf" : png ? "png" : "jpg" };
+  } catch (error) {
+    bytes.fill(0);
+    if (error instanceof TRPCError) throw error;
+    return fail("BAD_REQUEST", "Support file could not be validated. Upload a valid PDF, PNG or JPEG.");
+  }
+}
+function isRentalSetupDuplicate(error: unknown): boolean {
+  // Drizzle wraps MySQL constraint errors in a cause; never expose raw SQL/VINs.
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
+    const details = current as { code?: string; errno?: number; cause?: unknown };
+    if (details.code === "ER_DUP_ENTRY" || details.errno === 1062) return true;
+    current = details.cause;
+  }
+  return false;
 }
 export class RentalHandoffService {
   constructor(readonly deps: RentalDependencies = defaultRentalDependencies) {}
   get repo() { return this.deps.repo; }
   async settings(repo = this.repo): Promise<LaunchSettings> { const row = (await repo.find("settings", { eq: { id: 1 } }))[0]; const settings = row ? decryptRental<LaunchSettings>(row.payload) : defaults(); return { ...settings, emailProviderReady: this.deps.providerReady(settings.senderEmail) }; }
+  async saveSharedSender(actor: RentalActor, input: RentalMailgunSharedConfig) {
+    adminOnly(actor);
+    if (!this.deps.verifySharedSender) fail("SERVICE_UNAVAILABLE", "Shared Mailgun configuration is unavailable.");
+    let verified: Awaited<ReturnType<typeof verifyRentalSharedSenderConfig>>;
+    try { verified = await this.deps.verifySharedSender!(input); }
+    catch { return fail("PRECONDITION_FAILED", "Shared Mailgun sender verification failed. Check the API key's domain-read permission, US/EU region, active verified domain and matching From email."); }
+    await this.repo.transaction(async tx => {
+      const old = (await tx.find("settings", { eq: { id: RENTAL_MAILGUN_SETTINGS_ID }, lock: true }))[0];
+      const version = (old?.version || 0) + 1;
+      // No plaintext key reaches audit, settings/session replies or signed packets.
+      const payload = encryptRental({ key: RENTAL_MAILGUN_SETTINGS_KEY, formatVersion: 1, ...verified.config });
+      const values = { payload, version, updatedAt: this.deps.now() };
+      if (old) await tx.update("settings", { eq: { id: RENTAL_MAILGUN_SETTINGS_ID } }, values);
+      else await tx.insert("settings", { id: RENTAL_MAILGUN_SETTINGS_ID, ...values });
+      await this.audit(tx, actor, null, "sender.mailgun.save", { version, provider: "mailgun", domain: verified.config.domain, fromEmail: verified.config.fromEmail, region: verified.config.region, verified: true });
+    });
+    return { success: true as const, sender: verified.status };
+  }
   async actorSettings(actor: RentalActor, repo = this.repo) {
     const settings = await this.settings(repo);
     if (!this.deps.senderStatus) return { settings, sender: { connected: settings.emailProviderReady === true, email: settings.senderEmail || null, configured: settings.emailProviderReady === true } };
-    let sender: { connected: boolean; email: string | null; configured: boolean };
+    let sender: RentalMailgunSenderStatus;
     try { sender = await this.deps.senderStatus(actor.key); } catch { sender = { connected: false, email: null, configured: false }; }
     return { settings: { ...settings, senderEmail: sender.email || "", emailProviderReady: sender.connected && sender.configured }, sender };
   }
@@ -153,13 +213,77 @@ export class RentalHandoffService {
     const assets = r.status === "Out" ? [...(r.activePacketId === null ? await this.versionAssets(this.repo, id) : history.filter(a => !a.kind.startsWith("return"))), ...await this.returnAssets(this.repo, id)] : r.activePacketId === null && r.status === "Scheduled" ? [...await this.versionAssets(this.repo, id), ...history.filter(a => a.kind.startsWith("return"))] : history;
     return { id: r.id, status: r.status as "Scheduled" | "Out" | "Returned" | "Closed", locationId: r.locationId, vehicleId: r.vehicleId, updatedAt: r.updatedAt, revision: r.revision, activePacketId: r.activePacketId, draft: redactClosedDraft(decryptRental<RentalDraft>(r.payload), actor, r.status), rates: decryptRental<RentalRates>(r.rateSnapshot), assets: assets.filter(a => !(actor.role === "shop" && r.status === "Closed" && ["licenseFront", "licenseBack"].includes(a.kind))).map(assetPublic), packets: actor.role === "shop" && r.status === "Closed" ? [] : packets.map(packetPublic), emails: emails.map(e => ({ id: e.id, packetId: e.packetId, recipient: decryptRental<string>(e.recipient), status: e.status, providerId: e.providerId, error: e.error ? decryptRental<string>(e.error) : null, createdAt: e.createdAt, sentAt: e.sentAt })), audit: audit.map(a => ({ id: a.id, actorName: a.actorName, action: a.action, detail: decryptRental<unknown>(a.detail), createdAt: a.createdAt })), returnData: r.returnPayload ? decryptRental<RentalReturn & { charges?: unknown }>(r.returnPayload) : null };
   }
-  async create(actor: RentalActor, draft: RentalDraft) {
-    claimsOnly(actor); draft = rentalDraftSchema.parse(draft); enforceDraftCardSafety(draft);
-    const { vehicle } = await this.locationVehicle(draft); const settings = await this.settings(); assertFixedRates(settings.rates); const now = this.deps.now();
-    return this.repo.transaction(async tx => {
-      const id = await tx.insert("records", { status: "Scheduled", locationId: draft.locationId, vehicleId: draft.vehicleId, ...this.searchFields(draft, vehicle.vin, vehicle.plate), payload: encryptRental(draft), revision: 1, rateSnapshot: encryptRental(settings.rates), createdBy: actor.key, createdAt: now, updatedAt: now });
-      await this.audit(tx, actor, id, "rental.create", { revision: 1 }); return { id, revision: 1 };
-    });
+  async create(actor: RentalActor, inputDraft: RentalCreateDraft, manualInput?: RentalManualVehicle) {
+    if (actor.role !== "admin" && actor.role !== "claims") fail("FORBIDDEN", "Claims or Admin access is required.");
+    const draft = rentalCreateDraftSchema.parse(inputDraft); enforceDraftCardSafety(draft);
+    const parsedVehicle = manualInput === undefined ? undefined : rentalManualVehicleSchema.safeParse(manualInput);
+    if (parsedVehicle && !parsedVehicle.success) fail("BAD_REQUEST", "Enter a valid year/make/model, 17-character VIN, plate and whole-number odometer (0–2,000,000).");
+    const manual = parsedVehicle?.success ? parsedVehicle.data : undefined;
+    if (draft.locationId <= 0) fail("BAD_REQUEST", "Choose an active location.");
+    if (manual && draft.vehicleId > 0) fail("BAD_REQUEST", "Choose inventory or enter a vehicle manually, not both.");
+    if (!manual && draft.vehicleId <= 0) fail("BAD_REQUEST", "Choose an inventory vehicle or enter its year/make/model, VIN and plate.");
+    if (manual && draft.odometerOut !== null && !Number.isInteger(draft.odometerOut)) fail("BAD_REQUEST", "Pickup odometer must be a whole number.");
+    assertRentalAccess(actor, { locationId: draft.locationId });
+    try {
+      return await this.repo.transaction(async tx => {
+        // Validate and lock location before touching inventory; no fleet is seeded.
+        const location = (await tx.find("locations", { eq: { id: draft.locationId, active: true }, lock: true }))[0];
+        if (!location) fail("BAD_REQUEST", "Choose an active location.");
+        const settings = await this.settings(tx); assertFixedRates(settings.rates);
+        let vehicle: RentalRows["vehicles"];
+        let inventoryCreated = false;
+        if (manual) {
+          const existing = (await tx.find("vehicles", { eq: { vin: manual.vin }, lock: true }))[0];
+          if (existing) {
+            if (existing.vin !== manual.vin || existing.locationId !== location.id || !existing.active || existing.ymm !== manual.ymm || existing.plate !== manual.plate || (manual.lastOdometer !== undefined && existing.lastOdometer !== manual.lastOdometer)) fail("CONFLICT", "This VIN already exists with different vehicle details or is unavailable at this location. Use the existing inventory or contact Admin.");
+            const assigned = await tx.find("records", { eq: { vehicleId: existing.id }, in: { status: ["Scheduled", "Out"] }, lock: true, limit: 1 });
+            if (assigned.length) fail("CONFLICT", "This VIN is already assigned to an active rental.");
+            vehicle = existing;
+          } else {
+            const lastOdometer = manual.lastOdometer ?? draft.odometerOut ?? 0;
+            const values = { locationId: location.id, ymm: manual.ymm, vin: manual.vin, plate: manual.plate, lastOdometer, active: true };
+            const vehicleId = await tx.insert("vehicles", values);
+            vehicle = { ...values, id: vehicleId };
+            inventoryCreated = true;
+          }
+          if (draft.odometerOut !== null && draft.odometerOut < vehicle.lastOdometer) fail("BAD_REQUEST", "Pickup odometer cannot be below the inventory odometer.");
+        } else {
+          const selected = (await tx.find("vehicles", { eq: { id: draft.vehicleId, locationId: location.id, active: true }, lock: true }))[0];
+          if (!selected) fail("BAD_REQUEST", "Choose an active location and a vehicle assigned to it.");
+          vehicle = selected;
+        }
+        const savedDraft = rentalDraftSchema.parse({ ...draft, vehicleId: vehicle.id });
+        const now = this.deps.now();
+        const id = await tx.insert("records", { status: "Scheduled", locationId: savedDraft.locationId, vehicleId: vehicle.id, ...this.searchFields(savedDraft, vehicle.vin, vehicle.plate), payload: encryptRental(savedDraft), revision: 1, rateSnapshot: encryptRental(settings.rates), createdBy: actor.key, createdAt: now, updatedAt: now });
+        if (inventoryCreated) await this.audit(tx, actor, id, "vehicle.create", { vehicleId: vehicle.id, source: "rental.setup" });
+        await this.audit(tx, actor, id, "rental.create", { revision: 1, vehicleId: vehicle.id, inventoryCreated });
+        return { id, revision: 1 };
+      });
+    } catch (error) {
+      // The global unique VIN index is the final guard when two locations race.
+      if (isRentalSetupDuplicate(error)) fail("CONFLICT", "This VIN was added by another request. Reload inventory before creating the rental.");
+      throw error;
+    }
+  }
+  async decodeVin(actor: RentalActor, inputVin: string): Promise<{ year: string; make: string; model: string }> {
+    if (!["claims", "admin", "shop"].includes(actor.role)) fail("FORBIDDEN", "Rental access is required.");
+    const checked = rentalManualVehicleSchema.shape.vin.safeParse(inputVin);
+    if (!checked.success) fail("BAD_REQUEST", "VIN must contain 17 valid characters (no I, O or Q).");
+    try {
+      // Matches DocGenerator's vPIC fields, but the server owns the URL and VIN validation.
+      const response = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${checked.data}?format=json`, { signal: AbortSignal.timeout(10000), redirect: "error" });
+      if (!response.ok || Number(response.headers.get("content-length") || 0) > 2 * 1024 * 1024) fail("BAD_GATEWAY", "VIN decoding is unavailable. Enter the year, make and model manually.");
+      const data: unknown = await response.json();
+      const results = z.object({ Results: z.array(z.object({ Variable: z.string(), Value: z.string().nullable() })).max(1000) }).safeParse(data);
+      if (!results.success) return fail("BAD_GATEWAY", "VIN decoding returned an invalid response. Enter the vehicle manually.");
+      const value = (variable: string) => results.data.Results.find(row => row.Variable === variable)?.Value?.trim().slice(0, 120) || "";
+      const decoded = { year: value("Model Year"), make: value("Make"), model: value("Model") };
+      if (!/^(?:19|20)\d{2}$/.test(decoded.year) || !decoded.make || !decoded.model) fail("NOT_FOUND", "VIN did not decode to a complete year, make and model. Check it or enter the vehicle manually.");
+      return decoded;
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      return fail("BAD_GATEWAY", "VIN decoding is unavailable. Enter the year, make and model manually.");
+    }
   }
   searchFields(d: RentalDraft, vin: string, plate: string) { return { renterNameSearch: d.renterName.toLowerCase().slice(0, 180), rentalVinLastSix: vin.slice(-6).toLowerCase(), renterVinLastSix: d.renterVehicleVin.slice(-6).toLowerCase(), claimNumber: d.claimNumber, plateSearch: `${plate} ${d.renterVehiclePlate}`.toLowerCase().slice(0, 80) }; }
   async save(actor: RentalActor, id: number, revision: number, draft: RentalDraft) {
@@ -182,6 +306,7 @@ export class RentalHandoffService {
   }
   async upload(actor: RentalActor, input: { id: number; kind: typeof ASSET_KINDS[number]; base64: string; signerName?: string }, auditData: { ipHash: string; device: string }) {
     if (!ASSET_KINDS.includes(input.kind)) fail("BAD_REQUEST", "Unsupported rental asset kind.");
+    if (isRentalSupport(input.kind)) fail("BAD_REQUEST", "Use support upload for retained estimate and vehicle photos.");
     if ((/Signature$/.test(input.kind) || ["signedPayment", "coverageConfirmation"].includes(input.kind)) && !input.signerName?.trim()) fail("BAD_REQUEST", "Signatory name is required.");
     const image = decodeRentalImage(input.base64);
     try {
@@ -196,6 +321,25 @@ export class RentalHandoffService {
       });
     } finally { image.bytes.fill(0); }
   }
+  async uploadSupport(actor: RentalActor, input: { id: number; kind: typeof RENTAL_SUPPORT_KINDS[number]; base64: string; fileName?: string }, auditData: { ipHash: string; device: string }) {
+    if (!["claims", "admin", "shop"].includes(actor.role)) fail("FORBIDDEN", "Rental access is required.");
+    if (!isRentalSupport(input.kind)) fail("BAD_REQUEST", "Unsupported claim support kind.");
+    await this.record(actor, input.id);
+    const file = await decodeRentalSupport(input.base64, input.kind);
+    try {
+      return await this.repo.transaction(async tx => {
+        const record = await this.record(actor, input.id, tx, true);
+        if (!["Scheduled", "Out"].includes(record.status)) fail("CONFLICT", "Support attachments are locked after return or closure.");
+        const existing = await tx.find("assets", { eq: { rentalId: record.id }, limit: 501 });
+        if (existing.length >= 500) fail("BAD_REQUEST", "The rental asset limit has been reached.");
+        // Generated object names avoid untrusted filenames; each original stays append-only.
+        const uploaded = await this.deps.put(`rental-handoff/support/${randomUUID()}/${randomUUID()}.${file.extension}`, file.bytes, file.mime);
+        const id = await tx.insert("assets", { rentalId: record.id, kind: input.kind, storageKey: uploaded.key, mime: file.mime, signerName: null, uploadedBy: actor.key, createdAt: this.deps.now(), ...auditData });
+        await this.audit(tx, actor, record.id, "support.append", { assetId: id, kind: input.kind, mime: file.mime, ...auditData });
+        return assetPublic((await tx.find("assets", { eq: { id } }))[0]);
+      });
+    } finally { file.bytes.fill(0); }
+  }
   async versionAssets(repo: RentalRepository, rentalId: number, returnKind = false) {
     const assets = await repo.find("assets", { eq: { rentalId }, limit: 2000 });
     const opens = await repo.find("audit", { eq: { rentalId }, in: { action: ["version.open", "signature.invalidate"] }, order: "createdAt", limit: 2000 });
@@ -207,7 +351,7 @@ export class RentalHandoffService {
     let bytes: Buffer | undefined;
     try {
       let total = 0;
-      for (const a of assets) {
+      for (const a of assets.filter(asset => !isRentalSupport(asset.kind))) {
         const image = await this.deps.read(a.storageKey, 5 * 1024 * 1024);
         hydrated.push({ id: a.id, kind: a.kind, signerName: a.signerName, createdAt: a.createdAt, bytes: image });
         total += image.length; if (total > 64 * 1024 * 1024) fail("BAD_REQUEST", "Packet images exceed the 64 MB generation limit.");
@@ -234,7 +378,7 @@ export class RentalHandoffService {
       assertFixedRates(rates); assertFixedRates(settings.rates);
       if (JSON.stringify(rates) !== JSON.stringify(settings.rates)) fail("PRECONDITION_FAILED", "Rental rate snapshot differs from current approved rates.");
       const gaps = launchMissing(settings); if (gaps.length) fail("PRECONDITION_FAILED", gaps.join(" "));
-      const assets = await this.versionAssets(tx, r.id);
+      const assets = (await this.versionAssets(tx, r.id)).filter(asset => !isRentalSupport(asset.kind));
       const missing = handoffMissing(draft, assets as any, this.deps.now(), location.timezone, settings.forceInkForRenter === true); if (missing.length) fail("BAD_REQUEST", missing.map(m => `Step ${m.step}: ${m.message}`).join(" "));
       for (const [kind, name] of [["renterSignature", draft.renterName], ["representativeSignature", draft.representativeName], ["signedPayment", draft.payment.cardholderName]]) {
         const asset = assets.find(a => a.kind === kind);
@@ -331,12 +475,12 @@ export class RentalHandoffService {
     const file = (await this.repo.find(type === "asset" ? "assets" : "packets", { eq: { id } }))[0]; if (!file) fail("NOT_FOUND", "Rental file not found."); const r = await this.record(actor, file.rentalId);
     if (type === "packet" && actor.role === "shop" && r.status === "Closed") fail("FORBIDDEN", "Original signed packets contain restricted identity information and remain available to Claims after closure.");
     if (type === "asset" && actor.role === "shop" && r.status === "Closed" && ["licenseFront", "licenseBack"].includes((file as RentalRows["assets"]).kind)) fail("FORBIDDEN", "License images are restricted after closure.");
-    return { storageKey: file.storageKey, mime: type === "packet" ? "application/pdf" : (file as RentalRows["assets"]).mime, filename: type === "packet" ? `metrocars-rental-${id}.pdf` : `rental-photo-${id}.${(file as RentalRows["assets"]).mime === "image/png" ? "png" : "jpg"}` };
+    return { storageKey: file.storageKey, mime: type === "packet" ? "application/pdf" : (file as RentalRows["assets"]).mime, filename: type === "packet" ? `metrocars-rental-${id}.pdf` : `rental-asset-${id}.${(file as RentalRows["assets"]).mime === "application/pdf" ? "pdf" : (file as RentalRows["assets"]).mime === "image/png" ? "png" : "jpg"}` };
   }
   async resend(actor: RentalActor, input: { packetId: number; requestId: string }) {
     const packet = (await this.repo.find("packets", { eq: { id: input.packetId } }))[0]; if (!packet) fail("NOT_FOUND", "Packet not found."); const record = await this.record(actor, packet.rentalId);
     if (actor.role === "shop" && record.status === "Closed") fail("FORBIDDEN", "Claims handles original signed packets after closure.");
-    // Reserve each email attempt atomically. Gmail correlation is not provider idempotency.
+    // Reserve each email attempt atomically. Mailgun correlation is not provider idempotency.
     // Pending/uncertain sends must be reconciled, never blindly reissued with a new key.
     const log = await this.repo.transaction(async tx => {
       const current = await this.record(actor, packet.rentalId, tx, true);
@@ -358,15 +502,16 @@ export class RentalHandoffService {
       const stored = decryptRental<string | { renterEmail: string; claimEmail: string }>(log.recipient);
       const recipient = typeof stored === "string" ? stored : stored.renterEmail;
       const claimEmail = typeof stored === "string" ? decryptRental<RentalPdfInput>(packet.snapshot).draft.claimEmail : stored.claimEmail;
-      bytes = await this.deps.read(packet.storageKey, 20 * 1024 * 1024); const sent = await this.deps.sendEmail({ actorKey: actor.key, sender: settings.senderEmail, recipient, claimEmail, kind: packet.kind, bytes, idempotencyKey: `rental-${tokenHash(input.requestId)}` });
-      if (!sent.providerId) throw new Error("Email provider did not confirm a send.");
+      bytes = await this.deps.read(packet.storageKey, RENTAL_MAILGUN_MAX_PDF_BYTES); const sent = await this.deps.sendEmail({ actorKey: actor.key, sender: settings.senderEmail, recipient, claimEmail, kind: packet.kind, bytes, idempotencyKey: `rental-${tokenHash(input.requestId)}` });
+      if (!sent.providerId) throw new RentalMailgunDeliveryUncertainError();
       providerConfirmed = true;
+      // Legacy "sent" means provider queue acceptance, not recipient delivery.
       await this.repo.transaction(async tx => { await tx.update("emails", { eq: { id: log.id } }, { status: "sent", providerId: sent.providerId, sentAt: this.deps.now() }); await this.audit(tx, actor, packet.rentalId, "email.sent", { packetId: packet.id, emailLogId: log.id, providerId: sent.providerId }); });
       return { status: "sent", providerId: sent.providerId };
     } catch (error) {
-      const uncertain = providerConfirmed || error instanceof RentalGmailDeliveryUncertainError || Boolean((error as any)?.deliveryUncertain);
+      const uncertain = providerConfirmed || error instanceof RentalMailgunDeliveryUncertainError || Boolean((error as any)?.deliveryUncertain);
       const status = uncertain ? "uncertain" : "failed";
-      const message = uncertain ? "Delivery status uncertain — reconcile before resend. The signed packet remains saved and locked." : error instanceof Error && /^(Verified sender|Email provider rejected|Email provider did not)/.test(error.message) ? error.message.slice(0, 250) : "Packet delivery failed; retry with Resend. The signed packet remains saved and locked.";
+      const message = uncertain ? "Delivery status uncertain — reconcile before resend. The signed packet remains saved and locked." : error instanceof Error && /^(Verified sender|Email provider rejected|Email provider did not)/.test(error.message) ? error.message.slice(0, 250) : "Packet delivery failed; retry using the resend action. The signed packet remains saved and locked.";
       await this.repo.transaction(async tx => { await tx.update("emails", { eq: { id: log.id } }, { status, error: encryptRental(message) }); await this.audit(tx, actor, packet.rentalId, `email.${status}`, { packetId: packet.id, emailLogId: log.id, error: message }); });
       return { status };
     } finally { bytes?.fill(0); }

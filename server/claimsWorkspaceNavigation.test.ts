@@ -6,8 +6,10 @@ describe('Claims Workspace navigation and floating panel', () => {
   const layout = fs.readFileSync(path.resolve(process.cwd(), 'client/src/components/WhipLayout.tsx'), 'utf8');
   const floating = fs.readFileSync(path.resolve(process.cwd(), 'client/src/components/FloatingClaimsWorkspace.tsx'), 'utf8');
 
-  it('includes Claims Workspace in both the administrator and handler-side navigation definitions', () => {
-    expect(layout.match(/href: "\/claims-workspace", label: "Claims Workspace"/g)).toHaveLength(2);
+  it('includes Claims Workspace in the shared Resources navigation for administrators and handlers', () => {
+    expect(layout.match(/href: "\/claims-workspace", label: "Claims Workspace"/g)).toHaveLength(1);
+    expect(layout).toContain('const RESOURCE_NAV_ITEMS');
+    expect(layout).toContain('RESOURCE_NAV_ITEMS.map');
   });
 
   it('provides a labelled pointer-drag control and persists the user-selected panel position', () => {

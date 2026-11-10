@@ -34,4 +34,26 @@ describe("rental file streaming security", () => {
     const response = await fetch(`${url}/api/rental-handoff/files/packet/1`); expect(response.status).toBe(200); expect(response.headers.get("location")).toBe(null); expect(response.headers.get("cache-control")).toContain("no-store"); expect(response.headers.get("content-type")).toContain("application/pdf"); expect(await response.text()).toBe("%PDF-private-test");
     expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ role: "claims" }), "packet", 1); expect(spy).toHaveBeenCalledWith("https://private-storage.test/object", expect.objectContaining({ redirect: "error" }));
   });
+  it("permits validated support assets above 5MB and provides a server-side download disposition", async () => {
+    const { url } = await setup({ id: 1, name: "Claims", role: "user" });
+    const nativeFetch = global.fetch;
+    const bytes = Buffer.alloc(6 * 1024 * 1024, 65);
+    vi.spyOn(global, "fetch").mockImplementation(async (input: any, init?: any) => String(input).startsWith("https://private-storage.test")
+      ? new Response(Readable.toWeb(Readable.from([bytes])) as any, { headers: { "content-length": String(bytes.length) } }) : nativeFetch(input, init));
+    const response = await fetch(`${url}/api/rental-handoff/files/asset/1?download=1`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="packet.pdf"');
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect((await response.arrayBuffer()).byteLength).toBe(bytes.length);
+  });
+  it("does not exchange tokens through the retired personal Gmail callback", async () => {
+    const { url } = await setup(null);
+    mocks.authenticate.mockClear();
+    const response = await fetch(`${url}/api/rental-handoff/gmail/callback?code=obsolete&state=obsolete`, { redirect: "manual" });
+    expect(response.status).toBe(410);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(await response.text()).toContain("shared Mailgun sender");
+    expect(mocks.authenticate).not.toHaveBeenCalled();
+  });
 });
