@@ -9,14 +9,14 @@ vi.mock("./storage", () => ({ storageGetSignedUrl: mocks.signed, storagePut: vi.
 import { registerRentalHandoffApi } from "./rentalHandoffApi";
 const servers: Server[] = [];
 afterEach(async () => { vi.restoreAllMocks(); for (const server of servers.splice(0)) await new Promise<void>(resolve => server.close(() => resolve())); });
-async function setup(actor: any, authorize = vi.fn(async () => ({ storageKey: "private-storage-key", mime: "application/pdf", filename: "packet.pdf" }))) {
+async function setup(actor: any, authorize = vi.fn(async () => ({ storageKey: "private-storage-key", mime: "application/pdf", filename: "packet.pdf" })), finish = vi.fn(async () => ({ email: "shared@example.test" }))) {
   mocks.authenticate.mockImplementation(async () => { if (!actor) throw new Error("No native auth"); return actor; });
   mocks.signed.mockResolvedValue("https://private-storage.test/object");
   const repo = { find: vi.fn(async () => []) };
-  const service = { repo, deps: { now: () => Date.now() }, authorizeFile: authorize } as any;
+  const service = { repo, deps: { now: () => Date.now() }, authorizeFile: authorize, finishSharedGmail: finish } as any;
   const app = express(); registerRentalHandoffApi(app, service);
   const server = app.listen(0, "127.0.0.1"); servers.push(server); await new Promise<void>(resolve => server.once("listening", resolve));
-  return { url: `http://127.0.0.1:${(server.address() as any).port}`, authorize, repo };
+  return { url: `http://127.0.0.1:${(server.address() as any).port}`, authorize, repo, finish };
 }
 describe("rental file streaming security", () => {
   it("requires authentication and never resolves a storage URL for anonymous downloads", async () => {
@@ -46,14 +46,46 @@ describe("rental file streaming security", () => {
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect((await response.arrayBuffer()).byteLength).toBe(bytes.length);
   });
-  it("does not exchange tokens through the retired personal Gmail callback", async () => {
-    const { url } = await setup(null);
+  it("never exchanges tokens through unauthenticated Gmail callbacks", async () => {
+    const { url, finish } = await setup(null);
     mocks.authenticate.mockClear();
     const response = await fetch(`${url}/api/rental-handoff/gmail/callback?code=obsolete&state=obsolete`, { redirect: "manual" });
-    expect(response.status).toBe(410);
+    expect(response.status).toBe(401);
     expect(response.headers.get("location")).toBeNull();
     expect(response.headers.get("cache-control")).toContain("no-store");
-    expect(await response.text()).toContain("shared Mailgun sender");
-    expect(mocks.authenticate).not.toHaveBeenCalled();
+    expect(await response.text()).toContain("rental Admin");
+    expect(mocks.authenticate).toHaveBeenCalledTimes(1);
+    expect(finish).not.toHaveBeenCalled();
+  });
+  it("rejects authenticated Claims callbacks before token exchange", async () => {
+    const { url, finish } = await setup({ id: 1, role: "user" });
+    expect((await fetch(`${url}/api/rental-handoff/gmail/callback?code=code&state=${"A".repeat(43)}`, { redirect: "manual" })).status).toBe(403);
+    expect(finish).not.toHaveBeenCalled();
+  });
+  it("authenticates the real admin and passes only code/state to shared completion, then redirects without secrets", async () => {
+    const { url, finish } = await setup({ id: 3, name: "Admin Three", role: "admin" });
+    const state = "A".repeat(43);
+    const response = await fetch(`${url}/api/rental-handoff/gmail/callback?code=private-code&state=${state}&senderEmail=spoof@example.test`, { redirect: "manual" });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/rental-handoff/admin?gmail=connected");
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(finish).toHaveBeenCalledWith({ key: "native:3", name: "Admin Three", role: "admin", locationIds: [] }, "private-code", state);
+    expect(await response.text()).not.toMatch(/private-code|spoof@example/);
+  });
+  it("handles wrong-admin state/replay errors with controlled redirects and no raw provider data", async () => {
+    const finish = vi.fn(async () => { throw new Error("private-access-token admin@example.test"); });
+    const { url } = await setup({ id: 2, role: "admin" }, undefined, finish);
+    const response = await fetch(`${url}/api/rental-handoff/gmail/callback?code=code&state=${"A".repeat(43)}`, { redirect: "manual" });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/rental-handoff/admin?gmail=error");
+    expect(await response.text()).not.toMatch(/private-access-token|admin@example/);
+  });
+  it.each(["code=code&state=bad", `code=code&state=${"A".repeat(43)}&error=access_denied`, `code=first&code=second&state=${"A".repeat(43)}`])("rejects malformed/denied OAuth callback %s before completion", async query => {
+    const { url, finish } = await setup({ id: 1, role: "admin" });
+    const response = await fetch(`${url}/api/rental-handoff/gmail/callback?${query}`, { redirect: "manual" });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/rental-handoff/admin?gmail=error");
+    expect(finish).not.toHaveBeenCalled();
   });
 });

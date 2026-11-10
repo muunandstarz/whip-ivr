@@ -186,7 +186,7 @@ describe("Standalone MetroCars rental interface", () => {
     expect(container.textContent).not.toMatch(
       /Gmail|OAuth|callback|client secret/
     );
-    expect(button("Connect Gmail")).toBeUndefined();
+    expect(button("Disconnect shared Gmail")).toBeUndefined();
     expect(mocks.connectSender).not.toHaveBeenCalled();
     expect(mocks.disconnectSender).not.toHaveBeenCalled();
   });
@@ -220,6 +220,17 @@ describe("Standalone MetroCars rental interface", () => {
       /OAuth|Google Cloud|callback|client secret/
     );
   });
+  it("opens Gmail callback administration for an admin but never for shop staff", async () => {
+    mocks.routeId = "admin";
+    mocks.session.data = session("admin");
+    await mount(React.createElement(RentalHandoff));
+    expect(container.textContent).toContain("Shared rental Gmail");
+    expect(button("Connect shared Gmail")).toBeDefined();
+    mocks.session.data = session("shop");
+    await mount(React.createElement(RentalHandoff));
+    expect(container.textContent).not.toContain("Shared rental Gmail");
+    expect(button("Connect shared Gmail")).toBeUndefined();
+  });
   it("exposes real administrative configuration only to an admin", async () => {
     mocks.session.data = session("admin");
     await mount(React.createElement(RentalHandoff));
@@ -229,6 +240,9 @@ describe("Standalone MetroCars rental interface", () => {
     expect(button("Add vehicle")).toBeDefined();
     expect(button("Create private invitation")).toBeDefined();
     expect(container.textContent).toContain("no automatic deletion");
+    expect(container.textContent).not.toMatch(/Mailgun|API key/);
+    const sender = [...container.querySelectorAll("label")].find(label => label.textContent?.includes("Connected shared Gmail sender"))?.querySelector<HTMLInputElement>("input");
+    expect(sender?.readOnly).toBe(true);
   });
   it("opens an existing packet without issuing a replacement and blocks uncertain delivery retries", async () => {
     mocks.routeId = "7";
@@ -610,6 +624,23 @@ describe("Location wall-clock time defaults", () => {
   });
 });
 describe("Protection and payment guardrails", () => {
+  it("shows separate camera and file controls for both sides of the renter's driver's license", async () => {
+    await mount(React.createElement(Protection, {
+      draft: emptyRentalDraft(), update: vi.fn(), assets: [], upload: vi.fn(), locations: [], vehicles: [],
+    }));
+    const card = [...container.querySelectorAll(".r-card")].find(
+      node => node.querySelector("h2")?.textContent === "Driver's license & coverage documents"
+    )!;
+    expect(card.textContent).toContain("Both are required before completing the rental");
+    for (const side of ["front", "back"]) {
+      const control = [...card.querySelectorAll(".r-photo")].find(
+        node => node.querySelector("strong")?.textContent === `Driver's license — ${side}`
+      )!;
+      expect(control.querySelectorAll('input[type="file"]')).toHaveLength(2);
+      expect(control.querySelector('input[capture="environment"]')).not.toBeNull();
+      expect(control.textContent).toContain("Choose file");
+    }
+  });
   it("renders all source agreement sections and the accessible coverage table", async () => {
     await mount(
       React.createElement(Protection, {

@@ -6,7 +6,7 @@ import { PDFDocument } from "pdf-lib";
 import * as tables from "../drizzle/rentalSchema";
 import { getDb } from "./db";
 import { storagePut, storageGetSignedUrl } from "./storage";
-import { rentalSenderStatus, sendRentalPacketMailgun, RentalMailgunDeliveryUncertainError, RENTAL_MAILGUN_MAX_PDF_BYTES, RENTAL_MAILGUN_SETTINGS_ID, RENTAL_MAILGUN_SETTINGS_KEY, verifyRentalSharedSenderConfig, type RentalMailgunSenderStatus, type RentalMailgunSharedConfig } from "./rentalHandoffMailgun";
+import { sharedGmailStatus, connectSharedGmail, finishSharedGmail, disconnectSharedGmail, sendRentalPacketSharedGmail, RentalGmailDeliveryUncertainError, RENTAL_GMAIL_MAX_PDF_BYTES, type RentalSharedGmailStatus } from "./rentalHandoffGmail";
 import { ASSET_KINDS, DEFAULT_RENTAL_RATES, RENTAL_FORM_VERSION, CONDITION_AREAS, rentalDraftSchema, rentalReturnSchema, handoffMissing, launchMissing, calculateRentalCharges, type RentalActor, type RentalDraft, type RentalReturn, type LaunchSettings, type RentalRates, type RentalVehicle, type RentalLocation } from "../shared/rentalHandoff";
 import { encryptRental, decryptRental, enforceDraftCardSafety, decodeRentalImage, hashPassword, verifyPassword, randomToken, tokenHash } from "./rentalHandoffSecurity";
 
@@ -58,9 +58,11 @@ export interface RentalDependencies {
   buildPickup: (input: RentalPdfInput) => Promise<Buffer>;
   buildReturn: (input: RentalPdfInput & { returnData: RentalReturn; charges: ReturnType<typeof calculateRentalCharges> }) => Promise<Buffer>;
   sendEmail: (input: { actorKey: string; sender: string; recipient: string; claimEmail: string; kind: string; bytes: Buffer; idempotencyKey: string }) => Promise<{ providerId: string }>;
-  senderStatus?: (actorKey: string) => Promise<RentalMailgunSenderStatus>;
+  senderStatus?: (actorKey: string) => Promise<RentalSharedGmailStatus>;
   providerReady: (sender: string) => boolean;
-  verifySharedSender?: typeof verifyRentalSharedSenderConfig;
+  connectSharedGmail?: typeof connectSharedGmail;
+  finishSharedGmail?: typeof finishSharedGmail;
+  disconnectSharedGmail?: typeof disconnectSharedGmail;
 }
 export async function readRentalStorage(key: string, maxBytes = 30 * 1024 * 1024): Promise<Buffer> {
   const url = await storageGetSignedUrl(key);
@@ -72,8 +74,8 @@ export async function readRentalStorage(key: string, maxBytes = 30 * 1024 * 1024
   finally { for (const b of chunks) b.fill(0); }
 }
 export const defaultRentalDependencies: RentalDependencies = {
-  repo: createDrizzleRentalRepository(), now: Date.now, put: storagePut, read: readRentalStorage, senderStatus: rentalSenderStatus, providerReady: () => false, verifySharedSender: verifyRentalSharedSenderConfig,
-  sendEmail: async input => { const sent = await sendRentalPacketMailgun({ actorKey: input.actorKey, renterEmail: input.recipient, claimEmail: input.claimEmail, pdf: input.bytes, kind: input.kind === "return" ? "return" : "handoff", requestId: input.idempotencyKey }); return { providerId: sent.providerId }; },
+  repo: createDrizzleRentalRepository(), now: Date.now, put: storagePut, read: readRentalStorage, senderStatus: sharedGmailStatus, providerReady: () => false, connectSharedGmail, finishSharedGmail, disconnectSharedGmail,
+  sendEmail: async input => { const sent = await sendRentalPacketSharedGmail({ actorKey: input.actorKey, renterEmail: input.recipient, claimEmail: input.claimEmail, pdf: input.bytes, kind: input.kind === "return" ? "return" : "handoff", requestId: input.idempotencyKey }); return { providerId: sent.providerId }; },
   buildPickup: async input => { const pdf = await import("./rentalHandoffPdf"); return pdf.buildRentalPacket(input as any); },
   buildReturn: async input => { const pdf = await import("./rentalHandoffPdf"); return pdf.buildRentalReturnPacket(input as any); },
 };
@@ -161,29 +163,33 @@ export class RentalHandoffService {
   constructor(readonly deps: RentalDependencies = defaultRentalDependencies) {}
   get repo() { return this.deps.repo; }
   async settings(repo = this.repo): Promise<LaunchSettings> { const row = (await repo.find("settings", { eq: { id: 1 } }))[0]; const settings = row ? decryptRental<LaunchSettings>(row.payload) : defaults(); return { ...settings, emailProviderReady: this.deps.providerReady(settings.senderEmail) }; }
-  async saveSharedSender(actor: RentalActor, input: RentalMailgunSharedConfig) {
+  /** Legacy credentials path is deliberately inactive; Gmail owns the shared sender. */
+  async saveSharedSender(actor: RentalActor, _input: unknown): Promise<never> {
     adminOnly(actor);
-    if (!this.deps.verifySharedSender) fail("SERVICE_UNAVAILABLE", "Shared Mailgun configuration is unavailable.");
-    let verified: Awaited<ReturnType<typeof verifyRentalSharedSenderConfig>>;
-    try { verified = await this.deps.verifySharedSender!(input); }
-    catch { return fail("PRECONDITION_FAILED", "Shared Mailgun sender verification failed. Check the API key's domain-read permission, US/EU region, active verified domain and matching From email."); }
-    await this.repo.transaction(async tx => {
-      const old = (await tx.find("settings", { eq: { id: RENTAL_MAILGUN_SETTINGS_ID }, lock: true }))[0];
-      const version = (old?.version || 0) + 1;
-      // No plaintext key reaches audit, settings/session replies or signed packets.
-      const payload = encryptRental({ key: RENTAL_MAILGUN_SETTINGS_KEY, formatVersion: 1, ...verified.config });
-      const values = { payload, version, updatedAt: this.deps.now() };
-      if (old) await tx.update("settings", { eq: { id: RENTAL_MAILGUN_SETTINGS_ID } }, values);
-      else await tx.insert("settings", { id: RENTAL_MAILGUN_SETTINGS_ID, ...values });
-      await this.audit(tx, actor, null, "sender.mailgun.save", { version, provider: "mailgun", domain: verified.config.domain, fromEmail: verified.config.fromEmail, region: verified.config.region, verified: true });
-    });
-    return { success: true as const, sender: verified.status };
+    return fail("PRECONDITION_FAILED", "Mailgun configuration is retired. A rental Admin must connect the shared Gmail account.");
+  }
+  async connectSharedGmail(actor: RentalActor) {
+    adminOnly(actor);
+    if (!this.deps.connectSharedGmail) return fail("SERVICE_UNAVAILABLE", "Shared Gmail authorization is unavailable.");
+    try { return await this.deps.connectSharedGmail(actor); }
+    catch { return fail("PRECONDITION_FAILED", "Shared Gmail could not be connected. Configure GMAIL_CLIENT_ID/SECRET and register https://whipclaimsivr.com/api/rental-handoff/gmail/callback on that OAuth client, then authorize send-only access as rental Admin."); }
+  }
+  async finishSharedGmail(actor: RentalActor, code: string, state: string) {
+    adminOnly(actor);
+    if (!this.deps.finishSharedGmail) return fail("SERVICE_UNAVAILABLE", "Shared Gmail authorization is unavailable.");
+    return this.deps.finishSharedGmail(actor, code, state);
+  }
+  async disconnectSharedGmail(actor: RentalActor) {
+    adminOnly(actor);
+    if (!this.deps.disconnectSharedGmail) return fail("SERVICE_UNAVAILABLE", "Shared Gmail authorization is unavailable.");
+    try { return await this.deps.disconnectSharedGmail(actor); }
+    catch { return fail("SERVICE_UNAVAILABLE", "Shared Gmail disconnect could not be completed. Check the shared connection before sending."); }
   }
   async actorSettings(actor: RentalActor, repo = this.repo) {
     const settings = await this.settings(repo);
-    if (!this.deps.senderStatus) return { settings, sender: { connected: settings.emailProviderReady === true, email: settings.senderEmail || null, configured: settings.emailProviderReady === true } };
-    let sender: RentalMailgunSenderStatus;
-    try { sender = await this.deps.senderStatus(actor.key); } catch { sender = { connected: false, email: null, configured: false }; }
+    if (!this.deps.senderStatus) return { settings, sender: { connected: settings.emailProviderReady === true, email: settings.senderEmail || null, configured: settings.emailProviderReady === true, provider: "gmail" as const, shared: true as const } };
+    let sender: RentalSharedGmailStatus;
+    try { sender = await this.deps.senderStatus(actor.key); } catch { sender = { connected: false, email: null, configured: false, provider: "gmail", shared: true }; }
     return { settings: { ...settings, senderEmail: sender.email || "", emailProviderReady: sender.connected && sender.configured }, sender };
   }
   async audit(repo: RentalRepository, actor: RentalActor, rentalId: number | null, action: string, detail: unknown) { await repo.insert("audit", { rentalId, actorKey: actor.key, actorName: actor.name, action, detail: encryptRental(detail), createdAt: this.deps.now() }); }
@@ -480,7 +486,7 @@ export class RentalHandoffService {
   async resend(actor: RentalActor, input: { packetId: number; requestId: string }) {
     const packet = (await this.repo.find("packets", { eq: { id: input.packetId } }))[0]; if (!packet) fail("NOT_FOUND", "Packet not found."); const record = await this.record(actor, packet.rentalId);
     if (actor.role === "shop" && record.status === "Closed") fail("FORBIDDEN", "Claims handles original signed packets after closure.");
-    // Reserve each email attempt atomically. Mailgun correlation is not provider idempotency.
+    // Reserve each email attempt atomically. Gmail correlation is not provider idempotency.
     // Pending/uncertain sends must be reconciled, never blindly reissued with a new key.
     const log = await this.repo.transaction(async tx => {
       const current = await this.record(actor, packet.rentalId, tx, true);
@@ -502,14 +508,14 @@ export class RentalHandoffService {
       const stored = decryptRental<string | { renterEmail: string; claimEmail: string }>(log.recipient);
       const recipient = typeof stored === "string" ? stored : stored.renterEmail;
       const claimEmail = typeof stored === "string" ? decryptRental<RentalPdfInput>(packet.snapshot).draft.claimEmail : stored.claimEmail;
-      bytes = await this.deps.read(packet.storageKey, RENTAL_MAILGUN_MAX_PDF_BYTES); const sent = await this.deps.sendEmail({ actorKey: actor.key, sender: settings.senderEmail, recipient, claimEmail, kind: packet.kind, bytes, idempotencyKey: `rental-${tokenHash(input.requestId)}` });
-      if (!sent.providerId) throw new RentalMailgunDeliveryUncertainError();
+      bytes = await this.deps.read(packet.storageKey, RENTAL_GMAIL_MAX_PDF_BYTES); const sent = await this.deps.sendEmail({ actorKey: actor.key, sender: settings.senderEmail, recipient, claimEmail, kind: packet.kind, bytes, idempotencyKey: `rental-${tokenHash(input.requestId)}` });
+      if (!sent.providerId) throw new RentalGmailDeliveryUncertainError();
       providerConfirmed = true;
       // Legacy "sent" means provider queue acceptance, not recipient delivery.
       await this.repo.transaction(async tx => { await tx.update("emails", { eq: { id: log.id } }, { status: "sent", providerId: sent.providerId, sentAt: this.deps.now() }); await this.audit(tx, actor, packet.rentalId, "email.sent", { packetId: packet.id, emailLogId: log.id, providerId: sent.providerId }); });
       return { status: "sent", providerId: sent.providerId };
     } catch (error) {
-      const uncertain = providerConfirmed || error instanceof RentalMailgunDeliveryUncertainError || Boolean((error as any)?.deliveryUncertain);
+      const uncertain = providerConfirmed || error instanceof RentalGmailDeliveryUncertainError || Boolean((error as any)?.deliveryUncertain);
       const status = uncertain ? "uncertain" : "failed";
       const message = uncertain ? "Delivery status uncertain — reconcile before resend. The signed packet remains saved and locked." : error instanceof Error && /^(Verified sender|Email provider rejected|Email provider did not)/.test(error.message) ? error.message.slice(0, 250) : "Packet delivery failed; retry using the resend action. The signed packet remains saved and locked.";
       await this.repo.transaction(async tx => { await tx.update("emails", { eq: { id: log.id } }, { status, error: encryptRental(message) }); await this.audit(tx, actor, packet.rentalId, `email.${status}`, { packetId: packet.id, emailLogId: log.id, error: message }); });

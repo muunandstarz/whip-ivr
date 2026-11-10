@@ -957,20 +957,20 @@ export function Protection({
   return (
     <>
       <Card
-        title="ID & coverage documents"
-        detail="A declarations page is evidence, not a substitute for insurer verification."
+        title="Driver's license & coverage documents"
+        detail="Upload the front and back of the renter's driver's license here. Both are required before completing the rental. A declarations page does not replace insurer verification."
       >
         <div className="r-grid">
           <PhotoUpload
             kind="licenseFront"
-            label="License front"
+            label="Driver's license — front"
             assets={assets}
             upload={upload}
             disabled={disabled}
           />
           <PhotoUpload
             kind="licenseBack"
-            label="License back"
+            label="Driver's license — back"
             assets={assets}
             upload={upload}
             disabled={disabled}

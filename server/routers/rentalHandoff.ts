@@ -22,13 +22,21 @@ export function createRentalHandoffRouter(service: RentalHandoffService) {
   });
   return router({
     session: resolve.query(({ ctx }) => service.session(ctx.rentalActor)),
+    connectSharedGmail: authenticated.input(z.void()).mutation(({ ctx }) => {
+      requireSameOrigin(ctx.req);
+      return service.connectSharedGmail(ctx.rentalActor);
+    }),
+    disconnectSharedGmail: authenticated.input(z.void()).mutation(({ ctx }) => {
+      requireSameOrigin(ctx.req);
+      return service.disconnectSharedGmail(ctx.rentalActor);
+    }),
     connectSender: authenticated.mutation(async ({ ctx }): Promise<{ url: string }> => {
       requireSameOrigin(ctx.req);
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Rental packets use the shared Mailgun sender. An administrator must configure its credentials and verified sending domain in server secret settings; individual Gmail connections are not used." });
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Personal Gmail connections are disabled. A rental Admin must use connectSharedGmail to authorize the shared sender once." });
     }),
     disconnectSender: authenticated.mutation(async ({ ctx }): Promise<{ success: boolean }> => {
       requireSameOrigin(ctx.req);
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The shared Mailgun sender cannot be disconnected by an individual rental user. An administrator manages it through server secret settings." });
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Personal Gmail connections are disabled. Only a rental Admin can disconnect the shared Gmail sender." });
     }),
     saveSharedSender: authenticated.input(z.object({ domain: z.string().min(1).max(253), fromEmail: z.string().min(1).max(254), apiKey: z.string().min(1).max(512), region: z.enum(["US", "EU"]), replyToEmail: z.string().min(1).max(254).optional() }).strict()).mutation(({ ctx, input }) => {
       requireSameOrigin(ctx.req);

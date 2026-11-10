@@ -7,12 +7,30 @@ import { resolveRentalActor } from "./rentalHandoffSecurity";
 import { RentalHandoffService, rentalHandoffService } from "./rentalHandoffService";
 import { storageGetSignedUrl } from "./storage";
 
-/** Only a streaming download route; shop auth is intentionally not global middleware. */
+/** Rental-only OAuth and streaming downloads; shop auth is not global middleware. */
 export function registerRentalHandoffApi(app: Express, service: RentalHandoffService = rentalHandoffService) {
-  app.get("/api/rental-handoff/gmail/callback", (_req, res) => {
+  app.get("/api/rental-handoff/gmail/callback", async (req, res) => {
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
-    res.status(410).json({ error: "Rental emails now use the shared Mailgun sender. Personal Gmail connections are no longer required." });
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    let user = null;
+    try { user = await sdk.authenticateRequest(req); } catch { /* No anonymous OAuth binding. */ }
+    // Only native rental ADMIN can finish OAuth; the shared storage owner is never
+    // passed as the authenticated principal. State verifies this exact admin key.
+    if (!user) { res.status(401).json({ error: "Sign in as the rental Admin who started the shared Gmail connection, then connect again." }); return; }
+    const actor = await resolveRentalActor({ req, user }, service.repo, service.deps.now());
+    if (!actor || actor.role !== "admin") { res.status(403).json({ error: "Rental Admin access is required to connect the shared Gmail sender." }); return; }
+    const { code, state, error } = req.query;
+    if (typeof code !== "string" || typeof state !== "string" || error !== undefined || !/^[A-Za-z0-9_-]{43}$/.test(state) || !code || code.length > 4096) {
+      res.redirect(303, "/rental-handoff/admin?gmail=error"); return;
+    }
+    try {
+      await service.finishSharedGmail(actor, code, state);
+      res.redirect(303, "/rental-handoff/admin?gmail=connected");
+    } catch {
+      // Never return arbitrary Google error text, authorization code, or state.
+      res.redirect(303, "/rental-handoff/admin?gmail=error");
+    }
   });
   app.get("/api/rental-handoff/files/:type/:id", async (req, res) => {
     const abort = new AbortController();

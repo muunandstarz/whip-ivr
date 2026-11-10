@@ -1,12 +1,15 @@
 /**
- * Isolated staff-owned Gmail sending; never imports or enables inbox ingestion.
+ * Isolated shared rental Gmail sending; never imports or enables inbox ingestion.
+ * Shared methods bind consent to a real native rental Admin, while tokens belong
+ * to one fixed internal storage owner used by all authorized rental staff. Legacy
+ * actor-owned factory methods remain for compatibility but have no active routes.
  * OAuth/API contracts:
  * https://developers.google.com/identity/protocols/oauth2/web-server
  * https://developers.google.com/identity/openid-connect/openid-connect
  * https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send
  *
- * Integration: resolveRentalActor must authenticate the SAME native/shop actor at
- * connect and callback. Only pass server-resolved actor keys to these functions.
+ * Integration: resolveRentalActor must authenticate the SAME native ADMIN at
+ * shared connect and callback. Pass only server-resolved staff keys for sending.
  * The service must reserve its unique email-log entry before invoking send, and
  * persist an uncertain outcome (never blindly retry) when deliveryUncertain=true.
  * Gmail has NO provider idempotency API: Message-ID/X-Idempotency-Key are correlation
@@ -17,7 +20,7 @@
  * recipients are added. Upstream file grants/retention remain unchanged.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, like, or } from "drizzle-orm";
 import {
   rentalOauthStates,
   rentalSenderTokens,
@@ -34,6 +37,10 @@ const SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const STATE_MS = 10 * 60 * 1000;
 const HTTP_MS = 15_000;
 const UNCERTAIN = "delivery status uncertain — reconcile before resend";
+/** Internal-only owner: never accept a caller-supplied shared key or From email. */
+export const RENTAL_SHARED_GMAIL_OWNER = "shared:rental-gmail";
+export const RENTAL_SHARED_GMAIL_CALLBACK = "https://whipclaimsivr.com/api/rental-handoff/gmail/callback";
+export const RENTAL_GMAIL_MAX_PDF_BYTES = 20 * 1024 * 1024;
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
@@ -68,6 +75,9 @@ export interface RentalSenderStore {
     now: number
   ): Promise<StateRow | undefined>;
   removeStates(actorKey: string): Promise<void>;
+  /** Atomic completion-state consume + shared credential save; disconnect wins. */
+  finalizeSharedToken?(stateHash: string, now: number, row: SenderWrite): Promise<boolean>;
+  disconnectShared?(): Promise<void>;
 }
 
 async function database() {
@@ -140,7 +150,25 @@ const drizzleStore: RentalSenderStore = {
   async removeStates(actorKey) {
     await (await database())
       .delete(rentalOauthStates)
-      .where(eq(rentalOauthStates.actorKey, actorKey));
+      .where(actorKey === RENTAL_SHARED_GMAIL_OWNER
+        ? or(eq(rentalOauthStates.actorKey, RENTAL_SHARED_GMAIL_OWNER), like(rentalOauthStates.actorKey, `${RENTAL_SHARED_GMAIL_OWNER}|native:%`))
+        : eq(rentalOauthStates.actorKey, actorKey));
+  },
+  async finalizeSharedToken(stateHash, now, row) {
+    return (await database()).transaction(async tx => {
+      const predicate = and(eq(rentalOauthStates.actorKey, RENTAL_SHARED_GMAIL_OWNER), eq(rentalOauthStates.stateHash, stateHash), gt(rentalOauthStates.expiresAt, now));
+      const [intent] = await tx.select().from(rentalOauthStates).where(predicate).limit(1).for("update");
+      if (!intent || row.actorKey !== RENTAL_SHARED_GMAIL_OWNER) return false;
+      await tx.delete(rentalOauthStates).where(predicate);
+      await tx.insert(rentalSenderTokens).values(row).onDuplicateKeyUpdate({ set: row });
+      return true;
+    });
+  },
+  async disconnectShared() {
+    await (await database()).transaction(async tx => {
+      await tx.delete(rentalOauthStates).where(or(eq(rentalOauthStates.actorKey, RENTAL_SHARED_GMAIL_OWNER), like(rentalOauthStates.actorKey, `${RENTAL_SHARED_GMAIL_OWNER}|native:%`)));
+      await tx.delete(rentalSenderTokens).where(eq(rentalSenderTokens.actorKey, RENTAL_SHARED_GMAIL_OWNER));
+    });
   },
 };
 
@@ -161,6 +189,15 @@ function validActorKey(key: string) {
   ) {
     throw new Error("An authenticated rental staff actor is required.");
   }
+}
+function sharedAdmin(actor: RentalActor) {
+  validActorKey(actor.key);
+  if (actor.role !== "admin" || !/^native:[1-9]\d*$/.test(actor.key))
+    throw new Error("Rental Admin access is required to manage shared Gmail.");
+}
+function sharedStateOwner(actor: RentalActor) {
+  // Existing state actorKey stores BOTH distinct principals without a migration.
+  return `${RENTAL_SHARED_GMAIL_OWNER}|${actor.key}`;
 }
 function emailAddress(value: unknown): string {
   // Conservative ASCII addr-spec only; no display names, CR/LF, quoted strings,
@@ -355,7 +392,7 @@ export function createRentalSenderGmail(deps: {
         redirect: "error",
       });
       if (!response.ok) {
-        if (sending && response.status >= 500)
+        if (sending && (response.status === 408 || response.status >= 500))
           throw new RentalGmailDeliveryUncertainError();
         safeError = new Error(
           `${label} was rejected (HTTP ${response.status}).`
@@ -419,8 +456,7 @@ export function createRentalSenderGmail(deps: {
       );
     return { email: canonicalEmail(user.email), subject: user.sub };
   }
-  async function rentalSenderStatus(actorKey: string) {
-    validActorKey(actorKey);
+  async function senderStatusForOwner(actorKey: string) {
     const configured = Boolean(
       process.env.GMAIL_CLIENT_ID?.trim() &&
         process.env.GMAIL_CLIENT_SECRET?.trim()
@@ -434,23 +470,43 @@ export function createRentalSenderGmail(deps: {
       return { connected: false, email: null, configured };
     }
   }
+  async function rentalSenderStatus(actorKey: string) {
+    validActorKey(actorKey);
+    return senderStatusForOwner(actorKey);
+  }
+  async function sharedGmailStatus(actorKey: string) {
+    validActorKey(actorKey);
+    return { ...await senderStatusForOwner(RENTAL_SHARED_GMAIL_OWNER), provider: "gmail" as const, shared: true as const };
+  }
   async function connectRentalSender(actor: RentalActor, baseOrigin: string) {
     validActorKey(actor.key);
+    return connectForStateOwner(actor.key, callbackUri(baseOrigin));
+  }
+  async function connectSharedGmail(actor: RentalActor) {
+    sharedAdmin(actor);
+    if (!store.finalizeSharedToken) throw new Error("Shared Gmail credential storage is unavailable.");
+    return connectForStateOwner(sharedStateOwner(actor), RENTAL_SHARED_GMAIL_CALLBACK);
+  }
+  async function connectForStateOwner(stateOwner: string, redirectUri: string) {
     const { clientId } = oauthConfig();
     // Check encryption readiness before initiating consent, without storing secrets.
     encryptRental({ readiness: true });
-    const redirectUri = callbackUri(baseOrigin),
-      state = randomBytes(32).toString("base64url"),
+    const state = randomBytes(32).toString("base64url"),
       createdAt = now();
     await persist(() =>
       store.insertState({
-        actorKey: actor.key,
+        actorKey: stateOwner,
         stateHash: hash(state),
         redirectUri,
         expiresAt: createdAt + STATE_MS,
         createdAt,
       })
     );
+    if (stateOwner.startsWith(`${RENTAL_SHARED_GMAIL_OWNER}|`)) {
+      // A second, domain-separated hash permits atomic publication after exchange.
+      // Disconnect deletes this intent even if the CSRF state is already consumed.
+      await persist(() => store.insertState({ actorKey: RENTAL_SHARED_GMAIL_OWNER, stateHash: hash(`shared-finalize:${state}`), redirectUri, expiresAt: createdAt + STATE_MS, createdAt }));
+    }
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -469,6 +525,13 @@ export function createRentalSenderGmail(deps: {
     state: string
   ) {
     validActorKey(actor.key);
+    return finishForOwners(actor.key, actor.key, code, state, false);
+  }
+  async function finishSharedGmail(actor: RentalActor, code: string, state: string) {
+    sharedAdmin(actor);
+    return finishForOwners(sharedStateOwner(actor), RENTAL_SHARED_GMAIL_OWNER, code, state, true);
+  }
+  async function finishForOwners(stateOwner: string, tokenOwner: string, code: string, state: string, shared: boolean) {
     oauthConfig();
     if (
       typeof state !== "string" ||
@@ -483,17 +546,19 @@ export function createRentalSenderGmail(deps: {
     // Commit the deletion BEFORE any provider request. Wrong actors do not consume
     // valid state; failures after consumption require a fresh connect attempt.
     const saved = await persist(() =>
-      store.consumeState(actor.key, hash(state), now())
+      store.consumeState(stateOwner, hash(state), now())
     );
     if (
       !saved ||
-      saved.actorKey !== actor.key ||
+      saved.actorKey !== stateOwner ||
       saved.stateHash !== hash(state) ||
       saved.expiresAt <= now()
     )
       throw new Error(
         "Rental Gmail authorization state is invalid or expired."
       );
+    if (shared && saved.redirectUri !== RENTAL_SHARED_GMAIL_CALLBACK)
+      throw new Error("Rental Gmail callback origin is not allowed.");
     if (callbackUri(new URL(saved.redirectUri).origin) !== saved.redirectUri)
       throw new Error("Rental Gmail callback origin is not allowed.");
     const data = await tokenRequest({
@@ -504,7 +569,7 @@ export function createRentalSenderGmail(deps: {
     const fields = tokenFields(data, now()),
       scopes = scopesFrom(data.scope);
     const identity = await verifiedIdentity(fields.accessToken);
-    const previous = await persist(() => store.findToken(actor.key));
+    const previous = await persist(() => store.findToken(tokenOwner));
     let refreshToken =
       typeof data.refresh_token === "string" && data.refresh_token
         ? data.refresh_token
@@ -525,22 +590,26 @@ export function createRentalSenderGmail(deps: {
       );
     const payload: Credential = {
       version: 1,
-      actorKey: actor.key,
+      actorKey: tokenOwner,
       ...identity,
       ...fields,
       refreshToken,
       scopes,
     };
-    // Atomic upsert replaces the old account's encrypted tokens. Never retain an
-    // old account refresh token or revoke application-wide/shared credentials.
-    await persist(() =>
-      store.saveToken({
-        actorKey: actor.key,
+    const next: SenderWrite = {
+        actorKey: tokenOwner,
         email: identity.email,
         tokenPayload: encryptRental(payload),
         updatedAt: Math.max(now(), (previous?.updatedAt || 0) + 1),
-      })
-    );
+    };
+    // Shared publication consumes its completion intent atomically with upsert.
+    // A disconnect during Google exchange cannot resurrect the connection.
+    if (shared) {
+      if (!store.finalizeSharedToken || !(await persist(() => store.finalizeSharedToken!(hash(`shared-finalize:${state}`), now(), next))))
+        throw new Error("Rental Gmail authorization changed or expired; connect again.");
+    } else {
+      await persist(() => store.saveToken(next));
+    }
     return { email: identity.email };
   }
   async function disconnectRentalSender(actorKey: string) {
@@ -569,8 +638,23 @@ export function createRentalSenderGmail(deps: {
     }
     await persist(() => store.removeToken(row));
   }
+  async function disconnectSharedGmail(actor: RentalActor) {
+    sharedAdmin(actor);
+    // Google revocation can affect other grants for the same OAuth client/account.
+    // Local rental-only disconnect never touches inbox tokens or Google-wide grants.
+    if (!store.disconnectShared) throw new Error("Shared Gmail credential storage is unavailable.");
+    await persist(() => store.disconnectShared!());
+    return { success: true as const };
+  }
   async function sendRentalPacketGmail(input: RentalPacketGmailInput) {
     validActorKey(input.actorKey);
+    return sendForOwner(input, input.actorKey);
+  }
+  async function sendRentalPacketSharedGmail(input: RentalPacketGmailInput) {
+    validActorKey(input.actorKey);
+    return sendForOwner(input, RENTAL_SHARED_GMAIL_OWNER);
+  }
+  async function sendForOwner(input: RentalPacketGmailInput, tokenOwner: string) {
     oauthConfig();
     const renter = emailAddress(input.renterEmail),
       claim = emailAddress(input.claimEmail);
@@ -587,14 +671,16 @@ export function createRentalSenderGmail(deps: {
     if (
       !Buffer.isBuffer(input.pdf) ||
       input.pdf.length < 5 ||
-      input.pdf.length > 20 * 1024 * 1024 ||
+      input.pdf.length > RENTAL_GMAIL_MAX_PDF_BYTES ||
       input.pdf.subarray(0, 5).toString("ascii") !== "%PDF-"
     )
       throw new Error("A rental PDF packet no larger than 20 MB is required.");
-    const row = await persist(() => store.findToken(input.actorKey));
+    const row = await persist(() => store.findToken(tokenOwner));
     if (!row)
       throw new Error(
-        "Connect your own Gmail account before sending a rental packet."
+        tokenOwner === RENTAL_SHARED_GMAIL_OWNER
+          ? "A rental Admin must connect the shared Gmail account before sending a rental packet."
+          : "Connect your own Gmail account before sending a rental packet."
       );
     let token = credential(row);
     if (token.expiresAt <= now() + 60_000) {
@@ -632,7 +718,7 @@ export function createRentalSenderGmail(deps: {
     }
     // Check for a concurrent disconnect/reauth immediately before sending. This
     // narrows the race but does not promise distributed exactly-once delivery.
-    const current = await persist(() => store.findToken(input.actorKey));
+    const current = await persist(() => store.findToken(tokenOwner));
     if (
       !current ||
       credential(current).accessToken !== token.accessToken ||
@@ -701,6 +787,11 @@ export function createRentalSenderGmail(deps: {
     finishRentalSender,
     disconnectRentalSender,
     sendRentalPacketGmail,
+    sharedGmailStatus,
+    connectSharedGmail,
+    finishSharedGmail,
+    disconnectSharedGmail,
+    sendRentalPacketSharedGmail,
   };
 }
 
@@ -710,3 +801,9 @@ export const connectRentalSender = production.connectRentalSender;
 export const finishRentalSender = production.finishRentalSender;
 export const disconnectRentalSender = production.disconnectRentalSender;
 export const sendRentalPacketGmail = production.sendRentalPacketGmail;
+export const sharedGmailStatus = production.sharedGmailStatus;
+export const connectSharedGmail = production.connectSharedGmail;
+export const finishSharedGmail = production.finishSharedGmail;
+export const disconnectSharedGmail = production.disconnectSharedGmail;
+export const sendRentalPacketSharedGmail = production.sendRentalPacketSharedGmail;
+export type RentalSharedGmailStatus = Awaited<ReturnType<typeof sharedGmailStatus>>;

@@ -39,6 +39,11 @@ function fixture(): RentalPacketInput {
   Object.assign(d.payment, { cardholderName: d.renterName, billingAddress: "100 Example St", zip: "20850", phone: "555-0100", cardType: "Visa", lastFour: "4242", expiration: "01/30", relationship: "Renter", estimatedDays: 2, holdEntered: true, witness: "Pat Example", photoIdChecked: true, authorizationAcknowledged: true });
   return { rentalId: 1, version: 1, draft: d, vehicle: { id: 1, locationId: 1, ymm: "2024 Toyota Camry", vin: "1HGCM82633A004352", plate: "SAMPLE2 / MD", lastOdometer: 12345, status: "Available" }, location: { id: 1, name: "Example Shop", address: "100 Example St", phone: "555-0102", timezone: "America/New_York", active: true }, rates: { ...DEFAULT_RENTAL_RATES }, assets: [], settings: { counselApproved: true, registrationConfirmed: false, financialResponsibilityReference: "", omitFinancialReference: true, retentionYears: 7, senderEmail: "rental@example.invalid", emailProviderReady: true, rates: { ...DEFAULT_RENTAL_RATES }, rateVersion: 1 }, templates: templates() };
 }
+function fittingFixture(): RentalPacketInput {
+  const input = fixture(); input.vehicle.ymm = "2024 Camry"; input.vehicle.plate = "DEMO / MD";
+  input.draft.payment.chargedWhen = "At return";
+  return input;
+}
 function returned(): RentalReturn { return { returnedAt: "2026-11-12T16:00:00Z", odometer: 12400, fuel: "3/4", condition: CONDITION_AREAS.map(area => ({ area, ok: true, note: "" })), noticeAt: "2026-11-11T15:00:00Z", tolls: 12.34, parking: 5, fines: 0, researchEvents: 1, cleaning: 10, roadside: 0, lossOfUseDays: 0, lossOfUseResponsible: false, damageNoticeNotes: "No damage claim entered in this synthetic example.", notes: "Synthetic return only.", chargesSettled: false, representativeName: "Return Example" }; }
 async function rawPage(page: any) {
   const contents = page.node.Contents(); const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
@@ -95,7 +100,7 @@ describe("rental PDF input text validation", () => {
 describe.skipIf(!originalsAvailable)("rental PDF exact-original integration", () => {
   it("keeps nine base pages in RP0/RP1/RP2/RP3/RP4 order, Letter, exact text except approved e1 zones", async () => {
     const bytes = await buildRentalPacket(fixture()); saveSample("synthetic-handoff.pdf", bytes);
-    const pages = extract(bytes); const doc = await PDFDocument.load(bytes); expect(doc.getPageCount()).toBeGreaterThanOrEqual(9);
+    const pages = extract(bytes); const doc = await PDFDocument.load(bytes); expect(doc.getPageCount()).toBe(10);
     for (const page of doc.getPages()) expect(page.getSize()).toEqual({ width: 612, height: 792 });
     const titles = ["RENTAL VEHICLE INFORMATION", "RENTAL PROTECTION ELECTION AND DAMAGE WAIVER", "3. What each option covers", "8. Roadside assistance and towing", "12. Return of the Rental Vehicle", "RENTAL PAYMENT AUTHORIZATION", "4. Authorization and signature", "COVERAGE VERIFICATION WORKSHEET", "RENTAL VEHICLE CONDITION REPORT"];
     titles.forEach((title, n) => expect(normalize(pages[n])).toContain(title));
@@ -130,6 +135,91 @@ describe.skipIf(!originalsAvailable)("rental PDF exact-original integration", ()
       expect(Number(word[1])).toBeGreaterThanOrEqual(36);expect(Number(word[2])).toBeGreaterThanOrEqual(36);
       expect(Number(word[3])).toBeLessThanOrEqual(576);expect(Number(word[4])).toBeLessThanOrEqual(756);
     }
+  });
+  it("keeps each protection body beside its bold lead at the approved space and preserves every election word", async () => {
+    const source = wordBoxes(Buffer.from(templates().packet), "approved-options")[0];
+    const bytes = await buildRentalPacket(fittingFixture()); const output = wordBoxes(bytes, "aligned-options")[1];
+    const starts = (words: WordBox[]) => words.filter(w => ["For", "Only"].includes(w.text));
+    const sourceStarts = starts(source); const outputStarts = starts(output);
+    expect(sourceStarts).toHaveLength(3); expect(outputStarts).toHaveLength(3);
+    for (const [n, start] of outputStarts.entries()) {
+      const previous = (words: WordBox[], body: WordBox) => words.filter(w => Math.abs(w.top - body.top) < 0.1 && w.right <= body.left).sort((a, b) => b.right - a.right)[0];
+      const lead = previous(output, start); const sourceLead = previous(source, sourceStarts[n]);
+      expect(start.left - lead.right).toBeCloseTo(sourceStarts[n].left - sourceLead.right, 3);
+      expect(start.left - lead.right).toBeGreaterThan(2); expect(start.left - lead.right).toBeLessThan(4);
+      expect(start.top).toBeCloseTo(lead.top, 3); expect(start.bottom - start.top).toBeCloseTo(sourceStarts[n].bottom - sourceStarts[n].top, 3);
+    }
+    const electionWords = (words: WordBox[]) => {
+      const first = words.find(w => w.text === "Option")!.top;
+      const end = words.filter(w => w.text === "Initials").sort((a, b) => b.top - a.top)[0].bottom;
+      return words.filter(w => w.top >= first - 0.1 && w.bottom <= end + 0.1 && !["AE", "Initials"].includes(w.text) && !/^[\u2610\u2612]$/.test(w.text)).map(w => w.text);
+    };
+    expect(electionWords(output)).toEqual(electionWords(source));
+    const doc = await PDFDocument.load(bytes); const raw = await rawPage(doc.getPage(1));
+    // All three original selectable checkbox glyphs and the one selected X survive.
+    expect((raw.match(/\/F3 13 Tf<01>Tj/g) ?? [])).toHaveLength(3);
+    expect((raw.match(/0\.8 w/g) ?? [])).toHaveLength(2);
+  });
+  it("exports only nine base pages when fields fit, retaining routine metadata in the unmodified record", async () => {
+    const input = fittingFixture(); input.draft.staffNote = "Private routine staff note remains in record.";
+    const before = structuredClone(input.draft); const bytes = await buildRentalPacket(input); saveSample("synthetic-normal-handoff.pdf", bytes);
+    const doc = await PDFDocument.load(bytes); const pages = extract(bytes, "normal-no-metadata");
+    expect(doc.getPageCount()).toBe(9); expect(pages).toHaveLength(9); expect(input.draft).toEqual(before);
+    expect(pages.join(" ")).not.toContain("RENTAL FIELD CONTINUATION SCHEDULE");
+    expect(normalize(pages[6])).toContain(`Renter date of birth Driver license expiration ${input.draft.dob} ${input.draft.licenseExpiration}`);
+    for (const text of [input.draft.email, input.draft.claimEmail, input.draft.staffNote, "Cardholder photo ID checked", "Security hold entered", "Payment acknowledgment"]) expect(pages.join(" ")).not.toContain(text);
+    expectPrintFrame(wordBoxes(bytes, "normal-frame"));
+  });
+  it("retains both additional-driver license expirations on the existing page without an added schedule", async () => {
+    const input = fittingFixture();
+    input.draft.additionalDrivers = [{ name: "Dana Example", license: "D100", state: "MD", expiration: "2029-01-02", onPolicy: true, verified: true }, { name: "Lee Example", license: "D200", state: "MD", expiration: "2029-03-04", onPolicy: true, verified: true }];
+    const before = structuredClone(input.draft); const bytes = await buildRentalPacket(input);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(9); expect(input.draft).toEqual(before);
+    const page = normalize(extract(bytes, "driver-expirations")[6]);
+    expect(page).toContain("Additional driver 1 license expiration: 2029-01-02");
+    expect(page).toContain("Additional driver 2 license expiration: 2029-03-04");
+    expectPrintFrame(wordBoxes(bytes, "driver-expiration-frame"));
+  });
+  it("keeps the existing sample's two true overflows on one referenced schedule without metadata or blank pages", async () => {
+    const input = fixture(); const bytes = await buildRentalPacket(input); saveSample("synthetic-overflow-handoff.pdf", bytes);
+    const doc = await PDFDocument.load(bytes); const pages = extract(bytes, "two-overflows");
+    expect(doc.getPageCount()).toBe(10); expect(pages).toHaveLength(10);
+    expect(normalize(pages[5])).toContain("See schedule 1"); expect(normalize(pages[5])).toContain("See schedule 2");
+    expect(normalize(pages[9])).toContain(`Schedule 1 - Rental vehicle / plate ${input.vehicle.ymm} / ${input.vehicle.plate}`);
+    expect(normalize(pages[9])).toContain(`Schedule 2 - Charges timing ${input.draft.payment.chargedWhen}`);
+    expect(pages[9].match(/Schedule \d+ - /g)).toHaveLength(2);
+    expect(pages[9]).not.toMatch(/RP\d\.|Renter email|Claim file email|Rental reference|date of birth|hold entered/);
+  });
+  it("preserves all long condition text across continuation pages with no empty extra pages", async () => {
+    const input = fittingFixture(); const note = Array.from({ length: 45 }, (_, n) => `Detail-${n}`).join(" ");
+    input.draft.condition.forEach(row => row.note = note);
+    const bytes = await buildRentalPacket(input); saveSample("synthetic-multipage-overflow.pdf", bytes);
+    const doc = await PDFDocument.load(bytes); const pages = extract(bytes, "multipage-overflow");
+    expect(doc.getPageCount()).toBeGreaterThan(10); expect(pages).toHaveLength(doc.getPageCount());
+    for (const page of pages.slice(9)) {
+      expect(page).toContain("RENTAL FIELD CONTINUATION SCHEDULE");
+      expect(page).toContain("Detail-");
+    }
+    expect(normalize(pages.slice(9).join(" ")).match(/Detail-44/g)).toHaveLength(CONDITION_AREAS.length);
+    expect(normalize(pages.slice(9).join(" "))).toContain(note);
+    expectPrintFrame(wordBoxes(bytes, "multipage-frame"));
+  });
+  it("keeps signature/evidence appendices and compact returns without forced metadata pages", async () => {
+    const input = fittingFixture(); input.assets = [{ id: 1, kind: "renterSignature", signerName: input.draft.renterName, bytes: image() }, { id: 2, kind: "front", bytes: image() }];
+    const pickup = await buildRentalPacket(input); expect((await PDFDocument.load(pickup)).getPageCount()).toBe(10);
+    expect(extract(pickup, "one-evidence")[9]).toContain("RENTAL EVIDENCE APPENDIX");
+    input.assets.push({ id: 3, kind: "signedPayment", bytes: image() });
+    input.draft.payment.isRenter = false; input.draft.payment.cardholderName = "Other Example";
+    const ink = await buildRentalPacket(input); expect((await PDFDocument.load(ink)).getPageCount()).toBe(11);
+    const inkPages = extract(ink, "ink-evidence"); expect(inkPages[9]).toContain("SIGNED AUTHORIZATION APPENDIX"); expect(inkPages[10]).toContain("RENTAL EVIDENCE APPENDIX");
+    const returnData = returned(); const charges = calculateRentalCharges(input.draft, returnData, input.rates, input.location.timezone);
+    const bytes = await buildRentalReturnPacket({ ...input, returnData, charges });
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2); expect(extract(bytes, "compact-return")).toHaveLength(2);
+    input.assets.push({ id: 4, kind: "returnFront", bytes: image() });
+    returnData.condition[0].note = "Long entered return condition narrative that must be retained in a genuine field continuation schedule.";
+    const overflowReturn = await buildRentalReturnPacket({ ...input, returnData, charges });
+    const returnPages = extract(overflowReturn, "overflow-return"); expect((await PDFDocument.load(overflowReturn)).getPageCount()).toBe(4);
+    expect(normalize(returnPages[2])).toContain(returnData.condition[0].note); expect(returnPages[3]).toContain("RENTAL EVIDENCE APPENDIX");
   });
   it("fetches the deployed keys through signed storage URLs, never local source paths", async () => {
     const mock = vi.mocked(storageGetSignedUrl); mock.mockImplementation(async key => `https://test.invalid/${key}`);

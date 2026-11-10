@@ -178,6 +178,23 @@ const money = (value: number) => { if (!Number.isFinite(value) || value < 0) fai
 
 type Continuation = { id: number; field: string; text: string };
 type CellOptions = { lines?: number; continuation?: boolean; size?: number };
+function continuationLabel(field: string): string {
+  const condition = field.match(/^RP4\.(pickup|return)\.(.+)$/);
+  if (condition) return `${condition[1] === "pickup" ? "Pick-up" : "Return"} condition - ${condition[2]}`;
+  const driver = field.match(/^RP1\.additionalDriver(\d+)\.(name|licenseState)$/);
+  if (driver) return `Additional driver ${driver[1]} ${driver[2] === "name" ? "name" : "license / state"}`;
+  const signature = field.match(/^(.+Signature)\.printedName$/);
+  if (signature) return `${({ renterSignature: "Renter", representativeSignature: "Representative", returnRenterSignature: "Return renter", returnRepresentativeSignature: "Return representative" } as Record<string, string>)[signature[1]] ?? "Signer"} printed name`;
+  const key = field.replace(/^RP\d\./, "");
+  const labels: Record<string, string> = {
+    vehicle: "Rental vehicle", plateState: "Rental license plate / state", plate: "Rental license plate / state", renter: "Renter name", renterName: "Renter name", claim: "Claim number", claimNumber: "Claim number",
+    licenseState: "Driver license / state", additionalDrivers: "Additional drivers", location: "Rental location", financialReference: "Evidence of financial responsibility", insurerPolicy: "Renter insurer / policy",
+    phone: "Phone number", insurer: "Insurer", policy: "Policy number", verifiedWith: "Verified with", verifiedByDate: "Verified by / date", vehiclePlate: "Rental vehicle / plate", cardholder: "Cardholder name",
+    billingAddress: "Billing address", relationship: "Relationship to renter", chargedWhen: "Charges timing", cardholderPrintedName: "Cardholder printed name", witness: "Signature witness", contact: "Insurer contact name",
+    verifiedAt: "Date / time verified", verifiedBy: "Verified by", limits: "Liability limits", deductible: "Comprehensive / collision deductible", notes: "Coverage verification notes", pickupPhotos: "Pick-up photos", returnPhotos: "Return photos",
+  };
+  return labels[key] ?? "Entered field";
+}
 class Overlay {
   readonly continuations: Continuation[] = [];
   constructor(readonly doc: PDFDocument, readonly font: PDFFont) {}
@@ -246,7 +263,7 @@ class Overlay {
     for (const item of this.continuations) {
       const lines = this.wrap(item.text, FRAME_WIDTH, 10, item.field);
       if (!page || y < 80) newPage();
-      const label = `Schedule ${item.id} - ${item.field}`;
+      const label = `Schedule ${item.id} - ${continuationLabel(item.field)}`;
       if (this.font.widthOfTextAtSize(label, 10) > FRAME_WIDTH) fail(item.field, "schedule heading exceeds physical margins");
       page!.drawText(label, { x: MARGIN, y, size: 10, font: this.font, color: BLACK }); y -= 17;
       for (const line of lines) { if (y < MARGIN + 10) newPage(); if (this.font.widthOfTextAtSize(line, 10) > FRAME_WIDTH) fail(item.field, "single word exceeds continuation width"); page!.drawText(line, { x: MARGIN, y, size: 10, font: this.font, color: BLACK }); y -= 14; } y -= 14;
@@ -314,6 +331,30 @@ function removeAuthorizedText(page: PDFPage, kind: "registration" | "signature")
   if (removed !== (kind === "registration" ? 1 : 4)) fail("authorizedRevision", "approved source text-zone count mismatch");
   page.node.set(PDFName.of("Contents"), page.doc.context.register(page.doc.context.flateStream(Buffer.from(text,"latin1"))));
 }
+/** Each elected option starts with separate bold/regular source text runs.
+ * Expanding their origins while retaining the original font widths otherwise
+ * inserts a large gap after the bold lead. Counter-space only the three regular
+ * run origins; retain every original glyph, font, TJ operand and baseline. The
+ * checksum-pinned source and exact match count make this presentation-only. */
+function alignProtectionOptionText(page: PDFPage) {
+  const contents = page.node.Contents();
+  const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+  const origins = new Map([
+    ["302.9 281.639", 302.9],
+    ["421.95 208.489", 421.95],
+    ["165.8 135.339", 165.8],
+  ]);
+  let aligned = 0;
+  const text = refs.map(ref => Buffer.from(decodePDFRawStream(page.doc.context.lookup(ref) as PDFRawStream).decode()).toString("latin1")).join("\n").replace(/BT\s[\s\S]*?ET/g, block =>
+    block.replace(/([\d.]+) ([\d.]+) Td/, (operator, x, y) => {
+      const originalX = origins.get(`${x} ${y}`);
+      if (originalX === undefined) return operator;
+      aligned++;
+      return `${94.6 + (originalX - 94.6) / SCALE_X} ${y} Td`;
+    }));
+  if (aligned !== 3) fail("template", "protection-option source text-origin count mismatch");
+  page.node.set(PDFName.of("Contents"), page.doc.context.register(page.doc.context.flateStream(Buffer.from(text, "latin1"))));
+}
 /** Move source origins/table paths into the wider Letter frame, but counteract
  * the anisotropic frame transform in EACH text matrix and logo matrix. This is
  * positioning/re-spacing only: original glyph strings, TJ kerning, font sizes,
@@ -349,6 +390,7 @@ async function sourcePages(input: RentalPacketInput, returnOnly: boolean) {
   if (packet.getPageCount() !== 8 || vehicle.getPageCount() !== 1) fail("templates", "expected original 8 + 1 pages");
   const doc = await PDFDocument.create(); doc.setTitle(returnOnly ? "Rental return packet" : "Claimant rental handoff packet"); doc.setAuthor("Metrocars Leasing Corp.");
   if (!returnOnly) { removeAuthorizedText(vehicle.getPage(0), "registration"); removeAuthorizedText(packet.getPage(5), "signature"); }
+  if (!returnOnly) alignProtectionOptionText(packet.getPage(0));
   const source = returnOnly ? [packet.getPage(7)] : [vehicle.getPage(0), ...packet.getPages()];
   // Modify new packet copies only. No originals/cache/stored signed PDFs change.
   // Text stays searchable; original signature rules remain on their pages.
@@ -467,6 +509,18 @@ export async function buildRentalPacket(input: RentalPacketInput): Promise<Buffe
   if(d.payment.authorizationAcknowledged) await signatureRow(o,p[6],input,"renterSignature",d.renterName,start,316.5);
   // Contract has no entered-by or ID-type metadata: leave those cells blank rather than invent facts.
   grid(o,p[6],1,351.15,"RP2.witness",d.payment.witness,"RP2.witnessDate",d.payment.witness?start:"",17.3);
+  // Preserve the captured identity facts in RP2's existing unused office-use
+  // space, not in a separate routine metadata schedule or the in-vehicle notice.
+  for (const [label, field, value, x] of [["Renter date of birth", "RP2.dob", d.dob, 74], ["Driver license expiration", "RP2.licenseExpiration", d.licenseExpiration, 310]] as const) {
+    if (!value) continue;
+    p[6].drawText(label, { x: pageX(p[6], x), y: pageY(426), size: 8.5, font: o.font, color: BLACK });
+    o.cell(p[6], field, value, x, 430, 224, 20);
+  }
+  d.additionalDrivers.forEach((driver, n) => {
+    if (!driver.expiration) return;
+    const text = `Additional driver ${n + 1} license expiration: ${driver.expiration}`;
+    o.cell(p[6], `RP2.additionalDriver${n + 1}Expiration`, text, 74, 457 + n * 22, 462, 20);
+  });
   // RP3 insurer confirmation, with each factual checkbox bound to actual captured metadata.
   [["renter",d.renterName,"claim",d.claimNumber],["insurer",d.insurance.insurer,"policy",d.insurance.policy],["contact",d.insurance.contact,"phone",d.insurance.phone],["verifiedAt",date(d.insurance.verifiedAt,zone,true),"verifiedBy",d.insurance.verifiedBy]].forEach(([lf,lv,rf,rv],n)=>grid(o,p[7],n,141.75,`RP3.${lf}`,lv,`RP3.${rf}`,rv));
   const startDay=d.pickupAt?new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(d.pickupAt)):"";
@@ -479,21 +533,10 @@ export async function buildRentalPacket(input: RentalPacketInput): Promise<Buffe
   o.cell(p[7],"RP3.notes",d.insurance.notes,74,669,463,36,{lines:3,continuation:true});
   await signatureRow(o,p[7],input,"representativeSignature",d.representativeName,date(d.insurance.verifiedAt,zone)||start,748.1);
   conditionOverlay(o,p[8],input); await conditionSignatures(o,p[8],input);
-  supplementalMetadata(o,input); o.appendContinuations(input); await appendAssets(o,input,false);
+  // Routine metadata remains in the rental record, not on forced PDF schedules.
+  // Only genuine source-cell overflows add referenced continuation pages.
+  o.appendContinuations(input); await appendAssets(o,input,false);
   return Buffer.from(await doc.save());
-}
-function supplementalMetadata(o:Overlay,input:RentalPacketInput,returned?:RentalReturn) {
-  // These captured values have no corresponding cell in the originals; preserve
-  // them in a clearly labeled schedule, never fabricate new legal wording.
-  const d=input.draft; const fields:[string,unknown][]=[
-    ["Rental reference",`Rental ${input.rentalId}; version ${input.version}; form ${RENTAL_PDF_FORM_VERSION}`],["Renter email",d.email],["Renter vehicle year / make / model",d.renterVehicleYmm],["Renter vehicle VIN",d.renterVehicleVin],["Renter vehicle plate",d.renterVehiclePlate],
-    ["Claim file email",d.claimEmail],
-    ["Scheduled pickup",date(d.scheduledPickup,input.location.timezone,true)],["Renter date of birth",d.dob],["Renter license expiration",d.licenseExpiration],["Location phone",input.location.phone],["Pickup representative",d.representativeName],["Staff note",d.staffNote],
-    ["Cardholder photo ID checked",d.payment.photoIdChecked?"Confirmed in person":""],["Security hold entered",d.payment.holdEntered?"Confirmed in payment system":""],["Payment acknowledgment",d.payment.authorizationAcknowledged?"Acknowledged":""],["Insurance declarations",d.insurance.noneProvided?"None provided":""],["No other liability insurance",d.insurance.noOtherLiability?"Renter confirmed":""],
-    ...d.additionalDrivers.map((a,n)=>[`Additional driver ${n+1} license expiration`,a.expiration] as [string,unknown]),
-  ];
-  if(returned) fields.push(["Return date and time",date(returned.returnedAt,input.location.timezone,true)],["Return representative",returned.representativeName],["Return notice date and time",date(returned.noticeAt,input.location.timezone,true)],["Damage notice / basis notes",returned.damageNoticeNotes],["Return notes",returned.notes]);
-  for(const [field,value] of fields) if(value!==undefined&&value!==null&&String(value).trim())o.continuations.push({id:o.continuations.length+1,field,text:sanitizeRentalPdfText(value,field)});
 }
 async function appendAssets(o:Overlay,input:RentalPacketInput,returnOnly:boolean) {
   // Each scan/photo is evidence, never represented as a substitute for original ink.
@@ -544,6 +587,6 @@ export async function buildRentalReturnPacket(input:RentalReturnPacketInput):Pro
   const {doc,overlay:o,pages:p}=await sourcePages(input,true);
   o.cell(p[0],"formRevision","e1 owner-approved",430,781,106,14,{size:8.5});
   conditionOverlay(o,p[0],input,input.returnData);await conditionSignatures(o,p[0],input,input.returnData);
-  chargesStatement(o,input);supplementalMetadata(o,input,input.returnData);o.appendContinuations(input);await appendAssets(o,input,true);
+  chargesStatement(o,input);o.appendContinuations(input);await appendAssets(o,input,true);
   return Buffer.from(await doc.save());
 }

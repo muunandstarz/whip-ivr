@@ -115,7 +115,7 @@ describe("rental service security and lifecycle", () => {
     deps.sendEmail = vi.fn(async () => ({ providerId: "retry-confirmed" })); expect(await service.resend(shop, { packetId: result.packetId, requestId: "failure-retry-1" })).toMatchObject({ status: "sent" });
   });
   it("uses the shared sender for every actor and only the signed renter plus claim-specific recipient", async () => {
-    deps.senderStatus = vi.fn(async () => ({ connected: true, configured: true, email: "shared@example.test", provider: "mailgun" as const }));
+    deps.senderStatus = vi.fn(async () => ({ connected: true, configured: true, email: "shared@example.test", provider: "gmail" as const, shared: true as const }));
     expect((await service.session(shop)).settings?.senderEmail).toBe("shared@example.test"); expect((await service.session(admin)).sender).toEqual((await service.session(shop)).sender);
     const created = await createReady(); const result = await service.complete(shop, { ...created, requestId: "mailgun-recipients-1" }); expect(result.emailStatus).toBe("sent");
     expect(deps.sendEmail).toHaveBeenCalledWith(expect.objectContaining({ actorKey: shop.key, sender: "shared@example.test", recipient: "renter@example.test", claimEmail: "claim@example.test" }));
@@ -194,47 +194,63 @@ describe("rental service security and lifecycle", () => {
   });
 });
 
-describe("shared Mailgun sender configuration API", () => {
+describe("shared Gmail sender authorization API", () => {
   const config = { domain: "mg.example.test", fromEmail: "shared@example.test", apiKey: "mock-secret-never-live", region: "US" as const };
-  function verifier() {
-    deps.verifySharedSender = vi.fn(async value => ({ config: value, status: { configured: true, connected: true, email: value.fromEmail, provider: "mailgun" as const } }));
+  function oauth() {
+    deps.connectSharedGmail = vi.fn(async () => ({ url: "https://accounts.google.com/o/oauth2/v2/auth?mock" }));
+    deps.disconnectSharedGmail = vi.fn(async () => ({ success: true as const }));
+    deps.finishSharedGmail = vi.fn(async () => ({ email: "shared@example.test" }));
   }
-  it("stores only encrypted credentials in separate numeric settings row and returns no key", async () => {
-    verifier(); const launchRow = structuredClone(repo.rows.settings[0]);
-    const response = await service.saveSharedSender(admin, config);
-    expect(response).toEqual({ success: true, sender: { configured: true, connected: true, email: config.fromEmail, provider: "mailgun" } });
-    const row = repo.rows.settings.find(r => r.id === 2);
-    expect(row.payload).not.toContain(config.apiKey);
-    expect(decryptRental(row.payload)).toEqual({ key: "mailgun_sender", formatVersion: 1, ...config });
-    expect(repo.rows.settings[0]).toEqual(launchRow);
-    expect(JSON.stringify(response)).not.toContain(config.apiKey);
-    expect(JSON.stringify(decryptRental(repo.rows.audit.at(-1).detail))).not.toContain(config.apiKey);
-    expect(JSON.stringify(await service.session(admin))).not.toContain(config.apiKey);
-    await service.saveSharedSender(admin, { ...config, apiKey: "rotated-test-key" });
-    expect(repo.rows.settings.filter(r => r.id === 2)).toHaveLength(1); expect(repo.rows.settings.find(r => r.id === 2).version).toBe(2);
+  it("admin authorizes once through dedicated shared mutation, without changing launch settings or sending mail", async () => {
+    oauth(); const launchRow = structuredClone(repo.rows.settings[0]);
+    const caller = createRentalHandoffRouter(service).createCaller(context({ id: 1, name: admin.name, role: "admin" }).ctx);
+    expect(await caller.connectSharedGmail()).toEqual({ url: "https://accounts.google.com/o/oauth2/v2/auth?mock" });
+    expect(deps.connectSharedGmail).toHaveBeenCalledWith(admin);
+    expect(await caller.disconnectSharedGmail()).toEqual({ success: true });
+    expect(deps.disconnectSharedGmail).toHaveBeenCalledWith(admin);
+    expect(repo.rows.settings).toEqual([launchRow]);
+    expect(repo.rows.audit).toHaveLength(0);
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
-  it("rejects Claims/shop before verification and failed verification before saving without key leakage", async () => {
-    verifier();
-    for (const actor of [shop, { ...admin, role: "claims" as const }]) await expect(service.saveSharedSender(actor, config)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(deps.verifySharedSender).not.toHaveBeenCalled();
-    deps.verifySharedSender = vi.fn(async () => { throw new Error(config.apiKey); });
-    await expect(service.saveSharedSender(admin, config)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(repo.rows.settings).toHaveLength(1); expect(repo.rows.audit).toHaveLength(0); expect(deps.sendEmail).not.toHaveBeenCalled();
+  it("rejects unauthenticated, Claims and cross-origin requests before OAuth operations", async () => {
+    oauth(); const router = createRentalHandoffRouter(service);
+    for (const method of ["connectSharedGmail", "disconnectSharedGmail"] as const) {
+      await expect(router.createCaller(context().ctx)[method]()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(router.createCaller(context({ id: 2, role: "user" }).ctx)[method]()).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(router.createCaller(context({ id: 1, role: "admin" }, "", "https://evil.test").ctx)[method]()).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(service[method](shop)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    }
+    await expect(service.finishSharedGmail(shop, "code", "state")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(deps.connectSharedGmail).not.toHaveBeenCalled();
+    expect(deps.disconnectSharedGmail).not.toHaveBeenCalled();
+    expect(deps.finishSharedGmail).not.toHaveBeenCalled();
   });
-  it("enforces same-origin, authenticated admin and strict mutation schema", async () => {
-    verifier(); const router = createRentalHandoffRouter(service);
-    await expect(router.createCaller(context().ctx).saveSharedSender(config)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await expect(router.createCaller(context({ id: 2, role: "user" }).ctx).saveSharedSender(config)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(router.createCaller(context({ id: 1, role: "admin" }, "", "https://evil.test").ctx).saveSharedSender(config)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(router.createCaller(context({ id: 1, role: "admin" }).ctx).saveSharedSender({ ...config, extraRecipient: "evil@example.test" } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect(deps.verifySharedSender).not.toHaveBeenCalled();
-    expect(await router.createCaller(context({ id: 1, role: "admin" }).ctx).saveSharedSender(config)).toMatchObject({ success: true });
+  it("rejects supplied shared owner and sender override inputs instead of accepting a rebind", async () => {
+    oauth(); const caller = createRentalHandoffRouter(service).createCaller(context({ id: 1, role: "admin" }).ctx);
+    await expect((caller.connectSharedGmail as any)({ actorKey: "shared:rental-gmail", senderEmail: "spoof@example.test" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect((caller.disconnectSharedGmail as any)({ actorKey: "native:2" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(deps.connectSharedGmail).not.toHaveBeenCalled();
+    expect(deps.disconnectSharedGmail).not.toHaveBeenCalled();
   });
-  it("deprecates Gmail connect/disconnect without OAuth or per-actor shared account mutation", async () => {
+  it("returns shared-only status and ignores launch sender override and forged readiness", async () => {
+    deps.senderStatus = vi.fn(async () => ({ connected: true, configured: true, email: "shared@example.test", provider: "gmail" as const, shared: true as const }));
+    await service.saveSettings(admin, { ...readySettings, senderEmail: "spoof@example.test", emailProviderReady: true });
+    for (const actor of [admin, shop, { ...admin, role: "claims" as const }, { ...shop, key: "shop:2", locationIds: [2] }]) {
+      const result = await service.session(actor);
+      expect(result.settings?.senderEmail).toBe("shared@example.test");
+      expect(result.sender).toEqual({ connected: true, configured: true, email: "shared@example.test", provider: "gmail", shared: true });
+    }
+  });
+  it("preserves safe canonical setup guidance without leaking OAuth errors", async () => {
+    oauth(); deps.connectSharedGmail = vi.fn(async () => { throw new Error("private-client-secret"); });
+    await expect(service.connectSharedGmail(admin)).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("https://whipclaimsivr.com/api/rental-handoff/gmail/callback") });
+  });
+  it("disables old Mailgun saving and personal Gmail mutations without DB writes", async () => {
     const router = createRentalHandoffRouter(service), caller = router.createCaller(context({ id: 1, role: "admin" }).ctx);
     await expect(caller.connectSender()).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await expect(caller.disconnectSender()).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(caller.saveSharedSender(config)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(service.saveSharedSender(shop, config)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(router.createCaller(context().ctx).connectSender()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     expect(repo.rows.settings).toHaveLength(1); expect(repo.rows.audit).toHaveLength(0);
   });

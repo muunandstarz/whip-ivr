@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createRentalSenderGmail,
   RentalGmailDeliveryUncertainError,
+  RENTAL_SHARED_GMAIL_OWNER,
+  RENTAL_SHARED_GMAIL_CALLBACK,
   type RentalSenderStore,
   type RentalPacketGmailInput,
 } from "./rentalHandoffGmail";
@@ -84,6 +86,16 @@ class FakeStore implements RentalSenderStore {
   }
   async removeStates(actorKey: string) {
     this.states = this.states.filter(row => row.actorKey !== actorKey);
+  }
+  async finalizeSharedToken(stateHash: string, now: number, row: Omit<SenderRow, "id">) {
+    const intent = await this.consumeState(RENTAL_SHARED_GMAIL_OWNER, stateHash, now);
+    if (!intent || row.actorKey !== RENTAL_SHARED_GMAIL_OWNER) return false;
+    await this.saveToken(row);
+    return true;
+  }
+  async disconnectShared() {
+    this.states = this.states.filter(row => row.actorKey !== RENTAL_SHARED_GMAIL_OWNER && !row.actorKey.startsWith(`${RENTAL_SHARED_GMAIL_OWNER}|`));
+    this.tokens.delete(RENTAL_SHARED_GMAIL_OWNER);
   }
 }
 let store: FakeStore,
@@ -841,5 +853,135 @@ describe("Gmail rental PDF delivery", () => {
     expect(source).toContain('.for("update")');
     expect(source).toContain("Message-ID/X-Idempotency-Key are correlation");
     expect(source).toContain("NOT an exactly-once guarantee");
+  });
+});
+
+const rentalAdmin: RentalActor = { ...actor, role: "admin" };
+async function sharedStateFor(a = rentalAdmin) {
+  return new URL((await gmail.connectSharedGmail(a)).url).searchParams.get("state")!;
+}
+describe("admin-authorized shared rental Gmail", () => {
+  it("binds real admin and fixed shared storage owner separately and always uses canonical callback", async () => {
+    const url = new URL((await gmail.connectSharedGmail(rentalAdmin)).url);
+    const state = url.searchParams.get("state")!;
+    expect(url.searchParams.get("redirect_uri")).toBe(RENTAL_SHARED_GMAIL_CALLBACK);
+    expect(url.searchParams.get("scope")).toBe(GRANT);
+    expect(store.states.find(s => s.stateHash === sha(state))).toMatchObject({ actorKey: `${RENTAL_SHARED_GMAIL_OWNER}|native:1`, expiresAt: clock + 600_000 });
+    expect(store.states.find(s => s.stateHash === sha(`shared-finalize:${state}`))).toMatchObject({ actorKey: RENTAL_SHARED_GMAIL_OWNER });
+    expect(JSON.stringify(store.states)).not.toContain(state);
+    http.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(identityResponse("Shared.Sender@example.test"));
+    await gmail.finishSharedGmail(rentalAdmin, "test-code", state);
+    expect(store.tokens.size).toBe(1);
+    const row = store.tokens.get(RENTAL_SHARED_GMAIL_OWNER)!;
+    expect(decryptRental<any>(row.tokenPayload)).toMatchObject({ actorKey: RENTAL_SHARED_GMAIL_OWNER, email: "shared.sender@example.test" });
+    expect(row.tokenPayload).not.toContain("mock-refresh");
+    expect(store.tokens.has(rentalAdmin.key)).toBe(false);
+    expect(store.states).toHaveLength(0);
+    expect(http.mock.calls[0][1].body.get("redirect_uri")).toBe(RENTAL_SHARED_GMAIL_CALLBACK);
+  });
+  it("rejects shop and Claims connect/disconnect/callback and same-role wrong-admin CSRF without consumption", async () => {
+    const state = await sharedStateFor();
+    for (const a of [actor, shop, { ...shop, role: "admin" as const }]) {
+      await expect(gmail.connectSharedGmail(a)).rejects.toThrow(/Admin/);
+      await expect(gmail.disconnectSharedGmail(a)).rejects.toThrow(/Admin/);
+      await expect(gmail.finishSharedGmail(a, "code", state)).rejects.toThrow(/Admin/);
+    }
+    await expect(gmail.finishSharedGmail({ ...rentalAdmin, key: "native:2" }, "code", state)).rejects.toThrow(/invalid or expired/);
+    expect(store.states).toHaveLength(2);
+    expect(store.tokens.size).toBe(0);
+    expect(http).not.toHaveBeenCalled();
+  });
+  it("rejects replay, concurrent callback, malformed state and ten-minute expiry without repeated exchange", async () => {
+    const state = await sharedStateFor();
+    http.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(identityResponse());
+    const attempts = await Promise.allSettled([gmail.finishSharedGmail(rentalAdmin, "code", state), gmail.finishSharedGmail(rentalAdmin, "code", state)]);
+    expect(attempts.filter(x => x.status === "fulfilled")).toHaveLength(1);
+    await expect(gmail.finishSharedGmail(rentalAdmin, "code", state)).rejects.toThrow(/invalid or expired/);
+    expect(http).toHaveBeenCalledTimes(2);
+    const expired = await sharedStateFor();
+    clock += 600_000;
+    for (const value of [expired, "malformed", "A".repeat(43)]) await expect(gmail.finishSharedGmail(rentalAdmin, "code", value)).rejects.toThrow(/invalid or expired/);
+    expect(http).toHaveBeenCalledTimes(2);
+  });
+  it("never accepts legacy personal OAuth state or the shared owner as an authenticated actor", async () => {
+    const state = await stateFor(rentalAdmin);
+    await expect(gmail.finishSharedGmail(rentalAdmin, "code", state)).rejects.toThrow(/invalid or expired/);
+    await expect(gmail.connectSharedGmail({ ...rentalAdmin, key: RENTAL_SHARED_GMAIL_OWNER })).rejects.toThrow(/authenticated/);
+    await expect(gmail.sendRentalPacketSharedGmail(input({ actorKey: RENTAL_SHARED_GMAIL_OWNER }))).rejects.toThrow(/authenticated/);
+    expect(http).not.toHaveBeenCalled();
+  });
+  it("every authorized shop/Claims send uses one verified shared account; ignores personal token and arbitrary From/Bcc", async () => {
+    await seed(RENTAL_SHARED_GMAIL_OWNER, {}, "shared@example.test");
+    await seed(shop.key, {}, "personal@example.test");
+    http.mockImplementation(async () => response({ id: "shared-send-id" }));
+    for (const a of [rentalAdmin, actor, shop, { ...shop, key: "shop:2" }]) {
+      expect(await gmail.sharedGmailStatus(a.key)).toEqual({ configured: true, connected: true, email: "shared@example.test", provider: "gmail", shared: true });
+      await gmail.sendRentalPacketSharedGmail({ ...input({ actorKey: a.key }), sender: "spoof@example.test", bcc: "thief@example.test" } as any);
+    }
+    for (let i = 0; i < 4; i++) {
+      expect(sentMime(i)).toContain("From: Metrocars Leasing Corp <shared@example.test>\r\n");
+      expect(sentMime(i)).not.toMatch(/spoof|thief|personal@example|Bcc:/);
+      expect(sentMime(i)).toContain("To: renter+packet@example.test\r\nCc: claim-123@example.test\r\n");
+    }
+    expect(http).toHaveBeenCalledTimes(4);
+  });
+  it("does not fall back to personal Gmail when shared account is disconnected", async () => {
+    await seed(shop.key);
+    expect((await gmail.sharedGmailStatus(shop.key)).connected).toBe(false);
+    await expect(gmail.sendRentalPacketSharedGmail(input({ actorKey: shop.key }))).rejects.toThrow(/Admin must connect/);
+    expect(http).not.toHaveBeenCalled();
+  });
+  it("shared disconnect clears every admin intent and only rental shared token without revoking inbox grants", async () => {
+    await seed(RENTAL_SHARED_GMAIL_OWNER);
+    await seed(shop.key);
+    await sharedStateFor();
+    await sharedStateFor({ ...rentalAdmin, key: "native:2" });
+    await stateFor(shop);
+    expect(await gmail.disconnectSharedGmail(rentalAdmin)).toEqual({ success: true });
+    expect(store.tokens.has(RENTAL_SHARED_GMAIL_OWNER)).toBe(false);
+    expect(store.tokens.has(shop.key)).toBe(true);
+    expect(store.states.map(s => s.actorKey)).toEqual([shop.key]);
+    expect(http).not.toHaveBeenCalled();
+  });
+  it("a disconnect during OAuth exchange prevents shared token resurrection", async () => {
+    const state = await sharedStateFor();
+    http.mockImplementationOnce(async () => { await gmail.disconnectSharedGmail(rentalAdmin); return tokenResponse(); }).mockResolvedValueOnce(identityResponse());
+    await expect(gmail.finishSharedGmail(rentalAdmin, "code", state)).rejects.toThrow(/changed or expired/);
+    expect(store.tokens.size).toBe(0);
+    expect(store.states).toHaveLength(0);
+  });
+  it.each([undefined, "openid email", `${GRANT} https://www.googleapis.com/auth/gmail.modify`])("rejects insufficient/broader shared authorization scopes %s", async scope => {
+    const state = await sharedStateFor();
+    http.mockResolvedValueOnce(tokenResponse({ scope }));
+    await expect(gmail.finishSharedGmail(rentalAdmin, "code", state)).rejects.toThrow(/permission/);
+    expect(store.tokens.size).toBe(0);
+    await expect(gmail.finishSharedGmail(rentalAdmin, "code", state)).rejects.toThrow(/invalid or expired/);
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+  it("refreshes expired shared token for another shop using the same subject/email", async () => {
+    await seed(RENTAL_SHARED_GMAIL_OWNER, { expiresAt: clock - 1 });
+    http.mockResolvedValueOnce(tokenResponse({ access_token: "shared-fresh" })).mockResolvedValueOnce(identityResponse()).mockResolvedValueOnce(response({ id: "shared-refreshed" }));
+    expect((await gmail.sendRentalPacketSharedGmail(input({ actorKey: "shop:2" }))).providerId).toBe("shared-refreshed");
+    expect(http.mock.calls[2][1].headers.Authorization).toBe("Bearer shared-fresh");
+    expect(decryptRental<any>(store.tokens.get(RENTAL_SHARED_GMAIL_OWNER)!.tokenPayload).actorKey).toBe(RENTAL_SHARED_GMAIL_OWNER);
+    expect(store.tokens.has("shop:2")).toBe(false);
+  });
+  it.each(["openid email", `${GRANT} https://www.googleapis.com/auth/gmail.readonly`])("rejects shared refresh permission changes before a send %s", async scope => {
+    await seed(RENTAL_SHARED_GMAIL_OWNER, { expiresAt: clock - 1 });
+    http.mockResolvedValueOnce(tokenResponse({ scope }));
+    await expect(gmail.sendRentalPacketSharedGmail(input())).rejects.toThrow(/permissions/);
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+  it.each([408, 500, 503])("treats HTTP %s shared send as unknown delivery and makes exactly one POST", async status => {
+    await seed(RENTAL_SHARED_GMAIL_OWNER);
+    http.mockResolvedValueOnce(response({ error: "sensitive provider error" }, status));
+    await expect(gmail.sendRentalPacketSharedGmail(input())).rejects.toMatchObject({ deliveryUncertain: true });
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+  it.each([400, 401, 403, 429])("treats explicit HTTP %s as rejection with no automatic send retry", async status => {
+    await seed(RENTAL_SHARED_GMAIL_OWNER);
+    http.mockResolvedValueOnce(response({ error: "sensitive provider error" }, status));
+    await expect(gmail.sendRentalPacketSharedGmail(input())).rejects.toThrow(`Rental Gmail packet delivery was rejected (HTTP ${status}).`);
+    expect(http).toHaveBeenCalledTimes(1);
   });
 });

@@ -449,7 +449,7 @@ export function Admin({
           </div>
         )}
       </Card>
-      <SharedSenderForm refresh={refresh} />
+      <SharedSenderForm refresh={refresh} sender={{ connected: settings.emailProviderReady === true, email: settings.senderEmail }} />
       <Card
         title="Launch approvals & delivery"
         detail="Only the owner administrator may intentionally confirm these items. Pending prerequisites block completed handoffs."
@@ -493,12 +493,11 @@ export function Admin({
                 }
               />
               <Field
-                label="Verified sending email address"
+                label="Connected shared Gmail sender"
                 type="email"
-                value={config.senderEmail}
-                onChange={e =>
-                  setConfig({ ...config, senderEmail: e.target.value })
-                }
+                value={settings.senderEmail}
+                readOnly
+                placeholder="Connect the shared Gmail account above"
               />
               <Field
                 label="Retention period (years)"
@@ -517,11 +516,11 @@ export function Admin({
             <p className="r-guidance">
               Email provider:{" "}
               {settings.emailProviderReady
-                ? "Server configuration ready"
-                : "Not configured"}
-              . One shared Mailgun sender sends packets to the renter and the
+                ? "Shared Gmail connected"
+                : "Shared Gmail not connected"}
+              . One shared Gmail account sends packets to the renter and the
               claim-specific email. Technicians do not connect personal email accounts.
-              The API key is protected server-side and is never included in a rental packet.
+              The From address comes from the authorized Google account and cannot be overwritten here.
             </p>
             <p className="r-guidance">
               Retention is metadata only. Records are retained for the life of

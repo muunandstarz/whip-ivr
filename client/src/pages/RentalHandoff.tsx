@@ -75,7 +75,7 @@ export default function RentalHandoff() {
   });
   const signOut = trpc.rentalHandoff.signOut.useMutation();
   const { theme, setTheme } = useTheme();
-  const [view, setView] = useState<View>("Rentals");
+  const [view, setView] = useState<View>(() => params?.id === "admin" ? "Settings" : "Rentals");
   const [mobileNav, setMobileNav] = useState(false);
   const [newRental, setNewRental] = useState(false);
   const [error, setError] = useState("");
