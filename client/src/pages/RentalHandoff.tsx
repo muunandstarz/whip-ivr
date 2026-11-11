@@ -161,6 +161,10 @@ export default function RentalHandoff() {
       </aside>
       <div className="r-workspace">
         <header className="r-topbar">
+          <a className="r-dashboard-back" href="/">
+            <ArrowLeft size={17} aria-hidden="true" />
+            <span>Back to IVR Dashboard</span>
+          </a>
           <button
             type="button"
             className="r-icon-button r-menu"

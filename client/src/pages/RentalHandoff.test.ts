@@ -175,6 +175,23 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("Standalone MetroCars rental interface", () => {
+  it.each(["admin", "claims", "shop"])("offers a same-tab dashboard return link for %s without changing authentication or records", async role => {
+    mocks.session.data = session(role);
+    await mount(React.createElement(RentalHandoff));
+    const link = container.querySelector<HTMLAnchorElement>(".r-topbar .r-dashboard-back")!;
+    expect(link.textContent).toBe("Back to IVR Dashboard");
+    expect(link.getAttribute("href")).toBe("/");
+    expect(link.getAttribute("target")).toBeNull();
+    expect(mocks.signIn).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it("keeps dashboard navigation available on the rental sign-in screen", async () => {
+    mocks.session.data = { actor: null };
+    await mount(React.createElement(RentalHandoff));
+    expect(container.querySelector(".r-dashboard-back")?.getAttribute("href")).toBe("/");
+  });
   it("shows shared email setup guidance without personal sender controls", async () => {
     await mount(React.createElement(RentalHandoff));
     expect(container.querySelector(".r-sender-status")?.textContent).toContain(

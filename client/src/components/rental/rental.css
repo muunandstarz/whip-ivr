@@ -253,6 +253,26 @@
   padding: 0 24px;
   gap: 12px;
 }
+.r-dashboard-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--r-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.r-dashboard-back:hover {
+  background: var(--r-callout);
+  text-decoration: underline;
+}
+.r-dashboard-back:focus-visible {
+  outline: 2px solid var(--r-teal);
+  outline-offset: 2px;
+}
 .r-topbar-label {
   font-weight: 600;
   font-size: 12px;
@@ -1442,9 +1462,16 @@
     height: 38px;
   }
   .r-topbar {
-    height: 56px;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
     padding: 0 8px;
     gap: 4px;
+  }
+  .r-dashboard-back {
+    flex-basis: 100%;
+    border-bottom: 1px solid var(--r-border);
+    border-radius: 0;
   }
   .r-topbar-label {
     display: none;
