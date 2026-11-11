@@ -51,6 +51,7 @@ import { Admin } from "@/components/rental/Admin";
 import { ReturnFlow } from "@/components/rental/ReturnFlow";
 import { AppointmentReminders } from "@/components/rental/AppointmentReminders";
 import { PickupVehicleAssignment } from "@/components/rental/PickupVehicleAssignment";
+import { DemoRentals } from "@/components/rental/DemoRentals";
 import { useRentalAutosave } from "@/components/rental/useRentalAutosave";
 import type { UploadAsset } from "@/components/rental/Media";
 import type {
@@ -60,7 +61,7 @@ import type {
 } from "@/components/rental/types";
 import "@/components/rental/rental.css";
 
-type View = "Rentals" | "Vehicles" | "Documents" | "Settings";
+type View = "Rentals" | "Vehicles" | "Documents" | "Demo rentals" | "Settings";
 const RENTAL_LOGO = "/manus-storage/metrocars-leasing-original_0b89b3d7.webp";
 const stepNames = [
   "Details",
@@ -118,6 +119,7 @@ export default function RentalHandoff() {
               ["Rentals", LayoutList],
               ["Vehicles", Car],
               ["Documents", FileText],
+              ...(data?.actor && data.actor.role !== "shop" ? [["Demo rentals", LayoutList]] : []),
               ...(data?.actor?.role === "admin"
                 ? [["Settings", Settings2]]
                 : []),
@@ -263,13 +265,18 @@ export default function RentalHandoff() {
               settings={data.settings}
               refresh={() => session.refetch()}
             />
+          ) : view === "Demo rentals" && data.actor.role !== "shop" ? (
+            <DemoRentals />
           ) : (
+            <>
+            {data.actor.role !== "shop" && <div className="r-launch-note"><ShieldCheck size={20} /><div><strong>Two fictional rentals are ready to review</strong><p>Walk through Claims-prepared pickup and a completed pickup/return example. Demo actions never affect live records or send messages.</p><button className="r-button" type="button" onClick={() => move("Demo rentals")}>Review demo rentals</button></div></div>}
             <RentalList
               session={data}
               documents={view === "Documents"}
               onNew={() => setNewRental(true)}
               onOpen={rentalId => navigate(`/rental-handoff/${rentalId}`)}
             />
+            </>
           )}
         </main>
         <footer className="r-legal">
