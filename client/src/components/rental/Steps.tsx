@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   eligibleOptions,
+  PICKUP_EVIDENCE_KINDS,
   type RentalDraft,
   type RentalLocation,
   type RentalVehicle,
@@ -420,8 +421,8 @@ export function Details({
   StepProps,
   "draft" | "update" | "disabled" | "locations" | "vehicles" | "returnTimeState"
 > & {
-  vehicleMode?: "inventory" | "manual";
-  onVehicleModeChange?: (mode: "inventory" | "manual") => void;
+  vehicleMode?: "inventory" | "manual" | "later";
+  onVehicleModeChange?: (mode: "inventory" | "manual" | "later") => void;
   manualVehicle?: ManualRentalVehicle;
   onManualVehicleChange?: (vehicle: ManualRentalVehicle) => void;
   supportAssets?: AssetWithUrl[];
@@ -534,7 +535,7 @@ export function Details({
         title="Assigned rental vehicle"
         detail={
           onVehicleModeChange
-            ? "Choose inventory or enter the actual rental vehicle to add it when scheduling."
+            ? "Vehicle assignment can wait until pickup. Claims can schedule without knowing the rental vehicle."
             : "Select a real vehicle from the location inventory."
         }
       >
@@ -543,7 +544,7 @@ export function Details({
             className="r-filters r-vehicle-modes"
             aria-label="Vehicle entry method"
           >
-            {(["manual", "inventory"] as const).map(mode => (
+            {(["later", "manual", "inventory"] as const).map(mode => (
               <button
                 type="button"
                 className={`r-chip ${vehicleMode === mode ? "r-chip-active" : ""}`}
@@ -552,14 +553,16 @@ export function Details({
                 disabled={disabled}
                 onClick={() => onVehicleModeChange(mode)}
               >
-                {mode === "inventory"
+                {mode === "later" ? "Assign at pickup" : mode === "inventory"
                   ? "Choose previously used vehicle"
                   : "Enter rental vehicle"}
               </button>
             ))}
           </div>
         )}
-        {vehicleMode === "manual" && manualVehicle && onManualVehicleChange ? (
+        {vehicleMode === "later" ? (
+          <p className="r-guidance">No rental vehicle is required to continue. Total Recon will assign the actual vehicle in Vehicle & pickup before the signed handoff.</p>
+        ) : vehicleMode === "manual" && manualVehicle && onManualVehicleChange ? (
           <fieldset disabled={disabled} className="r-grid">
             <VinEntry
               label="Rental VIN"
@@ -580,10 +583,9 @@ export function Details({
               }
             />
             <Field
-              label="Rental license plate"
+              label="Rental license plate (optional)"
               value={manualVehicle.plate}
               maxLength={30}
-              required
               onChange={e =>
                 onManualVehicleChange({
                   ...manualVehicle,
@@ -641,7 +643,7 @@ export function Details({
             <span className="r-tag">{vehicle.status}</span>
           </div>
         )}
-        {!vehicles.some(v => v.locationId === d.locationId) && (
+        {vehicleMode !== "later" && !vehicles.some(v => v.locationId === d.locationId) && (
           <p className="r-guidance">
             {onVehicleModeChange
               ? "No inventory at this location yet. Enter the actual vehicle manually to add it when scheduling. No sample vehicles are supplied."
@@ -664,7 +666,7 @@ export function Details({
             onChange={e => set("renterVehicleYmm", e.target.value)}
           />
           <Field
-            label="License plate"
+            label="License plate (optional)"
             value={d.renterVehiclePlate}
             onChange={e => set("renterVehiclePlate", e.target.value)}
           />
@@ -809,17 +811,24 @@ export function Pickup({
             disabled={disabled}
           />
         </fieldset>
+        <Note
+          label="Pickup observed dashboard warning lights — staff manual notes (optional)"
+          value={d.dashboardAlertsOut || ""}
+          onChange={value => set("dashboardAlertsOut", value)}
+          disabled={disabled}
+        />
+        <p className="r-guidance">Record only what staff observed. No automatic photo analysis. Blank means Not recorded – review photo; it does not mean no warning lights.</p>
         <section
           className="r-pickup-photos"
           aria-labelledby="pickup-photos-title"
         >
           <h3 id="pickup-photos-title">Pickup condition photos</h3>
           <p>
-            Four exterior views and a dedicated dashboard photo are required.
-            Add extra photos for interior or damage; extras do not replace the dashboard photo.
+            All 11 dedicated pickup photos are required: four sides, four corners, windshield, VIN plate and dashboard.
+            Add extra photos for interior or damage; extras do not replace the dashboard photo or any other required view. Return photos cannot replace pickup views.
           </p>
           <div className="r-grid r-pickup-photo-grid">
-            {(["front", "rear", "driver", "passenger", "dashboard", "extra"] as const).map(
+            {([...PICKUP_EVIDENCE_KINDS, "extra"] as const).map(
               kind => (
                 <PhotoUpload
                   key={kind}
@@ -830,11 +839,17 @@ export function Pickup({
                       rear: "Rear",
                       driver: "Driver side",
                       passenger: "Passenger side",
+                      cornerFrontDriver: "Front-driver corner (required)",
+                      cornerFrontPassenger: "Front-passenger corner (required)",
+                      cornerRearDriver: "Rear-driver corner (required)",
+                      cornerRearPassenger: "Rear-passenger corner (required)",
+                      windshield: "Pickup windshield (required)",
+                      vinPlate: "Pickup VIN plate (required)",
                       dashboard: "Pickup dashboard (required)",
                       extra: "Additional condition photos",
                     }[kind]
                   }
-                  guidance={kind === "dashboard" ? "While parked, turn ignition on and capture entire instrument cluster clearly: odometer, fuel and warning lights." : undefined}
+                  guidance={kind === "dashboard" ? "While parked, turn ignition on and capture entire instrument cluster clearly: odometer, fuel and warning lights." : kind === "vinPlate" ? "Capture the actual vehicle VIN plate clearly; compare it with the assigned inventory VIN." : undefined}
                   assets={assets}
                   upload={upload}
                   disabled={disabled}

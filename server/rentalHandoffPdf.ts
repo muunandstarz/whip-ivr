@@ -22,6 +22,7 @@ export const RENTAL_PDF_AUTHORIZED_REVISIONS = {
   registration: "Rental vehicle notice — keep this page in the vehicle.",
   cardholderLabel: "Cardholder signature",
   signatureInstructions: "Renter-cardholders may sign electronically. A different cardholder must sign in ink in person and show government photo ID.",
+  marylandLiability: "Owner statement: rental liability is provided at Maryland minimums: $30,000 bodily injury/person; $60,000 bodily injury/accident; $15,000 property damage, subject to the rental terms.",
 } as const;
 /** Immutable originals, not regenerated legal text. No upload paths in production. */
 export const RENTAL_PDF_TEMPLATE_KEYS = {
@@ -84,6 +85,14 @@ const sourceLeft = new WeakMap<PDFPage, number>();
 const pageX = (page: PDFPage, x: number) => MARGIN + (x - (sourceLeft.get(page) ?? SOURCE.left)) * SCALE_X;
 const pageY = (top: number) => 792 - MARGIN - (top - SOURCE.top) * SCALE_Y;
 const BLACK = rgb(0, 0, 0);
+// Generated schedules/statements use a quieter 11pt body. Pinned source text
+// and its field geometry retain their approved font payloads and point sizes.
+const BODY = grayscale(0.18);
+const MUTED = grayscale(0.38);
+const GENERATED_BODY_SIZE = 11;
+const FOOTER_INITIALS_LIFT = 9; // Physical points; label, rule and value move together.
+const PICKUP_PHOTO_KINDS = ["front", "rear", "driver", "passenger", "cornerFrontDriver", "cornerFrontPassenger", "cornerRearDriver", "cornerRearPassenger", "windshield", "vinPlate", "dashboard", "extra"];
+const RETURN_PHOTO_KINDS = ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnCornerFrontDriver", "returnCornerFrontPassenger", "returnCornerRearDriver", "returnCornerRearPassenger", "returnWindshield", "returnVinPlate", "returnDashboard", "returnExtra"];
 const blankTemplateCache = new Map<string, Buffer>(); // Only checksum-pinned blank templates.
 
 async function fetchBounded(url: string, max: number): Promise<Buffer> {
@@ -254,19 +263,19 @@ class Overlay {
     if (kind === "renterSignature" && input.samePacketSigning?.renter === false) fail(kind, "signature not authorized for this packet");
     if (kind === "representativeSignature" && input.samePacketSigning?.representative === false) fail(kind, "signature not authorized for this packet");
     const image = await embedGrayImage(this.doc, asset);
-    const fit = image.scaleToFit(width * SCALE_X, height * SCALE_Y);
+    const fit = image.scaleToFit(Math.min(width * SCALE_X, 160), Math.min(height * SCALE_Y, 18));
     page.drawImage(image, { x: pageX(page, x), y: pageY(top + height), ...fit });
   }
   appendContinuations(input: RentalPacketInput) {
     let page: PDFPage | undefined; let y = 0;
     const newPage = () => { page = this.doc.addPage([612, 792]); y = 703; header(page, this.font, "RENTAL FIELD CONTINUATION SCHEDULE", input); };
     for (const item of this.continuations) {
-      const lines = this.wrap(item.text, FRAME_WIDTH, 10, item.field);
+      const lines = this.wrap(item.text, FRAME_WIDTH, GENERATED_BODY_SIZE, item.field);
       if (!page || y < 80) newPage();
       const label = `Schedule ${item.id} - ${continuationLabel(item.field)}`;
-      if (this.font.widthOfTextAtSize(label, 10) > FRAME_WIDTH) fail(item.field, "schedule heading exceeds physical margins");
-      page!.drawText(label, { x: MARGIN, y, size: 10, font: this.font, color: BLACK }); y -= 17;
-      for (const line of lines) { if (y < MARGIN + 10) newPage(); if (this.font.widthOfTextAtSize(line, 10) > FRAME_WIDTH) fail(item.field, "single word exceeds continuation width"); page!.drawText(line, { x: MARGIN, y, size: 10, font: this.font, color: BLACK }); y -= 14; } y -= 14;
+      if (this.font.widthOfTextAtSize(label, GENERATED_BODY_SIZE) > FRAME_WIDTH) fail(item.field, "schedule heading exceeds physical margins");
+      page!.drawText(label, { x: MARGIN, y, size: GENERATED_BODY_SIZE, font: this.font, color: BODY }); y -= 17;
+      for (const line of lines) { if (y < MARGIN + GENERATED_BODY_SIZE) newPage(); if (this.font.widthOfTextAtSize(line, GENERATED_BODY_SIZE) > FRAME_WIDTH) fail(item.field, "single word exceeds continuation width"); page!.drawText(line, { x: MARGIN, y, size: GENERATED_BODY_SIZE, font: this.font, color: BODY }); y -= 14; } y -= 10;
     }
   }
 }
@@ -309,11 +318,11 @@ async function embedGrayImage(doc: PDFDocument, asset: RentalPdfAsset): Promise<
   } finally { copy.fill(0); pixels?.data.fill(0); encoded?.fill(0); canvas.width = 1; canvas.height = 1; }
 }
 function header(page: PDFPage, font: PDFFont, title: string, input: RentalPacketInput) {
-  page.drawText(title, { x: MARGIN, y: 746, size: 12, font, color: BLACK });
+  page.drawText(title, { x: MARGIN, y: 746, size: GENERATED_BODY_SIZE, font, color: BODY });
   const subtitle = sanitizeRentalPdfText(`Rental ${input.rentalId} | Packet version ${input.version} | ${RENTAL_PDF_FORM_VERSION}`, "header");
   if (font.widthOfTextAtSize(subtitle, 10) > FRAME_WIDTH) fail("version", "header exceeds physical margins");
-  page.drawText(subtitle, { x: MARGIN, y: 729, size: 10, font, color: BLACK });
-  page.drawLine({ start: { x: MARGIN, y: 720 }, end: { x: 612 - MARGIN, y: 720 }, thickness: 0.6, color: BLACK });
+  page.drawText(subtitle, { x: MARGIN, y: 729, size: 10, font, color: MUTED });
+  page.drawLine({ start: { x: MARGIN, y: 720 }, end: { x: 612 - MARGIN, y: 720 }, thickness: 0.4, color: grayscale(0.7) });
 }
 /** Remove only the exact approved BT/ET blocks, not merely hide searchable
  * contradictory text under white rectangles. SHA256 + expected block counts
@@ -355,6 +364,19 @@ function alignProtectionOptionText(page: PDFPage) {
   if (aligned !== 3) fail("template", "protection-option source text-origin count mismatch");
   page.node.set(PDFName.of("Contents"), page.doc.context.register(page.doc.context.flateStream(Buffer.from(text, "latin1"))));
 }
+/** Footer safety is positioning only: retain the exact source glyph/font and
+ * underline operands, lifting the bottom Section 7 initials as one unit. */
+function liftFooterInitials(page: PDFPage) {
+  const contents = page.node.Contents();
+  const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+  const shift = FOOTER_INITIALS_LIFT / SCALE_Y;
+  let labels = 0, rules = 0;
+  const text = refs.map(ref => Buffer.from(decodePDFRawStream(page.doc.context.lookup(ref) as PDFRawStream).decode()).toString("latin1")).join("\n")
+    .replace(/460\.1 50\.839 Td/g, () => { labels++; return `460.1 ${50.839 + shift} Td`; })
+    .replace(/460 44\.589 m\n540 44\.589 l S/g, () => { rules++; return `460 ${44.589 + shift} m\n540 ${44.589 + shift} l S`; });
+  if (labels !== 1 || rules !== 1) fail("template", "footer initials source-zone count mismatch");
+  page.node.set(PDFName.of("Contents"), page.doc.context.register(page.doc.context.flateStream(Buffer.from(text, "latin1"))));
+}
 /** Move source origins/table paths into the wider Letter frame, but counteract
  * the anisotropic frame transform in EACH text matrix and logo matrix. This is
  * positioning/re-spacing only: original glyph strings, TJ kerning, font sizes,
@@ -390,7 +412,7 @@ async function sourcePages(input: RentalPacketInput, returnOnly: boolean) {
   if (packet.getPageCount() !== 8 || vehicle.getPageCount() !== 1) fail("templates", "expected original 8 + 1 pages");
   const doc = await PDFDocument.create(); doc.setTitle(returnOnly ? "Rental return packet" : "Claimant rental handoff packet"); doc.setAuthor("Metrocars Leasing Corp.");
   if (!returnOnly) { removeAuthorizedText(vehicle.getPage(0), "registration"); removeAuthorizedText(packet.getPage(5), "signature"); }
-  if (!returnOnly) alignProtectionOptionText(packet.getPage(0));
+  if (!returnOnly) { alignProtectionOptionText(packet.getPage(0)); liftFooterInitials(packet.getPage(1)); }
   const source = returnOnly ? [packet.getPage(7)] : [vehicle.getPage(0), ...packet.getPages()];
   // Modify new packet copies only. No originals/cache/stored signed PDFs change.
   // Text stays searchable; original signature rules remain on their pages.
@@ -434,7 +456,7 @@ function conditionOverlay(o: Overlay, p: PDFPage, input: RentalPacketInput, retu
   });
   grid(o,p,0,509.75,"RP4.odometerOut",d.odometerOut ?? "","RP4.odometerReturn",returned?.odometer ?? "",20,false,false);
   grid(o,p,1,509.75,"RP4.fuelOut",d.fuelOut,"RP4.fuelReturn",returned?.fuel ?? "",20,false,false);
-  const count = (prefix: string) => input.assets.filter(a => prefix === "return" ? /^return(Front|Rear|Driver|Passenger|Dashboard|Extra)$/.test(a.kind) : /^(front|rear|driver|passenger|dashboard|extra)$/.test(a.kind)).length;
+  const count = (prefix: string) => input.assets.filter(a => (prefix === "return" ? RETURN_PHOTO_KINDS : PICKUP_PHOTO_KINDS).includes(a.kind)).length;
   grid(o,p,2,509.75,"RP4.pickupPhotos",count("pickup") ? `${count("pickup")} attached` : "","RP4.returnPhotos",returned && count("return") ? `${count("return")} attached` : "");
 }
 async function conditionSignatures(o: Overlay,p: PDFPage,input: RentalPacketInput,returned?: RentalReturn) {
@@ -453,6 +475,13 @@ export async function buildRentalPacket(input: RentalPacketInput): Promise<Buffe
   const start=date(d.pickupAt,zone), startTime=date(d.pickupAt,zone,true), expected=date(d.expectedReturn,zone,true);
   // Tiny additive audit marker; original source version labels and all footers stay intact.
   for(const page of [p[0],p[5],p[6]]) o.cell(page,"formRevision","e1 owner-approved",430,781,106,14,{size:8.5});
+  // Additive owner-authorized statement only, not independent policy verification.
+  // The source clauses remain untouched. Non-Maryland locations get no new claim.
+  if(/\bMD\b|Maryland/i.test(input.location.address)) {
+    const lines=o.wrap(RENTAL_PDF_AUTHORIZED_REVISIONS.marylandLiability,245,10,"RP0.marylandLiability");
+    if(lines.length>4)fail("RP0.marylandLiability","exceeds unused notice header space");
+    lines.forEach((line,n)=>p[0].drawText(line,{x:185,y:pageY(44)-n*11,size:10,font:o.font,color:BODY}));
+  }
   // RP0. Registered owner is the original text; registration row is the narrow e1 revision.
   const rp0=(field:string,value:unknown,top:number,allow=true)=>o.cell(p[0],field,value,220,top,309,16.5,allow?narrative:{});
   rp0("RP0.vehicle",input.vehicle.ymm,175.1);rp0("RP0.VIN",input.vehicle.vin,193.6,false);rp0("RP0.plateState",input.vehicle.plate,212.1);
@@ -474,7 +503,7 @@ export async function buildRentalPacket(input: RentalPacketInput): Promise<Buffe
   const electionBaseline={A:SOURCE.height-232.489,B:SOURCE.height-159.339,Decline:SOURCE.height-70.589};
   o.check(p[1],72.1,electionTop[d.election as "A"|"B"|"Decline"],true,10);
   o.initials(p[1],"RP1.electionInitials",d.initials.election,460.1,electionBaseline[d.election as "A"|"B"|"Decline"]);
-  for(const [page,key,labelX,sourceY,applies] of [[p[2],"5",460.1,319.439,d.election!=="Decline"],[p[2],"6",460.1,185.139,d.election==="B"],[p[2],"7",460.1,50.839,true],[p[3],"8",460.1,689.139,true],[p[3],"9",460.35,421.339,true],[p[3],"10",460.1,208.539,true]] as const) if(applies)o.initials(page,`RP1.section${key}Initials`,d.initials[key],labelX,SOURCE.height-sourceY);
+  for(const [page,key,labelX,sourceY,applies] of [[p[2],"5",460.1,319.439,d.election!=="Decline"],[p[2],"6",460.1,185.139,d.election==="B"],[p[2],"7",460.1,50.839,true],[p[3],"8",460.1,689.139,true],[p[3],"9",460.35,421.339,true],[p[3],"10",460.1,208.539,true]] as const) if(applies)o.initials(page,`RP1.section${key}Initials`,d.initials[key],labelX,SOURCE.height-sourceY-(key==="7"?FOOTER_INITIALS_LIFT/SCALE_Y:0));
   d.additionalDrivers.forEach((a,n)=>{
     const top=355.35+n*26;o.cell(p[3],`RP1.additionalDriver${n+1}.name`,a.name,76,top+1,152,24,{lines:2,continuation:true});
     o.cell(p[3],`RP1.additionalDriver${n+1}.licenseState`,[a.license,a.state].filter(Boolean).join(" / "),236,top+1,127,24,{lines:2,continuation:true});
@@ -543,38 +572,79 @@ const evidenceCaptions: Record<string, string> = {
   signedPayment: "Signed payment authorization (retained-original scan)",
   front: "Pickup - front exterior", rear: "Pickup - rear exterior",
   driver: "Pickup - driver-side exterior", passenger: "Pickup - passenger-side exterior",
+  cornerFrontDriver: "Pickup - front driver corner", cornerFrontPassenger: "Pickup - front passenger corner",
+  cornerRearDriver: "Pickup - rear driver corner", cornerRearPassenger: "Pickup - rear passenger corner",
+  windshield: "Pickup - windshield", vinPlate: "Pickup - VIN plate",
   dashboard: "Pickup dashboard / instrument cluster", extra: "Pickup - additional condition photo",
   declarations: "Renter insurance declarations page", coverageConfirmation: "Insurer coverage verification support",
   returnFront: "Return - front exterior", returnRear: "Return - rear exterior",
   returnDriver: "Return - driver-side exterior", returnPassenger: "Return - passenger-side exterior",
+  returnCornerFrontDriver: "Return - front driver corner", returnCornerFrontPassenger: "Return - front passenger corner",
+  returnCornerRearDriver: "Return - rear driver corner", returnCornerRearPassenger: "Return - rear passenger corner",
+  returnWindshield: "Return - windshield", returnVinPlate: "Return - VIN plate",
   returnDashboard: "Return dashboard / instrument cluster", returnExtra: "Return - additional condition photo",
 };
 async function appendAssets(o:Overlay,input:RentalPacketInput,returnOnly:boolean) {
-  // Each scan/photo is evidence, never represented as a substitute for original ink.
-  // License front/back remain private verification records, not claimant packet pages.
-  const kinds=returnOnly?["returnFront","returnRear","returnDriver","returnPassenger","returnDashboard","returnExtra"]:["signedPayment","front","rear","driver","passenger","dashboard","extra","declarations","coverageConfirmation"];
+  // Keep the existing protected selection: IDs/claim evidence never enter either
+  // phase packet. Existing selected insurance support remains unchanged; compact
+  // photo layout is not authorization to alter delivery/privacy policy.
+  const photos=returnOnly?RETURN_PHOTO_KINDS:PICKUP_PHOTO_KINDS;
+  const kinds=returnOnly?photos:["signedPayment",...photos,"declarations","coverageConfirmation"];
   const selected=input.assets.filter(a=>kinds.includes(a.kind)).sort((a,b)=>kinds.indexOf(a.kind)-kinds.indexOf(b.kind)||a.id-b.id);
-  for(const asset of selected) {
-    const page=o.doc.addPage([612,792]);header(page,o.font,asset.kind==="signedPayment"?"SIGNED AUTHORIZATION APPENDIX":"RENTAL EVIDENCE APPENDIX",input);
+  const drawScan=async(asset:RentalPdfAsset)=>{
+    const page=o.doc.addPage([612,792]);const ink=asset.kind==="signedPayment";
+    header(page,o.font,ink?"SIGNED AUTHORIZATION APPENDIX":"RENTAL EVIDENCE APPENDIX",input);
     const label=`Asset ${asset.id} | ${evidenceCaptions[asset.kind]}${asset.createdAt!==undefined?` | ${date(asset.createdAt,input.location.timezone,true)}`:""}`;
     if(o.font.widthOfTextAtSize(label,10)>FRAME_WIDTH)fail("asset.label","exceeds physical margins");
-    page.drawText(label,{x:MARGIN,y:702,size:10,font:o.font,color:BLACK});
-    const isDashboard=asset.kind==="dashboard"||asset.kind==="returnDashboard";
-    if(isDashboard) {
-      const returned=asset.kind==="returnDashboard"?(input as RentalReturnPacketInput).returnData:undefined;
-      const odometer=returned?.odometer??input.draft.odometerOut;
-      const caption=`${returned?"Return":"Pickup"} odometer: ${odometer===null?"Not recorded":`${formatMiles(odometer)} miles`} | Fuel: ${returned?.fuel??input.draft.fuelOut}`;
-      page.drawText(caption,{x:MARGIN,y:685,size:10,font:o.font,color:BLACK});
-      // A photo is the alerts evidence; no OCR-derived or invented alert status.
-      page.drawText("Alerts: see dashboard photo; recorded vehicle condition is on RP4.",{x:MARGIN,y:670,size:10,font:o.font,color:BLACK});
+    page.drawText(label,{x:MARGIN,y:702,size:10,font:o.font,color:BODY});
+    if(ink){
+      page.drawText("Retained-original evidence only. This scan is not an electronic authorization.",{x:MARGIN,y:685,size:10,font:o.font,color:BODY});
+      page.drawText("The original ink form must remain retained; RP2 signature rules are unchanged.",{x:MARGIN,y:670,size:10,font:o.font,color:BODY});
     }
-    if(asset.kind==="signedPayment") {
-      page.drawText("Retained-original evidence only. This scan is not an electronic authorization.",{x:MARGIN,y:685,size:10,font:o.font,color:BLACK});
-      page.drawText("The original ink form must remain retained; RP2 signature rules are unchanged.",{x:MARGIN,y:670,size:10,font:o.font,color:BLACK});
-    }
-    const image=await embedGrayImage(o.doc,asset);const imageHeight=asset.kind==="signedPayment"||isDashboard?620:650;const size=image.scaleToFit(FRAME_WIDTH,imageHeight);
+    const image=await embedGrayImage(o.doc,asset);const imageHeight=ink?620:650;const size=image.scaleToFit(FRAME_WIDTH,imageHeight);
     page.drawImage(image,{x:MARGIN+(FRAME_WIDTH-size.width)/2,y:MARGIN+imageHeight-size.height,...size});
+  };
+  for(const asset of selected.filter(a=>a.kind==="signedPayment"))await drawScan(asset);
+  const phaseAssets=selected.filter(a=>photos.includes(a.kind));
+  if(phaseAssets.length){
+    const phase=returnOnly?"Return":"Pickup";
+    const dashboard=phaseAssets.find(a=>a.kind===(returnOnly?"returnDashboard":"dashboard"));
+    const tiles=phaseAssets.filter(a=>a!==dashboard); // Retain duplicate dashboards as separate evidence tiles.
+    let page:PDFPage;let top=0;let row=0;let rows=0;let column=0;
+    const width=(FRAME_WIDTH-24)/3;const slotHeight=133;
+    const newSheet=()=>{page=o.doc.addPage([612,792]);header(page,o.font,`RENTAL EVIDENCE APPENDIX - ${phase.toUpperCase()} PHOTO SHEET`,input);top=700;row=0;column=0;rows=Math.floor((top-MARGIN)/slotHeight);};
+    newSheet();
+    if(dashboard){
+      const returned=returnOnly?(input as RentalReturnPacketInput).returnData:undefined;
+      const odometer=returned?.odometer??input.draft.odometerOut;
+      const recorded=returnOnly?(returned as RentalReturn & {dashboardAlerts?:string})?.dashboardAlerts:(input.draft as RentalDraft & {dashboardAlertsOut?:string}).dashboardAlertsOut;
+      const summary=[evidenceCaptions[dashboard.kind],`${phase} odometer: ${odometer===null?"Not recorded":`${formatMiles(odometer)} miles`} | Fuel: ${returned?.fuel??input.draft.fuelOut}`,`Recorded warnings: ${recorded?.trim()||"Not recorded — review dashboard photograph"}`,"Alerts: see dashboard photo. No image analysis or warning-status inference."];
+      let y=702;
+      for(const text of summary)for(const line of o.wrap(sanitizeRentalPdfText(text,"dashboard.caption"),350,10,"dashboard.caption")){
+        if(o.font.widthOfTextAtSize(line,10)>350||y<MARGIN+10)fail("dashboard.caption","exceeds contact-sheet summary space");
+        page!.drawText(line,{x:226,y,size:10,font:o.font,color:BODY});y-=13;
+      }
+      const image=await embedGrayImage(o.doc,dashboard);const size=image.scaleToFit(174,94);
+      page!.drawImage(image,{x:MARGIN+(174-size.width)/2,y:700-size.height,...size});
+      const metadata=`Asset ${dashboard.id}${dashboard.createdAt!==undefined?` | ${date(dashboard.createdAt,input.location.timezone,true)}`:""}`;
+      page!.drawText(metadata,{x:MARGIN,y:594,size:9,font:o.font,color:MUTED});
+      top=Math.min(578,y-14);rows=Math.floor((top-MARGIN)/slotHeight);
+    }
+    for(const asset of tiles){
+      if(row>=rows)newSheet();
+      const x=MARGIN+column*(width+12),y=top-row*slotHeight;
+      const image=await embedGrayImage(o.doc,asset);const size=image.scaleToFit(width,90);
+      page!.drawImage(image,{x:x+(width-size.width)/2,y:y-size.height,...size});
+      const lines=o.wrap(evidenceCaptions[asset.kind],width,10,"asset.caption");
+      if(lines.length>2)fail("asset.caption","exceeds contact-sheet caption space");
+      lines.forEach((line,n)=>page!.drawText(line,{x,y:y-100-n*11,size:10,font:o.font,color:BODY}));
+      const metadata=`Asset ${asset.id}${asset.createdAt!==undefined?` | ${date(asset.createdAt,input.location.timezone,true)}`:""}`;
+      if(o.font.widthOfTextAtSize(metadata,9)>width)fail("asset.label","exceeds contact-sheet metadata space");
+      page!.drawText(metadata,{x,y:y-124,size:9,font:o.font,color:MUTED});
+      column++;if(column===3){column=0;row++;}
+    }
   }
+  for(const asset of selected.filter(a=>a.kind==="declarations"||a.kind==="coverageConfirmation"))await drawScan(asset);
 }
 function chargesStatement(o:Overlay,input:RentalReturnPacketInput) {
   let page:PDFPage;let y=0;const c=input.charges;
@@ -586,6 +656,7 @@ function chargesStatement(o:Overlay,input:RentalReturnPacketInput) {
     ["Pickup odometer (miles)",pickupOdometer===null?"Not recorded":formatMiles(pickupOdometer)],
     ["Return odometer (miles)",formatMiles(input.returnData.odometer)],
     ["Miles driven",pickupOdometer===null?"Not available (pickup not recorded)":formatMiles(input.returnData.odometer-pickupOdometer)],
+    ["Pickup fuel",input.draft.fuelOut],["Return fuel",input.returnData.fuel],
     [`Protection (${c.days} day(s) x ${money(c.daily)})`,money(c.protection)],[`Late return (${c.lateDays} calendar day(s))`,money(c.late)],
     ["Tolls",money(c.tolls)],["Parking",money(c.parking)],["Tickets / citations / fines",money(c.fines)],[`Research / processing (${input.returnData.researchEvents} event(s))`,money(c.research)],
     ["Cleaning / deodorizing (entered actual cost)",money(c.cleaning)],["Renter-caused roadside service (entered cost)",money(c.roadside)],[`Loss of use (${input.returnData.lossOfUseResponsible?input.returnData.lossOfUseDays:0} responsible day(s))`,money(c.lossOfUse)],
@@ -593,26 +664,26 @@ function chargesStatement(o:Overlay,input:RentalReturnPacketInput) {
     ["Charges settled (staff record)",input.returnData.chargesSettled?"Yes":"No"],
   ];
   for(const [label,value] of rows) {
-    const labels=o.wrap(label,290,10,label);const values=o.wrap(sanitizeRentalPdfText(value,label),236,10,label);
-    if(labels.some(l=>o.font.widthOfTextAtSize(l,10)>290)||values.some(l=>o.font.widthOfTextAtSize(l,10)>236))fail(label,"single word exceeds charges statement column");
-    const lines=Math.max(labels.length,values.length);const height=lines*12+12;
+    const labels=o.wrap(label,290,GENERATED_BODY_SIZE,label);const values=o.wrap(sanitizeRentalPdfText(value,label),236,GENERATED_BODY_SIZE,label);
+    if(labels.some(l=>o.font.widthOfTextAtSize(l,GENERATED_BODY_SIZE)>290)||values.some(l=>o.font.widthOfTextAtSize(l,GENERATED_BODY_SIZE)>236))fail(label,"single word exceeds charges statement column");
+    const lines=Math.max(labels.length,values.length);const height=lines*14+7;
     // Keep a row together when it fits on one page; exceptionally long rows can
     // continue line-by-line. Never clip text or force content below the frame.
     if(height<=651&&y-height<MARGIN+10)newPage();
     for(let n=0;n<lines;n++) {
-      if(y<MARGIN+10)newPage();
-      if(labels[n])page!.drawText(labels[n],{x:MARGIN,y,size:10,font:o.font,color:BLACK});
-      if(values[n])page!.drawText(values[n],{x:340,y,size:10,font:o.font,color:BLACK});
-      y-=12;
+      if(y<MARGIN+GENERATED_BODY_SIZE)newPage();
+      if(labels[n])page!.drawText(labels[n],{x:MARGIN,y,size:GENERATED_BODY_SIZE,font:o.font,color:BODY});
+      if(values[n])page!.drawText(values[n],{x:340,y,size:GENERATED_BODY_SIZE,font:o.font,color:BODY});
+      y-=14;
     }
-    y-=12;
+    y-=7;
   }
   const notes=[
     input.returnData.chargesSettled?"Hold eligible for release after settlement; release not confirmed by this PDF.":"Hold remains pending settlement; no release is confirmed by this PDF.",
     "Bank timing controls availability after release. No payment or hold action is performed here.",
     "Damage is not automatically charged. Any claim requires notice and its stated basis under RP1/RP2.",
-  ];y-=10;
-  for(const text of notes)for(const line of o.wrap(text,FRAME_WIDTH,10,"charges.notes")){if(y<MARGIN+10)newPage();page!.drawText(line,{x:MARGIN,y,size:10,font:o.font,color:BLACK});y-=14;}
+  ];y-=7;
+  for(const text of notes){for(const line of o.wrap(text,FRAME_WIDTH,GENERATED_BODY_SIZE,"charges.notes")){if(y<MARGIN+GENERATED_BODY_SIZE)newPage();page!.drawText(line,{x:MARGIN,y,size:GENERATED_BODY_SIZE,font:o.font,color:BODY});y-=14;}y-=4;}
 }
 export async function buildRentalReturnPacket(input:RentalReturnPacketInput):Promise<Buffer> {
   rentalReturnSchema.parse(input.returnData);validateTextTree(input.returnData,"returnData");

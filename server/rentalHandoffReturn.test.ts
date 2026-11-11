@@ -8,7 +8,7 @@ vi.mock("./rentalHandoffMailgun", () => ({ rentalSenderStatus: live.sender, send
 import { RentalHandoffService, type RentalDependencies, type RentalRepository, type RentalQuery, type RentalTable, type RentalPdfInput } from "./rentalHandoffService";
 import { createRentalHandoffRouter } from "./routers/rentalHandoff";
 import { encryptRental, decryptRental, tokenHash, RENTAL_COOKIE } from "./rentalHandoffSecurity";
-import { CONDITION_AREAS, DEFAULT_RENTAL_RATES, emptyRentalDraft, type RentalActor, type RentalReturn } from "../shared/rentalHandoff";
+import { PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, CONDITION_AREAS, DEFAULT_RENTAL_RATES, emptyRentalDraft, type RentalActor, type RentalReturn } from "../shared/rentalHandoff";
 
 class MemoryRepo implements RentalRepository {
   rows: Record<RentalTable, any[]> = { locations: [], vehicles: [], records: [], assets: [], packets: [], audit: [], emails: [], settings: [], shopUsers: [], sessions: [] };
@@ -42,7 +42,7 @@ const claims: RentalActor = { key: "native:2", name: "Claims", role: "claims", l
 const shop: RentalActor = { key: "shop:1", name: "Shop", role: "shop", locationIds: [1] };
 const outsider: RentalActor = { ...shop, key: "shop:2", locationIds: [2] };
 function data(): RentalReturn {
-  return { returnedAt: "2026-11-11T16:00:00Z", odometer: 1100, fuel: "Full", condition: CONDITION_AREAS.map(area => ({ area, ok: true, note: "" })), noticeAt: "", tolls: 5, parking: 0, fines: 0, researchEvents: 1, cleaning: 0, roadside: 0, lossOfUseDays: 0, lossOfUseResponsible: false, damageNoticeNotes: "", notes: "", chargesSettled: false, representativeName: "Shop" };
+  return { returnedAt: "2026-11-11T16:00:00Z", odometer: 1100, fuel: "Full", dashboardAlerts: "", condition: CONDITION_AREAS.map(area => ({ area, ok: true, note: "" })), noticeAt: "", tolls: 5, parking: 0, fines: 0, researchEvents: 1, cleaning: 0, roadside: 0, lossOfUseDays: 0, lossOfUseResponsible: false, damageNoticeNotes: "", notes: "", chargesSettled: false, representativeName: "Shop" };
 }
 let repo: MemoryRepo, service: RentalHandoffService, deps: RentalDependencies;
 beforeEach(async () => {
@@ -66,7 +66,7 @@ function expectNoExternalCalls() {
   for (const fn of [deps.put, deps.read, deps.buildPickup, deps.buildReturn, deps.sendEmail, ...Object.values(live)]) expect(fn).not.toHaveBeenCalled();
 }
 async function returnEvidence() {
-  for (const kind of ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: 1, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now });
+  for (const kind of [...RETURN_EVIDENCE_KINDS, "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: 1, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now });
 }
 async function finishReturn() {
   await returnEvidence();
@@ -124,11 +124,11 @@ describe("return draft lifecycle", () => {
     await expect(service.returnComplete(shop, { id: 1, revision: 3, requestId: "changed-return", data: changed })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const oldAssets = structuredClone(repo.rows.assets); await service.saveReturn(shop, { id: 1, revision: 3, data: changed });
     const current = await service.get(shop, 1);
-    expect(current.assets.filter(a => a.kind.startsWith("return"))).toHaveLength(5);
+    expect(current.assets.filter(a => a.kind.startsWith("return"))).toHaveLength(RETURN_EVIDENCE_KINDS.length);
     expect(current.assets.filter(a => a.kind === "renterSignature" || a.kind === "representativeSignature")).toHaveLength(2);
     expect(repo.rows.assets).toEqual(oldAssets);
     const audit = decryptRental<any>(repo.rows.audit.at(-1).detail);
-    expect(audit).toMatchObject({ fields: ["cleaning"], assetCutoffId: 9, resignRequired: true });
+    expect(audit).toMatchObject({ fields: ["cleaning"], assetCutoffId: Math.max(...oldAssets.map(a=>a.id)), resignRequired: true });
     await expect(service.returnComplete(shop, { id: 1, revision: 4, requestId: "changed-return", data: changed })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     for (const kind of ["returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: 1, kind, createdAt: now, storageKey: "private/new-signature" });
     await service.saveReturn(shop, { id: 1, revision: 4, data: changed }); // No-op save retains fresh evidence.
@@ -155,6 +155,22 @@ describe("return draft lifecycle", () => {
 });
 
 describe("required return instrument-cluster evidence", () => {
+  it.each(["returnCornerFrontDriver","returnCornerFrontPassenger","returnCornerRearDriver","returnCornerRearPassenger","returnWindshield","returnVinPlate"] as const)("requires dedicated %s despite extras and every pickup view",async kind=>{
+    await returnEvidence();repo.rows.assets=repo.rows.assets.filter(a=>a.kind!==kind);
+    for(const substitute of ["extra","returnExtra",...PICKUP_EVIDENCE_KINDS])await repo.insert("assets",{rentalId:1,kind:substitute,storageKey:"private/substitute",createdAt:now});
+    const before=structuredClone(repo.rows);
+    await expect(service.returnComplete(shop,{id:1,revision:2,requestId:`missing-${kind}`,data:data()})).rejects.toMatchObject({code:"BAD_REQUEST",message:expect.stringContaining(kind)});
+    expect(repo.rows).toEqual(before);expectNoExternalCalls();
+  });
+  it("persists observed return warning-light notes and invalidates only previous return signatures",async()=>{
+    await service.saveReturn(shop,{id:1,revision:2,data:data()});await returnEvidence();
+    const originals=structuredClone(repo.rows.assets);
+    await service.saveReturn(shop,{id:1,revision:3,data:{...data(),dashboardAlerts:"TPMS lamp observed while parked"}});
+    const current=await service.get(shop,1);expect(current.returnData?.dashboardAlerts).toBe("TPMS lamp observed while parked");
+    expect(current.assets.filter(a=>a.kind.startsWith("return")&&!a.kind.endsWith("Signature"))).toHaveLength(11);
+    expect(current.assets.some(a=>a.kind.startsWith("return")&&a.kind.endsWith("Signature"))).toBe(false);
+    expect(repo.rows.assets).toEqual(originals);expectNoExternalCalls();
+  });
   it("blocks direct service completion without a dashboard even when four photos and signatures are present", async () => {
     await returnEvidence(); repo.rows.assets = repo.rows.assets.filter(a => a.kind !== "returnDashboard");
     const before = structuredClone(repo.rows);

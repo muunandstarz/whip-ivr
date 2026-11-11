@@ -24,6 +24,7 @@ import { createReceiptRequestKey } from "@/lib/receiptBrowser";
 import {
   emptyRentalDraft,
   handoffMissing,
+  PICKUP_EVIDENCE_KINDS,
   type RentalDraft,
 } from "@shared/rentalHandoff";
 import {
@@ -48,6 +49,8 @@ import {
 } from "@/components/rental/Steps";
 import { Admin } from "@/components/rental/Admin";
 import { ReturnFlow } from "@/components/rental/ReturnFlow";
+import { AppointmentReminders } from "@/components/rental/AppointmentReminders";
+import { PickupVehicleAssignment } from "@/components/rental/PickupVehicleAssignment";
 import { useRentalAutosave } from "@/components/rental/useRentalAutosave";
 import type { UploadAsset } from "@/components/rental/Media";
 import type {
@@ -527,7 +530,7 @@ function RentalList({
               ? "Try a different name, claim number or last six VIN digits."
               : session.actor?.role === "shop"
                 ? "Claims will schedule rentals for your assigned locations. Only your location’s records are shown."
-                : "Create a rental using a real location and available vehicle. If inventory is empty, ask an administrator to configure it first."}
+                : "Schedule the customer at a real Total Recon location. The shop can assign the rental vehicle at pickup."}
           </Empty>
         ) : (
           <div className="r-rental-list">
@@ -670,8 +673,8 @@ function NewRental({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(emptyRentalDraft);
-  const [vehicleMode, setVehicleMode] = useState<"inventory" | "manual">(
-    "manual"
+  const [vehicleMode, setVehicleMode] = useState<"inventory" | "manual" | "later">(
+    "later"
   );
   const [manualVehicle, setManualVehicle] = useState<ManualRentalVehicle>({
     ymm: "",
@@ -685,11 +688,10 @@ function NewRental({
     vehicleMode === "manual"
       ? /^(?:19|20)\d{2}\s+\S+\s+\S.*$/.test(manualVehicle.ymm.trim()) &&
         /^[A-HJ-NPR-Z0-9]{17}$/.test(manualVehicle.vin) &&
-        !!manualVehicle.plate.trim() &&
         Number.isInteger(manualVehicle.lastOdometer) &&
         manualVehicle.lastOdometer >= 0 &&
         manualVehicle.lastOdometer <= 2000000
-      : draft.vehicleId > 0;
+      : vehicleMode === "later" || draft.vehicleId > 0;
   const ready =
     !!draft.renterName.trim() && draft.locationId > 0 && vehicleReady;
   return (
@@ -699,30 +701,20 @@ function NewRental({
       <div className="r-two-column">
         <div>
           <p className="r-guidance">
-            New setup is not yet saved. Enter at least renter name, location and
-            an available or manually entered vehicle, then select Schedule
-            rental. All subsequent changes autosave.
+            New setup is not yet saved. Enter renter name and location, then select
+            Schedule & continue. The rental vehicle can be assigned at pickup.
+            All subsequent changes autosave.
           </p>
           <ErrorNotice message={error} />
           <Details
             draft={draft}
-            update={next => {
-              if (
-                next.locationId !== draft.locationId &&
-                !session.vehicles.some(
-                  v =>
-                    v.locationId === next.locationId && v.status === "Available"
-                )
-              )
-                setVehicleMode("manual");
-              setDraft(next);
-            }}
+            update={next => setDraft(next)}
             locations={session.locations}
             vehicles={session.vehicles}
             vehicleMode={vehicleMode}
             onVehicleModeChange={mode => {
               setVehicleMode(mode);
-              if (mode === "manual") setDraft({ ...draft, vehicleId: 0 });
+              if (mode !== "inventory") setDraft({ ...draft, vehicleId: 0 });
             }}
             manualVehicle={manualVehicle}
             onManualVehicleChange={setManualVehicle}
@@ -759,7 +751,7 @@ function NewRental({
               }
             }}
           >
-            {create.isPending ? "Scheduling…" : "Schedule rental"}
+            {create.isPending ? "Scheduling…" : "Schedule & continue"}
             <ArrowRight size={16} />
           </button>
         </div>
@@ -777,6 +769,7 @@ function ExistingRental({
   onHome: () => void;
 }) {
   const record = trpc.rentalHandoff.get.useQuery({ id }, { retry: false });
+  const [editorEpoch, setEditorEpoch] = useState(0);
   if (record.isLoading) return <p role="status">Loading rental…</p>;
   if (record.error || !record.data)
     return (
@@ -794,10 +787,11 @@ function ExistingRental({
     );
   return (
     <RentalEditor
-      key={`${id}-${record.data.activePacketId || "draft"}-${record.data.status}`}
+      key={`${id}-${record.data.activePacketId || "draft"}-${record.data.status}-${editorEpoch}`}
       record={record.data as RentalRecord}
       session={session}
       refresh={() => record.refetch()}
+      onAssigned={async () => { await record.refetch(); setEditorEpoch(value => value + 1); }}
       onHome={onHome}
     />
   );
@@ -807,10 +801,12 @@ function RentalEditor({
   session,
   refresh,
   onHome,
+  onAssigned,
 }: {
   record: RentalRecord;
   session: RentalSession;
   refresh: () => Promise<unknown>;
+  onAssigned: () => Promise<void>;
   onHome: () => void;
 }) {
   const save = trpc.rentalHandoff.save.useMutation();
@@ -834,7 +830,7 @@ function RentalEditor({
     },
   });
   const [step, setStep] = useState(
-    session.actor?.role === "shop" && !locked ? 2 : locked ? 5 : 1
+    !locked && (session.actor?.role === "shop" || !record.draft.vehicleId) ? 2 : locked ? 5 : 1
   );
   const [returning, setReturning] = useState(false);
   const [error, setError] = useState("");
@@ -862,9 +858,10 @@ function RentalEditor({
         )
       )
   );
+  const vehicleAssetCutoff = Math.max(0, ...record.audit.filter(event => event.action === "vehicle.assign").map(event => Number((event.detail as { assetCutoffId?: number })?.assetCutoffId || 0)));
   const currentAssets = record.assets.filter(
     asset =>
-      !(
+      !(asset.id <= vehicleAssetCutoff && ([...PICKUP_EVIDENCE_KINDS, "extra"] as readonly string[]).includes(asset.kind)) && !(
         (asset.kind.endsWith("Signature") ||
           ["signedPayment", "coverageConfirmation"].includes(asset.kind)) &&
         asset.id <= assetCutoff
@@ -1057,6 +1054,7 @@ function RentalEditor({
       <div className="r-two-column">
         <div className="r-form-stack">
           {step === 1 && (
+            <>
             <Details
               {...props}
               disabled={locked || busy || session.actor?.role === "shop"}
@@ -1066,8 +1064,13 @@ function RentalEditor({
                 busy || ["Returned", "Closed"].includes(record.status)
               }
             />
+            <AppointmentReminders id={record.id} actor={session.actor!} beforeSave={() => locked ? Promise.resolve() : autosave.flush()} />
+            </>
           )}
-          {step === 2 && <Pickup {...props} />}
+          {step === 2 && <>
+            {!d.vehicleId && !locked && <PickupVehicleAssignment id={record.id} locationId={d.locationId} vehicles={session.vehicles} disabled={busy} beforeAssign={() => autosave.flush()} onAssigned={onAssigned} />}
+            <Pickup {...props} />
+          </>}
           {step === 3 && <Protection {...props} />}
           {step === 4 && <Signatures {...props} />}
           {step === 5 && (

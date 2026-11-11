@@ -1,11 +1,29 @@
 import { describe, it, expect } from "vitest";
-import { emptyRentalDraft, rentalDraftSchema, rentalReturnSchema, handoffMissing, eligibleOptions, launchMissing, calculateRentalCharges, DEFAULT_RENTAL_RATES, CONDITION_AREAS, safeLocation, type RentalAsset, type RentalReturn, type LaunchSettings } from "../shared/rentalHandoff";
+import { emptyRentalDraft, PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, ASSET_KINDS, rentalDraftSchema, rentalReturnSchema, handoffMissing, eligibleOptions, launchMissing, calculateRentalCharges, DEFAULT_RENTAL_RATES, CONDITION_AREAS, safeLocation, type RentalAsset, type RentalReturn, type LaunchSettings } from "../shared/rentalHandoff";
 const NOW=Date.parse("2026-11-10T21:00:00Z");
 function fixture(){const d=emptyRentalDraft();Object.assign(d,{renterName:"SYNTHETIC RENTER",mobile:"555-0100",email:"synthetic@example.test",claimEmail:"claim@example.test",claimNumber:"CLM-DEMO-1042",locationId:1,vehicleId:1,scheduledPickup:"2026-11-10T19:00:00Z",expectedReturn:"2026-11-13T19:00:00Z",renterVehicleYmm:"2023 Toyota Camry",renterVehicleVin:"4T1C11AK8PU915672",renterVehiclePlate:"DEMO",pickupAt:"2026-11-10T19:00:00Z",odometerOut:42610,dob:"1989-05-10",license:"SYNTHETIC-ID",licenseState:"MD",licenseExpiration:"2028-01-01",representativeName:"Synthetic Representative"});d.condition.forEach(c=>c.ok=true);d.election="B";d.insurance.noOtherLiability=true;d.insurance.noneProvided=true;for(const k of ["election","5","6","7","8","9","10"])d.initials[k]="SR";Object.assign(d.payment,{cardholderName:d.renterName,billingAddress:"123 Synthetic Street",zip:"20850",phone:"555-0100",cardType:"Visa",lastFour:"1234",expiration:"11/2028",holdEntered:true,witness:"Synthetic Witness",photoIdChecked:true,authorizationAcknowledged:true});return d;}
-const assets:RentalAsset[]=["front","rear","driver","passenger","dashboard","licenseFront","licenseBack","signedPayment","renterSignature","representativeSignature"].map((kind,i)=>({id:i+1,kind:kind as RentalAsset["kind"]}));
+const assets:RentalAsset[]=[...PICKUP_EVIDENCE_KINDS,"licenseFront","licenseBack","signedPayment","renterSignature","representativeSignature"].map((kind,i)=>({id:i+1,kind:kind as RentalAsset["kind"]}));
 const settings:LaunchSettings={counselApproved:false,registrationConfirmed:false,financialResponsibilityReference:"",omitFinancialReference:false,retentionYears:7,senderEmail:"",emailProviderReady:false,rates:DEFAULT_RENTAL_RATES,rateVersion:1};
 function ret():RentalReturn{return{ returnedAt:"2026-11-12T20:00:00Z",odometer:43000,fuel:"Full",condition:CONDITION_AREAS.map(area=>({area,ok:true,note:""})),noticeAt:"",tolls:0,parking:0,fines:0,researchEvents:0,cleaning:0,roadside:0,lossOfUseDays:0,lossOfUseResponsible:false,damageNoticeNotes:"",notes:"",chargesSettled:false,representativeName:"Synthetic Representative"};}
 describe("rental handoff source-faithful rules",()=>{
+ it("exports exactly 11 distinct, disjoint dedicated views for each phase",()=>{
+   expect(PICKUP_EVIDENCE_KINDS).toHaveLength(11);expect(RETURN_EVIDENCE_KINDS).toHaveLength(11);
+   expect(new Set([...PICKUP_EVIDENCE_KINDS,...RETURN_EVIDENCE_KINDS]).size).toBe(22);
+   expect([...PICKUP_EVIDENCE_KINDS,...RETURN_EVIDENCE_KINDS].every(kind=>ASSET_KINDS.includes(kind))).toBe(true);
+ });
+ it.each(["cornerFrontDriver","cornerFrontPassenger","cornerRearDriver","cornerRearPassenger","windshield","vinPlate"] as const)("requires the dedicated pickup %s view; extras and opposite phase cannot substitute",kind=>{
+   const without=assets.filter(a=>a.kind!==kind);
+   const gap=handoffMissing(fixture(),without,NOW);expect(gap).toHaveLength(1);expect(gap[0].step).toBe(2);
+   const opposite=RETURN_EVIDENCE_KINDS[PICKUP_EVIDENCE_KINDS.indexOf(kind)];
+   for(const substitute of ["extra","returnExtra","claimPhoto",opposite] as const)
+     expect(handoffMissing(fixture(),[...without,{id:100,kind:substitute}],NOW)).toEqual(gap);
+ });
+ it("keeps manual warning-light notes optional and defaults legacy payloads to blank, not no lights",()=>{
+   const {dashboardAlertsOut,...legacy}=fixture();expect(rentalDraftSchema.parse(legacy).dashboardAlertsOut).toBe("");
+   expect(rentalReturnSchema.parse(ret()).dashboardAlerts).toBe("");
+   expect(rentalDraftSchema.parse({...legacy,dashboardAlertsOut:"ABS observed"}).dashboardAlertsOut).toBe("ABS observed");
+   expect(rentalReturnSchema.parse({...ret(),dashboardAlerts:"Tire pressure observed"}).dashboardAlerts).toBe("Tire pressure observed");
+ });
  it("accepts complete ink-authorized no-insurance Option B without fabricating facts",()=>expect(handoffMissing(fixture(),assets,NOW)).toEqual([]));
  it("blocks a renter who is still 24 and admits on the 25th birthday",()=>{const d=fixture();d.dob="2001-11-11";expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("at least 25"))).toBe(true);d.dob="2001-11-10";expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("at least 25"))).toBe(false);});
  it("rejects impossible birth dates rather than normalizing them",()=>{const d=fixture();d.dob="1990-02-31";expect(handoffMissing(d,assets,NOW).some(x=>x.message.includes("at least 25"))).toBe(true);});

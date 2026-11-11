@@ -3,7 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import { RentalHandoffService, RENTAL_SUPPORT_MAX_BYTES, type RentalRepository, type RentalTable, type RentalQuery, type RentalDependencies, type RentalPdfInput } from "./rentalHandoffService";
 import { createRentalHandoffRouter } from "./routers/rentalHandoff";
 import { decryptRental, encryptRental, tokenHash, RENTAL_COOKIE } from "./rentalHandoffSecurity";
-import { emptyRentalDraft, DEFAULT_RENTAL_RATES, type RentalActor } from "../shared/rentalHandoff";
+import { emptyRentalDraft, PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, DEFAULT_RENTAL_RATES, type RentalActor } from "../shared/rentalHandoff";
 
 class MemoryRepo implements RentalRepository {
   rows: Record<RentalTable, any[]> = { locations: [], vehicles: [], records: [], assets: [], packets: [], audit: [], emails: [], settings: [], shopUsers: [], sessions: [] };
@@ -64,8 +64,48 @@ describe("rental manual setup", () => {
     expect(repo.rows.audit.map(row => row.action)).toEqual(["vehicle.create", "rental.create"]);
     expect(deps.sendEmail).not.toHaveBeenCalled(); expect(deps.put).not.toHaveBeenCalled();
   });
-  it.each(["", undefined, 0] as const)("accepts empty inventory selection %s only with manual metadata", async vehicleId => {
+  it.each(["", undefined, 0] as const)("accepts empty inventory selection %s with optional manual metadata", async vehicleId => {
     await service.create(claims, { ...draft(), vehicleId }, manual); expect(repo.rows.records[0].vehicleId).toBe(1);
+  });
+  it("schedules and saves an unassigned rental without inventory or a plate", async () => {
+    const created = await service.create(claims, { ...draft(), claimNumber: "MDW-1234-123456-123456" });
+    expect(repo.rows.vehicles).toHaveLength(0);
+    expect(repo.rows.records[0]).toMatchObject({ vehicleId: 0, rentalVinLastSix: "", status: "Scheduled" });
+    const stored = decryptRental<any>(repo.rows.records[0].payload);
+    expect((await service.save(claims, created.id, 1, { ...stored, staffNote: "Prepare for arrival" })).revision).toBe(2);
+    await expect(service.complete(shop, { id: created.id, revision: 2, requestId: "no-vehicle-pickup" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(deps.sendEmail).not.toHaveBeenCalled(); expect(repo.rows.packets).toHaveLength(0);
+  });
+  it("allows blank manual plates and assigns an unassigned rental on site with fresh mileage", async () => {
+    const created = await service.create(claims, draft());
+    await service.assignVehicle(shop, { ...created, vehicle: { ...manual, plate: "" } });
+    expect(repo.rows.vehicles[0].plate).toBe("");
+    expect(decryptRental<any>(repo.rows.records[0].payload)).toMatchObject({ vehicleId: 1, odometerOut: null });
+    expect(repo.rows.audit.map(row => row.action)).toContain("vehicle.assign");
+    await expect(service.assignVehicle({ ...shop, locationIds: [2] }, { id: created.id, revision: 2, vehicleId: 1 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    repo.rows.records[0].status = "Out";
+    await expect(service.assignVehicle(shop, { id: created.id, revision: 2, vehicleId: 1 })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+  it("serializes competing pickup assignments and never assigns the same vehicle twice", async () => {
+    const a = await service.create(claims, draft()), b = await service.create(claims, draft());
+    await repo.insert("vehicles", { ...manual, id: 1, locationId: 1, lastOdometer: 0, active: true });
+    const results = await Promise.allSettled([service.assignVehicle(shop, { ...a, vehicleId: 1 }), service.assignVehicle(shop, { ...b, vehicleId: 1 })]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(repo.rows.records.filter(r => r.vehicleId === 1)).toHaveLength(1);
+  });
+  it("invalidates pre-assignment condition images but retains their protected originals", async () => {
+    const a = await service.create(claims, draft());
+    for(const kind of [...PICKUP_EVIDENCE_KINDS,"extra"])await repo.insert("assets", { rentalId: a.id, kind, storageKey: `old-private-${kind}`, createdAt: now });
+    await repo.insert("assets", { rentalId: a.id, kind: "licenseFront", storageKey: "private-license", createdAt: now });
+    await repo.insert("assets", { rentalId: a.id, kind: "licenseBack", storageKey: "private-license-back", createdAt: now });
+    const originals=structuredClone(repo.rows.assets);
+    await service.assignVehicle(shop, { ...a, vehicle: { ...manual, plate: "" } });
+    expect((await service.versionAssets(repo, a.id)).map(asset=>asset.kind).sort()).toEqual(["licenseBack","licenseFront"]);
+    expect(repo.rows.assets).toEqual(originals);
+    for(const kind of PICKUP_EVIDENCE_KINDS)await repo.insert("assets",{rentalId:a.id,kind,storageKey:`new-private-${kind}`,createdAt:now});
+    const fresh=await service.versionAssets(repo,a.id);
+    expect(fresh.filter(asset=>(PICKUP_EVIDENCE_KINDS as readonly string[]).includes(asset.kind))).toHaveLength(11);
+    expect(fresh.filter(asset=>(PICKUP_EVIDENCE_KINDS as readonly string[]).includes(asset.kind)).every(asset=>asset.id>Math.max(...originals.map(a=>a.id)))).toBe(true);
   });
   it("reuses exact available VIN metadata without duplication or overwriting facts", async () => {
     await repo.insert("vehicles", { ...manual, id: 7, locationId: 1, lastOdometer: 12345, active: true });
@@ -98,7 +138,7 @@ describe("rental manual setup", () => {
   it.each(["SHORT", "1HGCM82633A00435I", "1HGCM82633A00435O", "1HGCM82633A00435Q", "1HGCM82633A00435!"])("validates manual VIN on the service: %s", async vin => {
     await expect(service.create(admin, draft(), { ...manual, vin })).rejects.toMatchObject({ code: "BAD_REQUEST" }); expect(repo.rows.vehicles).toHaveLength(0);
   });
-  it.each([{ ymm: "Camry" }, { ymm: "2024 Toyota" }, { plate: " " }, { lastOdometer: -1 }, { lastOdometer: 1.5 }, { lastOdometer: 2000001 }, { lastOdometer: "12345" }])("validates trusted manual facts: %j", async invalid => {
+  it.each([{ ymm: "Camry" }, { ymm: "2024 Toyota" }, { lastOdometer: -1 }, { lastOdometer: 1.5 }, { lastOdometer: 2000001 }, { lastOdometer: "12345" }])("validates trusted manual facts: %j", async invalid => {
     await expect(service.create(admin, draft(), { ...manual, ...invalid } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" }); expect(repo.rows.vehicles).toHaveLength(0);
   });
   it("keeps create Claims/Admin-only even for an onsite shop user", async () => {
@@ -158,6 +198,26 @@ describe("authenticated VIN decoder", () => {
 });
 
 describe("dedicated dashboard image uploads", () => {
+  it.each(PICKUP_EVIDENCE_KINDS.slice(4,10))("accepts dedicated pickup %s append-only without signatory and enforces phase",async kind=>{
+    const rental=await service.create(admin,draft(),manual);
+    const caller=createRentalHandoffRouter(service).createCaller(context());
+    const first=await caller.upload({id:rental.id,kind,base64:png});
+    const second=await service.upload(shop,{id:rental.id,kind,base64:png},audit);
+    expect((await service.versionAssets(repo,rental.id)).filter(a=>a.kind===kind).map(a=>a.id)).toEqual([second.id]);
+    expect(repo.rows.assets.filter(a=>a.kind===kind)).toHaveLength(2);expect(first.signerName).toBeNull();
+    repo.rows.records[0].status="Out";repo.rows.records[0].activePacketId=88;
+    await expect(service.upload(shop,{id:rental.id,kind,base64:png},audit)).rejects.toMatchObject({code:"CONFLICT"});
+    expect(JSON.stringify([first,second])).not.toContain("PRIVATE");
+  });
+  it.each(RETURN_EVIDENCE_KINDS.slice(4,10))("accepts dedicated return %s only during locked Out phase",async kind=>{
+    const rental=await service.create(admin,draft(),manual);
+    await expect(service.upload(shop,{id:rental.id,kind,base64:png},audit)).rejects.toMatchObject({code:"CONFLICT"});
+    repo.rows.records[0].status="Out";repo.rows.records[0].activePacketId=88;
+    expect(await createRentalHandoffRouter(service).createCaller(context()).upload({id:rental.id,kind,base64:png})).toMatchObject({kind,signerName:null});
+    repo.rows.records[0].status="Returned";
+    await expect(service.upload(shop,{id:rental.id,kind,base64:png},audit)).rejects.toMatchObject({code:"CONFLICT"});
+    expect(deps.put).toHaveBeenCalledTimes(1);expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
   it("accepts pickup and return dashboards through the image-only endpoint without a signatory", async () => {
     const rental = await service.create(admin, draft(), manual);
     const before = structuredClone(repo.rows.records[0]);

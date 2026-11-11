@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/mysql-core";
 
 export * from "./rentalSchema";
+export * from "./rentalReminderSchema";
 export * from "./rentalSenderSchema";
 
 export const users = mysqlTable("users", {

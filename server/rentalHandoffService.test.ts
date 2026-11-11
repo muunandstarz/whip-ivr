@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RentalHandoffService, type RentalRepository, type RentalTable, type RentalQuery, type RentalDependencies } from "./rentalHandoffService";
 import { encryptRental, decryptRental, tokenHash, resolveRentalActor, hashPassword, verifyPassword, decodeRentalImage, requireSameOrigin, RENTAL_COOKIE } from "./rentalHandoffSecurity";
 import { createRentalHandoffRouter } from "./routers/rentalHandoff";
-import { emptyRentalDraft, DEFAULT_RENTAL_RATES, CONDITION_AREAS, type RentalActor, type RentalDraft, type RentalReturn, type LaunchSettings } from "../shared/rentalHandoff";
+import { emptyRentalDraft, PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, DEFAULT_RENTAL_RATES, CONDITION_AREAS, type RentalActor, type RentalDraft, type RentalReturn, type LaunchSettings } from "../shared/rentalHandoff";
 
 class FakeRepo implements RentalRepository {
   rows: Record<RentalTable, any[]> = { locations: [], vehicles: [], records: [], assets: [], packets: [], audit: [], emails: [], settings: [], shopUsers: [], sessions: [] };
@@ -52,11 +52,58 @@ beforeEach(async () => {
 });
 async function createReady(d = draftReady()) {
   const created = await service.create(admin, d);
-  for (const kind of ["front", "rear", "driver", "passenger", "dashboard", "licenseFront", "licenseBack", "signedPayment", "renterSignature", "representativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now, device: "hashed", ipHash: "hashed" });
+  for (const kind of [...PICKUP_EVIDENCE_KINDS, "licenseFront", "licenseBack", "signedPayment", "renterSignature", "representativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now, device: "hashed", ipHash: "hashed" });
   return created;
 }
 
 describe("rental service security and lifecycle", () => {
+  it.each(["cornerFrontDriver", "cornerFrontPassenger", "cornerRearDriver", "cornerRearPassenger", "windshield", "vinPlate"] as const)("blocks missing pickup %s before PDF work despite extras and all opposite-phase views", async kind => {
+    const created = await createReady();repo.rows.assets = repo.rows.assets.filter(a => a.kind !== kind);
+    for (const substitute of ["extra", "returnExtra", ...RETURN_EVIDENCE_KINDS]) await repo.insert("assets", { rentalId: created.id, kind: substitute, storageKey: "private/substitute", createdAt: now });
+    const before = structuredClone(repo.rows);
+    await expect(service.complete(shop, { ...created, requestId: `missing-${kind}` })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Step 2:") });
+    expect(repo.rows).toEqual(before);expect(deps.buildPickup).not.toHaveBeenCalled();expect(deps.put).not.toHaveBeenCalled();expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+  it("persists pickup manual warning-light notes and invalidates signatures without altering photos", async () => {
+    const created = await createReady();const images = structuredClone(repo.rows.assets);
+    await service.save(shop, created.id, 1, { ...draftReady(), dashboardAlertsOut: "ABS lamp observed while parked" });
+    expect((await service.get(shop, created.id)).draft.dashboardAlertsOut).toBe("ABS lamp observed while parked");
+    expect(repo.rows.assets).toEqual(images);expect((await service.versionAssets(repo, created.id)).some(a => a.kind.endsWith("Signature"))).toBe(false);
+  });
+  it("retires phone reminder consent on each A→B→A change in the same save transaction", async () => {
+    const a = "+13015550100", b = "+13015550101";
+    const created = await service.create(admin, { ...draftReady(), mobile: a });
+    const retire = vi.fn();const originalTransaction = repo.transaction.bind(repo);
+    const rootRetire = vi.fn(() => { throw new Error("Retirement must use the save transaction"); });
+    repo.retireReminderConsent = rootRetire;
+    repo.transaction = work => originalTransaction(tx => work(new Proxy(tx, { get(target, key) { if(key === "retireReminderConsent")return retire;const value=Reflect.get(target,key);return typeof value === "function" ? value.bind(target) : value; } })));
+    const second = await service.save(admin, created.id, 1, { ...draftReady(), mobile: b });
+    expect(retire).toHaveBeenNthCalledWith(1, created.id, now);
+    await service.save(admin, created.id, second.revision, { ...draftReady(), mobile: a });
+    expect(retire).toHaveBeenNthCalledWith(2, created.id, now);expect(rootRetire).not.toHaveBeenCalled();
+    expect((await service.get(admin, created.id)).draft.mobile).toBe(a);
+  });
+  it("does not retire consent for a normalized-equivalent phone edit", async () => {
+    const created = await service.create(admin, { ...draftReady(), mobile: "+13015550100" });
+    const retire = vi.fn();repo.retireReminderConsent = retire;
+    await service.save(admin, created.id, 1, { ...draftReady(), mobile: "(301) 555-0100" });
+    expect(retire).not.toHaveBeenCalled();
+  });
+  it("normalizes an absent legacy dashboard note to blank without invalidating existing signatures",async()=>{
+    const created=await createReady();const legacy=draftReady();delete legacy.dashboardAlertsOut;
+    repo.rows.records[0].payload=encryptRental(legacy);
+    await service.save(shop,created.id,1,legacy);
+    expect((await service.get(shop,created.id)).draft.dashboardAlertsOut).toBe("");
+    expect((await service.versionAssets(repo,created.id)).filter(a=>a.kind.endsWith("Signature"))).toHaveLength(2);
+    expect(repo.rows.audit.some(a=>a.action==="signature.invalidate")).toBe(false);
+  });
+  it("replays an immutable pickup before the unassigned-vehicle guard and without vehicle lookup",async()=>{
+    const created=await createReady();const request={...created,requestId:"unassigned-legacy-replay"};
+    const issued=await service.complete(shop,request);
+    repo.rows.records[0].vehicleId=0;repo.calls=[];
+    expect(await service.complete(shop,request)).toEqual(issued);
+    expect(repo.calls.some(call=>call.table==="vehicles")).toBe(false);expect(deps.buildPickup).toHaveBeenCalledTimes(1);
+  });
   it("encrypts payloads with randomized authenticated encryption and rejects tampering", () => {
     const a = encryptRental({ name: "private" }), b = encryptRental({ name: "private" }); expect(a).not.toBe(b); expect(a).not.toContain("private"); expect(decryptRental(a)).toEqual({ name: "private" });
     const pieces = a.split("."); const corrupted = Buffer.from(pieces[3], "base64url"); corrupted[0] ^= 1; pieces[3] = corrupted.toString("base64url"); expect(() => decryptRental(pieces.join("."))).toThrow();
@@ -65,6 +112,18 @@ describe("rental service security and lifecycle", () => {
     const created = await createReady(); const outsider = { ...shop, locationIds: [2] };
     expect(await service.list(outsider)).toEqual([]); expect(repo.calls.some(c => c.table === "records" && c.query.in?.locationId?.[0] === 2)).toBe(true);
     await expect(service.get(outsider, created.id)).rejects.toMatchObject({ code: "NOT_FOUND" }); await expect(service.authorizeFile(outsider, "asset", 1)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+  it("does not misidentify full Snapsheet claim identifiers as card numbers at setup", async () => {
+    const d = { ...draftReady(), claimNumber: "MDW-1234-123456-123456" };
+    const created = await service.create(admin, d);
+    expect((await service.get(admin, created.id)).draft.claimNumber).toBe(d.claimNumber);
+    await expect(service.create(admin, { ...d, claimNumber: "4111 1111 1111 1111" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(service.create(admin, { ...d, claimNumber: d.claimNumber + " 4111111111111111" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+  it.each(["", "1", "12", "123", "1234"])("allows last-four draft typing %s without permitting a full PAN", async lastFour => {
+    const d = draftReady(); d.payment.lastFour = lastFour;
+    const created = await service.create(admin, d);
+    expect((await service.get(admin, created.id)).draft.payment.lastFour).toBe(lastFour);
   });
   it("rejects full card fields and PANs hidden in free text", async () => {
     const draft = draftReady(); (draft.payment as any).cvv = "123"; await expect(service.create(admin, draft)).rejects.toThrow();
@@ -134,10 +193,10 @@ describe("rental service security and lifecycle", () => {
   });
   it("invalidates prior signatures after changed facts without deleting historical objects", async () => {
     const created = await createReady(); await service.save(shop, created.id, 1, { ...draftReady(), keysOut: 2 });
-    expect(repo.rows.assets).toHaveLength(10); expect((await service.get(shop, created.id)).assets.some(a => a.kind.endsWith("Signature"))).toBe(false);
+    expect(repo.rows.assets).toHaveLength(PICKUP_EVIDENCE_KINDS.length + 5); expect((await service.get(shop, created.id)).assets.some(a => a.kind.endsWith("Signature"))).toBe(false);
     await expect(service.complete(shop, { id: created.id, revision: 2, requestId: "invalidate-test-1" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     for (const kind of ["renterSignature", "representativeSignature", "signedPayment"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: "private/new", mime: "image/png", signerName: kind === "representativeSignature" ? "Test Shop" : "Test Renter", uploadedBy: shop.key, createdAt: now });
-    expect((await service.complete(shop, { id: created.id, revision: 2, requestId: "invalidate-test-1" })).status).toBe("Out"); expect(repo.rows.assets).toHaveLength(13);
+    expect((await service.complete(shop, { id: created.id, revision: 2, requestId: "invalidate-test-1" })).status).toBe("Out"); expect(repo.rows.assets).toHaveLength(PICKUP_EVIDENCE_KINDS.length + 8);
   });
   it("issues one immutable packet with replay, locks edits, and never returns storage keys", async () => {
     const created = await createReady(); const request = { ...created, requestId: "handoff-test-2" };
@@ -212,13 +271,13 @@ describe("rental service security and lifecycle", () => {
   it("preserves original assets and requires new signatures for a replacement version", async () => {
     const created = await createReady(); await service.complete(shop, { ...created, requestId: "version-test-1" }); const original = structuredClone(repo.rows.packets[0]);
     await expect(service.newVersion(shop, created.id, 2, "Correction")).rejects.toMatchObject({ code: "FORBIDDEN" }); expect(await service.newVersion(admin, created.id, 2, "Correction")).toEqual({ revision: 3 });
-    expect(repo.rows.records[0]).toMatchObject({ status: "Out", activePacketId: null }); expect(repo.rows.assets).toHaveLength(10);
+    expect(repo.rows.records[0]).toMatchObject({ status: "Out", activePacketId: null }); expect(repo.rows.assets).toHaveLength(PICKUP_EVIDENCE_KINDS.length + 5);
     expect((await service.get(shop, created.id)).assets.some(a => a.kind.endsWith("Signature"))).toBe(false);
     await expect(service.complete(shop, { id: created.id, revision: 3, requestId: "version-test-2" })).rejects.toMatchObject({ code: "BAD_REQUEST" }); expect(repo.rows.packets[0]).toEqual(original);
   });
   it("makes a separate return packet, releases fleet availability, restricts closed licenses", async () => {
     const created = await createReady(); await service.complete(shop, { ...created, requestId: "return-test-1" });
-    for (const kind of ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now + 1 });
+    for (const kind of [...RETURN_EVIDENCE_KINDS, "returnRenterSignature", "returnRepresentativeSignature"]) await repo.insert("assets", { rentalId: created.id, kind, storageKey: `private/${kind}`, mime: "image/png", signerName: "Test", uploadedBy: shop.key, createdAt: now + 1 });
     deps.now = () => now + 86400000;
     await expect(service.returnComplete(shop, { id: created.id, revision: 2, requestId: "return-test-2", data: { ...returnReady(), odometer: 999 } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const returned = await service.returnComplete(shop, { id: created.id, revision: 2, requestId: "return-test-2", data: returnReady() }); expect(returned.status).toBe("Returned"); expect(repo.rows.packets).toHaveLength(2); expect(repo.rows.vehicles[0].lastOdometer).toBe(1100);

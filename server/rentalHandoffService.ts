@@ -4,10 +4,12 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { PDFDocument } from "pdf-lib";
 import * as tables from "../drizzle/rentalSchema";
+import { rentalReminderSubscriptions } from "../drizzle/rentalReminderSchema";
+import { normalizeReminderPhone } from "../shared/rentalReminders";
 import { getDb } from "./db";
 import { storagePut, storageGetSignedUrl } from "./storage";
 import { sharedGmailStatus, connectSharedGmail, finishSharedGmail, disconnectSharedGmail, sendRentalPacketSharedGmail, RentalGmailDeliveryUncertainError, RENTAL_GMAIL_MAX_PDF_BYTES, type RentalSharedGmailStatus } from "./rentalHandoffGmail";
-import { ASSET_KINDS, DEFAULT_RENTAL_RATES, RENTAL_FORM_VERSION, CONDITION_AREAS, rentalDraftSchema, rentalReturnSchema, handoffMissing, launchMissing, calculateRentalCharges, type RentalActor, type RentalDraft, type RentalReturn, type LaunchSettings, type RentalRates, type RentalVehicle, type RentalLocation } from "../shared/rentalHandoff";
+import { ASSET_KINDS, PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, DEFAULT_RENTAL_RATES, RENTAL_FORM_VERSION, CONDITION_AREAS, rentalDraftSchema, rentalReturnSchema, handoffMissing, launchMissing, calculateRentalCharges, type RentalActor, type RentalDraft, type RentalReturn, type LaunchSettings, type RentalRates, type RentalVehicle, type RentalLocation } from "../shared/rentalHandoff";
 import { encryptRental, decryptRental, enforceDraftCardSafety, decodeRentalImage, hashPassword, verifyPassword, randomToken, tokenHash } from "./rentalHandoffSecurity";
 
 const tableMap = { locations: tables.rentalLocations, vehicles: tables.rentalVehicles, records: tables.rentalRecords, assets: tables.rentalAssets, packets: tables.rentalPackets, audit: tables.rentalAudit, emails: tables.rentalEmailLog, settings: tables.rentalSettings, shopUsers: tables.rentalShopUsers, sessions: tables.rentalSessions };
@@ -21,6 +23,7 @@ export interface RentalRepository {
   update<K extends RentalTable>(table: K, query: RentalQuery, values: Partial<RentalInserts[K]>): Promise<number>;
   remove(table: RentalTable, query: RentalQuery): Promise<void>;
   transaction<T>(work: (tx: RentalRepository) => Promise<T>): Promise<T>;
+  retireReminderConsent?(rentalId: number, now: number): Promise<void>;
 }
 // Generic operations remain private to the repository; every query value is parameterized.
 function whereFor(table: any, query: RentalQuery) {
@@ -46,6 +49,7 @@ export function createDrizzleRentalRepository(connection?: any): RentalRepositor
     async insert(name, values) { const ids = await (await db()).insert(tableMap[name]).values(values).$returningId(); return ids[0]?.id || (values as any).id; },
     async update(name, query, values) { const [result] = await (await db()).update(tableMap[name]).set(values).where(whereFor(tableMap[name], query)); return Number(result.affectedRows); },
     async remove(name, query) { await (await db()).delete(tableMap[name]).where(whereFor(tableMap[name], query)); },
+    async retireReminderConsent(rentalId, now) { await (await db()).update(rentalReminderSubscriptions).set({ enabled: false, consentAt: null, consentBy: null, consentPhoneHash: null, updatedAt: now }).where(eq(rentalReminderSubscriptions.rentalId, rentalId)); },
     async transaction(work) { return (await db()).transaction((tx: any) => work(createDrizzleRentalRepository(tx))); },
   };
 }
@@ -111,9 +115,9 @@ export const rentalCreateDraftSchema = rentalDraftSchema.extend({
   vehicleId: z.union([z.number().int().nonnegative(), z.literal(""), z.null()]).optional().transform(value => typeof value === "number" ? value : 0),
 }).strict();
 export const rentalManualVehicleSchema = z.object({
-  ymm: z.string().trim().min(1).max(120).regex(/^(?:19|20)\d{2}\s+\S+\s+\S.*$/, "Enter the vehicle year, make and model.").regex(/^[^\u0000-\u001f\u007f]+$/),
+  ymm: z.string().trim().min(1).max(120).regex(/^(?:19|20)\d{2}\s+\S+\s+\S.*$/).regex(/^[^\u0000-\u001f\u007f]+$/),
   vin: z.string().trim().length(17).regex(/^[A-HJ-NPR-Z0-9]{17}$/i, "VIN must contain 17 valid characters (no I, O or Q).").transform(value => value.toUpperCase()),
-  plate: z.string().trim().min(1).max(30).regex(/^[^\u0000-\u001f\u007f]+$/),
+  plate: z.string().trim().max(30).regex(/^[^\u0000-\u001f\u007f]*$/).default(""),
   lastOdometer: z.number().int().nonnegative().max(2000000).optional(),
 }).strict();
 type RentalCreateDraft = z.input<typeof rentalCreateDraftSchema>;
@@ -223,11 +227,10 @@ export class RentalHandoffService {
     if (actor.role !== "admin" && actor.role !== "claims") fail("FORBIDDEN", "Claims or Admin access is required.");
     const draft = rentalCreateDraftSchema.parse(inputDraft); enforceDraftCardSafety(draft);
     const parsedVehicle = manualInput === undefined ? undefined : rentalManualVehicleSchema.safeParse(manualInput);
-    if (parsedVehicle && !parsedVehicle.success) fail("BAD_REQUEST", "Enter a valid year/make/model, 17-character VIN, plate and whole-number odometer (0–2,000,000).");
+    if (parsedVehicle && !parsedVehicle.success) fail("BAD_REQUEST", "Enter a valid year/make/model, 17-character VIN and whole-number odometer (0–2,000,000). Plate is optional.");
     const manual = parsedVehicle?.success ? parsedVehicle.data : undefined;
     if (draft.locationId <= 0) fail("BAD_REQUEST", "Choose an active location.");
     if (manual && draft.vehicleId > 0) fail("BAD_REQUEST", "Choose inventory or enter a vehicle manually, not both.");
-    if (!manual && draft.vehicleId <= 0) fail("BAD_REQUEST", "Choose an inventory vehicle or enter its year/make/model, VIN and plate.");
     if (manual && draft.odometerOut !== null && !Number.isInteger(draft.odometerOut)) fail("BAD_REQUEST", "Pickup odometer must be a whole number.");
     assertRentalAccess(actor, { locationId: draft.locationId });
     try {
@@ -236,7 +239,7 @@ export class RentalHandoffService {
         const location = (await tx.find("locations", { eq: { id: draft.locationId, active: true }, lock: true }))[0];
         if (!location) fail("BAD_REQUEST", "Choose an active location.");
         const settings = await this.settings(tx); assertFixedRates(settings.rates);
-        let vehicle: RentalRows["vehicles"];
+        let vehicle: RentalRows["vehicles"] | undefined;
         let inventoryCreated = false;
         if (manual) {
           const existing = (await tx.find("vehicles", { eq: { vin: manual.vin }, lock: true }))[0];
@@ -253,21 +256,60 @@ export class RentalHandoffService {
             inventoryCreated = true;
           }
           if (draft.odometerOut !== null && draft.odometerOut < vehicle.lastOdometer) fail("BAD_REQUEST", "Pickup odometer cannot be below the inventory odometer.");
-        } else {
+        } else if (draft.vehicleId > 0) {
           const selected = (await tx.find("vehicles", { eq: { id: draft.vehicleId, locationId: location.id, active: true }, lock: true }))[0];
           if (!selected) fail("BAD_REQUEST", "Choose an active location and a vehicle assigned to it.");
           vehicle = selected;
         }
-        const savedDraft = rentalDraftSchema.parse({ ...draft, vehicleId: vehicle.id });
+        // Zero is an explicit unassigned Scheduled draft, never a fabricated inventory row.
+        const savedDraft = rentalDraftSchema.parse({ ...draft, vehicleId: vehicle?.id || 0 });
         const now = this.deps.now();
-        const id = await tx.insert("records", { status: "Scheduled", locationId: savedDraft.locationId, vehicleId: vehicle.id, ...this.searchFields(savedDraft, vehicle.vin, vehicle.plate), payload: encryptRental(savedDraft), revision: 1, rateSnapshot: encryptRental(settings.rates), createdBy: actor.key, createdAt: now, updatedAt: now });
-        if (inventoryCreated) await this.audit(tx, actor, id, "vehicle.create", { vehicleId: vehicle.id, source: "rental.setup" });
-        await this.audit(tx, actor, id, "rental.create", { revision: 1, vehicleId: vehicle.id, inventoryCreated });
+        const id = await tx.insert("records", { status: "Scheduled", locationId: savedDraft.locationId, vehicleId: savedDraft.vehicleId, ...this.searchFields(savedDraft, vehicle?.vin || "", vehicle?.plate || ""), payload: encryptRental(savedDraft), revision: 1, rateSnapshot: encryptRental(settings.rates), createdBy: actor.key, createdAt: now, updatedAt: now });
+        if (inventoryCreated) await this.audit(tx, actor, id, "vehicle.create", { vehicleId: vehicle!.id, source: "rental.setup" });
+        await this.audit(tx, actor, id, "rental.create", { revision: 1, vehicleId: savedDraft.vehicleId, inventoryCreated });
         return { id, revision: 1 };
       });
     } catch (error) {
       // The global unique VIN index is the final guard when two locations race.
       if (isRentalSetupDuplicate(error)) fail("CONFLICT", "This VIN was added by another request. Reload inventory before creating the rental.");
+      throw error;
+    }
+  }
+  async assignVehicle(actor: RentalActor, input: { id: number; revision: number; vehicleId?: number; vehicle?: RentalManualVehicle }) {
+    const initial = await this.record(actor, input.id);
+    const parsed = input.vehicle === undefined ? undefined : rentalManualVehicleSchema.safeParse(input.vehicle);
+    if (parsed && !parsed.success) fail("BAD_REQUEST", "Enter an actual year/make/model and valid 17-character VIN. Plate is optional.");
+    const manual = parsed?.success ? parsed.data : undefined;
+    if (!!manual === !!input.vehicleId) fail("BAD_REQUEST", "Select inventory or enter the rental vehicle, not both.");
+    try {
+      return await this.repo.transaction(async tx => {
+        const location = (await tx.find("locations", { eq: { id: initial.locationId, active: true }, lock: true }))[0];
+        if (!location) fail("BAD_REQUEST", "The pickup location is inactive.");
+        let vehicle = (await tx.find("vehicles", { eq: manual ? { vin: manual.vin } : { id: input.vehicleId, locationId: initial.locationId, active: true }, lock: true }))[0];
+        let created = false;
+        if (manual && !vehicle) {
+          const values = { locationId: initial.locationId, ymm: manual.ymm, vin: manual.vin, plate: manual.plate, lastOdometer: manual.lastOdometer ?? 0, active: true };
+          const id = await tx.insert("vehicles", values); vehicle = { ...values, id }; created = true;
+        }
+        if (!vehicle || !vehicle.active || vehicle.locationId !== initial.locationId) fail("BAD_REQUEST", "Select an available vehicle at this pickup location.");
+        if (manual && (manual.ymm !== vehicle.ymm || (manual.plate && manual.plate !== vehicle.plate))) fail("CONFLICT", "This VIN has different inventory details. Select the existing vehicle or contact Admin.");
+        const r = await this.record(actor, input.id, tx, true); checkRevision(r, input.revision);
+        if (r.locationId !== initial.locationId || r.status !== "Scheduled" || r.activePacketId !== null) fail("CONFLICT", "Only an unsigned scheduled rental can be assigned a vehicle.");
+        const active = await tx.find("records", { eq: { vehicleId: vehicle.id }, in: { status: ["Scheduled", "Out"] }, limit: 500 });
+        if (active.some(other => other.id !== r.id)) fail("CONFLICT", "This vehicle is already assigned to another active rental.");
+        if (r.vehicleId === vehicle.id) return { revision: r.revision, vehicleId: vehicle.id };
+        if (r.vehicleId > 0) fail("CONFLICT", "This rental already has a vehicle. Contact Claims for an audited correction.");
+        // Different vehicle means fresh measurements and signatures; old evidence remains append-only.
+        const draft = rentalDraftSchema.parse({ ...decryptRental<RentalDraft>(r.payload), vehicleId: vehicle.id, odometerOut: null });
+        await tx.update("records", { eq: { id: r.id, revision: input.revision } }, { vehicleId: vehicle.id, payload: encryptRental(draft), ...this.searchFields(draft, vehicle.vin, vehicle.plate), revision: r.revision + 1, updatedAt: this.deps.now() });
+        const assets = await tx.find("assets", { eq: { rentalId: r.id }, limit: 2000 });
+        if (assets.length) await this.audit(tx, actor, r.id, "signature.invalidate", { assetCutoffId: Math.max(...assets.map(a => a.id)), fields: ["vehicleId"], revision: r.revision + 1 });
+        if (created) await this.audit(tx, actor, r.id, "vehicle.create", { vehicleId: vehicle.id, source: "rental.pickup" });
+        await this.audit(tx, actor, r.id, "vehicle.assign", { previousVehicleId: r.vehicleId, vehicleId: vehicle.id, revision: r.revision + 1, assetCutoffId: Math.max(0, ...assets.map(a => a.id)) });
+        return { revision: r.revision + 1, vehicleId: vehicle.id };
+      });
+    } catch (error) {
+      if (isRentalSetupDuplicate(error)) fail("CONFLICT", "This VIN was added concurrently. Reload inventory and select the existing vehicle.");
       throw error;
     }
   }
@@ -298,11 +340,17 @@ export class RentalHandoffService {
       const r = await this.record(actor, id, tx, true); checkRevision(r, revision);
       if (r.activePacketId !== null || !["Scheduled", "Out"].includes(r.status)) fail("CONFLICT", "Signed or returned rentals are locked. Claims must open a new version.");
       const previous = decryptRental<RentalDraft>(r.payload);
+      if (normalizeReminderPhone(previous.mobile) !== normalizeReminderPhone(draft.mobile)) await tx.retireReminderConsent?.(id, this.deps.now());
       if (actor.role === "shop" && CLAIMS_FIELDS.some(k => JSON.stringify(draft[k]) !== JSON.stringify(previous[k]))) fail("FORBIDDEN", "Shop cannot change Claims-owned rental details.");
       if (r.status === "Out" && (draft.vehicleId !== r.vehicleId || draft.locationId !== r.locationId)) fail("CONFLICT", "An Out rental must keep its vehicle and location until return.");
-      const { vehicle } = await this.locationVehicle(draft, tx); assertRentalAccess(actor, { locationId: draft.locationId });
-      const changed = Object.keys(draft).filter(k => JSON.stringify(draft[k as keyof RentalDraft]) !== JSON.stringify(previous[k as keyof RentalDraft]));
-      if (!await tx.update("records", { eq: { id, revision } }, { payload: encryptRental(draft), ...this.searchFields(draft, vehicle.vin, vehicle.plate), locationId: draft.locationId, vehicleId: draft.vehicleId, revision: revision + 1, updatedAt: this.deps.now() })) fail("CONFLICT", "Rental changed. Reload before saving.");
+      const location = (await tx.find("locations", { eq: { id: draft.locationId, active: true } }))[0];
+      if (!location) fail("BAD_REQUEST", "Choose an active location.");
+      if (!draft.vehicleId && r.status !== "Scheduled") fail("CONFLICT", "An active rental must keep its assigned vehicle.");
+      const vehicle = draft.vehicleId ? (await this.locationVehicle(draft, tx)).vehicle : undefined;
+      assertRentalAccess(actor, { locationId: draft.locationId });
+      // A missing legacy manual note and the blank schema default mean the same unrecorded fact.
+      const changed = Object.keys(draft).filter(k => JSON.stringify(draft[k as keyof RentalDraft]) !== JSON.stringify(k === "dashboardAlertsOut" ? previous.dashboardAlertsOut ?? "" : previous[k as keyof RentalDraft]));
+      if (!await tx.update("records", { eq: { id, revision } }, { payload: encryptRental(draft), ...this.searchFields(draft, vehicle?.vin || "", vehicle?.plate || ""), locationId: draft.locationId, vehicleId: draft.vehicleId, revision: revision + 1, updatedAt: this.deps.now() })) fail("CONFLICT", "Rental changed. Reload before saving.");
       if (changed.some(k => k !== "staffNote" && k !== "claimEmail")) {
         const assets = await tx.find("assets", { eq: { rentalId: id }, limit: 2000 });
         if (assets.some(a => a.kind.endsWith("Signature") || a.kind === "signedPayment")) await this.audit(tx, actor, id, "signature.invalidate", { assetCutoffId: Math.max(0, ...assets.map(a => a.id)), fields: changed, revision: revision + 1 });
@@ -349,8 +397,10 @@ export class RentalHandoffService {
   async versionAssets(repo: RentalRepository, rentalId: number, returnKind = false) {
     const assets = await repo.find("assets", { eq: { rentalId }, limit: 2000 });
     const opens = await repo.find("audit", { eq: { rentalId }, in: { action: ["version.open", "signature.invalidate"] }, order: "createdAt", limit: 2000 });
+    const assignments = await repo.find("audit", { eq: { rentalId, action: "vehicle.assign" }, limit: 2000 });
+    const vehicleCutoff = Math.max(0, ...assignments.map(a => decryptRental<{ assetCutoffId: number }>(a.detail).assetCutoffId || 0));
     const cutoff = Math.max(0, ...opens.map(a => decryptRental<{ assetCutoffId: number }>(a.detail).assetCutoffId || 0));
-    return selectCurrentAssets(assets.filter(a => returnKind ? a.kind.startsWith("return") : !a.kind.startsWith("return") && (!(a.kind.endsWith("Signature") || ["signedPayment", "coverageConfirmation"].includes(a.kind)) || a.id > cutoff)));
+    return selectCurrentAssets(assets.filter(a => returnKind ? a.kind.startsWith("return") : !a.kind.startsWith("return") && (!(a.id <= vehicleCutoff && ([...PICKUP_EVIDENCE_KINDS, "extra"] as readonly string[]).includes(a.kind))) && (!(a.kind.endsWith("Signature") || ["signedPayment", "coverageConfirmation"].includes(a.kind)) || a.id > cutoff)));
   }
   async buildPacket(input: RentalPdfInput, assets: RentalRows["assets"][], isReturn: boolean) {
     const hydrated: RentalPdfInput["assets"] = [];
@@ -371,6 +421,15 @@ export class RentalHandoffService {
   async complete(actor: RentalActor, input: { id: number; revision: number; requestId: string }) {
     const initial = await this.record(actor, input.id);
     const result = await this.repo.transaction(async tx => {
+      if (!initial.vehicleId) {
+        // Preserve immutable replay before rejecting a new, unassigned pickup.
+        const unassigned = await this.record(actor, input.id, tx, true);
+        const replay = (await tx.find("packets", { eq: { requestId: input.requestId }, lock: true }))[0];
+        if (replay) { if (replay.rentalId !== unassigned.id || replay.kind !== "pickup") fail("CONFLICT", "Request ID was already used for another operation."); return { packetId: replay.id, replay: true }; }
+        checkRevision(unassigned, input.revision);
+        if (unassigned.vehicleId !== initial.vehicleId) fail("CONFLICT", "Vehicle assignment changed. Reload and try again.");
+        fail("BAD_REQUEST", "Assign the actual rental vehicle at pickup before completing the handoff.");
+      }
       // All issuance/return locks use vehicle then rental, serializing concurrent rentals for a vehicle.
       const vehicle = (await tx.find("vehicles", { eq: { id: initial.vehicleId }, lock: true }))[0];
       const r = await this.record(actor, input.id, tx, true);
@@ -422,8 +481,9 @@ export class RentalHandoffService {
       if (!Number.isFinite(Date.parse(data.returnedAt)) || Date.parse(data.returnedAt) > this.deps.now() + 300000 || !data.representativeName.trim() || !CONDITION_AREAS.every(area => data.condition.some(c => c.area === area && (c.ok || c.note.trim())))) fail("BAD_REQUEST", "Complete return time, representative and all 12 condition areas.");
       const all = await tx.find("assets", { eq: { rentalId: r.id }, limit: 2000 }); const assets = await this.returnAssets(tx, r.id, original.createdAt);
       if (!assets.some(a => a.kind === "returnDashboard")) fail("BAD_REQUEST", "Add the return dashboard / instrument-cluster photo showing alerts, fuel level, and odometer (mileage).");
-      const required = ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnRenterSignature", "returnRepresentativeSignature"];
-      if (required.some(k => !assets.some(a => a.kind === k))) fail("BAD_REQUEST", "All four return photos and renter/representative signatures are required.");
+      const required = [...RETURN_EVIDENCE_KINDS, "returnRenterSignature", "returnRepresentativeSignature"];
+      const missingEvidence = required.filter(k => !assets.some(a => a.kind === k));
+      if (missingEvidence.length) fail("BAD_REQUEST", `All 11 dedicated return photos and renter/representative signatures are required. Missing: ${missingEvidence.join(", ")}.`);
       const charges = (() => { try { return calculateRentalCharges(draft, data, snapshot.rates, snapshot.location.timezone); } catch (error) { return fail("BAD_REQUEST", error instanceof Error ? error.message : "Invalid return charges."); } })();
       const pickupSignatureIds = snapshot.assets.filter(a => ["renterSignature", "representativeSignature"].includes(a.kind)).map(a => a.id);
       const packetAssets = [...all.filter(a => pickupSignatureIds.includes(a.id)), ...assets];

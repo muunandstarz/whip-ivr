@@ -31,6 +31,7 @@ import { extractPipBillLinesFromUpload } from "../pipBillExtraction";
 import { analyzeCarrierRebuttalUpload } from "../carrierRebuttalAnalysis";
 import { registerInsuranceDirectDvApi } from "../insuranceDirectDvApi";
 import { registerKlutchPolicyApi } from "../klutchPolicyApi";
+import { registerRentalRemindersApi } from "../rentalRemindersApi";
 import { registerRentalHandoffApi } from "../rentalHandoffApi";
 import { sdk } from "./sdk";
 import {
@@ -105,6 +106,7 @@ async function startServer() {
   registerKlutchPolicyApi(app);
   registerInsuranceDirectDvApi(app);
   registerRentalHandoffApi(app);
+  registerRentalRemindersApi(app);
 
   // ─── Document File Upload Endpoint ─────────────────────────────────────────
   // Used by Medical Bills Review, Carrier Rebuttal, PIP Exhaustion, TL Settlement

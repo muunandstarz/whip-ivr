@@ -5,6 +5,9 @@ import { RentalHandoffService, rentalHandoffService, rentalSettingsSchema, renta
 import { ASSET_KINDS, RENTAL_STATUS, rentalDraftSchema, rentalReturnSchema } from "../../shared/rentalHandoff";
 import { resolveRentalActor, requireSameOrigin, rateLimitRental, requestAudit, issueShopSession, cookieToken, tokenHash, RENTAL_COOKIE, rentalCookieOptions } from "../rentalHandoffSecurity";
 
+import { rentalReminderService } from "../rentalReminders";
+import { rentalReminderConfigSchema, rentalReminderSubscriptionSchema } from "../../shared/rentalReminders";
+
 const id = z.number().int().positive();
 const revision = z.number().int().positive();
 const recordInput = z.object({ id, revision }).strict();
@@ -42,10 +45,15 @@ export function createRentalHandoffRouter(service: RentalHandoffService) {
       requireSameOrigin(ctx.req);
       return service.saveSharedSender(ctx.rentalActor, input);
     }),
+    reminderConfig: authenticated.query(({ ctx }) => rentalReminderService.configStatus(ctx.rentalActor)),
+    saveReminderConfig: authenticated.input(rentalReminderConfigSchema).mutation(({ ctx, input }) => { requireSameOrigin(ctx.req); return rentalReminderService.saveConfig(ctx.rentalActor, input); }),
+    reminders: authenticated.input(z.object({ id }).strict()).query(({ ctx, input }) => rentalReminderService.get(ctx.rentalActor, input.id)),
+    saveReminders: authenticated.input(z.object({ id, settings: rentalReminderSubscriptionSchema }).strict()).mutation(({ ctx, input }) => rentalReminderService.saveSubscription(ctx.rentalActor, input.id, input.settings)),
     list: authenticated.input(z.object({ search: z.string().max(180).optional(), status: z.enum(RENTAL_STATUS).optional() }).strict().optional()).query(({ ctx, input }) => service.list(ctx.rentalActor, input)),
     get: authenticated.input(z.object({ id }).strict()).query(({ ctx, input }) => service.get(ctx.rentalActor, input.id)),
     create: authenticated.input(z.object({ draft: rentalCreateDraftSchema, vehicle: rentalManualVehicleSchema.optional() }).strict()).mutation(({ ctx, input }) => service.create(ctx.rentalActor, input.draft, input.vehicle)),
     decodeVin: authenticated.input(z.object({ vin: rentalManualVehicleSchema.shape.vin }).strict()).mutation(({ ctx, input }) => service.decodeVin(ctx.rentalActor, input.vin)),
+    assignVehicle: authenticated.input(recordInput.extend({ vehicleId: id.optional(), vehicle: rentalManualVehicleSchema.optional() }).strict()).mutation(({ ctx, input }) => service.assignVehicle(ctx.rentalActor, input)),
     save: authenticated.input(recordInput.extend({ draft: rentalDraftSchema }).strict()).mutation(({ ctx, input }) => service.save(ctx.rentalActor, input.id, input.revision, input.draft)),
     upload: authenticated.input(z.object({ id, kind: z.enum(ASSET_KINDS), base64: z.string().max(6990600), signerName: z.string().trim().min(1).max(120).optional() }).strict()).mutation(({ ctx, input }) => service.upload(ctx.rentalActor, input, requestAudit(ctx.req))),
     uploadSupport: authenticated.input(z.object({ id, kind: z.enum(RENTAL_SUPPORT_KINDS), base64: z.string().max(Math.ceil(RENTAL_SUPPORT_MAX_BYTES / 3) * 4 + 64), fileName: z.string().max(255).optional() }).strict()).mutation(({ ctx, input }) => service.uploadSupport(ctx.rentalActor, input, requestAudit(ctx.req))),
@@ -57,7 +65,7 @@ export function createRentalHandoffRouter(service: RentalHandoffService) {
     newVersion: authenticated.input(recordInput.extend({ reason: z.string().trim().min(1).max(1000) }).strict()).mutation(({ ctx, input }) => service.newVersion(ctx.rentalActor, input.id, input.revision, input.reason)),
     resend: authenticated.input(z.object({ packetId: id, requestId }).strict()).mutation(({ ctx, input }) => service.resend(ctx.rentalActor, input)),
     saveLocation: authenticated.input(z.object({ id: id.optional(), name: z.string().trim().min(1).max(120), address: z.string().trim().min(1).max(1000), phone: z.string().trim().min(1).max(40), timezone: z.string().min(1).max(60), active: z.boolean() }).strict()).mutation(({ ctx, input }) => service.saveLocation(ctx.rentalActor, input)),
-    saveVehicle: authenticated.input(z.object({ id: id.optional(), locationId: id, ymm: z.string().trim().min(1).max(120), vin: z.string().length(17).regex(/^[A-HJ-NPR-Z0-9]{17}$/i).transform(v => v.toUpperCase()), plate: z.string().trim().min(1).max(30), lastOdometer: z.number().int().nonnegative().max(2000000) }).strict()).mutation(({ ctx, input }) => service.saveVehicle(ctx.rentalActor, input)),
+    saveVehicle: authenticated.input(z.object({ id: id.optional(), locationId: id, ymm: z.string().trim().min(1).max(120), vin: z.string().length(17).regex(/^[A-HJ-NPR-Z0-9]{17}$/i).transform(v => v.toUpperCase()), plate: z.string().trim().max(30).default(""), lastOdometer: z.number().int().nonnegative().max(2000000) }).strict()).mutation(({ ctx, input }) => service.saveVehicle(ctx.rentalActor, input)),
     saveSettings: authenticated.input(z.object({ settings: rentalSettingsSchema }).strict()).mutation(({ ctx, input }) => service.saveSettings(ctx.rentalActor, input.settings)),
     inviteShop: authenticated.input(z.object({ name: z.string().trim().min(1).max(120), email: z.email().max(254), locationIds: z.array(id).min(1).max(100) }).strict()).mutation(({ ctx, input }) => service.inviteShop(ctx.rentalActor, input)),
     deactivateShop: authenticated.input(z.object({ id }).strict()).mutation(({ ctx, input }) => service.deactivateShop(ctx.rentalActor, input.id)),

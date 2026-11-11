@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   emptyRentalDraft,
   DEFAULT_RENTAL_RATES,
+  PICKUP_EVIDENCE_KINDS,
   type RentalDraft,
 } from "@shared/rentalHandoff";
 const mocks = vi.hoisted(() => ({
@@ -315,13 +316,13 @@ describe("Standalone MetroCars rental interface", () => {
       /Klutch|Whip|self.insurance|risk retention/i
     );
   });
-  it("allows Claims to schedule only after actual inventory selection", async () => {
+  it("lets Claims schedule without choosing a rental vehicle", async () => {
     await mount(React.createElement(RentalHandoff));
     await click(button("New rental"));
-    expect(button("Schedule rental").disabled).toBe(true);
+    expect(button("Schedule & continue").disabled).toBe(true);
     expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
-    expect(container.textContent).toContain("Rental VIN");
-    expect(container.textContent).toContain("No sample vehicles are supplied");
+    expect(button("Assign at pickup").getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("No rental vehicle is required to continue");
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("schedules a directly entered vehicle and refreshes inventory before opening its record", async () => {
@@ -344,17 +345,17 @@ describe("Standalone MetroCars rental interface", () => {
     });
     await mount(React.createElement(RentalHandoff));
     await click(button("New rental"));
-    expect(button("Enter rental vehicle").getAttribute("aria-pressed")).toBe(
-      "true"
-    );
+    await click(button("Enter rental vehicle"));
+    expect(button("Enter rental vehicle").getAttribute("aria-pressed")).toBe("true");
     await input("Renter full name", "Actual renter");
     await select("Pickup location", "1");
     await input("Rental VIN", "1HGCM82633A004352");
     await click(button("Decode VIN"));
     expect(mocks.decodeVin).toHaveBeenCalledWith({ vin: "1HGCM82633A004352" });
-    await input("Rental license plate", "REAL123");
-    expect(button("Schedule rental").disabled).toBe(false);
-    await click(button("Schedule rental"));
+    expect(button("Schedule & continue").disabled).toBe(false);
+    await input("Rental license plate (optional)", "REAL123");
+    expect(button("Schedule & continue").disabled).toBe(false);
+    await click(button("Schedule & continue"));
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         draft: expect.objectContaining({ vehicleId: 0, locationId: 1 }),
@@ -581,7 +582,7 @@ describe("Standalone MetroCars rental interface", () => {
     expect(container.textContent).toContain("Pickup condition photos");
     expect(container.querySelectorAll(".r-condition")).toHaveLength(12);
     expect(container.querySelectorAll(".r-pickup-card .r-photo")).toHaveLength(
-      6
+      PICKUP_EVIDENCE_KINDS.length + 1
     );
     expect(container.querySelector(".r-sticky-footer")?.textContent).toContain(
       "Continue"
@@ -590,6 +591,20 @@ describe("Standalone MetroCars rental interface", () => {
       "Back"
     );
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it("clears all 11 old pickup images after vehicle assignment while retaining DL and fresh photos",async()=>{
+    mocks.routeId="7";mocks.session.data=session("shop");
+    const old=[...PICKUP_EVIDENCE_KINDS,"extra"].map((kind,i)=>({id:i+1,kind,url:`/api/rental-handoff/files/asset/${i+1}`}));
+    mocks.get.data={id:7,status:"Scheduled",revision:2,activePacketId:null,draft:{...emptyRentalDraft(),renterName:"Actual renter",vehicleId:1,locationId:1},rates:DEFAULT_RENTAL_RATES,
+      assets:[...old,{id:13,kind:"licenseFront",url:"/api/rental-handoff/files/asset/13"},{id:14,kind:"licenseBack",url:"/api/rental-handoff/files/asset/14"},{id:15,kind:"windshield",url:"/api/rental-handoff/files/asset/15"}],packets:[],emails:[],returnData:null,
+      audit:[{id:1,action:"vehicle.assign",detail:{assetCutoffId:14}}]};
+    await mount(React.createElement(RentalHandoff));
+    const images=[...container.querySelectorAll<HTMLImageElement>(".r-pickup-photos img")];
+    expect(images.map(image=>image.getAttribute("src"))).toEqual(["/api/rental-handoff/files/asset/15"]);
+    await click(button("Protection"));
+    expect(container.querySelector('img[alt="Driver\'s license — front"]')?.getAttribute("src")).toBe("/api/rental-handoff/files/asset/13");
+    expect(container.querySelector('img[alt="Driver\'s license — back"]')?.getAttribute("src")).toBe("/api/rental-handoff/files/asset/14");
+    expect(mocks.save).not.toHaveBeenCalled();expect(mocks.complete).not.toHaveBeenCalled();
   });
 });
 describe("Location wall-clock time defaults", () => {

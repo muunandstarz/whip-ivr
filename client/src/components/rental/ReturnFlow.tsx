@@ -4,6 +4,7 @@ import { createReceiptRequestKey } from "@/lib/receiptBrowser";
 import {
   CONDITION_AREAS,
   calculateRentalCharges,
+  RETURN_EVIDENCE_KINDS,
   type RentalReturn,
 } from "@shared/rentalHandoff";
 import {
@@ -46,6 +47,7 @@ export function ReturnFlow({
       returnedAt: new Date().toISOString(),
       odometer: 0,
       fuel: record.draft.fuelOut,
+      dashboardAlerts: "",
       condition: CONDITION_AREAS.map(area => ({ area, ok: false, note: "" })),
       noticeAt: "",
       tolls: 0,
@@ -124,11 +126,7 @@ export function ReturnFlow({
     calculationError = errorMessage(e);
   }
   const requiredKinds = [
-    "returnFront",
-    "returnRear",
-    "returnDriver",
-    "returnPassenger",
-    "returnDashboard",
+    ...RETURN_EVIDENCE_KINDS,
     "returnRenterSignature",
     "returnRepresentativeSignature",
   ] as const;
@@ -137,6 +135,12 @@ export function ReturnFlow({
     returnRear: "the return rear photo",
     returnDriver: "the return driver-side photo",
     returnPassenger: "the return passenger-side photo",
+    returnCornerFrontDriver: "the return front-driver corner photo",
+    returnCornerFrontPassenger: "the return front-passenger corner photo",
+    returnCornerRearDriver: "the return rear-driver corner photo",
+    returnCornerRearPassenger: "the return rear-passenger corner photo",
+    returnWindshield: "the return windshield photo",
+    returnVinPlate: "the return VIN plate photo",
     returnDashboard: "the required return dashboard photo (odometer, fuel and warning lights)",
     returnRenterSignature: "the renter return signature",
     returnRepresentativeSignature: "the representative return signature",
@@ -255,22 +259,20 @@ export function ReturnFlow({
             hint="Record the notice that was actually given. Late fees start only after that notice plus 24 hours."
           />
         </fieldset>
+        <Note
+          label="Return observed dashboard warning lights — staff manual notes (optional)"
+          value={data.dashboardAlerts || ""}
+          onChange={value => set("dashboardAlerts", value)}
+          disabled={locked || busy}
+        />
+        <p className="r-guidance">Record only what staff observed. No automatic photo analysis. Blank means Not recorded – review photo; it does not mean no warning lights.</p>
       </Card>
       <Card
         title="Return photos"
-        detail="Four exterior views and a dedicated dashboard photo are required for the return copy. Extra photos do not replace the dashboard photo."
+        detail="All 11 dedicated return photos are required: four sides, four corners, windshield, VIN plate and dashboard. Extra photos and pickup photos do not replace any required return view."
       >
         <div className="r-grid">
-          {(
-            [
-              "returnFront",
-              "returnRear",
-              "returnDriver",
-              "returnPassenger",
-              "returnDashboard",
-              "returnExtra",
-            ] as const
-          ).map(kind => (
+          {([...RETURN_EVIDENCE_KINDS, "returnExtra"] as const).map(kind => (
             <PhotoUpload
               key={kind}
               kind={kind}
@@ -280,11 +282,17 @@ export function ReturnFlow({
                   returnRear: "Return rear",
                   returnDriver: "Return driver side",
                   returnPassenger: "Return passenger side",
+                  returnCornerFrontDriver: "Return front-driver corner (required)",
+                  returnCornerFrontPassenger: "Return front-passenger corner (required)",
+                  returnCornerRearDriver: "Return rear-driver corner (required)",
+                  returnCornerRearPassenger: "Return rear-passenger corner (required)",
+                  returnWindshield: "Return windshield (required)",
+                  returnVinPlate: "Return VIN plate (required)",
                   returnDashboard: "Return dashboard (required)",
                   returnExtra: "Additional return photos",
                 }[kind]
               }
-              guidance={kind === "returnDashboard" ? "While parked, turn ignition on and capture entire instrument cluster clearly: odometer, fuel and warning lights." : undefined}
+              guidance={kind === "returnDashboard" ? "While parked, turn ignition on and capture entire instrument cluster clearly: odometer, fuel and warning lights." : kind === "returnVinPlate" ? "Capture the actual returned vehicle VIN plate clearly; compare it with the rental VIN." : undefined}
               assets={record.assets}
               upload={upload}
               disabled={locked || busy}

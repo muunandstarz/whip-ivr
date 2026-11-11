@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Mail, Plus, Settings2, UserX } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { ReminderSettings } from "./ReminderSettings";
 import { SharedSenderForm } from "./SharedSenderForm";
 import {
   DEFAULT_RENTAL_RATES,
@@ -259,8 +260,7 @@ export function Admin({
               }
             />
             <Field
-              label="License plate"
-              required
+              label="License plate (optional)"
               value={vehicle.plate}
               onChange={e => setVehicle({ ...vehicle, plate: e.target.value })}
             />
@@ -449,6 +449,7 @@ export function Admin({
           </div>
         )}
       </Card>
+      <ReminderSettings />
       <SharedSenderForm refresh={refresh} sender={{ connected: settings.emailProviderReady === true, email: settings.senderEmail }} />
       <Card
         title="Launch approvals & delivery"

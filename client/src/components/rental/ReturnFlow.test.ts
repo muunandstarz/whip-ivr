@@ -4,13 +4,13 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emptyRentalDraft, CONDITION_AREAS, DEFAULT_RENTAL_RATES } from "@shared/rentalHandoff";
+import { emptyRentalDraft, PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, CONDITION_AREAS, DEFAULT_RENTAL_RATES } from "@shared/rentalHandoff";
 const mocks = vi.hoisted(() => ({ saveReturn: vi.fn(), confirmSettlement: vi.fn(), close: vi.fn(), returnComplete: vi.fn() }));
 vi.mock("@/lib/trpc", () => ({ trpc: { rentalHandoff: new Proxy({}, { get: (_, key: string) => ({ useMutation: () => ({ isPending: false, mutateAsync: (mocks as any)[key] || vi.fn().mockResolvedValue({}) }) }) }) } }));
 import { ReturnFlow } from "./ReturnFlow";
 let root: Root, container: HTMLDivElement;
 const returned = () => ({ returnedAt: "2026-11-10T21:00:00Z", odometer: 10010, fuel: "Full" as const, condition: CONDITION_AREAS.map(area => ({ area, ok: true, note: "" })), noticeAt: "", tolls: 0, parking: 0, fines: 0, researchEvents: 0, cleaning: 0, roadside: 0, lossOfUseDays: 0, lossOfUseResponsible: false, damageNoticeNotes: "", notes: "", chargesSettled: false, representativeName: "Test staff" });
-const record = (status = "Out") => ({ id: 77, revision: 2, status, activePacketId: 88, draft: { ...emptyRentalDraft(), renterName: "Sample renter", pickupAt: "2026-11-09T21:00:00Z", odometerOut: 10000, election: "B" }, rates: DEFAULT_RENTAL_RATES, returnData: returned(), assets: ["returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "returnRenterSignature", "returnRepresentativeSignature"].map((kind, i) => ({ id: 100 + i, kind, url: "/test-image" })), packets: [], emails: [], audit: [] });
+const record = (status = "Out") => ({ id: 77, revision: 2, status, activePacketId: 88, draft: { ...emptyRentalDraft(), renterName: "Sample renter", pickupAt: "2026-11-09T21:00:00Z", odometerOut: 10000, election: "B" }, rates: DEFAULT_RENTAL_RATES, returnData: returned(), assets: [...RETURN_EVIDENCE_KINDS, "returnRenterSignature", "returnRepresentativeSignature"].map((kind, i) => ({ id: 100 + i, kind, url: "/test-image" })), packets: [], emails: [], audit: [] });
 const session = (role = "claims") => ({ actor: { key: "test", name: "Test", role, locationIds: [1] }, locations: [{ id: 1, timezone: "America/New_York" }], vehicles: [], settings: {}, launchGaps: [] });
 const button = (text: string) => Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(b => b.textContent?.includes(text))!;
 const field = (label: string) => Array.from(container.querySelectorAll("label")).find(l => l.querySelector("span")?.textContent === label)?.querySelector("input")!;
@@ -46,6 +46,28 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("Return workflow completion", () => {
+  it.each(["returnCornerFrontDriver","returnCornerFrontPassenger","returnCornerRearDriver","returnCornerRearPassenger","returnWindshield","returnVinPlate"] as const)("blocks completion without %s despite extras and every pickup view",async kind=>{
+    const assets=[...record().assets.filter(a=>a.kind!==kind),{id:200,kind:"returnExtra",url:"/extra"},...PICKUP_EVIDENCE_KINDS.map((kind,i)=>({id:201+i,kind,url:"/pickup"}))];
+    await mount("Out","claims",undefined,undefined,{assets});
+    expect(button("Complete return & email copy").disabled).toBe(true);
+    expect(container.querySelectorAll(".r-missing li")).toHaveLength(1);expect(mocks.returnComplete).not.toHaveBeenCalled();
+  });
+  it("renders 11 dedicated return slots plus extras with separate camera and file inputs",async()=>{
+    await mount();expect(container.querySelectorAll(".r-photo")).toHaveLength(RETURN_EVIDENCE_KINDS.length+1);
+    expect(container.querySelectorAll('.r-photo input[capture="environment"]')).toHaveLength(12);
+    expect(container.querySelectorAll('.r-photo input[aria-label^="Choose file:"]')).toHaveLength(12);
+    expect(container.textContent).toContain("All 11 dedicated return photos are required");
+  });
+  it("autosaves staff warning-light notes only as manually entered and invalidates old return signatures",async()=>{
+    vi.useFakeTimers();await mount();
+    const label=[...container.querySelectorAll("label")].find(l=>l.querySelector("span")?.textContent==="Return observed dashboard warning lights — staff manual notes (optional)")!;
+    const textarea=label.querySelector("textarea")!;expect(textarea.value).toBe("");
+    await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")!.set!.call(textarea,"TPMS lamp observed");textarea.dispatchEvent(new Event("input",{bubbles:true}));});
+    expect(button("Complete return & email copy").disabled).toBe(true);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(650);});
+    expect(mocks.saveReturn).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({dashboardAlerts:"TPMS lamp observed"})}));
+    expect(container.textContent).toContain("it does not mean no warning lights");
+  });
   it("autosaves return edits with the current revision and disables completion until signatures are recaptured", async () => {
     vi.useFakeTimers(); await mount(); await input("Return odometer (miles)", "10020");
     expect(container.textContent).toContain("Unsaved changes");

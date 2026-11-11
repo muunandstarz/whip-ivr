@@ -46,6 +46,11 @@ export function requireSameOrigin(req: Request) {
     const parsed = new URL(origin);
     if (configured) {
       if (parsed.origin !== new URL(configured).origin) throw new Error();
+    } else if (process.env.NODE_ENV === "production") {
+      // Production's gateway may rewrite Host to an internal service name.
+      // Use only this application's registered HTTPS origins, never forwarded headers.
+      const approved = ["https://whipclaimsivr.com", "https://www.whipclaimsivr.com", "https://whipivr-tyswfku7.manus.space"];
+      if (!approved.includes(parsed.origin) || origin !== parsed.origin || parsed.username || parsed.password) throw new Error();
     } else {
       const host = req.get("host");
       if (!host || parsed.host.toLowerCase() !== host.toLowerCase() || parsed.username || parsed.password) throw new Error();
@@ -101,10 +106,11 @@ export async function issueShopSession(repo: RentalRepository, shopUserId: numbe
   res.cookie(RENTAL_COOKIE, token, { ...rentalCookieOptions, maxAge: RENTAL_SESSION_MS });
 }
 export function enforceDraftCardSafety(draft: RentalDraft) {
-  if (draft.payment.lastFour !== "" && !/^\d{4}$/.test(draft.payment.lastFour)) throw new TRPCError({ code: "BAD_REQUEST", message: "Payment accepts only four card digits." });
+  if (draft.payment.lastFour !== "" && !/^\d{1,4}$/.test(draft.payment.lastFour)) throw new TRPCError({ code: "BAD_REQUEST", message: "Payment accepts at most four card digits. Record only the last four." });
   if (Buffer.byteLength(JSON.stringify(draft), "utf8") > 45000 || Object.keys(draft.initials).some(key => !["election", "5", "6", "7", "8", "9", "10"].includes(key))) throw new TRPCError({ code: "BAD_REQUEST", message: "Rental draft or initials exceed the approved form limits." });
-  // Do not allow a PAN hidden in free-text fields; VINs are separately validated identifiers.
+  // Validated structural identifiers are not PANs. Never scan concatenated fields.
   const walk = (value: unknown, path = "") => {
+    if (typeof value === "string" && path === "claimNumber" && /^[A-Za-z0-9]{3}-\d{4}-\d{6}-\d{6}$/.test(value.trim())) return;
     if (typeof value === "string" && !/Vin$/.test(path) && /(?:\d[ -]?){13,19}/.test(value)) throw new TRPCError({ code: "BAD_REQUEST", message: "Do not enter full card numbers in the rental app." });
     if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) walk(item, key);
   };

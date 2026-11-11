@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { emptyRentalDraft, DEFAULT_RENTAL_RATES, calculateRentalCharges, CONDITION_AREAS, type RentalReturn } from "../shared/rentalHandoff";
+import { emptyRentalDraft, DEFAULT_RENTAL_RATES, calculateRentalCharges, CONDITION_AREAS, PICKUP_EVIDENCE_KINDS, RETURN_EVIDENCE_KINDS, type RentalReturn } from "../shared/rentalHandoff";
 import { rentalAgreementSections, rentalAgreementCoverageChart } from "../shared/rentalAgreement";
 import { buildRentalPacket, buildRentalReturnPacket, sanitizeRentalPdfText, loadRentalPdfTemplates, RENTAL_PDF_TEMPLATE_KEYS, RENTAL_PDF_AUTHORIZED_REVISIONS, RENTAL_PDF_FILL_LIMITS, type RentalPacketInput, type RentalPdfTemplates } from "./rentalHandoffPdf";
 vi.mock("./storage", () => ({ storageGetSignedUrl: vi.fn() }));
@@ -354,27 +354,85 @@ describe.skipIf(!originalsAvailable)("rental PDF exact-original integration", ()
     const input = fittingFixture(); input.draft.odometerOut = 42610;
     input.assets = ["front", "rear", "driver", "passenger", "dashboard", "returnFront", "returnRear", "returnDriver", "returnPassenger", "returnDashboard", "licenseFront", "licenseBack"].map((kind, n) => ({ id: n + 1, kind, bytes: image(), createdAt: Date.parse(kind.startsWith("return") ? "2026-11-13T15:00:00Z" : input.draft.pickupAt) }));
     const pickupBytes = await buildRentalPacket(input); const pickup = extract(pickupBytes, "pickup-dashboard");
-    expect(pickup).toHaveLength(14); expect(normalize(pickup[8])).toContain("5 attached");
-    expect(normalize(pickup[13])).toContain("Pickup dashboard / instrument cluster");
-    expect(normalize(pickup[13])).toContain("Pickup odometer: 42,610 miles | Fuel: Full");
-    expect(pickup[13]).toContain("Alerts: see dashboard photo");
+    expect(pickup).toHaveLength(10); expect(normalize(pickup[8])).toContain("5 attached");
+    expect(normalize(pickup[9])).toContain("Pickup dashboard / instrument cluster");
+    expect(normalize(pickup[9])).toContain("Pickup odometer: 42,610 miles | Fuel: Full");
+    expect(pickup[9]).toContain("Alerts: see dashboard photo");
+    expect(normalize(pickup[9])).toContain("Recorded warnings: Not recorded — review dashboard photograph");
+    expect(pickup[9]).not.toMatch(/no warnings|no active alerts|none active/i);
     expect(pickup.slice(9).join(" ")).not.toMatch(/Return dashboard|licenseFront|licenseBack/);
     const returnData = returned(); returnData.odometer = 42734;
     const charges = calculateRentalCharges(input.draft, returnData, input.rates, input.location.timezone);
     const returnBytes = await buildRentalReturnPacket({ ...input, returnData, charges }); const ret = extract(returnBytes, "return-dashboard");
-    expect(ret).toHaveLength(7); expect(normalize(ret[0]).match(/5 attached/g)).toHaveLength(2);
-    expect(normalize(ret[6])).toContain("Return dashboard / instrument cluster");
-    expect(normalize(ret[6])).toContain("Return odometer: 42,734 miles | Fuel: 3/4");
+    expect(ret).toHaveLength(3); expect(normalize(ret[0]).match(/5 attached/g)).toHaveLength(2);
+    expect(normalize(ret[2])).toContain("Return dashboard / instrument cluster");
+    expect(normalize(ret[2])).toContain("Return odometer: 42,734 miles | Fuel: 3/4");
     expect(normalize(ret[1])).toContain("Pickup odometer (miles) 42,610");
     expect(normalize(ret[1])).toContain("Return odometer (miles) 42,734");
     expect(normalize(ret[1])).toContain("Miles driven 124");
     expect(ret.slice(2).join(" ")).not.toMatch(/Pickup dashboard|licenseFront|licenseBack/);
-    // Both actual dashboard pages embed a photo, not merely captions.
-    for (const [bytes, n] of [[pickupBytes, 13], [returnBytes, 6]] as const) {
-      const doc = await PDFDocument.load(bytes); expect(await rawPage(doc.getPage(n))).toMatch(/ Do\b/);
+    // Each actual sheet embeds all five separate images, not merely captions.
+    for (const [bytes, n] of [[pickupBytes, 9], [returnBytes, 2]] as const) {
+      const doc = await PDFDocument.load(bytes); expect((await rawPage(doc.getPage(n))).match(/ Do\b/g)).toHaveLength(5);
+      const imageMatrices=[...(await rawPage(doc.getPage(n))).matchAll(/([\d.]+) 0 0 ([\d.]+) [\d.]+ [\d.]+ cm\s*\/Image[^\s]+ Do/g)];
+      expect(Number(imageMatrices[0][1])).toBeLessThanOrEqual(174);
+      expect(Number(imageMatrices[0][2])).toBeLessThanOrEqual(94);
     }
+    const returnDoc=await PDFDocument.load(returnBytes);
+    expect(await rawPage(returnDoc.getPage(1))).toMatch(/\/Helvetica[^\s]* 11 Tf/);
     expectPrintFrame(wordBoxes(pickupBytes, "pickup-dashboard-frame"));
     expectPrintFrame(wordBoxes(returnBytes, "return-dashboard-frame"));
+  });
+  it("adds the owner-authorized minimum liability notice only for Maryland location addresses, without changing source wording", async () => {
+    const input = fittingFixture(); input.location.address = "100 Example St, Rockville, MD 20850";
+    const bytes = await buildRentalPacket(input); const pages = extract(bytes, "maryland-owner-note");
+    const noteBoxes=wordBoxes(bytes,"maryland-owner-zone")[0].filter(w=>w.left>=185 && w.right<=430 && w.top<92);
+    expect(normalize(noteBoxes.map(w=>w.text).join(" "))).toBe(RENTAL_PDF_AUTHORIZED_REVISIONS.marylandLiability);
+    expect(pages.slice(1).join(" ")).not.toContain("Owner statement:");
+    expectPrintFrame(wordBoxes(bytes, "maryland-owner-frame"));
+    input.location.address = "100 Example St, Maryland";
+    expect(normalize(extract(await buildRentalPacket(input), "maryland-spelled")[0])).toContain("$30,000 bodily injury/person");
+    input.location.address = "100 Example St, Arlington, VA";
+    expect(extract(await buildRentalPacket(input), "non-maryland")[0]).not.toContain("Owner statement:");
+  });
+  it("keeps footer-adjacent Section 7 initials at least twelve points above the footer and modest signature dimensions", async () => {
+    const input = fittingFixture(); input.assets = [{ id: 1, kind: "renterSignature", bytes: image(), signerName: input.draft.renterName }];
+    const bytes = await buildRentalPacket(input); const boxes = wordBoxes(bytes, "footer-safety")[2];
+    const label = boxes.filter(w => w.text === "Initials").sort((a,b) => b.top-a.top)[0];
+    const value = boxes.find(w => w.text === "AE" && Math.abs(w.top-label.top)<1)!;
+    const footer = boxes.filter(w => w.top>label.bottom && /Metrocars|MLC-RP-1/.test(w.text));
+    expect(Math.min(...footer.map(w => w.top))-Math.max(label.bottom,value.bottom)).toBeGreaterThan(12);
+    const doc = await PDFDocument.load(bytes); const raw = await rawPage(doc.getPage(4));
+    const signatures = [...raw.matchAll(/([\d.]+) 0 0 ([\d.]+) [\d.]+ [\d.]+ cm\s*\/Image[^\s]+ Do/g)];
+    expect(signatures.length).toBeGreaterThan(0);
+    for (const signature of signatures) { expect(Number(signature[1])).toBeLessThanOrEqual(160); expect(Number(signature[2])).toBeLessThanOrEqual(18); }
+  });
+  it("paginates many separate photos in compact three-column sheets and retains existing selected support scans but not IDs or claim photos", async () => {
+    const input = fittingFixture();
+    input.assets = Array.from({length:16},(_,n)=>({id:n+1,kind:n===0?"dashboard":"extra",bytes:image(),createdAt:Date.parse(input.draft.pickupAt)}));
+    input.assets.push({id:21,kind:"licenseFront",bytes:image()},{id:22,kind:"licenseBack",bytes:image()},{id:23,kind:"claimPhoto",bytes:image()},{id:24,kind:"declarations",bytes:image()},{id:25,kind:"coverageConfirmation",bytes:image()});
+    const bytes=await buildRentalPacket(input); const doc=await PDFDocument.load(bytes); const pages=extract(bytes,"many-photos");
+    expect(doc.getPageCount()).toBe(13); // Nine base, two photo sheets, two existing support scans.
+    expect(pages[9]).toContain("PICKUP PHOTO SHEET");expect(pages[10]).toContain("PICKUP PHOTO SHEET");
+    const photos=(await rawPage(doc.getPage(9))).match(/ Do\b/g)!.length+(await rawPage(doc.getPage(10))).match(/ Do\b/g)!.length;
+    expect(photos).toBe(16);expect(pages.slice(9).join(" ")).not.toMatch(/Asset 21|Asset 22|Asset 23/);
+    expect(pages[11]).toContain("Renter insurance declarations page");expect(pages[12]).toContain("Insurer coverage verification support");
+    expectPrintFrame(wordBoxes(bytes,"many-photo-frame"));
+  });
+  it("fits all eleven dedicated pickup and return views on one sheet per phase without losing originals", async () => {
+    const input = fittingFixture();
+    input.assets = [...PICKUP_EVIDENCE_KINDS, ...RETURN_EVIDENCE_KINDS].map((kind,n)=>({id:n+1,kind,bytes:image(),createdAt:Date.parse(input.draft.pickupAt)}));
+    const pickup=await buildRentalPacket(input), pickupDoc=await PDFDocument.load(pickup);
+    expect(pickupDoc.getPageCount()).toBe(10);
+    expect((await rawPage(pickupDoc.getPage(9))).match(/ Do\b/g)).toHaveLength(11);
+    expect(extract(pickup,"eleven-pickup")[9]).toContain("Pickup - VIN plate");
+    expectPrintFrame(wordBoxes(pickup,"eleven-pickup-frame"));
+    const returnData=returned(), charges=calculateRentalCharges(input.draft,returnData,input.rates,input.location.timezone);
+    const returnedBytes=await buildRentalReturnPacket({...input,returnData,charges}), returnDoc=await PDFDocument.load(returnedBytes);
+    expect(returnDoc.getPageCount()).toBe(3);
+    expect((await rawPage(returnDoc.getPage(2))).match(/ Do\b/g)).toHaveLength(11);
+    expect(extract(returnedBytes,"eleven-return")[2]).toContain("Return - VIN plate");
+    expectPrintFrame(wordBoxes(returnedBytes,"eleven-return-frame"));
   });
   it("never derives negative or invalid miles and explicitly handles missing or equal pickup readings", async () => {
     const input = fittingFixture(); input.draft.odometerOut = 42610;

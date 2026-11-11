@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { Camera, CheckCircle2, Upload, Eraser } from "lucide-react";
 import type { RentalAsset } from "@shared/rentalHandoff";
 import { ErrorNotice, errorMessage } from "./Controls";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export type AssetWithUrl = RentalAsset & { url: string };
 export type UploadAsset = (
@@ -66,6 +67,9 @@ export function PhotoUpload({
   const [error, setError] = useState("");
   const matching = assets.filter(a => a.kind === kind);
   const asset = matching.at(-1);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const selectedPhoto = matching[Math.min(galleryIndex, matching.length - 1)];
   const choose = async (file?: File) => {
     if (!file || busy || disabled) return;
     setBusy(true);
@@ -87,14 +91,27 @@ export function PhotoUpload({
       </div>
       {guidance && <small id={`${id}-guidance`}>{guidance}</small>}
       {asset && (
-        <a
-          href={asset.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="r-photo-preview"
-        >
-          <img src={asset.url} alt={label} />
-        </a>
+        <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+          <DialogTrigger asChild>
+            <button type="button" className="r-photo-preview" aria-label={`Expand photo: ${label}`} onClick={() => setGalleryIndex(matching.length - 1)}>
+              <img src={asset.url} alt={label} />
+            </button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-5xl overflow-auto bg-background text-foreground sm:max-w-5xl" showCloseButton={false}>
+            <DialogHeader>
+              <DialogTitle>{label} — photo gallery</DialogTitle>
+              <DialogDescription>Saved original evidence. Photo {Math.min(galleryIndex + 1, matching.length)} of {matching.length}. No automatic analysis.</DialogDescription>
+            </DialogHeader>
+            {selectedPhoto && <img src={selectedPhoto.url} alt={`${label} enlarged photo ${galleryIndex + 1}`} className="h-auto max-h-[65dvh] w-full object-contain" />}
+            <div className="flex flex-wrap items-center gap-3">
+              {matching.length > 1 && <>
+                <button type="button" className="r-button" aria-label="Previous photo" disabled={galleryIndex <= 0} onClick={() => setGalleryIndex(index => Math.max(0, index - 1))}>Previous</button>
+                <button type="button" className="r-button" aria-label="Next photo" disabled={galleryIndex >= matching.length - 1} onClick={() => setGalleryIndex(index => Math.min(matching.length - 1, index + 1))}>Next</button>
+              </>}
+              <DialogClose asChild><button type="button" className="r-button" aria-label="Close photo gallery">Close photo gallery</button></DialogClose>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       <div className="r-actions">
         <label className={`r-button ${disabled || busy ? "r-disabled" : ""}`}>
