@@ -176,6 +176,25 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("Standalone MetroCars rental interface", () => {
+  it.each(["admin", "claims", "shop"])("removes demo entry points and preserves real rental views for %s", async role => {
+    mocks.session.data = session(role);
+    await mount(React.createElement(RentalHandoff));
+    const navigation = [...container.querySelectorAll("nav[aria-label='Rental navigation'] button")].map(item => item.textContent);
+    expect(navigation).toEqual(role === "admin" ? ["Rentals", "Vehicles", "Documents", "Settings"] : ["Rentals", "Vehicles", "Documents"]);
+    expect(container.textContent).not.toMatch(/Demo rentals|Review demo rentals|Two fictional rentals|Avery Demo|Jordan Taylor/);
+    expect(container.querySelector("h1")?.textContent).toBe("Rentals");
+    await click(button("Documents"));
+    expect(container.querySelector("h1")?.textContent).toBe("Rental documents");
+    expect(container.textContent).toContain("No completed packets yet");
+    await click(button("Vehicles"));
+    expect(container.querySelector("h1")?.textContent).toBe("Rental vehicles");
+    await click(button("Rentals"));
+    expect(container.querySelector("h1")?.textContent).toBe("Rentals");
+    expect(container.querySelector(".r-dashboard-back")?.getAttribute("href")).toBe("/");
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
   it.each(["admin", "claims", "shop"])("offers a same-tab dashboard return link for %s without changing authentication or records", async role => {
     mocks.session.data = session(role);
     await mount(React.createElement(RentalHandoff));
