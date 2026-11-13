@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { sdk } from "./_core/sdk";
+import { assertCanonicalKlutchSignoff, getKlutchSignoff, klutchSignoffInfo, KlutchSignoffError, updateKlutchSignoff } from "./klutchSignoff";
 import {
   cancelKlutchPolicy,
   correctKlutchPolicy,
@@ -86,12 +87,25 @@ function stringValue(value: unknown) {
 export function registerKlutchPolicyApi(app: Express) {
   const base = "/api/klutch-policy-documents";
 
+  app.get(`${base}/signoff`, async (req, res) => {
+    const user = await authenticatedUser(req, res);
+    if (!user) return;
+    try { res.json(await klutchSignoffInfo(user, req)); }
+    catch (error) { res.status(error instanceof KlutchSignoffError ? error.status : 400).json({ error: messageOf(error) }); }
+  });
+  app.post(`${base}/signoff`, async (req, res) => {
+    const user = await authenticatedUser(req, res);
+    if (!user) return;
+    try { res.json(await updateKlutchSignoff(user, req, req.body)); }
+    catch (error) { res.status(error instanceof KlutchSignoffError ? error.status : 400).json({ error: messageOf(error) }); }
+  });
+
   app.get(`${base}/register`, async (req, res) => {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
       const search = stringValue(req.query.search);
-      res.json({ policies: await listKlutchPolicies(100, search), currentUser: { name: user.name ?? user.email ?? "" } });
+      res.json({ policies: await listKlutchPolicies(100, search), currentUser: { name: user.name ?? user.email ?? "" }, ...await klutchSignoffInfo(user, req) });
     } catch (error) {
       res.status(400).json({ error: messageOf(error) });
     }
@@ -126,10 +140,10 @@ export function registerKlutchPolicyApi(app: Express) {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
       const draft = req.body?.draft;
       if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("Draft data is required.");
-      await saveKlutchDraft(user.id, "", "", draft as Record<string, unknown>);
-      res.json({ ok: true });
+      res.json(await saveKlutchDraft(user.id, undefined, undefined, draft as Record<string, unknown>));
     } catch (error) {
       res.status(400).json({ error: messageOf(error) });
     }
@@ -139,6 +153,7 @@ export function registerKlutchPolicyApi(app: Express) {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
       const body = (req.body ?? {}) as Record<string, unknown>;
       const state = body.state;
       if (!isState(state)) throw new Error("Choose a supported Klutch policy state.");
@@ -163,6 +178,7 @@ export function registerKlutchPolicyApi(app: Express) {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
       const body = (req.body ?? {}) as Record<string, unknown>;
       const policy = await renewKlutchPolicy(
         requiredNumber(body.policyId, "Policy"),
@@ -181,6 +197,7 @@ export function registerKlutchPolicyApi(app: Express) {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
       const body = (req.body ?? {}) as Record<string, unknown>;
       const policy = await correctKlutchPolicy(requiredNumber(body.policyId, "Policy"), termsFrom(body), actorFor(user));
       res.json({ policy });
@@ -192,7 +209,7 @@ export function registerKlutchPolicyApi(app: Express) {
   app.post(`${base}/pip-history`, async (req, res) => {
     const user = await authenticatedUser(req, res);
     if (!user) return;
-    try { res.json({ policy: await documentMarylandPipHistory(requiredNumber(req.body?.policyId, "Policy"), req.body?.history, actorFor(user)) }); }
+    try { assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff()); res.json({ policy: await documentMarylandPipHistory(requiredNumber(req.body?.policyId, "Policy"), req.body?.history, actorFor(user)) }); }
     catch (error) { res.status(400).json({ error: messageOf(error) }); }
   });
 
@@ -200,6 +217,7 @@ export function registerKlutchPolicyApi(app: Express) {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
       const body = (req.body ?? {}) as Record<string, unknown>;
       const type = documentTypeFrom(body.documentType);
       const snapshot = body.snapshot;
@@ -221,6 +239,7 @@ export function registerKlutchPolicyApi(app: Express) {
     const user = await authenticatedUser(req, res);
     if (!user) return;
     try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
       const body = (req.body ?? {}) as Record<string, unknown>;
       const snapshot = body.snapshot;
       if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) throw new Error("Cancellation notice facts are required.");

@@ -2,6 +2,7 @@ import { parseMarylandPipHistory, validateMarylandPipHistory, pipSelectionAt } f
 import type { MarylandPipHistory } from "@shared/klutchMarylandPip";
 import crypto from "node:crypto";
 import mysql, { type RowDataPacket } from "mysql2/promise";
+import { assertCanonicalKlutchSignoff, getKlutchSignoff, normalizeKlutchSignoffAliases } from "./klutchSignoff";
 import {
   addKlutchTermMonths,
   calculateKlutchPremium,
@@ -109,9 +110,16 @@ function parseTerms(value: DbPolicy["terms"] | DbTerm["terms"]): KlutchPolicyTer
 
 function handlerFor(actor: KlutchActor) {
   return {
-    name: actor.handlerName?.trim() || actor.name,
-    title: actor.handlerTitle?.trim() || "Claims Handler",
+    name: actor.handlerName!,
+    title: actor.handlerTitle!,
   };
+}
+
+async function canonicalPersistence(conn: mysql.Connection, payload: unknown, actor: KlutchActor) {
+  const signoff = await getKlutchSignoff(conn, true);
+  assertCanonicalKlutchSignoff(payload, signoff);
+  assertCanonicalKlutchSignoff({ ...(actor.handlerName !== undefined ? { handlerName: actor.handlerName } : {}), ...(actor.handlerTitle !== undefined ? { handlerTitle: actor.handlerTitle } : {}) }, signoff);
+  return { signoff, actor: { ...actor, handlerName: signoff.name, handlerTitle: signoff.title } };
 }
 
 function publicPolicy(row: DbPolicy) {
@@ -343,12 +351,14 @@ export async function issueKlutchPolicy(input: {
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
+    const canonical = await canonicalPersistence(conn, input, actor);
+    actor = canonical.actor;
     const [replayed] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE issue_request_key = ? FOR UPDATE", [input.issueRequestKey]);
     if (replayed[0]) {
       if (replayed[0].initial_issue_fingerprint && replayed[0].initial_issue_fingerprint !== fingerprint) throw new Error("This issuance request was already used with different policy inputs.");
       const replayTerms = await latestTermsForPolicy(conn, Number(replayed[0].id));
       await conn.commit();
-      return { policy: publicPolicy(replayed[0]), declarationTerms: replayTerms.map(term => declarationTerm(replayed[0].policy_number, term)), replayed: true };
+      return { policy: publicPolicy(replayed[0]), declarationTerms: replayTerms.map(term => declarationTerm(replayed[0].policy_number, term)), replayed: true, signoff: canonical.signoff };
     }
     const vin = normalizeKlutchVin(input.terms.vin);
     const activeForVin = await lockVinRegister(conn, vin);
@@ -357,7 +367,8 @@ export async function issueKlutchPolicy(input: {
     }
     const sequence = await allocatePolicySequence(conn);
     const policyNumber = formatKlutchPolicyNumber(state, sequence);
-    const plannedTerms = annualPlan.map(plan => normalizedTerms({ terms: input.terms, state, effectiveOn: plan.effectiveOn, expiresOn: plan.expiresOn, leaseId: input.leaseId, type: plan.transactionType }));
+    const approvedTerms = normalizeKlutchSignoffAliases(input.terms as unknown as Record<string, unknown>, canonical.signoff, false) as unknown as KlutchPolicyTerms;
+    const plannedTerms = annualPlan.map(plan => normalizedTerms({ terms: approvedTerms, state, effectiveOn: plan.effectiveOn, expiresOn: plan.expiresOn, leaseId: input.leaseId, type: plan.transactionType }));
     const currentTerms = plannedTerms[plannedTerms.length - 1];
     const [result] = await conn.execute<mysql.ResultSetHeader>(
       `INSERT INTO klutch_policies
@@ -389,7 +400,7 @@ export async function issueKlutchPolicy(input: {
     const [created] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ?", [policyId]);
     const createdTerms = await latestTermsForPolicy(conn, policyId);
     await conn.commit();
-    return { policy: publicPolicy(created[0]), declarationTerms: createdTerms.map(term => declarationTerm(policyNumber, term)), replayed: false };
+    return { policy: publicPolicy(created[0]), declarationTerms: createdTerms.map(term => declarationTerm(policyNumber, term)), replayed: false, signoff: canonical.signoff };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -404,6 +415,9 @@ export async function renewKlutchPolicy(policyId: number, effectiveOn: string, e
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
+    const canonical = await canonicalPersistence(conn, termsInput, actor);
+    actor = canonical.actor;
+    termsInput = normalizeKlutchSignoffAliases(termsInput as unknown as Record<string, unknown>, canonical.signoff, false) as unknown as KlutchPolicyTerms;
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [policyId]);
     const policy = policies[0];
     if (!policy || policy.status !== "active") throw new Error("Only an active Klutch policy can be renewed.");
@@ -443,6 +457,9 @@ export async function correctKlutchPolicy(policyId: number, termsInput: KlutchPo
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
+    const canonical = await canonicalPersistence(conn, termsInput, actor);
+    actor = canonical.actor;
+    termsInput = normalizeKlutchSignoffAliases(termsInput as unknown as Record<string, unknown>, canonical.signoff, false) as unknown as KlutchPolicyTerms;
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [policyId]);
     const policy = policies[0];
     if (!policy || policy.status !== "active") throw new Error("Only an active Klutch policy can be corrected.");
@@ -481,6 +498,7 @@ export async function documentMarylandPipHistory(policyId: number, rawHistory: u
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
+    actor = (await canonicalPersistence(conn, rawHistory, actor)).actor;
     const [rows] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [policyId]);
     const policy = rows[0];
     if (!policy || policy.state !== "MD") throw new Error("PIP change history is available only for an existing Maryland policy.");
@@ -509,6 +527,9 @@ export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn:
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
+    const canonical = await canonicalPersistence(conn, input, actor);
+    actor = canonical.actor;
+    const approvedSnapshot = normalizeKlutchSignoffAliases(input.documentSnapshot, canonical.signoff);
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [input.policyId]);
     const policy = policies[0];
     if (!policy || policy.status !== "active") throw new Error("Only an active Klutch policy can be cancelled.");
@@ -529,7 +550,7 @@ export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn:
        (policy_id, claim_id, term_id, document_type, document_version, delivery_status, policy_transaction_type, policy_number, klutch_claim_number, member_name, handler_title, input_snapshot, created_by_user_id, created_by_name)
        VALUES (?, ?, ?, 'cancellation_notice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [input.policyId, claim?.id ?? null, term.id, POLICY_DOCUMENT_VERSION, KLUTCH_CREATED_NOT_SENT, "correction", policy.policy_number, claim?.klutch_claim_number ?? null,
-       policy.member_name, handler.title, JSON.stringify(input.documentSnapshot), actor.userId, actor.name],
+       policy.member_name, handler.title, JSON.stringify(approvedSnapshot), actor.userId, actor.name],
     );
     await conn.execute(
       `INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata)
@@ -557,6 +578,9 @@ export async function recordKlutchDocument(input: {
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
+    const canonical = await canonicalPersistence(conn, input, actor);
+    actor = canonical.actor;
+    const approvedSnapshot = normalizeKlutchSignoffAliases(input.snapshot, canonical.signoff);
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [input.policyId]);
     const policy = policies[0];
     if (!policy) throw new Error("Klutch policy not found.");
@@ -577,7 +601,7 @@ export async function recordKlutchDocument(input: {
        (policy_id, claim_id, term_id, document_type, document_version, delivery_status, policy_transaction_type, policy_number, klutch_claim_number, member_name, handler_title, input_snapshot, created_by_user_id, created_by_name)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [input.policyId, claim?.id ?? null, term.id, input.documentType, input.snapshot.formId === "MD-PIP-HISTORY" ? "MD-PIP-HISTORY-2026.11" : POLICY_DOCUMENT_VERSION, KLUTCH_CREATED_NOT_SENT, transactionType, policy.policy_number,
-       claim?.klutch_claim_number ?? null, policy.member_name, handler.title, JSON.stringify(input.snapshot), actor.userId, actor.name],
+       claim?.klutch_claim_number ?? null, policy.member_name, handler.title, JSON.stringify(approvedSnapshot), actor.userId, actor.name],
     );
     await conn.execute(
       `INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata)
@@ -651,21 +675,31 @@ export async function loadKlutchDraft(userId: number) {
     const [rows] = await conn.execute<RowDataPacket[]>("SELECT handler_name, handler_title, draft, updated_at FROM klutch_policy_drafts WHERE user_id = ?", [userId]);
     const row = rows[0];
     if (!row) return null;
-    return { handlerName: row.handler_name, handlerTitle: row.handler_title, draft: typeof row.draft === "string" ? JSON.parse(row.draft) : row.draft, updatedAt: row.updated_at };
+    const signoff = await getKlutchSignoff(conn);
+    const draft = normalizeKlutchSignoffAliases(typeof row.draft === "string" ? JSON.parse(row.draft) : row.draft, signoff);
+    return { handlerName: signoff.name, handlerTitle: signoff.title, draft, signoff, updatedAt: row.updated_at };
   } finally {
     await conn.end();
   }
 }
 
-export async function saveKlutchDraft(userId: number, handlerName: string, handlerTitle: string, draft: Record<string, unknown>) {
+export async function saveKlutchDraft(userId: number, handlerName: string | undefined, handlerTitle: string | undefined, draft: Record<string, unknown>) {
   const conn = await mysql.createConnection(databaseUrl());
   try {
+    await conn.beginTransaction();
+    const canonical = await canonicalPersistence(conn, draft, { userId, name: "Draft operator", handlerName, handlerTitle });
+    const approvedDraft = normalizeKlutchSignoffAliases(draft, canonical.signoff);
     await conn.execute(
       `INSERT INTO klutch_policy_drafts (user_id, handler_name, handler_title, draft)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE handler_name = VALUES(handler_name), handler_title = VALUES(handler_title), draft = VALUES(draft)`,
-      [userId, handlerName.trim(), handlerTitle.trim(), JSON.stringify(draft)],
+      [userId, canonical.signoff.name, canonical.signoff.title, JSON.stringify(approvedDraft)],
     );
+    await conn.commit();
+    return { ok: true as const, signoff: canonical.signoff };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
   } finally {
     await conn.end();
   }

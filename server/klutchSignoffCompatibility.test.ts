@@ -15,27 +15,34 @@ function section(source: string, start: string, end: string) {
 }
 
 const preparedBy = 'writeReferenceLines(doc, ["Prepared by:", signer, signerTitle].filter(Boolean), 15, y + 8, 7.2, 3.8);';
-const sharedImport = 'import { KLUTCH_DEFAULT_HANDLER_NAME, KLUTCH_DEFAULT_HANDLER_TITLE } from "@shared/klutchSignoff";';
+const hookImport = 'from "@/hooks/useKlutchSignoff";';
 
 describe("Klutch printed sign-off compatibility", () => {
   it("shares the requested name and title without adding signature assets", () => {
     expect(KLUTCH_DEFAULT_HANDLER_NAME).toBe("Morgan Ellis");
     expect(KLUTCH_DEFAULT_HANDLER_TITLE).toBe("Liability Claims Specialist");
-    expect(workspace).toContain(sharedImport);
-    expect(generator).toContain(sharedImport);
+    expect(workspace).toContain(hookImport);
+    expect(generator).toContain(hookImport);
+    expect(workspace).not.toContain("KLUTCH_DEFAULT_HANDLER_NAME");
+    expect(generator).not.toContain("KLUTCH_DEFAULT_HANDLER_NAME");
   });
 
-  it("initializes editable workspace handler fields with shared defaults", () => {
+  it("normalizes workspace handler fields to the approved query and disallows per-document edits", () => {
     const defaults = section(workspace, "const [docForm, setDocForm]", "const activePolicy");
-    expect(defaults).toContain("handlerName: KLUTCH_DEFAULT_HANDLER_NAME,");
-    expect(defaults).toContain("handlerTitle: KLUTCH_DEFAULT_HANDLER_TITLE,");
-    expect(workspace).toContain("const signer = docForm.handlerName;");
-    expect(workspace).toContain("const signerTitle = docForm.handlerTitle;");
-    expect(workspace).toContain('value={docForm.handlerName} onChange={(event) => setDocument("handlerName", event.target.value)}');
-    expect(workspace).toContain('value={docForm.handlerTitle} onChange={(event) => setDocument("handlerTitle", event.target.value)}');
+    expect(defaults).toContain('handlerName: signoff?.name ?? "",');
+    expect(defaults).toContain('handlerTitle: signoff?.title ?? "",');
+    expect(workspace).toContain("const signer = approved.name;");
+    expect(workspace).toContain("const signerTitle = approved.title;");
+    expect(workspace).toContain('value={docForm.handlerName} readOnly');
+    expect(workspace).toContain('value={docForm.handlerTitle} readOnly');
+    expect(workspace).not.toContain('setDocument("handlerName",');
+    expect(workspace).not.toContain('setDocument("handlerTitle",');
+    expect(workspace).toContain("normalizeKlutchDocumentSignoff(docForm, approved)");
+    expect(workspace).toContain("approvedSignoff.canEdit");
+    expect(workspace).toContain('href="/kb/klutch-policy-documents"');
   });
 
-  it("uses the editable signer in all three letter closings, including cancellation", () => {
+  it("uses the approved signer in all three letter closings, including cancellation", () => {
     const cancellation = section(workspace, 'if (kind === "cancellation_notice")', 'doc.text("ENDORSEMENT NO. KIC-END-002"');
     expect(cancellation).toContain('["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"]');
     expect(cancellation).not.toContain('"Policy Services"');
@@ -63,8 +70,8 @@ describe("Klutch printed sign-off compatibility", () => {
 
   it("prints Klutch name and title above the existing COI label inside the current box", () => {
     const representative = section(generator, '    if (isKlutch) {\n      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);', "    y += botH + 3;");
-    expect(representative).toContain("doc.text(KLUTCH_DEFAULT_HANDLER_NAME, cx2, y + 19);");
-    expect(representative).toContain("doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, cx2, y + 22);");
+    expect(representative).toContain("doc.text(signoff!.name, cx2, y + 19);");
+    expect(representative).toContain("doc.text(signoff!.title, cx2, y + 22);");
     expect(representative).toContain('const sigLine = isKlutch ? "Authorized Representative, Klutch Insurance Company" : "Authorized Representative";');
     expect(representative).toContain("doc.text(sigLine, cx2, y + 25);");
     expect(representative).not.toMatch(/addImage|addPage|\.line\(|\.path\(|certif(?:y|ied)|autograph/i);
@@ -74,9 +81,9 @@ describe("Klutch printed sign-off compatibility", () => {
     const cancellation = section(generator, "    // Cancellation\n    const cx2", "    y += botH + 3;");
     const klutchOnly = `    if (isKlutch) {
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-      doc.text(KLUTCH_DEFAULT_HANDLER_NAME, cx2, y + 19);
+      doc.text(signoff!.name, cx2, y + 19);
       doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
-      doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, cx2, y + 22);
+      doc.text(signoff!.title, cx2, y + 22);
     }
 `;
     expect(cancellation).toContain(klutchOnly);
@@ -100,8 +107,8 @@ describe("Klutch printed sign-off compatibility", () => {
 
   it("places legacy PDF representative text beside the existing date, before the footer", () => {
     const representative = section(generator, 'doc.text("Authorized representative", lm, y);', "  // ── Sidebar page 2");
-    expect(representative).toContain("doc.text(KLUTCH_DEFAULT_HANDLER_NAME, lm, y + 8);");
-    expect(representative).toContain("doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, lm, y + 13);");
+    expect(representative).toContain("doc.text(signoff.name, lm, y + 8);");
+    expect(representative).toContain("doc.text(signoff.title, lm, y + 13);");
     expect(representative).toContain("doc.text(fmtDate(form.effectiveDate), lm + 75, y + 8);");
     expect(representative).toContain('doc.text("Date Issued", lm + 75, y + 14);');
     expect(representative).not.toMatch(/addImage|H -|addPage|\.path\(/);

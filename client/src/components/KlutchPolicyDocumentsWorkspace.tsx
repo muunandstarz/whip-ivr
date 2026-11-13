@@ -18,7 +18,7 @@ import {
   type KlutchDocumentType,
   type KlutchState,
 } from "@shared/klutchPolicy";
-import { KLUTCH_DEFAULT_HANDLER_NAME, KLUTCH_DEFAULT_HANDLER_TITLE } from "@shared/klutchSignoff";
+import { normalizeKlutchDocumentSignoff, useKlutchSignoff } from "@/hooks/useKlutchSignoff";
 
 const KLUTCH_LOGO_URL = "/manus-storage/klutch-insurance-logo_c2ff6576.png";
 const NAVY = "#003B40";
@@ -168,6 +168,8 @@ function writeMemberMailingAddress(doc: jsPDF, terms: PolicyTerms, y: number) {
 
 export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: { initialState?: string }) {
   const utils = trpc.useUtils();
+  const approvedSignoff = useKlutchSignoff();
+  const { signoff, ready: signoffReady } = approvedSignoff;
   const policiesQuery = trpc.klutchPolicies.list.useQuery({ limit: 100 });
   const issueMutation = trpc.klutchPolicies.issue.useMutation({ onSuccess: () => utils.klutchPolicies.list.invalidate() });
   const documentMutation = trpc.klutchPolicies.recordDocument.useMutation();
@@ -210,12 +212,10 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     adjusterTitle: "",
     carrierClaimNumber: "",
     cancellationDate: "",
-    handlerName: KLUTCH_DEFAULT_HANDLER_NAME,
-    handlerTitle: KLUTCH_DEFAULT_HANDLER_TITLE,
+    handlerName: signoff?.name ?? "",
+    handlerTitle: signoff?.title ?? "",
   });
   const activePolicy = useMemo(() => (policiesQuery.data ?? []).find((policy) => policy.id === selectedPolicyId) as PolicyRecord | undefined, [policiesQuery.data, selectedPolicyId]);
-  const signer = docForm.handlerName;
-  const signerTitle = docForm.handlerTitle;
   const expiresOn = addYear(issueForm.effectiveOn);
   const weeklyMembershipFee = DEFAULT_KLUTCH_WEEKLY_MEMBERSHIP_FEE;
   const premiumCalculation = calculateKlutchPremium({
@@ -234,9 +234,18 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       return null;
     });
   }, [documentType]);
+  useEffect(() => {
+    setDocForm((current) => normalizeKlutchDocumentSignoff(current, signoff));
+  }, [signoff?.name, signoff?.title, signoff?.revision, approvedSignoff.identityKey, signoffReady]);
+  useEffect(() => {
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  }, [approvedSignoff.revision, approvedSignoff.identityKey]);
 
   const setIssue = <K extends keyof typeof issueForm>(key: K, value: (typeof issueForm)[K]) => setIssueForm((current) => ({ ...current, [key]: value }));
-  const setDocument = <K extends keyof DocForm>(key: K, value: DocForm[K]) => setDocForm((current) => ({ ...current, [key]: value }));
+  const setDocument = <K extends Exclude<keyof DocForm, "handlerName" | "handlerTitle">>(key: K, value: DocForm[K]) => setDocForm((current) => normalizeKlutchDocumentSignoff({ ...current, [key]: value }, signoff));
 
   const buildDraftPolicy = (): PolicyRecord => ({
     id: 0,
@@ -280,6 +289,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       return;
     }
     try {
+      await approvedSignoff.requireApprovedSignoff();
       const terms: PolicyTerms = {
         leaseId: issueForm.leaseId,
         memberName: issueForm.memberName,
@@ -318,7 +328,8 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       return;
     }
     try {
-      const document = await buildPdf("declarations", buildDraftPolicy());
+      const approved = await approvedSignoff.requireApprovedSignoff();
+      const document = await buildPdf("declarations", buildDraftPolicy(), approved);
       const filename = cleanFilename(`Klutch_Policy_Declarations_${issueForm.memberName}`);
       setPreviewFilename(filename);
       openPdf(document, filename, "preview", setPreviewUrl);
@@ -328,7 +339,9 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     }
   }
 
-  const buildPdf = async (kind: KlutchDocumentType, policy: PolicyRecord, klutchClaimNumber?: string | null) => {
+  const buildPdf = async (kind: KlutchDocumentType, policy: PolicyRecord, approved: { name: string; title: string }, klutchClaimNumber?: string | null) => {
+    const signer = approved.name;
+    const signerTitle = approved.title;
     const doc = new jsPDF({ unit: "mm", format: "letter" });
     const terms = policy.terms;
     const vehicleText = `${terms.vehicle}${terms.vin ? ` (${terms.vin})` : ""}`;
@@ -527,9 +540,10 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
   async function previewDocument() {
     if (!validatePreviewInputs() || !activePolicy) return;
     try {
+      const approved = await approvedSignoff.requireApprovedSignoff();
       const sourceClaimNumber = docForm.claimNumber || activePolicy.leaseId;
       const matchingClaim = policyDetailQuery.data?.claims?.find((claim) => claim.snapsheetClaimNumber === sourceClaimNumber.trim().toUpperCase());
-      const document = await buildPdf(documentType, activePolicy, matchingClaim?.klutchClaimNumber);
+      const document = await buildPdf(documentType, activePolicy, approved, matchingClaim?.klutchClaimNumber);
       const filename = cleanFilename(`Klutch_${KLUTCH_DOCUMENT_LABELS[documentType]}_${activePolicy.policyNumber}_${matchingClaim?.klutchClaimNumber || "Preview"}`);
       setPreviewFilename(filename);
       openPdf(document, filename, "preview", setPreviewUrl);
@@ -544,13 +558,14 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     const sourceClaimNumber = docForm.claimNumber || activePolicy.leaseId;
     if (documentType === "cancellation_notice" && !docForm.cancellationDate) { toast.error("Enter the lease-termination effective date."); return; }
     try {
+      const approved = await approvedSignoff.requireApprovedSignoff();
       let result: { klutchClaimNumber?: string | null; deliveryStatus: string } | undefined;
-      const snapshot = { ...docForm, sourceClaimNumber, policyNumber: activePolicy.policyNumber, whipClaimNumber: activePolicy.leaseId, signer, signerTitle };
+      const snapshot = { ...normalizeKlutchDocumentSignoff(docForm, approved), sourceClaimNumber, policyNumber: activePolicy.policyNumber, whipClaimNumber: activePolicy.leaseId, signer: approved.name, signerTitle: approved.title };
       if (documentType === "cancellation_notice") {
         result = await cancellationMutation.mutateAsync({ policyId: activePolicy.id, cancelledOn: docForm.cancellationDate, claimNumber: sourceClaimNumber || undefined, documentSnapshot: snapshot });
         activePolicy.status = "cancelled";
       } else result = await documentMutation.mutateAsync({ policyId: activePolicy.id, documentType, claimNumber: sourceClaimNumber || undefined, snapshot });
-      const document = await buildPdf(documentType, activePolicy, result?.klutchClaimNumber);
+      const document = await buildPdf(documentType, activePolicy, approved, result?.klutchClaimNumber);
       const filename = cleanFilename(`Klutch_${KLUTCH_DOCUMENT_LABELS[documentType]}_${activePolicy.policyNumber}_${result?.klutchClaimNumber || sourceClaimNumber || "Policy"}`);
       setPreviewFilename(filename);
       openPdf(document, filename, mode, setPreviewUrl);
@@ -605,15 +620,16 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
             <p className="mt-3 text-xs text-slate-600">The policy-period total is apportioned across elected coverages using the prior declaration weights: BI 30, PD 12, Collision 25, Comprehensive 13, PIP 8, UM 7, and UIM 5. Unavailable, waived, or rejected coverages receive no allocation and the remaining elected coverages are rebalanced.</p>
           </div>
           <div className="overflow-x-auto rounded-md border border-slate-200 bg-white"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-[#003B40] text-white"><tr><th className="px-3 py-2 font-semibold">Coverage</th><th className="px-3 py-2 font-semibold">Limit / election</th><th className="px-3 py-2 font-semibold">Deductible</th><th className="px-3 py-2 text-right font-semibold">Policy-period premium</th></tr></thead><tbody>{issueCoverages.map((coverage) => <tr key={coverage.label} className="border-t border-slate-100"><td className="px-3 py-2">{coverage.label}</td><td className="px-3 py-2">{coverage.limit}</td><td className="px-3 py-2">{coverage.deductible || "—"}</td><td className="px-3 py-2 text-right">{coverage.premium ? money(coverage.premium) : "—"}</td></tr>)}<tr className="border-t-2 border-[#003B40] font-semibold"><td colSpan={3} className="px-3 py-2 text-right">Total policy-period premium</td><td className="px-3 py-2 text-right">{money(premiumCalculation.totalPremium)}</td></tr></tbody></table></div>
-          <div className="flex flex-wrap items-center justify-between gap-3"><p className="max-w-2xl text-xs text-slate-500">Preview the declaration as often as needed before issuing. A preview does not create a policy number, audit record, email, or delivery. Issuing creates the permanent server record; then all five document actions become available below.</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewDraftDeclarations}><Eye className="mr-2 h-4 w-4" />Preview declaration</Button><Button className="bg-[#003B40] hover:bg-[#0B5458]" onClick={issuePolicy} disabled={issueMutation.isPending}>{issueMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Issue 12-month policy</Button></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="max-w-2xl text-xs text-slate-500">Preview the declaration as often as needed before issuing. A preview does not create a policy number, audit record, email, or delivery. Issuing creates the permanent server record; then all five document actions become available below.</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewDraftDeclarations} disabled={!signoffReady}><Eye className="mr-2 h-4 w-4" />Preview declaration</Button><Button className="bg-[#003B40] hover:bg-[#0B5458]" onClick={issuePolicy} disabled={!signoffReady || issueMutation.isPending}>{issueMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Issue 12-month policy</Button></div></div>
         </div>}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">Step 2</p><h3 className="text-lg font-semibold text-slate-900">Choose a Klutch document</h3><p className="mt-1 text-sm text-slate-600">All five documents are saved as created-not-sent claim-file audit records with the policy and Klutch claim identifiers.</p></div>
+        <p role="status" className="mb-4 text-xs text-slate-600">{signoffReady ? "This approved sign-off is shared across Klutch documents and cannot be changed per document." : approvedSignoff.error ? "Unable to load the approved shared sign-off. Document actions are blocked." : "Loading the approved shared sign-off. Document actions are blocked."}{approvedSignoff.canEdit && <> <a className="underline" href="/kb/klutch-policy-documents">Use Save approved sign-off in Klutch Policy Documents to change the shared setting.</a></>}</p>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">{(Object.keys(KLUTCH_DOCUMENT_LABELS) as KlutchDocumentType[]).map((kind) => <button type="button" key={kind} onClick={() => setDocumentType(kind)} className={`rounded-lg border p-3 text-left transition ${documentType === kind ? "border-[#0B5458] bg-[#EDF7F3] ring-1 ring-[#0B5458]" : "border-slate-200 bg-white hover:border-[#0B5458]/50"}`}><span className="mb-2 flex h-7 w-7 items-center justify-center rounded bg-[#003B40] text-[#CBEA4B]">{kind === "declarations" ? <FileText className="h-4 w-4" /> : kind === "tnc_denial" ? <ShieldAlert className="h-4 w-4" /> : kind === "carrier_position" ? <Building2 className="h-4 w-4" /> : kind === "cancellation_notice" ? <Landmark className="h-4 w-4" /> : <BadgeCheck className="h-4 w-4" />}</span><span className="text-sm font-semibold text-slate-900">{KLUTCH_DOCUMENT_LABELS[kind]}</span></button>)}</div>
         {!activePolicy ? <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />Issue or select a policy before preparing a document.</div> : <div className="mt-5 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="grid gap-4 md:grid-cols-4"><div><Label htmlFor="klutch-claim-number">Whip / SnapSheet claim number</Label><Input id="klutch-claim-number" value={docForm.claimNumber || activePolicy.leaseId} onChange={(event) => setDocument("claimNumber", event.target.value)} placeholder="GB-0000-000000-000000" /><p className="mt-1 text-xs text-slate-500">When entered, the server maps this source claim to a separate Klutch claim number.</p></div><div><Label htmlFor="klutch-loss-date">Date of loss</Label><Input id="klutch-loss-date" type="date" value={docForm.dateOfLoss} onChange={(event) => setDocument("dateOfLoss", event.target.value)} /></div><div><Label htmlFor="klutch-handler-name">Handler name</Label><Input id="klutch-handler-name" value={docForm.handlerName} onChange={(event) => setDocument("handlerName", event.target.value)} placeholder="Enter the handling adjuster" /></div><div><Label htmlFor="klutch-handler-title">Handler title</Label><Input id="klutch-handler-title" value={docForm.handlerTitle} onChange={(event) => setDocument("handlerTitle", event.target.value)} placeholder="Claims adjuster" /></div></div>
+          <div className="grid gap-4 md:grid-cols-4"><div><Label htmlFor="klutch-claim-number">Whip / SnapSheet claim number</Label><Input id="klutch-claim-number" value={docForm.claimNumber || activePolicy.leaseId} onChange={(event) => setDocument("claimNumber", event.target.value)} placeholder="GB-0000-000000-000000" /><p className="mt-1 text-xs text-slate-500">When entered, the server maps this source claim to a separate Klutch claim number.</p></div><div><Label htmlFor="klutch-loss-date">Date of loss</Label><Input id="klutch-loss-date" type="date" value={docForm.dateOfLoss} onChange={(event) => setDocument("dateOfLoss", event.target.value)} /></div><div><Label htmlFor="klutch-handler-name">Handler name</Label><Input id="klutch-handler-name" value={docForm.handlerName} readOnly placeholder="Approved shared sign-off" /></div><div><Label htmlFor="klutch-handler-title">Handler title</Label><Input id="klutch-handler-title" value={docForm.handlerTitle} readOnly placeholder="Approved shared sign-off" /></div></div>
           {(["tnc_denial", "carrier_position"] as KlutchDocumentType[]).includes(documentType) && <>
             <div className="grid gap-4 md:grid-cols-2">
               <div><Label htmlFor="klutch-tnc-name">TNC platform</Label><Input id="klutch-tnc-name" value={docForm.tncName} onChange={(event) => setDocument("tncName", event.target.value)} placeholder="Uber, Lyft, or other platform" /></div>
@@ -625,11 +641,11 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
           {documentType === "carrier_position" && <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="klutch-carrier-name">Carrier name</Label><Input id="klutch-carrier-name" value={docForm.carrierName} onChange={(event) => setDocument("carrierName", event.target.value)} /></div><div><Label htmlFor="klutch-adjuster">Carrier adjuster</Label><Input id="klutch-adjuster" value={docForm.adjusterName} onChange={(event) => setDocument("adjusterName", event.target.value)} /></div><div><Label htmlFor="klutch-adjuster-title">Adjuster title</Label><Input id="klutch-adjuster-title" value={docForm.adjusterTitle} onChange={(event) => setDocument("adjusterTitle", event.target.value)} placeholder="Claims adjuster" /></div><div><Label htmlFor="klutch-carrier-letter-date">Date of carrier letter</Label><Input id="klutch-carrier-letter-date" type="date" value={docForm.carrierLetterDate} onChange={(event) => setDocument("carrierLetterDate", event.target.value)} /></div><div><Label htmlFor="klutch-carrier-claim">Carrier claim number</Label><Input id="klutch-carrier-claim" value={docForm.carrierClaimNumber} onChange={(event) => setDocument("carrierClaimNumber", event.target.value)} /></div><div><Label htmlFor="klutch-carrier-address">Carrier address</Label><Textarea id="klutch-carrier-address" rows={2} value={docForm.carrierAddress} onChange={(event) => setDocument("carrierAddress", event.target.value)} /></div><p className="md:col-span-2 text-xs text-slate-500">Preview and the created-not-sent record are available without a linked declarations or denial document.</p></div>}
           {documentType === "cancellation_notice" && <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="klutch-cancellation-date">Lease terminated — effective date <span className="text-rose-600">*</span></Label><Input id="klutch-cancellation-date" type="date" value={docForm.cancellationDate} onChange={(event) => setDocument("cancellationDate", event.target.value)} /></div><div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Only allowed cancellation reason:</strong> Lease terminated. Creating the notice atomically marks the policy cancelled and stores the effective date.</div></div>}
           {documentType === "endorsement" && <div className="rounded-md border border-[#0B5458]/20 bg-white p-3 text-sm text-slate-700">KIC-END-002 is available for preview and created-not-sent recording without a manager-approval or carrier-evidence requirement.</div>}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-600"><CheckCircle2 className="mr-1 inline h-4 w-4 text-emerald-600" />Preview opens an on-page PDF with <strong>Open/Print</strong> and <strong>Download</strong> controls without changing policy or audit records. The separate record action logs <strong>CREATED_NOT_SENT</strong>; it never sends the document.</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewDocument} disabled={documentMutation.isPending || cancellationMutation.isPending}><Eye className="mr-2 h-4 w-4" />Preview PDF</Button><Button className="bg-[#003B40] hover:bg-[#0B5458]" onClick={() => createDocument("download")} disabled={documentMutation.isPending || cancellationMutation.isPending}><Download className="mr-2 h-4 w-4" />Create record & download</Button></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-600"><CheckCircle2 className="mr-1 inline h-4 w-4 text-emerald-600" />Preview opens an on-page PDF with <strong>Open/Print</strong> and <strong>Download</strong> controls without changing policy or audit records. The separate record action logs <strong>CREATED_NOT_SENT</strong>; it never sends the document.</p><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewDocument} disabled={!signoffReady || documentMutation.isPending || cancellationMutation.isPending}><Eye className="mr-2 h-4 w-4" />Preview PDF</Button><Button className="bg-[#003B40] hover:bg-[#0B5458]" onClick={() => createDocument("download")} disabled={!signoffReady || documentMutation.isPending || cancellationMutation.isPending}><Download className="mr-2 h-4 w-4" />Create record & download</Button></div></div>
         </div>}
       </section>
 
-      {previewUrl && <section className="rounded-xl border border-[#0B5458]/25 bg-white p-4 shadow-sm"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">PDF preview</p><h3 className="font-semibold text-slate-900">{KLUTCH_DOCUMENT_LABELS[documentType]}</h3><p className="mt-1 text-xs text-slate-600">Use <strong>Open / Print</strong> for the browser’s native print dialog, including Save to PDF.</p></div><div className="flex flex-wrap gap-2"><a href={previewUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-md border border-[#0B5458] px-3 text-sm font-medium text-[#003B40] transition hover:bg-[#EDF7F3]"><Printer className="mr-2 h-4 w-4" />Open / Print</a><a href={previewUrl} download={`${previewFilename}.pdf`} className="inline-flex h-9 items-center rounded-md bg-[#003B40] px-3 text-sm font-medium text-white transition hover:bg-[#0B5458]"><Download className="mr-2 h-4 w-4" />Download PDF</a><Button variant="outline" size="sm" onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }}><X className="mr-2 h-4 w-4" />Close preview</Button></div></div><iframe title="Klutch policy document preview" src={previewUrl} className="h-[780px] w-full rounded border border-slate-200" /></section>}
+      {signoffReady && previewUrl && <section className="rounded-xl border border-[#0B5458]/25 bg-white p-4 shadow-sm"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-[#0B5458]">PDF preview</p><h3 className="font-semibold text-slate-900">{KLUTCH_DOCUMENT_LABELS[documentType]}</h3><p className="mt-1 text-xs text-slate-600">Use <strong>Open / Print</strong> for the browser’s native print dialog, including Save to PDF.</p></div><div className="flex flex-wrap gap-2"><a href={previewUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-md border border-[#0B5458] px-3 text-sm font-medium text-[#003B40] transition hover:bg-[#EDF7F3]"><Printer className="mr-2 h-4 w-4" />Open / Print</a><a href={previewUrl} download={`${previewFilename}.pdf`} className="inline-flex h-9 items-center rounded-md bg-[#003B40] px-3 text-sm font-medium text-white transition hover:bg-[#0B5458]"><Download className="mr-2 h-4 w-4" />Download PDF</a><Button variant="outline" size="sm" onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }}><X className="mr-2 h-4 w-4" />Close preview</Button></div></div><iframe title="Klutch policy document preview" src={previewUrl} className="h-[780px] w-full rounded border border-slate-200" /></section>}
     </div>
   );
 }

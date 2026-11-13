@@ -1,5 +1,6 @@
 import WhipLayout from "@/components/WhipLayout";
 import { installKlutchPdfBridge } from "@/lib/klutchPdfExport";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { FileText, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -11,10 +12,15 @@ import { useEffect, useState } from "react";
  */
 export default function KlutchPolicyDocuments() {
   const [frame, setFrame] = useState<HTMLIFrameElement | null>(null);
+  const { isImpersonating } = useImpersonation();
 
   useEffect(() => {
     if (frame) return installKlutchPdfBridge(frame);
   }, [frame]);
+
+  useEffect(() => {
+    frame?.contentWindow?.postMessage({ type: "klutch-permission-refresh" }, window.location.origin);
+  }, [frame, isImpersonating]);
 
   return (
     <WhipLayout>

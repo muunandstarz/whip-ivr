@@ -11,11 +11,15 @@ function environment(draft: Record<string, unknown> | null = null) {
   const context = vm.createContext({
     localStorage: { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value) },
     today: () => "2026-11-13",
+    sec: (label: string) => `<section>${label}</section>`,
+    esc: (value: unknown) => String(value ?? "").replaceAll('"', "&quot;"),
   });
   vm.runInContext(`${defaults}\n${loadCode}\nload();`, context);
   return {
     apply: (draft: Record<string, unknown>) => JSON.parse(JSON.stringify(context.applyKlutchHandlerDefaults(draft))),
     state: () => JSON.parse(vm.runInContext("JSON.stringify(F)", context)),
+    configure: (access: Record<string, unknown>) => vm.runInContext(`klutchSignoffAccess=${JSON.stringify(access)};applyKlutchHandlerDefaults(F)`, context),
+    fields: () => context.klutchSignoffFields() as string,
   };
 }
 const expected = { hn: "Morgan Ellis", ht: "Liability Claims Specialist", dopSignerName: "Morgan Ellis", dopSignerTitle: "Liability Claims Specialist" };
@@ -30,11 +34,29 @@ describe("Klutch designated handler attribution", () => {
   it("replaces obsolete unentered login defaults only in the editable draft", () => {
     expect(environment({ hn: "Old Auto User", ht: "Old Auto Title", handlerNameEntered: false }).state()).toMatchObject(expected);
   });
-  it("preserves an explicitly entered alternate handler and title", () => {
-    expect(environment({ hn: "Explicit Handler", ht: "Explicit Title", handlerNameEntered: true }).state()).toMatchObject({ hn: "Explicit Handler", ht: "Explicit Title" });
+  it("replaces previously edited handler names with the approved locked sign-off", () => {
+    expect(environment({ hn: "Explicit Handler", ht: "Explicit Title", handlerNameEntered: true }).state()).toMatchObject({ hn: "Morgan Ellis", ht: "Liability Claims Specialist" });
   });
-  it("keeps an explicitly edited title for Morgan", () => {
-    expect(environment({ hn: "Morgan Ellis", ht: "Explicit Title", handlerNameEntered: true }).state()).toMatchObject({ hn: "Morgan Ellis", ht: "Explicit Title" });
+  it("replaces a previously edited title with the approved title", () => {
+    expect(environment({ hn: "Morgan Ellis", ht: "Explicit Title", handlerNameEntered: true }).state()).toMatchObject({ hn: "Morgan Ellis", ht: "Liability Claims Specialist" });
+  });
+  it("renders read-only fields without a save control until owner permission is verified", () => {
+    const model = environment();
+    expect(model.fields()).toContain('readonly aria-readonly="true"');
+    expect(model.fields()).not.toContain('data-act="saveKlutchSignoff"');
+  });
+  it("uses only the server-approved name and title after a shared owner change", () => {
+    const model = environment();
+    model.configure({ signoff: { name: "Owner Approved", title: "Approved Title", revision: 1 }, canEdit: false, ready: true });
+    expect(model.state()).toMatchObject({ hn: "Owner Approved", ht: "Approved Title" });
+    expect(model.fields()).toContain('readonly aria-readonly="true"');
+    expect(model.fields()).not.toContain('data-act="saveKlutchSignoff"');
+  });
+  it("shows the separate shared-setting editor only for verified native-owner permission", () => {
+    const model = environment();
+    model.configure({ signoff: { name: "Morgan Ellis", title: "Liability Claims Specialist", revision: 0 }, canEdit: true, ready: true });
+    expect(model.fields()).toContain('data-signoff-field="name"');
+    expect(model.fields()).toContain('data-act="saveKlutchSignoff"');
   });
   it("never manufactures a Direction of Pay mark, consent or certificate", () => {
     const value = environment().state();

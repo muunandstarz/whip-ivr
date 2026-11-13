@@ -16,6 +16,7 @@ import {
 export * from "./rentalSchema";
 export * from "./rentalReminderSchema";
 export * from "./rentalSenderSchema";
+export * from "./klutchSignoffSchema";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),

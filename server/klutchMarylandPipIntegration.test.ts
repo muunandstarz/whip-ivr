@@ -11,6 +11,7 @@ beforeEach(() => {
  h.policy = { id: 998, policy_number: "KIC-MD-999991", state: "MD", terms: policyTerms, effective_on: "2026-08-01", expires_on: "2027-08-01", cancelled_on: null, member_name: "SYNTHETIC MEMBER", vin_normalized: policyTerms.vin };
  h.terms = [{ id: 1, policy_id: 998, term_number: 1, revision_number: 1, effective_on: "2025-08-01", expires_on: "2026-08-01", terms: policyTerms }, { id: 2, policy_id: 998, term_number: 2, revision_number: 1, effective_on: "2026-08-01", expires_on: "2027-08-01", terms: { ...policyTerms, effectiveOn: "2026-08-01", expiresOn: "2027-08-01" } }];
  h.conn = { beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), end: vi.fn(), execute: vi.fn(async (sql: string, args: any[]) => {
+  if (sql.startsWith("SELECT name, title, revision FROM klutch_signoff_settings")) return [[], []];
   if (sql.startsWith("SELECT * FROM klutch_policies")) return [[h.policy], []];
   if (sql.startsWith("SELECT * FROM klutch_policy_terms")) return [sql.includes("LIMIT 1") ? [h.terms[1]] : h.terms, []];
   h.writes.push({ sql, args }); return [{ insertId: 77 }, []];

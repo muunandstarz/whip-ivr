@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
-import { KLUTCH_DEFAULT_HANDLER_NAME, KLUTCH_DEFAULT_HANDLER_TITLE } from "@shared/klutchSignoff";
+import { useKlutchSignoff } from "@/hooks/useKlutchSignoff";
 import { findLouVehicleRate, louRateSourceLabel } from "@shared/louRates";
 import { buildDvReportReference, dvReportConflicts, DV_REFERENCE_STARTER, type DvReportFacts } from "@shared/insuranceDirectDv";
 import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, LIABILITY_STATEMENT_EXAMPLES, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
@@ -7546,6 +7546,8 @@ export function UnifiedCOITab({
       ? "klutch"
       : "metrocars";
   const isKlutch = insurer === "klutch";
+  const approvedSignoff = useKlutchSignoff(isKlutch);
+  React.useEffect(() => { setPreviewPdfUrl(null); }, [isKlutch, approvedSignoff.identityKey, approvedSignoff.revision]);
   // COIs use one Date Issued / Subscription Start Date. Keep every rendered
   // coverage-period field tied to that single source rather than the legacy,
   // unpopulated effectiveDate form property.
@@ -7576,7 +7578,12 @@ export function UnifiedCOITab({
     return `${months[parseInt(m)-1]} ${parseInt(day)}, ${y}`;
   };
 
-  const handleDownload = (shouldDownload = true) => {
+  const handleDownload = async (shouldDownload = true) => {
+    let signoff: Awaited<ReturnType<typeof approvedSignoff.requireApprovedSignoff>> | undefined;
+    if (isKlutch) {
+      try { signoff = await approvedSignoff.requireApprovedSignoff(); }
+      catch (error) { toast.error(error instanceof Error ? error.message : "Unable to load the approved Klutch sign-off."); return; }
+    }
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
@@ -7965,9 +7972,9 @@ export function UnifiedCOITab({
     doc.text(cancelText, cx2, y + 8, { maxWidth: textW * 0.6 - 4 });
     if (isKlutch) {
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-      doc.text(KLUTCH_DEFAULT_HANDLER_NAME, cx2, y + 19);
+      doc.text(signoff!.name, cx2, y + 19);
       doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
-      doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, cx2, y + 22);
+      doc.text(signoff!.title, cx2, y + 22);
     }
     doc.setFont("helvetica", "italic"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
     const sigLine = isKlutch ? "Authorized Representative, Klutch Insurance Company" : "Authorized Representative";
@@ -8173,7 +8180,8 @@ export function UnifiedCOITab({
           ].join("\n")}
           onCopy={() => { toast.success("Copied"); }}
           onDownload={handleDownload}
-          pdfUrl={previewPdfUrl}
+          pdfUrl={isKlutch && !approvedSignoff.ready ? null : previewPdfUrl}
+          allowPreviewDownload={!isKlutch || approvedSignoff.ready}
           onPreview={handlePreviewOnly}
         />
       </div>
@@ -8183,6 +8191,7 @@ export function UnifiedCOITab({
 
 
 function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
+  const approvedSignoff = useKlutchSignoff();
   const DEC_STATE_RULES: Record<string, {
     biPP: string; biPO: string; pdLimit: string;
     umPP: string; umPO: string; uimPP: string; uimPO: string;
@@ -8212,6 +8221,7 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     if (isFloridaPipMandatory) setPipWaived(false);
   }, [isAutomaticUmRejection, isFloridaPipMandatory]);
   const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
+  React.useEffect(() => { setPreviewPdfUrl(null); }, [approvedSignoff.identityKey, approvedSignoff.revision]);
   const [form, setForm] = React.useState({
     policyNumber: "",
     memberName: "",
@@ -8318,7 +8328,10 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
     return `$${(weekly * weeks).toFixed(2)}`;
   };
 
-  const handleDownload = (shouldDownload = true) => {
+  const handleDownload = async (shouldDownload = true) => {
+    let signoff: Awaited<ReturnType<typeof approvedSignoff.requireApprovedSignoff>>;
+    try { signoff = await approvedSignoff.requireApprovedSignoff(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Unable to load the approved Klutch sign-off."); return; }
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
@@ -8657,9 +8670,9 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   doc.text(arls, lm, y); y += arls.length * 3.4 + 8;
 
   doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
-  doc.text(KLUTCH_DEFAULT_HANDLER_NAME, lm, y + 8);
+  doc.text(signoff.name, lm, y + 8);
   doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); C(GRAY);
-  doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, lm, y + 13);
+  doc.text(signoff.title, lm, y + 13);
   D(INK); doc.line(lm + 75, y + 10, lm + 120, y + 10);
   doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
   doc.text(fmtDate(form.effectiveDate), lm + 75, y + 8);
@@ -8855,7 +8868,8 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
           ].join("\n")}
           onCopy={() => { toast.success("Copied"); }}
           onDownload={handleDownload}
-          pdfUrl={previewPdfUrl}
+          pdfUrl={approvedSignoff.ready ? previewPdfUrl : null}
+          allowPreviewDownload={approvedSignoff.ready}
           onPreview={() => handleDownload(false)}
         />
       </div>
