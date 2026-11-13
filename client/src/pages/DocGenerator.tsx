@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
+import { KLUTCH_DEFAULT_HANDLER_NAME, KLUTCH_DEFAULT_HANDLER_TITLE } from "@shared/klutchSignoff";
 import { findLouVehicleRate, louRateSourceLabel } from "@shared/louRates";
 import { buildDvReportReference, dvReportConflicts, DV_REFERENCE_STARTER, type DvReportFacts } from "@shared/insuranceDirectDv";
 import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, LIABILITY_STATEMENT_EXAMPLES, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
@@ -7962,6 +7963,12 @@ export function UnifiedCOITab({
     doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
     const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";
     doc.text(cancelText, cx2, y + 8, { maxWidth: textW * 0.6 - 4 });
+    if (isKlutch) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+      doc.text(KLUTCH_DEFAULT_HANDLER_NAME, cx2, y + 19);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
+      doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, cx2, y + 22);
+    }
     doc.setFont("helvetica", "italic"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
     const sigLine = isKlutch ? "Authorized Representative, Klutch Insurance Company" : "Authorized Representative";
     doc.text(sigLine, cx2, y + 25);
@@ -8649,6 +8656,10 @@ function KlutchDecPageTab({ initialState = "MD" }: { initialState?: string }) {
   const arls = doc.splitTextToSize("This Policy Declarations Page is issued by Klutch Insurance Company. Coverage is provided pursuant to the master policy issued to Metrocars Leasing Corp and the terms of the named operator's Membership Agreement.", mainW);
   doc.text(arls, lm, y); y += arls.length * 3.4 + 8;
 
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
+  doc.text(KLUTCH_DEFAULT_HANDLER_NAME, lm, y + 8);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); C(GRAY);
+  doc.text(KLUTCH_DEFAULT_HANDLER_TITLE, lm, y + 13);
   D(INK); doc.line(lm + 75, y + 10, lm + 120, y + 10);
   doc.setFont("helvetica", "bold"); doc.setFontSize(9); C(INK);
   doc.text(fmtDate(form.effectiveDate), lm + 75, y + 8);

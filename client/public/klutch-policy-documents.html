@@ -341,12 +341,24 @@ function derive(F){
  let left=tot-cents.reduce((a,x)=>a+x[1],0);cents.sort((a,b)=>b[2]-a[2]);for(let i=0;i<left;i++)cents[i][1]++;
  cents.forEach(([k,c])=>cov[k+"P"]=(c/100).toFixed(2));
  return{cov,wk,tot:tot/100,R,pipOn,umOn}}
+const KLUTCH_DEFAULT_HANDLER={name:"Morgan Ellis",title:"Liability Claims Specialist"};
+// Editable attribution only; never adopt the logged-in user or create a signature/certificate.
+function applyKlutchHandlerDefaults(s){
+ if(!s.handlerNameEntered||!String(s.hn||"").trim()){s.hn=KLUTCH_DEFAULT_HANDLER.name;s.ht=KLUTCH_DEFAULT_HANDLER.title}
+ else if(s.hn===KLUTCH_DEFAULT_HANDLER.name&&!String(s.ht||"").trim())s.ht=KLUTCH_DEFAULT_HANDLER.title;
+ // Do not change identity underneath a previously captured or certified representative signature.
+ if(!s.dopSignatureAccepted&&!s.dopSignatureData&&!s.dopSignatureCertifiedAt&&!s.dopSignatureCertificateId){
+  if(!String(s.dopSignerName||"").trim()){s.dopSignerName=KLUTCH_DEFAULT_HANDLER.name;if(!String(s.dopSignerTitle||"").trim())s.dopSignerTitle=KLUTCH_DEFAULT_HANDLER.title}
+  else if(s.dopSignerName===KLUTCH_DEFAULT_HANDLER.name&&!String(s.dopSignerTitle||"").trim())s.dopSignerTitle=KLUTCH_DEFAULT_HANDLER.title;
+ }
+ return s;
+}
 let F,K;
 function load(){try{F=JSON.parse(localStorage.getItem("klutch_form_v3"))}catch(e){}try{K=JSON.parse(localStorage.getItem("klutch_nums_v3"))}catch(e){}
  F=F||{};
  F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",guideFocus:"opening",date:today(),tnc:"Uber",period:"2",eff:today()},F);
  if(F.stateConfirmed!==true||F.confirmedState!==F.st){F.stateConfirmed=false;F.confirmedState=""}
- if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}
+ applyKlutchHandlerDefaults(F);
  if(Object.prototype.hasOwnProperty.call(F,"dopSignerContact")){delete F.dopSignerContact;try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}
  if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{}};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100}
 function upsert(){if(!F.pn)return;const r=K.pols[F.pn]||(K.pols[F.pn]={pn:F.pn,terms:[]});
@@ -427,6 +439,7 @@ Please reply to this email or contact Whip Claims Management with the coverage i
 
 Thank you,
 ${F.hn||"[Handler name]"}
+${F.ht||"[Handler title]"}
 Whip Claims Management`;
  if(F.emailSubject===undefined)F.emailSubject=defaultSubject;if(F.emailBody===undefined)F.emailBody=defaultBody;
  return `<div class="f">${sec("Carrier Coverage Request Email")}<div class="s6 note" style="margin-top:-2px">Use this editable communication when requesting the adverse carrier’s comprehensive and collision coverage information. It is a non-PDF working email: Copy Email does not issue a policy, create a document record, or send anything.</div>${fld("emailRecipient","Carrier recipient email",3,{t:"email"})}${fld("emailAdjuster","Carrier adjuster / claims contact",3)}${fld("emailSubject","Subject",6)}<div class="s6"><label>Email body</label><textarea data-k="emailBody" style="min-height:250px;width:100%;resize:vertical">${esc(F.emailBody||defaultBody)}</textarea></div><div class="s6"><details class="note"><summary style="cursor:pointer;font-weight:700">Handler guide — carrier coverage verification</summary><ul style="margin:8px 0 0 18px;line-height:1.5"><li>Identify Whip Claims Management and Metrocars Leasing Corp.’s owner/lessor interest.</li><li>Request confirmation of comprehensive and collision coverage, including conditions, limits, deductible, and required records.</li><li>Review and tailor the recipient, subject, and facts before copying the email into the approved claim delivery workflow.</li><li>Attach only the records appropriate for the claim. This email template and the Carrier Communication Guide are not PDF packet documents.</li></ul></details></div><div class="s6"><button type="button" class="b" data-act="copyCarrierCoverageEmail">Copy Email</button></div></div>`;
@@ -485,8 +498,8 @@ function buildForm(){
   h+=fld("kc","Klutch claim number",3)+fld("dol","Date of loss",3,{t:"date"})+fld("tnc","TNC",3,{sel:[["Uber","Uber"],["Lyft","Lyft"]]})+fld("period","TNC period",3,{sel:[["1","1 – Waiting for a ride request"],["2","2 – Traveling to pick up a passenger"],["3","3 – Transporting a passenger"],["0","0 – Personal use (no denial)"]]});
   if(d==="den")h+=fld("filed","Date claim filed",3,{t:"date"})+fld("dden","Letter date (next business day, editable)",3,{t:"date"});
   else h+=fld("date","Letter date",6,{t:"date"});
-  h+=fld("hn","Handler name",3)+fld("ht","Handler title",3);
  }
+ if(["dec","den","car","can","end","pip_history"].includes(d))h+=sec("Document sign-off")+fld("hn","Handler name",3)+fld("ht","Handler title",3);
  if(d==="car"){
   h+=sec("Carrier");
   h+=fld("carrier","Carrier name",3)+fld("cclm","Carrier claim number",3)+fld("attn","Adjuster name and title",6)+fld("caddr","Carrier street address",3)+fld("ccity","City, State ZIP",3)+fld("cdt","Date of carrier letter",3,{t:"date"})+fld("rec","Supporting records",3);
@@ -607,6 +620,7 @@ function buildDoc(d,pol,claim,s){
  const dt=ld((d==="den"?s.dden:s.date)||today());
  const hand=()=>{if(!s.hn)miss.push("handler name");if(!s.ht)miss.push("handler title");
   return L(esc(s.hn||"")||"&nbsp;")+L(esc(s.ht||"")||"&nbsp;")+L("Klutch Insurance Company")+L("claims@klutchinsurance.com")};
+ const preparedBy=()=>`<div style="margin-top:14px;font-size:12px;line-height:1.4">Prepared by<br>${esc(s.hn||"")}<br>${esc(s.ht||"")}</div>`;
  const sheet=(inner,cls)=>`<div class="sheet ${cls}">${inner}</div>`;
  if(d==="carrier_guide"){
   const g=carrierGuideData(s),{entries,active}=activeCarrierGuideEntry(g),index=entries.findIndex(entry=>entry.id===active.id),previous=entries[index-1],next=entries[index+1];
@@ -615,7 +629,7 @@ function buildDoc(d,pol,claim,s){
  }
  if(d==="carrier_email"){
   const subject=s.emailSubject||`Coverage verification request — ${s.snap||s.kc||"[Whip claim number]"}`;
-  const body=s.emailBody||`Hello ${s.emailAdjuster||"Claims Team"},\n\nWhip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.\n\nPlease confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.\n\nVehicle: ${s.vehicle||"[Vehicle]"}\nVIN: ${s.vin||"[VIN]"}\nDate of loss: ${s.dol?ld(s.dol):"[Date of loss]"}\nWhip claim number: ${s.snap||s.kc||"[Whip claim number]"}\n\nPlease reply to this email or contact Whip Claims Management with the coverage information.\n\nThank you,\n${s.hn||"[Handler name]"}\nWhip Claims Management`;
+  const body=s.emailBody||`Hello ${s.emailAdjuster||"Claims Team"},\n\nWhip Claims Management handles physical-damage claim administration for Metrocars Leasing Corp., the owner and lessor of the vehicle referenced below.\n\nPlease confirm whether your insured’s policy provides comprehensive and/or collision coverage for this loss. Please also identify any applicable coverage conditions, limits, deductible, and documents you need to evaluate the claim.\n\nVehicle: ${s.vehicle||"[Vehicle]"}\nVIN: ${s.vin||"[VIN]"}\nDate of loss: ${s.dol?ld(s.dol):"[Date of loss]"}\nWhip claim number: ${s.snap||s.kc||"[Whip claim number]"}\n\nPlease reply to this email or contact Whip Claims Management with the coverage information.\n\nThank you,\n${s.hn||"[Handler name]"}\n${s.ht||"[Handler title]"}\nWhip Claims Management`;
   return{html:`<div style="max-width:710px;margin:0 auto;background:#fff;border:1px solid #d4d4d4;padding:28px 32px;font:14px/1.5 Arial,Helvetica,sans-serif;color:#111"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#52626a;text-transform:uppercase;margin-bottom:18px">Editable email preview · not a PDF packet document</div><div style="margin-bottom:8px"><b>To:</b> ${esc(s.emailRecipient||"[Carrier recipient email]")}</div><div style="margin-bottom:18px"><b>Subject:</b> ${esc(subject)}</div><div style="white-space:normal">${esc(body).replace(/\n/g,"<br>")}</div></div>`,miss:[]};
  }
  if(d==="dec"){
@@ -636,7 +650,7 @@ function buildDoc(d,pol,claim,s){
   const p2=`<div class="dec"><div class="top"><div></div><div style="font-size:12px;font-weight:700">Policy number ${pol.number}<br><span style="font-weight:400">${esc(nm)}</span></div></div>
    <div class="secx" style="margin-top:24px"><h2>Vehicle lessor</h2><div class="two" style="margin-top:4px"><div>${esc(pol.vehicle)}<br>${esc(pol.vin)}</div><div>Metrocars Leasing Corp<br>14670 Southlawn Lane<br>Rockville, MD 20850</div></div></div>
    <div class="secx"><h2>Policy Documents</h2><div class="fine">These declarations summarize your coverage. Refer to your policy for complete terms, conditions, limits, and exclusions. For policy documents or to report a claim, email claims@klutchinsurance.com.</div></div>
-   <div style="margin-top:24px;font-size:9px;line-height:1.5;color:#777">Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms and conditions.</div>${FOOT}</div>`;
+   <div style="margin-top:24px;font-size:9px;line-height:1.5;color:#777">Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms and conditions.</div>${preparedBy()}${FOOT}</div>`;
   return{html:sheet(p1)+sheet(p2),miss:[...new Set(miss)]};
  }
  if(d==="pip_history"){
@@ -645,7 +659,7 @@ function buildDoc(d,pol,claim,s){
   const h=mdPipHistory(s),rows=h.changes.map((c,i)=>{
    const before=i?h.changes[i-1].selection:h.initialSelection,period=mdPipChangePeriod(s,c,i);
    if(s.mdPipRequireIssuedTerms&&!period.verified)miss.push("confirmed issued policy term covering PIP change "+(i+1));
-   return `<div class="sheet"><div class="pip-history-doc"><div class="pip-masthead"><img class="pip-logo" src="${LOGO}"><div class="pip-company">Klutch Insurance Company<br>Personal auto policy</div></div><div class="pip-kicker">POLICY ENDORSEMENT</div><h2>Maryland PIP election / waiver change</h2><div class="pip-doc-ref">MD-PIP-HISTORY · Change ${i+1} of ${h.changes.length} · Prepared ${ld(s.date||today())}</div><div class="pip-grid">${cell("Policy number",pol.number)}${cell("Member number",s.mno)}${cell("Named insured",pol.member,true)}${cell("Vehicle",pol.vehicle)}${cell("VIN",pol.vin)}</div><div class="pip-section">Effective dates — existing policy term</div><div class="pip-term">${cell("Policy term begins",period.termStart?ld(period.termStart):"")}${cell("Policy term expires — unchanged",period.termEnd?ld(period.termEnd):"")}${cell("PIP change effective",ld(c.effectiveOn))}${cell("This selection applies until",period.appliesUntil?ld(period.appliesUntil)+" · "+period.endReason:"")}</div><p class="pip-notice">This PIP change applies from the confirmed effective date within the existing policy term. It does not restart or extend that term. The original expiration date remains unchanged; any later renewal is a separate policy term. A later documented PIP change or earlier cancellation ends this selection sooner.</p><div class="pip-section">Documented PIP selection</div><div class="pip-change">${cell("Immediately before this change",mdPipLabel(before))}${cell("From the confirmed effective date",mdPipLabel(c.selection))}</div><div class="pip-section">Signed election / waiver record</div><div class="pip-grid pip-evidence">${cell("Signed source-form date",ld(c.signedOn))}${cell("Original rental / policy start",ld(h.rentalEffectiveOn))}${cell("Signed source reference",c.sourceReference,true)}</div>${c.electionDetails?`<p class="pip-disclosure">Confirmed election / waiver details: ${esc(c.electionDetails)}</p>`:""}<p class="pip-disclosure">${before==="unconfirmed"?"The earlier PIP selection has not been confirmed; no election, waiver, or earlier coverage position is inferred.":"The prior documented selection is recorded for the period before this change."} This record does not replace earlier declarations or alter any earlier period by inference.</p><p class="pip-disclosure">This endorsement records the confirmed signed-form change. It does not replace the signed election / waiver, obtain a signature, cure a missing form, or establish legal effectiveness. Limited elections follow the signed scope. Retain the source in the policy / claim file.</p><p class="pip-disclosure">No premium adjustment or coverage determination is made by this document. All other policy terms remain unchanged, subject to the policy, the signed source, and applicable law.</p>${FOOT}</div></div>`;
+   return `<div class="sheet"><div class="pip-history-doc"><div class="pip-masthead"><img class="pip-logo" src="${LOGO}"><div class="pip-company">Klutch Insurance Company<br>Personal auto policy</div></div><div class="pip-kicker">POLICY ENDORSEMENT</div><h2>Maryland PIP election / waiver change</h2><div class="pip-doc-ref">MD-PIP-HISTORY · Change ${i+1} of ${h.changes.length} · Prepared ${ld(s.date||today())}</div><div class="pip-grid">${cell("Policy number",pol.number)}${cell("Member number",s.mno)}${cell("Named insured",pol.member,true)}${cell("Vehicle",pol.vehicle)}${cell("VIN",pol.vin)}</div><div class="pip-section">Effective dates — existing policy term</div><div class="pip-term">${cell("Policy term begins",period.termStart?ld(period.termStart):"")}${cell("Policy term expires — unchanged",period.termEnd?ld(period.termEnd):"")}${cell("PIP change effective",ld(c.effectiveOn))}${cell("This selection applies until",period.appliesUntil?ld(period.appliesUntil)+" · "+period.endReason:"")}</div><p class="pip-notice">This PIP change applies from the confirmed effective date within the existing policy term. It does not restart or extend that term. The original expiration date remains unchanged; any later renewal is a separate policy term. A later documented PIP change or earlier cancellation ends this selection sooner.</p><div class="pip-section">Documented PIP selection</div><div class="pip-change">${cell("Immediately before this change",mdPipLabel(before))}${cell("From the confirmed effective date",mdPipLabel(c.selection))}</div><div class="pip-section">Signed election / waiver record</div><div class="pip-grid pip-evidence">${cell("Signed source-form date",ld(c.signedOn))}${cell("Original rental / policy start",ld(h.rentalEffectiveOn))}${cell("Signed source reference",c.sourceReference,true)}</div>${c.electionDetails?`<p class="pip-disclosure">Confirmed election / waiver details: ${esc(c.electionDetails)}</p>`:""}<p class="pip-disclosure">${before==="unconfirmed"?"The earlier PIP selection has not been confirmed; no election, waiver, or earlier coverage position is inferred.":"The prior documented selection is recorded for the period before this change."} This record does not replace earlier declarations or alter any earlier period by inference.</p><p class="pip-disclosure">This endorsement records the confirmed signed-form change. It does not replace the signed election / waiver, obtain a signature, cure a missing form, or establish legal effectiveness. Limited elections follow the signed scope. Retain the source in the policy / claim file.</p><p class="pip-disclosure">No premium adjustment or coverage determination is made by this document. All other policy terms remain unchanged, subject to the policy, the signed source, and applicable law.</p>${preparedBy()}${FOOT}</div></div>`;
   });
   return {html:paginateMdPip(rows.join(""),pol.number),miss:[...new Set(miss)]};
  }
@@ -690,7 +704,7 @@ function buildDoc(d,pol,claim,s){
    ${I("3.","We have no duty to defend or indemnify any claim or suit that is excluded by this endorsement.")}
    ${I("4.","This exclusion applies even if a TNC, another insurer, or any other person provides, denies, or fails to provide coverage for the same loss. This policy is not other insurance available to contribute to that loss.")}
    ${I("5.","If the law of the state governing this policy requires coverage that this exclusion would otherwise remove, this exclusion applies only to the extent the law permits, and coverage is limited to the minimum amount that law requires.")}
-   <h4>D.  All Other Terms</h4>${P("All other terms, conditions, and exclusions of the policy remain unchanged.")}${pg(2)}</div>`;
+   <h4>D.  All Other Terms</h4>${P("All other terms, conditions, and exclusions of the policy remain unchanged.")}${preparedBy()}${pg(2)}</div>`;
   return{html:sheet(e1)+sheet(e2),miss};
  }
  const top=`<img class="lg" src="${LOGO}">${P(dt)}`;
@@ -735,7 +749,7 @@ function buildDoc(d,pol,claim,s){
    <div class="ol">1.  All coverage under this policy ends.</div><div class="ol">2.  Coverage applied only to the vehicle listed above. No coverage applies to you in any other vehicle.</div><div class="ol" style="margin-bottom:8px">3.  No coverage applies to any loss, liability, or claim arising from an occurrence after that date.</div>
    ${P("This cancellation does not affect coverage for covered losses that occurred before the cancellation effective date.")}
    ${P("If you believe this notice is in error, please contact us at claims@klutchinsurance.com.")}
-   ${P("Sincerely,")}<div class="gap"></div>${L("Policy Services")}${L("Klutch Insurance Company")}${L("claims@klutchinsurance.com")}${G}${L("cc:  Metrocars Leasing Corp")}</div>${FOOT}`);
+   ${P("Sincerely,")}<div class="gap"></div>${hand()}${G}${L("cc:  Metrocars Leasing Corp")}</div>${FOOT}`);
   return{html,miss};
  }
 }
@@ -753,7 +767,7 @@ async function genpolFlow(){const ex=dupVin();
  if(F.pn&&!await ask("Replace the policy number with a new one?","Replace"))return;
  F.pn="KIC-"+F.st+"-"+String(K.counter).padStart(6,"0");K.counter++;save();buildForm();preview()}
 async function clearFlow(){if(!await ask("Reset the form? This clears everything you entered. Saved policies in the register are not affected.","Reset form"))return;
- F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
+ F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};applyKlutchHandlerDefaults(F);save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
 document.addEventListener("click",e=>{
  const sg=e.target.closest("[data-seg]");
  if(sg){const k=sg.dataset.seg;const prevPt=F.ptype;F[k]=sg.dataset.v;save();if(k==="ptype"&&F.ptype==="n"&&(prevPt==="r"||prevPt==="c")){F.pn="";F.rq=""}if(k==="set"&&!setDocs().includes(F.sel))F.sel=setDocs()[0];if(k==="set"||k==="term"||k==="pip"||k==="um"||k==="lease"||k==="ptype"||k==="dopSignatureMode"||k==="mdPipSame"){if(k==="dopSignatureMode"){F.dopSignatureData="";clearDopCertification()}buildForm();if(k==="ptype")rsearch()}preview();return}
@@ -780,7 +794,7 @@ document.addEventListener("click",e=>{
  else if(a==="clear"){clearFlow()}
 });
 function inputMdPip(e){if(e.target.dataset.pipIndex===undefined)return false;const c=F.mdPipChanges?.[+e.target.dataset.pipIndex],k=e.target.dataset.pipKey;if(!c)return true;c[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;if(k!=="confirmed"){c.confirmed=false;const box=document.querySelector(`[data-pip-index="${e.target.dataset.pipIndex}"][data-pip-key="confirmed"]`);if(box)box.checked=false}save();if(k==="selection")buildForm();preview();return true}
-document.addEventListener("input",e=>{if(inputMdPip(e))return;if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn")F.handlerNameEntered=true;
+document.addEventListener("input",e=>{if(inputMdPip(e))return;if(e.target.id==="rsq"){F.rq=e.target.value;rsearch();return}if(e.target.id==="regq"){$("#regb").innerHTML=(regTab==="p"?regHtml:logHtml)(e.target.value);return}const k=e.target.dataset.k;if(!k)return;F[k]=e.target.type==="checkbox"?e.target.checked:(k==="cst"?e.target.value.toUpperCase().slice(0,2):(k==="vin"?e.target.value.toUpperCase():e.target.value));if(k==="hn"||k==="ht")F.handlerNameEntered=true;
  if(["mdPipInitial","mdPipInitialDetails","mdPipRentalStart","eff","lease","cdate","st","member","mno","vin"].includes(k)){for(const c of F.mdPipChanges||[])c.confirmed=false;document.querySelectorAll('[data-pip-key="confirmed"]').forEach(box=>box.checked=false)}
  if(k==="stateConfirmed"){F.confirmedState=F.stateConfirmed?F.st:"";save();buildForm();preview();return}
  if(["dopSignerName","dopSignerTitle","dopSignerDate"].includes(k)&&F.dopSignatureAccepted)clearDopCertification();
@@ -876,10 +890,8 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     const { policies, currentUser } = await plain(`/register${search ? `?search=${encodeURIComponent(search)}` : ""}`);
     K.pols = {}; serverPolicies = new Map();
     policies.forEach(p => { const legacy = asLegacy(p); K.pols[legacy.pn] = legacy; serverPolicies.set(legacy.pn, p); });
-    if (!F.handlerNameEntered && F.hn) {
-      F.hn = ""; F.ht = "";
-      try { localStorage.setItem("klutch_form_v3", JSON.stringify(F)); } catch (_) {}
-    }
+    applyKlutchHandlerDefaults(F);
+    try { localStorage.setItem("klutch_form_v3", JSON.stringify(F)); } catch (_) {}
     if (typeof regHtml === "function" && document.querySelector("#regb")) document.querySelector("#regb").innerHTML = regHtml("");
     if (typeof rsearch === "function") rsearch();
   }

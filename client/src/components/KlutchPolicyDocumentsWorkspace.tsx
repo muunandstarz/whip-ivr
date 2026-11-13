@@ -18,6 +18,7 @@ import {
   type KlutchDocumentType,
   type KlutchState,
 } from "@shared/klutchPolicy";
+import { KLUTCH_DEFAULT_HANDLER_NAME, KLUTCH_DEFAULT_HANDLER_TITLE } from "@shared/klutchSignoff";
 
 const KLUTCH_LOGO_URL = "/manus-storage/klutch-insurance-logo_c2ff6576.png";
 const NAVY = "#003B40";
@@ -209,8 +210,8 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     adjusterTitle: "",
     carrierClaimNumber: "",
     cancellationDate: "",
-    handlerName: "",
-    handlerTitle: "",
+    handlerName: KLUTCH_DEFAULT_HANDLER_NAME,
+    handlerTitle: KLUTCH_DEFAULT_HANDLER_TITLE,
   });
   const activePolicy = useMemo(() => (policiesQuery.data ?? []).find((policy) => policy.id === selectedPolicyId) as PolicyRecord | undefined, [policiesQuery.data, selectedPolicyId]);
   const signer = docForm.handlerName;
@@ -390,6 +391,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("Policy Documents", 15, y);
       y += 8;
       y = writeReferenceParagraph(doc, "These declarations summarize your coverage. Refer to your policy for complete terms, conditions, limits, and exclusions. For policy documents or to report a claim, email claims@klutchinsurance.com.", 15, y, 185, 8, 5.1);
+      writeReferenceLines(doc, ["Prepared by:", signer, signerTitle].filter(Boolean), 15, y + 8, 7.2, 3.8);
       doc.setTextColor("#9CA3AF"); doc.setFontSize(5.8); doc.text("Coverage applies to the vehicle(s) listed in these declarations during the applicable policy period, subject to the terms of the lessor’s agreement and the policy’s terms, conditions, and endorsements.", 15, 258, { maxWidth: 180 }); doc.setTextColor("#111827");
       doc.setDrawColor("#D1D5DB"); doc.line(15, 275, 200, 275);
       addReferenceFooter(doc);
@@ -457,7 +459,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       y += 2;
       y = writeReferenceParagraph(doc, "This cancellation does not affect coverage for covered losses that occurred before the cancellation effective date.", 15, y, 180, 8.8, 5.2) + 5;
       y = writeReferenceParagraph(doc, "If you believe this notice is in error, please contact us at claims@klutchinsurance.com.", 15, y, 180, 8.8, 5.2) + 10;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", "Policy Services", "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
       addReferenceFooter(doc);
       return doc;
     }
@@ -511,7 +513,8 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     application.forEach((line, index) => { doc.setFont("helvetica", "normal"); doc.setFontSize(8.2); doc.text(`${index + 1}.`, 19, y); y = writeReferenceParagraph(doc, line, 25, y, 171, 8.2, 4.95) + 4; });
     y += 3;
     doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.text("D. All Other Terms", 15, y); y += 8;
-    writeReferenceParagraph(doc, "All other terms, conditions, and exclusions of the policy remain unchanged.", 15, y, 185, 8.3, 5);
+    y = writeReferenceParagraph(doc, "All other terms, conditions, and exclusions of the policy remain unchanged.", 15, y, 185, 8.3, 5);
+    writeReferenceLines(doc, ["Prepared by:", signer, signerTitle].filter(Boolean), 15, y + 8, 7.2, 3.8);
     referenceFooter(2);
     return doc;
   };

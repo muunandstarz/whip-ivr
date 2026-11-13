@@ -138,10 +138,10 @@ describe("Klutch policy documents source integration", () => {
 
   it("does not auto-fill the signed-in user as the Klutch document handler", () => {
     expect(sourcePage).not.toContain('if (!F.hn && currentUser?.name) F.hn = currentUser.name;');
-    expect(sourcePage).toContain('if(!F.handlerNameEntered&&F.hn){F.hn="";F.ht="";');
-    expect(sourcePage).toContain('if (!F.handlerNameEntered && F.hn) {');
+    expect(sourcePage).toContain('const KLUTCH_DEFAULT_HANDLER={name:"Morgan Ellis",title:"Liability Claims Specialist"};');
+    expect(sourcePage).toContain('applyKlutchHandlerDefaults(F);');
     expect(sourcePage).not.toContain('const autoFilledHandlerName = String(currentUser?.name || "").trim();');
-    expect(sourcePage).toContain('if(k==="hn")F.handlerNameEntered=true;');
+    expect(sourcePage).toContain('if(k==="hn"||k==="ht")F.handlerNameEntered=true;');
     expect(sourcePage).toContain('F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()}');
     expect(legacyWorkspace).toContain('const signer = docForm.handlerName;');
     expect(legacyWorkspace).toContain('placeholder="Enter the handling adjuster"');
