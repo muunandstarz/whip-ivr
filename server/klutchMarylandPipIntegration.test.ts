@@ -124,7 +124,7 @@ beforeEach(() => {
  it("preserves the approved form and automatically includes a distinct history document in MD packets", () => {
   const html = fs.readFileSync("client/public/klutch-policy-documents.html", "utf8");
   expect(html).toContain("Was PIP the same throughout the rental?"); expect(html.toLowerCase()).toContain("signed source-form date");
-  expect(html).toContain('candidates.push("pip_history")'); expect(html).toContain('snap.formId="MD-PIP-HISTORY"');
+  expect(html).toContain('...(s.st==="MD"&&s.mdPipSame==="no"?["pip_history"]:[])'); expect(html).toContain('snap.formId="MD-PIP-HISTORY"');
   expect(html).toContain('mdPipAt(F,F.eff)'); expect(html).toContain('hydrateMdPip(r)');
   expect(html).toContain('st!=="MD"'); expect(html).toContain('issuedTermRendering:true');
  });

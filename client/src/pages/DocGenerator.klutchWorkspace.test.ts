@@ -51,9 +51,10 @@ describe("Klutch policy documents source integration", () => {
   });
 
   it("makes every form previewable in All forms without manager or claim-document gates", () => {
-    expect(sourcePage).toContain('const SETS=[["liab","Dec page + cancellation if terminated"],["all","All forms"]]');
+    expect(sourcePage).toContain('const SETS=[["liab","Standard declaration packet"],["all","All document forms"]]');
     expect(sourcePage).toContain('const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"]');
-    expect(sourcePage).toContain('return [...new Set([...packet.filter(id=>id!=="pip_history"),...(F.st==="MD"&&F.mdPipSame==="no"?["pip_history"]:[]),...NON_PDF_REFERENCE_IDS])]');
+    expect(sourcePage).toContain('function setDocs(){return DOCS.map(([id])=>id)}');
+    expect(sourcePage).toContain('function automaticPacketIds(s=F){return ["dec","end","den",...(s.lease==="t"?["can"]:[]),...(s.st==="MD"&&s.mdPipSame==="no"?["pip_history"]:[])]}');
     expect(sourcePage).toContain('const denialClaim=claim||{kc:s.kc||"[Klutch claim number]"');
     expect(sourcePage).toContain('if(d==="end")h+=sec("Endorsement")');
     expect(sourcePage).toContain('This form is available for preview and creation without a manager-approval or carrier-evidence field.');
@@ -76,7 +77,7 @@ describe("Klutch policy documents source integration", () => {
   it("starts a new policy with garaging state and places policy-number creation last", () => {
     const formStart = sourcePage.indexOf("function buildForm()");
     const garagingState = sourcePage.indexOf('h+=fld("st","Garaging state"', formStart);
-    const documentSet = sourcePage.indexOf('Which documents do you need?', formStart);
+    const documentSet = sourcePage.indexOf('All forms are available above the preview.', formStart);
     const coverageElections = sourcePage.indexOf('h+=sec("Coverage elections")', formStart);
     const policyNumber = sourcePage.indexOf('h+=sec("Policy number")', formStart);
 
@@ -119,8 +120,8 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('referenceOn: today()');
     expect(sourcePage).toContain('let automaticDeclarationTerms = [];');
     expect(sourcePage).toContain('function declarationResultForIssuedTerm(entry)');
-    expect(sourcePage).toContain('issued.declarationTerms.slice().sort((a, b) => a.termNumber - b.termNumber || a.revisionNumber - b.revisionNumber)');
-    expect(sourcePage).toContain('recordDocumentForSource(item.sourceId, policy, item.term?.termId)');
+    expect(sourcePage).toContain('issued.declarationTerms.slice().sort((a,b)=>a.termNumber-b.termNumber||a.revisionNumber-b.revisionNumber)');
+    expect(sourcePage).toContain('recordDocumentForSource(item.sourceId,policy,item.term?.termId)');
     expect(sourcePage).toContain("automatic renewal declaration");
     expect(api).toContain("referenceOn: stringValue(body.referenceOn)");
   });
@@ -304,11 +305,11 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('On-screen reference · not a PDF packet document');
     expect(sourcePage).toContain('const PRINTABLE_PDF_IDS=["dec","den","car","can","end","dop","pip_history"]');
     expect(sourcePage).toContain('const NON_PDF_REFERENCE_IDS=["carrier_email","carrier_guide"]');
-    expect(sourcePage).toContain('const candidates = all ? PRINTABLE_PDF_IDS.filter(id => setDocs().includes(id)) : [F.sel];');
-    expect(sourcePage).toContain('const ordered = all ? PRINTABLE_PDF_IDS.filter(id => printable.includes(id)) : printable;');
+    expect(sourcePage).toContain('const candidates=packetDocumentIds(all)');
+    expect(sourcePage).toContain('const ordered=PRINTABLE_PDF_IDS.filter(id=>candidates.includes(id))');
     expect(sourcePage).toContain('This is an email template. Use Copy Email; it is not a printable PDF.');
     expect(sourcePage).toContain('This is an on-screen communication guide. Use Copy guide; it is not a printable PDF.');
-    expect(sourcePage).toContain('email templates and communication scripts are not included in print packets');
+    expect(sourcePage).toContain('Email templates and communication scripts are not included in print packets');
     expect(sourcePage).not.toContain('carrier_email: "');
     expect(sourcePage).not.toContain('carrier_guide: "');
   });
