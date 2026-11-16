@@ -891,8 +891,8 @@ go(location.hash==="#coverage"?"#coverage":"#home");
       id: p.id, pn: p.policyNumber, member: t.memberName || p.memberName || "", mno: t.memberNumber || p.memberNumber || "",
       address: t.memberStreet || t.memberAddress || "", city: t.memberCity || "", cst: t.memberState || p.state || "", zip: t.memberZip || "",
       vehicle: t.vehicle || p.vehicle || "", vin: t.vin || p.vin || "", st: p.state || t.state || "MD",
-      mdPipHistory: t.marylandPipHistory, pip: t.pipWaived ? "w" : "a", um: t.umRejected ? "r" : "a", lease: t.leaseStatus === "terminated" ? "t" : "a",
-      cdate: t.cancellationDate || p.cancelledOn || "", terms: [{ eff: p.effectiveOn, exp: p.expiresOn, term: String(t.termMonths || 6) }],
+      mdPipHistory: t.marylandPipHistory, pip: t.pipWaived ? "w" : "a", um: t.umRejected ? "r" : "a", lease: p.status === "cancelled" || t.leaseStatus === "terminated" ? "t" : "a",
+      cdate: p.status === "cancelled" ? p.cancelledOn || "" : t.cancellationDate || "", terms: [{ eff: p.effectiveOn, exp: p.expiresOn, term: String(t.termMonths || 6) }],
       upd: Date.parse(p.updatedAt || p.createdAt || "") || Date.now(), status: p.status, raw: p,
     };
   };
@@ -1017,13 +1017,32 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     }
     return { policy: existing, declarationTerms: automaticDeclarationTerms, replayed: false };
   }
+  function cancellationOutputAction(policy, cancelledOn) {
+    if(!validMdDate(cancelledOn))throw new Error("A valid lease-termination effective date is required.");
+    if(!policy)throw new Error("Klutch policy not found.");
+    if(policy.status==="cancelled"){
+      if(!validMdDate(policy.cancelledOn)||policy.cancelledOn!==cancelledOn)throw new Error("This policy is already cancelled effective "+(policy.cancelledOn||"an unavailable date")+". Use the recorded cancellation date to reprint its notice; printing cannot change that date.");
+      return "record";
+    }
+    if(policy.status!=="active")throw new Error("Only an active policy can be cancelled, or an already-cancelled policy's recorded notice reprinted.");
+    return "cancel";
+  }
+  async function prepareCancellationOutput(policy, candidates) {
+    if(!candidates.includes("can"))return policy;
+    const current=(await plain(`/policy/${policy.id}`)).policy;
+    cancellationOutputAction(current,F.cdate);
+    serverPolicies.set(current.policyNumber,current);K.pols[current.policyNumber]=asLegacy(current);
+    return current;
+  }
   async function recordDocumentForSource(sourceId, policy, termId) {
     const type = srcDocType[sourceId];
     const snap = snapshot();
     if(sourceId==="pip_history"){snap.formId="MD-PIP-HISTORY";snap.marylandPipHistory=mdPipHistory(F)}
     const claimNumber = clean(F.snap);
-    if (type === "cancellation_notice") {
+    if (type === "cancellation_notice" && cancellationOutputAction(policy,F.cdate) === "cancel") {
       const { result } = await plain("/cancel", { method: "POST", body: JSON.stringify({ policyId: policy.id, cancelledOn: F.cdate, claimNumber: claimNumber || undefined, snapshot: snap }) });
+      const cancelled={...policy,status:"cancelled",cancelledOn:F.cdate};
+      serverPolicies.set(cancelled.policyNumber,cancelled);K.pols[cancelled.policyNumber]=asLegacy(cancelled);
       if (result.klutchClaimNumber) F.kc = result.klutchClaimNumber;
       return result;
     }
@@ -1078,7 +1097,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
         if(candidates.some(id=>!rs[id]?.html))throw new Error("Complete the required base details so every selected document can be previewed before draft printing.");
         const fileName=await outputKlutchHtml(markDraft(candidates.map(id=>rs[id].html).join("")),candidates,true);say("Draft prepared: "+fileName+". No policy or document record was changed.");return;
       }
-      const issued=await persistTermIfNeeded(),policy=issued.policy;rs=preview();
+      const issued=await persistTermIfNeeded(),policy=await prepareCancellationOutput(issued.policy,candidates);rs=preview();
       if(candidates.includes("pip_history")){
         let termEntries=issued.declarationTerms;if(!termEntries.length)termEntries=(await plain(`/policy/${policy.id}`)).policy.termsHistory||[];
         const {pol,claim}=ctx();rs.pip_history=buildDoc("pip_history",pol,claim,{...F,mdPipPolicyTerms:termEntries,mdPipRequireIssuedTerms:true});

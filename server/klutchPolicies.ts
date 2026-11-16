@@ -523,7 +523,7 @@ export async function documentMarylandPipHistory(policyId: number, rawHistory: u
 }
 
 export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn: string; claimNumber?: string; documentSnapshot: Record<string, unknown> }, actor: KlutchActor) {
-  if (!toDateOnly(input.cancelledOn)) throw new Error("A valid lease-termination effective date is required.");
+  if (!isCancellationCalendarDate(input.cancelledOn)) throw new Error("A valid lease-termination effective date is required.");
   const conn = await mysql.createConnection(databaseUrl());
   try {
     await conn.beginTransaction();
@@ -532,18 +532,28 @@ export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn:
     const approvedSnapshot = normalizeKlutchSignoffAliases(input.documentSnapshot, canonical.signoff);
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [input.policyId]);
     const policy = policies[0];
-    if (!policy || policy.status !== "active") throw new Error("Only an active Klutch policy can be cancelled.");
+    if (!policy) throw new Error("Klutch policy not found.");
+    const replayed = policy.status === "cancelled";
+    if (!replayed && policy.status !== "active") throw new Error("Only an active Klutch policy can be cancelled.");
+    if (replayed && (!isCancellationCalendarDate(toDateOnly(policy.cancelled_on)) || input.cancelledOn !== toDateOnly(policy.cancelled_on))) {
+      throw new Error("The cancellation date must match the policy's recorded cancellation date.");
+    }
+    assertCancellationSnapshot(input.documentSnapshot, input.cancelledOn);
+    const term = await cancellationTerm(conn, input.policyId, input.cancelledOn);
     const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
-    const term = await latestTerm(conn, input.policyId);
-    await conn.execute(
-      `UPDATE klutch_policies SET status = 'cancelled', cancelled_on = ?, cancellation_reason = 'Lease terminated', updated_by_user_id = ?, updated_by_name = ? WHERE id = ?`,
-      [input.cancelledOn, actor.userId, actor.name, input.policyId],
-    );
-    await conn.execute(
-      `INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata)
-       VALUES (?, 'cancelled', ?, ?, ?)`,
-      [input.policyId, actor.userId, actor.name, JSON.stringify({ cancelledOn: input.cancelledOn, reason: "Lease terminated", handler: handlerFor(actor) })],
-    );
+    // The locked policy row serializes stale-tab retries. A replay records only
+    // a fresh notice, never changes the original cancellation or issued terms.
+    if (!replayed) {
+      await conn.execute(
+        `UPDATE klutch_policies SET status = 'cancelled', cancelled_on = ?, cancellation_reason = 'Lease terminated', updated_by_user_id = ?, updated_by_name = ? WHERE id = ?`,
+        [input.cancelledOn, actor.userId, actor.name, input.policyId],
+      );
+      await conn.execute(
+        `INSERT INTO klutch_policy_events (policy_id, event_type, actor_user_id, actor_name, metadata)
+         VALUES (?, 'cancelled', ?, ?, ?)`,
+        [input.policyId, actor.userId, actor.name, JSON.stringify({ cancelledOn: input.cancelledOn, reason: "Lease terminated", handler: handlerFor(actor) })],
+      );
+    }
     const handler = handlerFor(actor);
     const [doc] = await conn.execute<mysql.ResultSetHeader>(
       `INSERT INTO klutch_policy_documents
@@ -558,13 +568,43 @@ export async function cancelKlutchPolicy(input: { policyId: number; cancelledOn:
       [input.policyId, actor.userId, actor.name, JSON.stringify({ documentType: "cancellation_notice", documentId: Number(doc.insertId), deliveryStatus: KLUTCH_CREATED_NOT_SENT })],
     );
     await conn.commit();
-    return { documentId: Number(doc.insertId), klutchClaimNumber: claim?.klutch_claim_number ?? null, deliveryStatus: KLUTCH_CREATED_NOT_SENT };
+    return { documentId: Number(doc.insertId), klutchClaimNumber: claim?.klutch_claim_number ?? null, deliveryStatus: KLUTCH_CREATED_NOT_SENT, replayed };
   } catch (error) {
     await conn.rollback();
     throw error;
   } finally {
     await conn.end();
   }
+}
+
+// Cancellation inputs must be exact calendar dates, unlike DATE/timestamp
+// display normalization in toDateOnly. Keep unrelated term workflows unchanged.
+function isCancellationCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000-")) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function assertCancellationSnapshot(snapshot: Record<string, unknown>, cancelledOn: string) {
+  if (!isCancellationCalendarDate(snapshot.cdate) || snapshot.cdate !== cancelledOn) {
+    throw new Error("The cancellation notice date must match the policy's recorded cancellation date.");
+  }
+}
+
+function assertCancellationTerm(term: DbTerm | undefined, cancelledOn: string): asserts term is DbTerm {
+  if (!term || !isCancellationCalendarDate(toDateOnly(term.effective_on)) || !isCancellationCalendarDate(toDateOnly(term.expires_on))
+    || cancelledOn < toDateOnly(term.effective_on) || cancelledOn >= toDateOnly(term.expires_on)) {
+    throw new Error("An issued Klutch policy term containing the cancellation date is required.");
+  }
+}
+
+async function cancellationTerm(conn: mysql.Connection, policyId: number, cancelledOn: string) {
+  const [terms] = await conn.execute<DbTerm[]>(
+    "SELECT * FROM klutch_policy_terms WHERE policy_id = ? AND effective_on <= ? AND expires_on > ? ORDER BY term_number DESC, revision_number DESC LIMIT 1 FOR UPDATE",
+    [policyId, cancelledOn, cancelledOn],
+  );
+  assertCancellationTerm(terms[0], cancelledOn);
+  return terms[0];
 }
 
 export async function recordKlutchDocument(input: {
@@ -584,16 +624,24 @@ export async function recordKlutchDocument(input: {
     const [policies] = await conn.execute<DbPolicy[]>("SELECT * FROM klutch_policies WHERE id = ? FOR UPDATE", [input.policyId]);
     const policy = policies[0];
     if (!policy) throw new Error("Klutch policy not found.");
+    const cancellationDate = input.documentType === "cancellation_notice" ? toDateOnly(policy.cancelled_on) : undefined;
+    if (cancellationDate !== undefined) {
+      if (policy.status !== "cancelled" || !isCancellationCalendarDate(cancellationDate)) {
+        throw new Error("A cancellation notice requires an already cancelled Klutch policy with a recorded cancellation date.");
+      }
+      assertCancellationSnapshot(input.snapshot, cancellationDate);
+    }
     if (input.snapshot.formId === "MD-PIP-HISTORY") {
       if (input.documentType !== "endorsement" || policy.state !== "MD") throw new Error("Maryland PIP history must be recorded as a Maryland endorsement.");
       const recorded = parseTerms(policy.terms).marylandPipHistory;
       if (!recorded || JSON.stringify(parseMarylandPipHistory(recorded)) !== JSON.stringify(parseMarylandPipHistory(input.snapshot.marylandPipHistory))) throw new Error("Confirm and save the matching Maryland PIP history before creating this endorsement.");
     }
-    const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
     const term = input.termId
       ? (await conn.execute<DbTerm[]>("SELECT * FROM klutch_policy_terms WHERE id = ? AND policy_id = ? FOR UPDATE", [input.termId, input.policyId]))[0][0]
-      : await latestTerm(conn, input.policyId);
+      : cancellationDate !== undefined ? await cancellationTerm(conn, input.policyId, cancellationDate) : await latestTerm(conn, input.policyId);
     if (!term) throw new Error("The selected Klutch policy term was not found.");
+    if (cancellationDate !== undefined) assertCancellationTerm(term, cancellationDate);
+    const claim = input.claimNumber?.trim() ? await getClaimForPolicy(conn, input.policyId, input.claimNumber, actor) : null;
     const handler = handlerFor(actor);
     const transactionType = String(parseTerms(term.terms).transactionType ?? "new");
     const [result] = await conn.execute<mysql.ResultSetHeader>(
