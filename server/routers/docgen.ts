@@ -26,6 +26,7 @@ import { lookupClaimForDocgen } from "../db";
 import { describeTeslaCoverageGap, sourceMatchesTeslaVehicle } from "../oemEvidenceLibrary";
 import { analyzeCarrierRebuttalClaimTextMaterial, analyzeCarrierRebuttalUpload } from "../carrierRebuttalAnalysis";
 import { totalReconReceiptSchema } from "../../shared/totalReconReceipt";
+import { analyzeInsuranceDirectRepairUpload, MAX_REPAIR_BYTES } from "../insuranceDirectRepairAnalysis";
 
 function extractText(result: Awaited<ReturnType<typeof invokeLLM>>): string {
   const message = result.choices?.[0]?.message as (Awaited<ReturnType<typeof invokeLLM>>["choices"][number]["message"] & {
@@ -673,6 +674,32 @@ export const docgenRouter = router({
   insuranceDirectDvReviewHistory: protectedProcedure
     .input(z.object({ claimNumber: z.string().trim().min(1).max(96) }))
     .query(async ({ input }) => listInsuranceDirectDvReviews(input.claimNumber)),
+
+  readInsuranceDirectRepair: protectedProcedure
+    .input(z.object({
+      fileBase64: z.string().min(4).max(4 * Math.ceil(MAX_REPAIR_BYTES / 3))
+        .refine(value => {
+          // Linear scan: a repeating-group regex can overflow V8's stack at 20 MiB.
+          if (value.length < 4 || value.length > 4 * Math.ceil(MAX_REPAIR_BYTES / 3) || value.length % 4 || /[^A-Za-z0-9+/=]/.test(value)) return false;
+          const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+          if (value.length / 4 * 3 - padding > MAX_REPAIR_BYTES) return false;
+          // Reject noncanonical padding bits; temporary validation bytes are also erased.
+          const bytes = Buffer.from(value, "base64");
+          try { return bytes.length > 0 && bytes.toString("base64") === value; }
+          finally { bytes.fill(0); }
+        }, "Use canonical base64 for one file no larger than 20 MB."),
+      mimeType: z.string().refine(value => ["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(value), "Use PDF, PNG, JPEG, or WEBP."),
+      fileName: z.string().max(255).optional(),
+    }).strict())
+    .mutation(async ({ input }) => {
+      const bytes = Buffer.from(input.fileBase64, "base64");
+      try {
+        // Filename is untrusted metadata and is deliberately not passed to extraction.
+        return await analyzeInsuranceDirectRepairUpload({ bytes, mimeType: input.mimeType });
+      } catch {
+        return { modelId: "none", error: "The repair document could not be read reliably. Enter repair facts manually.", warnings: [] };
+      } finally { bytes.fill(0); }
+    }),
 
   parseCccValuation: protectedProcedure
     .input(z.object({

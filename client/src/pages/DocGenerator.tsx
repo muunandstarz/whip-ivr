@@ -1,5 +1,7 @@
 import TotalReconReceiptForm from "@/components/TotalReconReceiptForm";
 import PendingClosureForm from "@/components/PendingClosureForm";
+import InsuranceDirectRepairUpload from "@/components/InsuranceDirectRepairUpload";
+import type { RepairPrefillPatch } from "@shared/insuranceDirectRepair";
 import UadDenialFields from "@/components/UadDenialFields";
 import UadDenialDraftPreview from "@/components/UadDenialDraftPreview";
 import { useFreshPdfPreview } from "@/hooks/useFreshPdfPreview";
@@ -6295,6 +6297,19 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   const [dvReportError, setDvReportError] = useState("");
   const dvRequestId = useRef(0);
   const dvReportInput = useRef<HTMLInputElement>(null);
+  const repairReader = trpc.docgen.readInsuranceDirectRepair.useMutation();
+  const applyRepairFields = (patch: RepairPrefillPatch) => {
+    if (patch.claimNumber !== undefined) setClaimNumber(patch.claimNumber);
+    if (patch.vin !== undefined) setVin(patch.vin);
+    if (patch.vehicle !== undefined) setYmm(patch.vehicle);
+    if (patch.dateOfLoss !== undefined) setDateOfLoss(patch.dateOfLoss);
+    if (patch.repairFacility !== undefined) setRepairFacility(patch.repairFacility);
+    if (patch.roNumber !== undefined) setRoNumber(patch.roNumber);
+    if (patch.repairStart !== undefined) setDropOffDate(patch.repairStart);
+    if (patch.returnedToService !== undefined) setPickUpDate(patch.returnedToService);
+    setDirectDraft(current => ({ ...current, ...(patch.repairCompleted !== undefined ? { repairCompleted: patch.repairCompleted } : {}), evidenceConfirmed: false, dopConfirmed: false }));
+    setPreviewPdfUrl(null);
+  };
   useEffect(() => () => { dvRequestId.current += 1; }, []);
   const { data: dvReviewHistory, refetch: refetchDvReviewHistory } = trpc.docgen.insuranceDirectDvReviewHistory.useQuery(
     { claimNumber: claimNumber.trim() }, { enabled: !!claimNumber.trim(), refetchOnWindowFocus: true },
@@ -6536,8 +6551,10 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
         <p className="text-xs leading-5 text-muted-foreground">Use the existing LOU calculator and its normal reimbursement form. Push the LOU record into the active-claim LOU/DV cover letter: the same amount fills the letter, and the full standard LOU form is appended behind it. This is not a subrogation demand. Enter DV manually; attach its report, the estimate, image report, and other exhibits separately.</p>
         <div className="flex flex-wrap gap-2"><Button id="lou-step-calculator" variant={!showDemand ? "default" : "outline"} size="sm" onClick={() => setShowDemand(false)}>1. LOU Calculator</Button><Button id="lou-step-letter" variant={showDemand ? "default" : "outline"} size="sm" onClick={() => setShowDemand(true)}>2. Active-Claim LOU/DV Cover Letter</Button></div>
       </div>
+      <InsuranceDirectRepairUpload current={{ claimNumber, vin, vehicle: ymm, dateOfLoss, repairFacility, roNumber, repairStart: dropOffDate, returnedToService: pickUpDate, repairCompleted: directDraft.repairCompleted || pickUpDate }} analyze={input => repairReader.mutateAsync(input)} onApply={applyRepairFields} />
       {showDemand && <Panel title="Active-Claim LOU/DV Cover Letter" tag="REPAIRS COMPLETED · NOT SUBROGATION">
         <p className="mb-3 text-xs leading-5 text-muted-foreground">Use for direct demands to the responsible carrier after the vehicle has been repaired in real time. Choose loss of use, documented diminished value, or both. The letter demands these items in addition to repair costs; it does not demand repair costs again. No letter is sent automatically.</p>
+        <div className="mb-3 flex flex-wrap items-center gap-2"><Button asChild size="sm" variant="outline"><a id="lou-open-dv-calculator" href="https://dvcalc-unkzbfqd.manus.space/agent-login" target="_blank" rel="noopener noreferrer"><Calculator className="mr-2 h-4 w-4" />Open DV Calculator<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button><p className="text-xs text-muted-foreground">Opens in a new tab. Enter the supported DV amount here manually or apply a reviewed appraisal report; calculator results are not imported automatically.</p></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1"><Label htmlFor="lou-direct-mode" className="text-xs font-semibold">Demand items</Label><select id="lou-direct-mode" className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs" value={directDraft.mode} onChange={(event) => setDirect("mode", event.target.value as InsuranceDirectDraft["mode"])}><option value="lou">Loss of Use only</option><option value="dv">Diminished Value only</option><option value="both">Loss of Use and Diminished Value</option></select></div>
           <Field label="Letter Date" id="lou-letter-date" value={directDraft.letterDate} onChange={(value) => setDirect("letterDate", value)} type="date" required />
@@ -6552,8 +6569,8 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           <p className="text-xs leading-5 text-muted-foreground">Replace every bracketed placeholder with verified claim facts and identify the correspondence, note, or exhibit. Selecting an example does not verify liability or insert it automatically. Repair payment alone is not treated as carrier acceptance.</p>
         </div>
       </Panel>}
-      <Panel title="DV Report · Optional Prefill" tag="CURRENT REPORT ONLY · NO PRESET AMOUNTS">
-        <p className="mb-3 text-xs leading-5 text-muted-foreground">Upload the appraisal to reduce typing, or use the field guide below and enter the values manually. Nothing is applied until you match this report to the claim and review it. The PDF is processed transiently and is not retained; structured review results are recorded for the team.</p>
+      {showDemand && hasDv && <Panel title="DV Appraisal Report · Optional Prefill" tag="APPRAISAL ONLY · NOT A REPAIR BILL">
+        <p className="mb-3 text-xs leading-5 text-muted-foreground">Upload an actual diminished-value appraisal here—not a repair invoice, final bill or estimate. Use the Final Repair Bill / Estimate upload above for repair details. Nothing is applied until you match this report to the claim and review it. The PDF is processed transiently and is not retained; structured review results are recorded for the team.</p>
         <input ref={dvReportInput} id="lou-dv-report-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" className="hidden" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void readDvReport(file); }} />
         <Button id="lou-dv-read-report" size="sm" variant="outline" disabled={dvReportBusy} onClick={() => dvReportInput.current?.click()}>{dvReportBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}{dvReportBusy ? "Reading DV Report…" : "Upload & Read DV Report"}</Button>
         {dvReportError && <p role="alert" className="mt-3 text-xs text-destructive">{dvReportError}</p>}
@@ -6568,7 +6585,7 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           <Button id="lou-dv-apply-report" size="sm" disabled={!dvReportReviewed || !!reportConflicts.length} onClick={applyDvReport}>Apply Reviewed Report to This Form</Button>
         </div>}
         {!!dvReviewHistory?.length && <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">Recent team report reviews for this claim ({dvReviewHistory.length})</summary><div className="mt-2 space-y-2">{dvReviewHistory.slice(0, 5).map(review => <p key={review.id}>Review #{review.id} · {review.createdByName || "Team member"} · {new Date(review.createdAt).toLocaleString()} · {review.status} · {review.modelId}. Review results are retained, not the uploaded report.</p>)}</div></details>}
-      </Panel>
+      </Panel>}
       <Panel title="Claim Information">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field label="Whip Claim No." id="lou-claim" value={claimNumber} onChange={setClaimNumber} placeholder="XXX-1234-123456-123456" required />

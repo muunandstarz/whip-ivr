@@ -40,7 +40,7 @@ function aiReport(): InsuranceDirectDvReport {
   return { reportId: "RPT-SYNTHETIC", reportDate: "2026-10-14", appraiser: "Synthetic Appraiser", methodology: "Comparable vehicle evidence", claimNumber: "TEST-123", claimNumberRole: "unknown", claimantName: "Synthetic Owner", vehicleYear: "2024", vehicleMake: "Tesla", vehicleModel: "Model 3", vin: VIN, dateOfLoss: "2026-09-01", repairFacility: "Synthetic Repair", dvAmount: "249925", adjustedVehicleValue: "3000000", prelossValue: "", postlossValue: "", carfaxReported: null, dvSourcePage: "6", warnings: [] };
 }
 function aiContent(report: Record<string, unknown> = aiReport() as unknown as Record<string, unknown>, extras = {}) {
-  return JSON.stringify({ report, vinCandidates: [VIN], ambiguousVehicle: false, ...extras });
+  return JSON.stringify({ report, vinCandidates: [VIN], ambiguousVehicle: false, documentKind: "dv_appraisal", ...extras });
 }
 function modelResponse(content: string, finish_reason = "stop") {
   return { model: "gpt-5-mini", choices: [{ message: { content }, finish_reason }] };
@@ -64,6 +64,15 @@ beforeEach(() => {
 });
 
 describe("request-only CarSense report extraction", () => {
+  it("rejects a positive final repair bill with a separate repair-upload recommendation and never uses its totals as DV", async () => {
+    const result = await analyze([`Total Recon Synthetic\nFinal Bill\nRO Number: 123\nInvoice Date: 10/14/2026\nLabor: $1,000.00\nGrand Total: $4,782.15\n${filler}`]);
+    expect(result.report).toBeUndefined(); expect(result.error).toContain("separate optional repair bill/estimate reader");
+    expect(result.error).toContain("Invoice totals cannot be used as DV"); expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+  it("allows positive supporting invoices when a genuine CarSense DV opinion is present", async () => {
+    const texts = fixtures(); texts[3] += "\nFinal Repair Invoice\nInvoice Number: SYN-123\nGrand Total: $9,876.54";
+    const result = await analyze(texts); expect(result.report?.dvAmount).toBe("249925"); expect(result.modelId).toBe("deterministic-carsense");
+  });
   it("reads all six pages, records the amount page, and preserves the printed opinion instead of rounded percentage math", async () => {
     const extraction = setPages(fixtures());
     const input = bytes();
@@ -228,6 +237,16 @@ describe("file validation and cleanup", () => {
 });
 
 describe("supported runtime model fallback", () => {
+  it("rejects a vision repair classification even if the model proposes the invoice total as DV", async () => {
+    const input = validPng(); mocks.invoke.mockResolvedValue(modelResponse(aiContent({ ...aiReport(), dvSourcePage: "1", dvAmount: "478215" }, { documentKind: "repair_invoice" })));
+    const result = await analyzeInsuranceDirectDvUpload({ bytes: input, fileName: "untrusted-DV-report.png", mimeType: "image/png" });
+    expect(result.report).toBeUndefined(); expect(result.error).toContain("separate optional repair bill/estimate reader"); expect(input.every(byte => byte === 0)).toBe(true);
+  });
+  it("allows vision DV appraisal classification with mixed supporting pages", async () => {
+    const input = validPng(); mocks.invoke.mockResolvedValue(modelResponse(aiContent({ ...aiReport(), dvSourcePage: "1" }, { documentKind: "dv_appraisal" })));
+    const result = await analyzeInsuranceDirectDvUpload({ bytes: input, fileName: "supporting-invoice.png", mimeType: "image/png" });
+    expect(result.report?.dvAmount).toBe("249925"); expect(input.every(byte => byte === 0)).toBe(true);
+  });
   it("verifies gpt-5-mini at runtime, uses correct tokens and an untrusted-source schema prompt", async () => {
     let request: any;
     mocks.invoke.mockImplementation(async input => { request = structuredClone(input); return modelResponse(aiContent()); });

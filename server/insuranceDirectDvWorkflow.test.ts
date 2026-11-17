@@ -92,4 +92,24 @@ describe("Insurance Direct DV guidance and per-report review", () => {
     expect(standalone).not.toContain("markets[0]");
     expect(client).not.toContain("louMarkets[0]");
   });
+  it("separates repair invoices from the DV appraisal slot and renders DV upload only for a selected DV demand", () => {
+    expect(standalone).toContain("<InsuranceDirectRepairUpload");
+    expect(standalone).toContain("trpc.docgen.readInsuranceDirectRepair.useMutation()");
+    expect(standalone).toContain('{showDemand && hasDv && <Panel title="DV Appraisal Report');
+    expect(standalone).toContain("not a repair invoice, final bill or estimate");
+    expect(standalone.indexOf("<InsuranceDirectRepairUpload")).toBeLessThan(standalone.indexOf('title="Claim Information"'));
+  });
+  it("opens the requested DV calculator from step 2 in a protected new tab without importing its result", () => {
+    expect(standalone).toContain('id="lou-open-dv-calculator" href="https://dvcalc-unkzbfqd.manus.space/agent-login" target="_blank" rel="noopener noreferrer"');
+    expect(standalone).toContain("calculator results are not imported automatically");
+    expect(standalone).not.toContain('event.data?.type === "dv-calculator-result"');
+  });
+  it("applies only reviewed repair fields, never invoice date, amount, DV, daily rate or liability", () => {
+    const apply = standalone.slice(standalone.indexOf("const applyRepairFields ="), standalone.indexOf("useEffect(() => () => { dvRequestId.current"));
+    expect(apply).toContain("setDropOffDate(patch.repairStart)");
+    expect(apply).toContain("setPickUpDate(patch.returnedToService)");
+    expect(apply).toContain("evidenceConfirmed: false, dopConfirmed: false");
+    expect(apply).toContain("setPreviewPdfUrl(null)");
+    expect(apply).not.toMatch(/repairTotal|invoiceDate|dvAmount|setDailyRate|setCustomRate|setMemberDriver|setAdverseCarrier|liabilityStatement/);
+  });
 });
