@@ -27,7 +27,8 @@ import { trpc } from "@/lib/trpc";
 import { getHandlerExtension } from "@shared/handlerExtensions";
 import { useKlutchSignoff } from "@/hooks/useKlutchSignoff";
 import { findLouVehicleRate, louRateSourceLabel } from "@shared/louRates";
-import { buildDvReportReference, dvReportConflicts, DV_REFERENCE_STARTER, type DvReportFacts } from "@shared/insuranceDirectDv";
+import { buildDvReportReference, DV_REFERENCE_STARTER, type DvReportFacts } from "@shared/insuranceDirectDv";
+import InsuranceDirectDvReview from "@/components/InsuranceDirectDvReview";
 import { calculateDirectLou, directDemandItems, directMoney, directRepairDays, initialInsuranceDirectDraft, LIABILITY_STATEMENT_EXAMPLES, validateInsuranceDirectDemand, type InsuranceDirectDraft } from "@shared/insuranceDirect";
 import { createInsuranceDirectPdf } from "@/lib/insuranceDirectPdf";
 import { createStandaloneLouPdf, appendLouPacketAttachment, numberLouPages, type StandaloneLouInput } from "@/lib/standaloneLouPdf";
@@ -6290,13 +6291,34 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   const [directDraft, setDirectDraft] = useState<InsuranceDirectDraft>(initialInsuranceDirectDraft);
   const setDirect = <K extends keyof InsuranceDirectDraft>(key: K, value: InsuranceDirectDraft[K]) => setDirectDraft((current) => ({ ...current, [key]: value }));
   const { hasLou, hasDv } = directDemandItems(directDraft.mode);
-  const [showDemand, setShowDemand] = useState(false);
-  const [dvReportReview, setDvReportReview] = useState<DvReportFacts | null>(null);
-  const [dvReportBusy, setDvReportBusy] = useState(false);
-  const [dvReportReviewed, setDvReportReviewed] = useState(false);
-  const [dvReportError, setDvReportError] = useState("");
-  const dvRequestId = useRef(0);
-  const dvReportInput = useRef<HTMLInputElement>(null);
+  const [workflowStage, setWorkflowStage] = useState<1 | 2 | 3>(1);
+  const [dvRequested, setDvRequested] = useState(false);
+  const [dvReadyForUpload, setDvReadyForUpload] = useState(false);
+  // This verification is deliberately transient. Saved drafts retain inputs, not source approval.
+  const [dvSourceConfirmation, setDvSourceConfirmation] = useState("");
+  const dvSourceKey = JSON.stringify([claimNumber, vin, directDraft.dvAmount, directDraft.dvMethod, directDraft.prelossValue, directDraft.postlossValue]);
+  const dvSourceConfirmed = dvSourceConfirmation === dvSourceKey;
+  useEffect(() => { setDvSourceConfirmation(current => current && current !== dvSourceKey ? "" : current); }, [dvSourceKey]);
+  const showDemand = workflowStage === 3;
+  const setShowDemand = (show: boolean) => setWorkflowStage(show ? 3 : 2);
+  const selectDemandMode = (mode: InsuranceDirectDraft["mode"]) => {
+    setDirect("mode", mode); setDvSourceConfirmation("");
+    if (mode !== "lou" && !dvRequested) setWorkflowStage(1);
+  };
+  const applyDvReport = (report: DvReportFacts) => {
+    const nextClaim = claimNumber.trim() ? claimNumber : report.claimNumberRole === "our" ? report.claimNumber : claimNumber;
+    const nextVin = vin.trim() ? vin : report.vin;
+    if (!claimNumber.trim() && report.claimNumberRole === "our") setClaimNumber(report.claimNumber);
+    if (!vin.trim() && report.vin) setVin(report.vin);
+    if (!ymm.trim()) setYmm([report.vehicleYear, report.vehicleMake, report.vehicleModel].filter(Boolean).join(" "));
+    if (!dateOfLoss.trim() && report.dateOfLoss) setDateOfLoss(report.dateOfLoss);
+    if (!repairFacility.trim() && report.repairFacility) setRepairFacility(report.repairFacility);
+    const reference = buildDvReportReference(report);
+    setDirectDraft(prev => ({ ...prev, dvAmount: report.dvAmount, prelossValue: report.prelossValue || "", postlossValue: report.postlossValue || "", dvMethod: reference, carfaxReported: false, evidenceConfirmed: false, dopConfirmed: false }));
+    setDvSourceConfirmation(JSON.stringify([nextClaim, nextVin, report.dvAmount, reference, report.prelossValue || "", report.postlossValue || ""]));
+    setPreviewPdfUrl(null);
+    toast.success("Completed DV report reviewed and applied. Carrier, liability, repair dates, and enclosures still require confirmation.");
+  };
   const repairReader = trpc.docgen.readInsuranceDirectRepair.useMutation();
   const applyRepairFields = (patch: RepairPrefillPatch) => {
     if (patch.claimNumber !== undefined) setClaimNumber(patch.claimNumber);
@@ -6310,15 +6332,9 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
     setDirectDraft(current => ({ ...current, ...(patch.repairCompleted !== undefined ? { repairCompleted: patch.repairCompleted } : {}), evidenceConfirmed: false, dopConfirmed: false }));
     setPreviewPdfUrl(null);
   };
-  useEffect(() => () => { dvRequestId.current += 1; }, []);
-  const { data: dvReviewHistory, refetch: refetchDvReviewHistory } = trpc.docgen.insuranceDirectDvReviewHistory.useQuery(
-    { claimNumber: claimNumber.trim() }, { enabled: !!claimNumber.trim(), refetchOnWindowFocus: true },
-  );
-  const reportConflicts = dvReportReview ? dvReportConflicts({ claimNumber, vin }, dvReportReview) : [];
-  useEffect(() => { setDvReportReviewed(false); }, [claimNumber, vin, dvReportReview]);
 
   const [liabilityExample, setLiabilityExample] = useState("");
-  useEffect(() => { document.getElementById("lou-workflow-start")?.scrollIntoView({ block: "start" }); }, [showDemand]);
+  useEffect(() => { document.getElementById("lou-workflow-start")?.scrollIntoView({ block: "start" }); }, [workflowStage]);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [vinDecoding, setVinDecoding] = useState(false);
 
@@ -6342,6 +6358,13 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
     if (saved) {
       try {
         const s = JSON.parse(saved);
+        if (s.workflowProgress && typeof s.workflowProgress === "object") {
+          const progress = s.workflowProgress;
+          const requested = progress.dvRequested === true;
+          setDvRequested(requested); setDvReadyForUpload(progress.dvReadyForUpload === true && requested);
+          const stage = [1, 2, 3].includes(progress.stage) ? progress.stage : 1;
+          setWorkflowStage(s.directDraft?.mode !== "lou" && !requested ? 1 : stage);
+        }
         if (s.claimNumber) setClaimNumber(s.claimNumber);
         if (s.adverseClaimNo) setAdverseClaimNo(s.adverseClaimNo);
         if (s.dateOfLoss) setDateOfLoss(s.dateOfLoss);
@@ -6372,11 +6395,11 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
       claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster,
       ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode,
       repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate,
-      louHandlerName, handlerTitle, directDraft,
+      louHandlerName, handlerTitle, directDraft, workflowProgress: { stage: workflowStage, dvRequested, dvReadyForUpload },
     };
     sessionStorage.setItem("lou_calc_state", JSON.stringify(draftData));
     onDraftChange?.(draftData);
-  }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft]);
+  }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft, workflowStage, dvRequested, dvReadyForUpload]);
   // A preview belongs only to the exact current inputs, never a stale prior claim.
   useEffect(() => { setPreviewPdfUrl(null); }, [claimNumber, adverseClaimNo, dateOfLoss, adverseCarrier, adjuster, ymm, vin, memberDriver, registeredOwner, vehicleStatus, vehicleClass, marketCode, repairFacility, roNumber, dropOffDate, pickUpDate, dailyRate, customRate, louHandlerName, handlerTitle, directDraft, showDemand, utilRowsData]);
   useEffect(() => () => { if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl); }, [previewPdfUrl]);
@@ -6413,43 +6436,6 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   // The server resolves reported workbook Occupancy/Utilization values. Never
   // derive a percentage from the display counts here: the source columns have
   // distinct meanings and that error previously produced 10,000% rates.
-  const readDvReport = async (file: File) => {
-    const requestId = ++dvRequestId.current;
-    setDvReportBusy(true); setDvReportError(""); setDvReportReview(null); setDvReportReviewed(false);
-    const payload = new FormData(); payload.append("file", file); payload.append("claimNumber", claimNumber.trim());
-    try {
-      const response = await fetch("/api/insurance-direct/dv-report/analyze", { method: "POST", credentials: "include", body: payload });
-      if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("The report reader is unavailable. Your form was not changed; use the field guide and enter the report amount manually.");
-      const result = await response.json() as { report?: DvReportFacts; error?: string; warnings?: string[] };
-      if (requestId !== dvRequestId.current) return;
-      if (!response.ok || !result.report) throw new Error(result.error || "The report could not be read. Enter the final DV opinion and its source reference manually.");
-      setDvReportReview(result.report);
-      toast.success("Report read. Match the VIN/claim, review the values, then apply only this report.");
-      if (claimNumber.trim()) void refetchDvReviewHistory();
-    } catch (error) {
-      if (requestId === dvRequestId.current) setDvReportError(error instanceof Error ? error.message : "The report could not be read. Enter its facts manually.");
-    } finally {
-      payload.delete("file");
-      if (requestId === dvRequestId.current) setDvReportBusy(false);
-      if (dvReportInput.current) dvReportInput.current.value = "";
-    }
-  };
-  const applyDvReport = () => {
-    if (!dvReportReview || !dvReportReviewed || reportConflicts.length) return;
-    const report = dvReportReview;
-    if (!claimNumber.trim() && report.claimNumberRole === "our") setClaimNumber(report.claimNumber);
-    if (!vin.trim() && report.vin) setVin(report.vin);
-    if (!ymm.trim()) setYmm([report.vehicleYear, report.vehicleMake, report.vehicleModel].filter(Boolean).join(" "));
-    if (!dateOfLoss.trim() && report.dateOfLoss) setDateOfLoss(report.dateOfLoss);
-    if (!repairFacility.trim() && report.repairFacility) setRepairFacility(report.repairFacility);
-    setDirectDraft(prev => ({ ...prev, mode: prev.mode === "dv" ? "dv" : "both",
-      dvAmount: report.dvAmount, prelossValue: report.prelossValue || "", postlossValue: report.postlossValue || "",
-      dvMethod: buildDvReportReference(report), carfaxReported: false, evidenceConfirmed: false, dopConfirmed: false,
-    }));
-    setShowDemand(true);
-    toast.success("Applied this report's DV amount and reference. Carrier, liability, repair dates, and enclosures still require confirmation.");
-  };
-
   const getUtilizationRows = () => {
     if (utilRows.length > 0) {
       return utilRows.map(r => ({
@@ -6488,12 +6474,16 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
   const directLou = calculateDirectLou({ days, dailyRate: effectiveRate });
   const dvAmount = directMoney(directDraft.dvAmount);
   const directTotal = directMoney((hasLou ? directLou.amount : 0) + (hasDv ? dvAmount : 0));
-  const directErrors = validateInsuranceDirectDemand({ draft: directDraft, claimNumber, carrierClaimNumber: adverseClaimNo, carrier: adverseCarrier, adjuster, dateOfLoss, vehicle: ymm, vin, driver: memberDriver, repairFacility, repairStart: dropOffDate, repairEnd: pickUpDate, handlerName: louHandlerName, handlerTitle, dailyRate: effectiveRate, louError: directLou.error, louAmount: directLou.amount });
+  const claimErrors = validateInsuranceDirectDemand({ draft: directDraft, claimNumber, carrierClaimNumber: adverseClaimNo, carrier: adverseCarrier, adjuster, dateOfLoss, vehicle: ymm, vin, driver: memberDriver, repairFacility, repairStart: dropOffDate, repairEnd: pickUpDate, handlerName: louHandlerName, handlerTitle, dailyRate: effectiveRate, louError: directLou.error, louAmount: directLou.amount });
+
+  const dvCompletionErrors = hasDv && !dvSourceConfirmed ? ["DV is pending or unverified. Upload and explicitly apply the completed report in step 3, or confirm its manual source after a genuine reader failure."] : [];
+  const directErrors = [...dvCompletionErrors, ...claimErrors];
 
   const openDirectDemand = () => {
     if (days <= 0 || effectiveRate <= 0) { toast.error("Enter a valid repair period and daily rate before using LOU in the letter."); return; }
-    if (directDraft.mode === "dv") setDirect("mode", "lou");
+    if (directDraft.mode === "dv") setDirect("mode", "both");
     setPreviewPdfUrl(null);
+    if (hasDv && !dvRequested) { setWorkflowStage(1); toast.info("Request the DV report first, then prepare LOU while it is pending."); return; }
     setShowDemand(true);
     toast.success(`LOU of $${louTotal} carried into the Insurance Direct letter.`);
   };
@@ -6548,15 +6538,36 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
     <div id="lou-workflow-start" className="space-y-4 max-w-4xl">
       <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
         <h2 className="text-base font-semibold">Insurance Direct: Loss of Use</h2>
-        <p className="text-xs leading-5 text-muted-foreground">Use the existing LOU calculator and its normal reimbursement form. Push the LOU record into the active-claim LOU/DV cover letter: the same amount fills the letter, and the full standard LOU form is appended behind it. This is not a subrogation demand. Enter DV manually; attach its report, the estimate, image report, and other exhibits separately.</p>
-        <div className="flex flex-wrap gap-2"><Button id="lou-step-calculator" variant={!showDemand ? "default" : "outline"} size="sm" onClick={() => setShowDemand(false)}>1. LOU Calculator</Button><Button id="lou-step-letter" variant={showDemand ? "default" : "outline"} size="sm" onClick={() => setShowDemand(true)}>2. Active-Claim LOU/DV Cover Letter</Button></div>
+        <p className="text-xs leading-5 text-muted-foreground">Request diminished value first because the report takes time. Prepare loss of use while it is pending, then review the completed DV report and create the active-claim demand. LOU-only skips DV. The full standard LOU form and calculation remain unchanged. This is not a subrogation demand.</p>
+        <div className="space-y-1"><Label htmlFor="lou-direct-mode" className="text-xs font-semibold">Demand items — select before starting</Label><select id="lou-direct-mode" className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs" value={directDraft.mode} onChange={event => selectDemandMode(event.target.value as InsuranceDirectDraft["mode"])}><option value="lou">Loss of Use only — skip DV</option><option value="both">Loss of Use and Diminished Value</option><option value="dv">Diminished Value only</option></select></div>
+        <nav aria-label="Insurance Direct workflow steps" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Button id="lou-step-request" variant={workflowStage === 1 ? "default" : "outline"} size="sm" onClick={() => setWorkflowStage(1)}>1. Start / Request DV</Button>
+          <Button id="lou-step-calculator" variant={workflowStage === 2 ? "default" : "outline"} size="sm" disabled={hasDv && !dvRequested} onClick={() => setWorkflowStage(2)}>2. Prepare LOU</Button>
+          <Button id="lou-step-letter" variant={showDemand ? "default" : "outline"} size="sm" disabled={hasDv && !dvRequested} onClick={() => setShowDemand(true)}>3. Review & Create Demand</Button>
+        </nav>
+        <p id="lou-dv-progress" role="status" className="text-xs font-semibold">DV: {!hasDv ? "Not included — LOU-only" : dvSourceConfirmed ? "Completed report reviewed" : dvRequested ? "Requested—waiting" : "Not started"}{hasDv && dvRequested && !dvSourceConfirmed ? " · Your manual indication only; no automatic monitoring." : ""}</p>
       </div>
+      {workflowStage === 1 && <Panel title="Step 1 · Start / Request Diminished Value" tag="EXTERNAL CALCULATOR">
+        {hasDv ? <div className="space-y-3">
+          <p className="text-xs leading-5 text-muted-foreground">Open the dedicated calculator, sign in, and request the report there first. Keep this tab open; your claim inputs are saved in this browser session. Opening the link does not submit a request or confirm completion. No numbers are transferred automatically.</p>
+          <Button asChild size="sm" variant="outline"><a id="lou-open-dv-calculator" href="https://dvcalc-unkzbfqd.manus.space/agent-login" target="_blank" rel="noopener noreferrer"><Calculator className="mr-2 h-4 w-4" />Open DV Calculator<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>
+          <label className="flex items-start gap-2 text-xs leading-5"><input id="lou-dv-requested" type="checkbox" className="mt-1 shrink-0" checked={dvRequested} onChange={event => { setDvRequested(event.target.checked); if (!event.target.checked) { setDvReadyForUpload(false); setDvSourceConfirmation(""); } }} /><span>I requested the report in the external calculator (or already have a requested report). This is my manual indication, not a verified external status.</span></label>
+          <Button id="lou-start-lou" size="sm" disabled={!dvRequested} onClick={() => setWorkflowStage(directDraft.mode === "dv" ? 3 : 2)}>{directDraft.mode === "dv" ? "Continue to Completed Report Review" : "Continue to LOU While DV Is Pending"}</Button>
+        </div> : <div className="space-y-3"><p className="text-xs leading-5 text-muted-foreground">DV is not included. Skip the external request and completed DV report review; prepare the usual LOU calculation and cover letter.</p><Button id="lou-skip-dv" size="sm" onClick={() => setWorkflowStage(2)}>Skip DV — Prepare LOU</Button></div>}
+      </Panel>}
+      {workflowStage === 2 && <div className="rounded-lg border border-border bg-muted/20 p-4 text-xs leading-5"><strong>Step 2 · Prepare Loss of Use</strong><p>{hasDv ? "DV report requested—waiting on the external calculator. Work on the repair facts, rates, and LOU below while it is pending. When your report is complete, go to step 3 to upload and review it." : "Prepare the LOU record below; no DV report is required."}</p><Button id="lou-report-ready-next" size="sm" variant="outline" className="mt-2" onClick={() => setShowDemand(true)}>{hasDv ? "LOU Prepared — Continue to Report Review" : "Continue to LOU-only Demand"}</Button></div>}
+      {showDemand && hasDv && <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3 text-xs leading-5">
+        <h3 className="text-sm font-semibold">Step 3 · Completed Report & Final Demand</h3>
+        <p>{dvSourceConfirmed ? "Completed DV source reviewed. Finish the claim facts and packet checks below to create the demand." : "DV remains pending or unverified. Return to the external calculator to check it yourself. You can keep working on LOU, but cannot download a final DV demand until its completed source is reviewed."}</p>
+        {!dvReadyForUpload && <Button id="lou-dv-report-ready" size="sm" variant="outline" onClick={() => setDvReadyForUpload(true)}>My Completed DV Report Is Ready — Review It</Button>}
+        <Button size="sm" variant="outline" onClick={() => setWorkflowStage(2)}>Keep Working on LOU</Button>
+      </div>}
+      {showDemand && hasDv && dvReadyForUpload && <InsuranceDirectDvReview current={{ claimNumber, vin, dvAmount: directDraft.dvAmount, dvMethod: directDraft.dvMethod, prelossValue: directDraft.prelossValue, postlossValue: directDraft.postlossValue }} confirmed={dvSourceConfirmed} onApply={applyDvReport} onInvalidate={() => { setDvSourceConfirmation(""); setPreviewPdfUrl(null); }} onManualConfirm={checked => { setDvSourceConfirmation(checked ? dvSourceKey : ""); setDirectDraft(current => ({ ...current, evidenceConfirmed: false, dopConfirmed: false })); }} />}
+      {workflowStage !== 1 && <>
       <InsuranceDirectRepairUpload current={{ claimNumber, vin, vehicle: ymm, dateOfLoss, repairFacility, roNumber, repairStart: dropOffDate, returnedToService: pickUpDate, repairCompleted: directDraft.repairCompleted || pickUpDate }} analyze={input => repairReader.mutateAsync(input)} onApply={applyRepairFields} />
       {showDemand && <Panel title="Active-Claim LOU/DV Cover Letter" tag="REPAIRS COMPLETED · NOT SUBROGATION">
         <p className="mb-3 text-xs leading-5 text-muted-foreground">Use for direct demands to the responsible carrier after the vehicle has been repaired in real time. Choose loss of use, documented diminished value, or both. The letter demands these items in addition to repair costs; it does not demand repair costs again. No letter is sent automatically.</p>
-        <div className="mb-3 flex flex-wrap items-center gap-2"><Button asChild size="sm" variant="outline"><a id="lou-open-dv-calculator" href="https://dvcalc-unkzbfqd.manus.space/agent-login" target="_blank" rel="noopener noreferrer"><Calculator className="mr-2 h-4 w-4" />Open DV Calculator<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button><p className="text-xs text-muted-foreground">Opens in a new tab. Enter the supported DV amount here manually or apply a reviewed appraisal report; calculator results are not imported automatically.</p></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1"><Label htmlFor="lou-direct-mode" className="text-xs font-semibold">Demand items</Label><select id="lou-direct-mode" className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs" value={directDraft.mode} onChange={(event) => setDirect("mode", event.target.value as InsuranceDirectDraft["mode"])}><option value="lou">Loss of Use only</option><option value="dv">Diminished Value only</option><option value="both">Loss of Use and Diminished Value</option></select></div>
           <Field label="Letter Date" id="lou-letter-date" value={directDraft.letterDate} onChange={(value) => setDirect("letterDate", value)} type="date" required />
           <Field label="Their Insured's Name" id="lou-insured" value={directDraft.insuredName} onChange={(value) => setDirect("insuredName", value)} placeholder="Carrier's insured — not the Whip driver" required />
           <Field label="Repair Completed Date" id="lou-completed" value={directDraft.repairCompleted || pickUpDate} onChange={(value) => setDirect("repairCompleted", value)} type="date" required />
@@ -6568,23 +6579,6 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           <TextareaField label="Verified Liability Statement" id="lou-liability" value={directDraft.liabilityStatement} onChange={(value) => setDirect("liabilityStatement", value)} placeholder="State the actual verified position and source. Acceptance wording is only appropriate when documented." rows={3} />
           <p className="text-xs leading-5 text-muted-foreground">Replace every bracketed placeholder with verified claim facts and identify the correspondence, note, or exhibit. Selecting an example does not verify liability or insert it automatically. Repair payment alone is not treated as carrier acceptance.</p>
         </div>
-      </Panel>}
-      {showDemand && hasDv && <Panel title="DV Appraisal Report · Optional Prefill" tag="APPRAISAL ONLY · NOT A REPAIR BILL">
-        <p className="mb-3 text-xs leading-5 text-muted-foreground">Upload an actual diminished-value appraisal here—not a repair invoice, final bill or estimate. Use the Final Repair Bill / Estimate upload above for repair details. Nothing is applied until you match this report to the claim and review it. The PDF is processed transiently and is not retained; structured review results are recorded for the team.</p>
-        <input ref={dvReportInput} id="lou-dv-report-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" className="hidden" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void readDvReport(file); }} />
-        <Button id="lou-dv-read-report" size="sm" variant="outline" disabled={dvReportBusy} onClick={() => dvReportInput.current?.click()}>{dvReportBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}{dvReportBusy ? "Reading DV Report…" : "Upload & Read DV Report"}</Button>
-        {dvReportError && <p role="alert" className="mt-3 text-xs text-destructive">{dvReportError}</p>}
-        {dvReportReview && <div className="mt-3 space-y-3 rounded-md border border-border bg-muted/20 p-3">
-          <div className="grid gap-2 text-xs sm:grid-cols-2"><p><strong>Reported final DV:</strong> ${directMoney(dvReportReview.dvAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><p><strong>Source:</strong> {dvReportReview.dvSourcePage || "Locate final opinion in report"}</p><p><strong>Report:</strong> {dvReportReview.reportId || "Not stated"} · {dvReportReview.reportDate || "Date not stated"}</p><p><strong>Vehicle:</strong> {[dvReportReview.vehicleYear, dvReportReview.vehicleMake, dvReportReview.vehicleModel].filter(Boolean).join(" ") || "Not stated"}</p><p className="break-all"><strong>VIN:</strong> {dvReportReview.vin || "Not stated"}</p><p><strong>Claim:</strong> {dvReportReview.claimNumber || "Not stated"}</p><p><strong>Report claimant:</strong> {dvReportReview.claimantName || "Not stated"} (confirm their role; not automatically the Whip driver or carrier’s insured)</p></div>
-          {dvReportReview.adjustedVehicleValue && <p className="text-xs text-muted-foreground">Adjusted vehicle-value calculation basis: ${directMoney(dvReportReview.adjustedVehicleValue).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. This is not automatically treated as a separate pre-loss/post-repair appraisal pair.</p>}
-          <p className="text-xs">{buildDvReportReference(dvReportReview)}</p>
-          {dvReportReview.carfaxReported === true && <p className="text-xs text-muted-foreground">The appraisal describes a CarFax-reported incident. This does not confirm that a separate CarFax report is enclosed; the enclosure checkbox remains unchecked.</p>}
-          {dvReportReview.warnings.map((warning, index) => <p className="text-xs text-muted-foreground" key={index}>{warning}</p>)}
-          {reportConflicts.map(conflict => <p role="alert" className="text-xs text-destructive" key={conflict}>{conflict}</p>)}
-          <label className="flex items-start gap-2 text-xs leading-5"><Checkbox id="lou-dv-reviewed" checked={dvReportReviewed} disabled={!!reportConflicts.length} onCheckedChange={checked => setDvReportReviewed(checked === true)} /><span>I matched this report's VIN/claim and verified the final DV opinion and source. Apply replaces the DV amount/reference for this form only.</span></label>
-          <Button id="lou-dv-apply-report" size="sm" disabled={!dvReportReviewed || !!reportConflicts.length} onClick={applyDvReport}>Apply Reviewed Report to This Form</Button>
-        </div>}
-        {!!dvReviewHistory?.length && <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">Recent team report reviews for this claim ({dvReviewHistory.length})</summary><div className="mt-2 space-y-2">{dvReviewHistory.slice(0, 5).map(review => <p key={review.id}>Review #{review.id} · {review.createdByName || "Team member"} · {new Date(review.createdAt).toLocaleString()} · {review.status} · {review.modelId}. Review results are retained, not the uploaded report.</p>)}</div></details>}
       </Panel>}
       <Panel title="Claim Information">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -6702,7 +6696,7 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           <p><strong>Where to look:</strong> On a CarSense report, use <strong>Section 4 · Diminished Value Calculation → TOTAL DIMINISHED VALUE</strong>. The total can continue onto the next page. Use that final dollar opinion—not total repair cost, average comparable value, severity score, or the rounded DV percentage.</p>
           <p><strong>What to write:</strong> Name the appraisal company/appraiser, report ID/date, stated method, and the final-opinion section/page. These are in the report header and Section 4/5. Use the editable starter below; replace every bracketed item with this claim's facts.</p>
           <p><strong>Optional values:</strong> Leave pre-loss/post-repair fields blank unless the report expressly states both. Do not manufacture a post-repair value by subtracting DV from an adjusted value. Confirm any separate CarFax enclosure yourself.</p>
-          <div className="flex flex-wrap gap-2"><Button id="lou-dv-use-reference" size="sm" variant="outline" onClick={() => setDirect("dvMethod", DV_REFERENCE_STARTER)}>Use Editable Source Wording</Button><Button id="lou-dv-clear-fields" size="sm" variant="outline" onClick={() => { dvRequestId.current += 1; setDvReportBusy(false); setDvReportError(""); if (dvReportInput.current) dvReportInput.current.value = ""; setDirectDraft(prev => ({ ...prev, dvAmount: "", prelossValue: "", postlossValue: "", dvMethod: "", carfaxReported: false, evidenceConfirmed: false })); setDvReportReview(null); setDvReportReviewed(false); }}>Clear DV Fields</Button></div>
+          <div className="flex flex-wrap gap-2"><Button id="lou-dv-use-reference" size="sm" variant="outline" onClick={() => setDirect("dvMethod", DV_REFERENCE_STARTER)}>Use Editable Source Wording</Button><Button id="lou-dv-clear-fields" size="sm" variant="outline" onClick={() => { setDvSourceConfirmation(""); setDvReadyForUpload(false); setDirectDraft(prev => ({ ...prev, dvAmount: "", prelossValue: "", postlossValue: "", dvMethod: "", carfaxReported: false, evidenceConfirmed: false })); }}>Clear DV Fields</Button></div>
         </div>
         <Field label="Report-Supported DV Demand Amount ($)" id="lou-dv-amount" value={directDraft.dvAmount} onChange={(value) => setDirect("dvAmount", value)} type="number" required />
         <details className="mt-3"><summary className="cursor-pointer text-xs font-medium">Optional appraised values · only if both are expressly stated</summary><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
@@ -6732,8 +6726,8 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
       {/* Direct-insurance summary: distinct from the unchanged subrogation handoff. */}
       {!showDemand && <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
         <div><div className="text-xs font-semibold text-muted-foreground uppercase">Standalone LOU Calculator — Total</div><div id="lou-calculator-total" className="text-3xl font-bold">${louTotal}</div><p className="text-xs text-muted-foreground">{days} days × ${effectiveRate.toFixed(2)}/day = ${louTotal}</p></div>
-        <div className="flex flex-wrap gap-2"><Button id="lou-use-in-letter" size="sm" onClick={openDirectDemand}>Push LOU to Active-Claim Cover Letter</Button><Button variant="outline" size="sm" onClick={() => { setDirect("mode", "dv"); setShowDemand(true); }}>Build DV-only Letter</Button><Button id="lou-preview-form" variant="outline" size="sm" onClick={() => handleStandaloneLou(false)}>Preview LOU Form</Button><Button id="lou-download-form" variant="outline" size="sm" onClick={() => handleStandaloneLou()}>Download LOU Form</Button></div>
-        <p className="text-xs text-muted-foreground">The usual LOU form can be previewed or downloaded on its own. Push this record to step 2 to fill the cover letter and automatically append that same LOU form. There is no Subro handoff in this active-claim workflow.</p>
+        <div className="flex flex-wrap gap-2"><Button id="lou-use-in-letter" size="sm" onClick={openDirectDemand}>Push LOU to Active-Claim Cover Letter</Button><Button variant="outline" size="sm" onClick={() => { selectDemandMode("dv"); if (dvRequested) setShowDemand(true); }}>Build DV-only Letter</Button><Button id="lou-preview-form" variant="outline" size="sm" onClick={() => handleStandaloneLou(false)}>Preview LOU Form</Button><Button id="lou-download-form" variant="outline" size="sm" onClick={() => handleStandaloneLou()}>Download LOU Form</Button></div>
+        <p className="text-xs text-muted-foreground">The usual LOU form can be previewed or downloaded on its own. Push this record to step 3 to fill the cover letter and automatically append that same LOU form. There is no Subro handoff in this active-claim workflow.</p>
       </div>}
       {showDemand && <div className="p-4 rounded-xl border border-border bg-muted/20">
         <div className="flex flex-wrap gap-4 items-center justify-between">
@@ -6746,11 +6740,12 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1.5" onClick={handlePreviewOnly}><Eye className="w-3.5 h-3.5" />Preview Cover Letter + LOU Packet</Button>
-            <Button size="sm" className="gap-1.5 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => handleDownload()}><Download className="w-3.5 h-3.5" />Download Cover Letter + LOU Packet</Button>
+            <Button id="lou-final-download" disabled={hasDv && !dvSourceConfirmed} size="sm" className="gap-1.5 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => handleDownload()}><Download className="w-3.5 h-3.5" />Download Cover Letter + LOU Packet</Button>
           </div>
         </div>
+        <p id="lou-demand-readiness" role="status" className="mt-3 text-xs font-semibold">{directErrors.length ? (hasDv && !dvSourceConfirmed ? "DV pending / source unverified — final demand blocked" : "Complete the remaining claim and packet checks") : "Demand ready — verified inputs and packet checks complete"}</p>
         {directErrors.length > 0 && <details className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground"><summary className="cursor-pointer font-semibold text-foreground">Complete before generating — {directErrors.length} remaining checks</summary><ul className="mt-2 list-disc pl-4 space-y-1">{directErrors.map((error) => <li key={error}>{error}</li>)}</ul></details>}
-        <div className="mt-3 rounded-md border border-border bg-background p-3 text-xs leading-5"><strong>Packet order:</strong> active-claim cover letter{hasLou ? " → full Loss of Use / Rental Reimbursement Request → its monthly utilization and supporting basis" : " (DV only; no LOU form)"}. <strong>Attach separately:</strong> {hasDv ? "DV appraisal/report, " : ""}repair estimate/final bill, image report, applicable fleet logs, Direction of Pay/ownership notice, and any additional claim exhibits. These external documents are not created, uploaded, or embedded by this form.</div>
+        <div className="mt-3 rounded-md border border-border bg-background p-3 text-xs leading-5"><strong>Packet order:</strong> active-claim cover letter{hasLou ? " → full Loss of Use / Rental Reimbursement Request → its monthly utilization and supporting basis" : " (DV only; no LOU form)"}. <strong>Attach separately:</strong> {hasDv ? "DV appraisal/report, " : ""}repair estimate/final bill, image report, applicable fleet logs, Direction of Pay/ownership notice, and any additional claim exhibits. Source exhibits are not created or embedded in the packet; completed DV uploads are used only for review by the report reader.</div>
       </div>}
 
       {/* Monthly Fleet Utilization Preview */}
@@ -6799,6 +6794,7 @@ function LOUCalculatorTab({ initialDraft, onDraftChange }: { initialDraft?: Reco
         
         onPreview={showDemand ? handlePreviewOnly : () => handleStandaloneLou(false)}/>
       )}
+      </>}
     </div>
   );
 }

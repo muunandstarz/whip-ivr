@@ -33,6 +33,27 @@ vi.mock("jspdf", () => ({
 let dispose: (() => void) | undefined;
 let canvases: HTMLCanvasElement[];
 let downloads: Array<{ connected: boolean; fileName: string; href: string }>;
+const originalDocumentFonts = Object.getOwnPropertyDescriptor(
+  document,
+  "fonts"
+);
+
+function mockFontSet(doc: Document, faces: FontFace[] = []) {
+  const registered = new Set(faces);
+  const fonts = {
+    ready: Promise.resolve(),
+    forEach: (visit: (face: FontFace) => void) => registered.forEach(visit),
+    has: vi.fn((face: FontFace) => registered.has(face)),
+    add: vi.fn((face: FontFace) => registered.add(face)),
+    delete: vi.fn((face: FontFace) => registered.delete(face)),
+  };
+  Object.defineProperty(doc, "fonts", { value: fonts, configurable: true });
+  return { fonts, registered };
+}
+
+function loadedFace(weight = "400") {
+  return { family: "SS", weight, status: "loaded" } as FontFace;
+}
 
 beforeEach(() => {
   document.title = "Whip Knowledge Base";
@@ -71,6 +92,9 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   document.body.replaceChildren();
+  if (originalDocumentFonts)
+    Object.defineProperty(document, "fonts", originalDocumentFonts);
+  else delete (document as Partial<Document>).fonts;
 });
 
 function preparedDocument(pageCount = 2) {
@@ -236,6 +260,142 @@ describe("Klutch capture boundaries and clone geometry", () => {
       live.querySelector<HTMLElement>("#allroot .sheet")!.style.transform
     ).toBe("scale(.5)");
     expect(clone.getElementById("outside")!.style.transform).toBe("");
+  });
+});
+
+describe("Klutch canvas font-document regressions", () => {
+  it("registers all exact loaded iframe faces in the renderer realm for every page, without changing declaration styles or the frame font set", async () => {
+    const doc = preparedDocument();
+    doc
+      .querySelector(".sheet")!
+      .setAttribute(
+        "style",
+        'font-family:"SS",Arial;font-size:12.5px;letter-spacing:normal'
+      );
+    const before = doc.body.innerHTML;
+    const faces = [loadedFace("400"), loadedFace("600"), loadedFace("700")];
+    const pending = { family: "Other", status: "unloaded" } as FontFace;
+    const frame = mockFontSet(doc, [...faces, pending]);
+    const host = mockFontSet(document);
+    const capture = renderer.capture.getMockImplementation()!;
+    renderer.capture.mockImplementation(async (...args) => {
+      expect([...host.registered]).toEqual(faces);
+      return capture(...args);
+    });
+    await exportKlutchPdf(doc, "Klutch-Policy.pdf", "allroot");
+    expect(host.fonts.add.mock.calls).toEqual(faces.map(face => [face]));
+    expect(host.fonts.delete.mock.calls).toEqual(faces.map(face => [face]));
+    expect(host.registered.size).toBe(0);
+    expect([...frame.registered]).toEqual([...faces, pending]);
+    expect(frame.fonts.add).not.toHaveBeenCalled();
+    expect(frame.fonts.delete).not.toHaveBeenCalled();
+    expect(doc.body.innerHTML).toBe(before);
+  });
+  it("preserves existing host registrations and uses the import realm rather than a different download document", async () => {
+    const doc = preparedDocument(1);
+    const existing = loadedFace();
+    const acquired = loadedFace("700");
+    mockFontSet(doc, [existing, acquired]);
+    const host = mockFontSet(document, [existing]);
+    const downloadDocument =
+      document.implementation.createHTMLDocument("Download");
+    const other = mockFontSet(downloadDocument);
+    await exportKlutchPdf(
+      doc,
+      "Klutch-Policy.pdf",
+      "allroot",
+      downloadDocument
+    );
+    expect(host.fonts.add.mock.calls).toEqual([[acquired]]);
+    expect(host.fonts.delete.mock.calls).toEqual([[acquired]]);
+    expect([...host.registered]).toEqual([existing]);
+    expect(other.fonts.add).not.toHaveBeenCalled();
+    expect(other.fonts.delete).not.toHaveBeenCalled();
+  });
+  it.each(["capture", "encode", "download", "cancel"])(
+    "releases renderer fonts after %s failure without touching frame fonts",
+    async failure => {
+      const doc = preparedDocument(1);
+      const face = loadedFace();
+      const frame = mockFontSet(doc, [face]);
+      const host = mockFontSet(document);
+      let active = true;
+      if (failure === "capture")
+        renderer.capture.mockRejectedValueOnce(new Error("Capture failed"));
+      if (failure === "encode")
+        renderer.addImage.mockImplementationOnce(() => {
+          throw new Error("Encode failed");
+        });
+      if (failure === "download")
+        vi.mocked(HTMLAnchorElement.prototype.click).mockImplementationOnce(
+          () => {
+            throw new Error("Click failed");
+          }
+        );
+      if (failure === "cancel") {
+        const capture = renderer.capture.getMockImplementation()!;
+        renderer.capture.mockImplementationOnce(async (...args) => {
+          active = false;
+          return capture(...args);
+        });
+      }
+      await expect(
+        exportKlutchPdf(
+          doc,
+          "Klutch-Policy.pdf",
+          "allroot",
+          document,
+          () => active
+        )
+      ).rejects.toThrow();
+      expect(host.registered.size).toBe(0);
+      expect(host.fonts.delete.mock.calls).toEqual([[face]]);
+      expect(frame.registered.has(face)).toBe(true);
+    }
+  );
+  it("keeps shared faces until the last overlapping export settles", async () => {
+    const doc = preparedDocument(1);
+    const face = loadedFace();
+    mockFontSet(doc, [face]);
+    const host = mockFontSet(document);
+    const finish: Array<() => void> = [];
+    const capture = renderer.capture.getMockImplementation()!;
+    renderer.capture.mockImplementation(async (...args) => {
+      await new Promise<void>(resolve => finish.push(resolve));
+      expect(host.registered.has(face)).toBe(true);
+      return capture(...args);
+    });
+    const first = exportKlutchPdf(doc, "Klutch-One.pdf", "allroot");
+    await vi.waitFor(() => expect(finish).toHaveLength(1));
+    const second = exportKlutchPdf(doc, "Klutch-Two.pdf", "allroot");
+    await vi.waitFor(() => expect(finish).toHaveLength(2));
+    expect(host.fonts.add.mock.calls).toEqual([[face]]);
+    finish[0]();
+    await first;
+    expect(host.fonts.delete).not.toHaveBeenCalled();
+    expect(host.registered.has(face)).toBe(true);
+    finish[1]();
+    await second;
+    expect(host.fonts.delete.mock.calls).toEqual([[face]]);
+    expect(host.registered.size).toBe(0);
+  });
+  it("rolls back earlier registrations if adding a later face fails", async () => {
+    const doc = preparedDocument(1);
+    const first = loadedFace();
+    const second = loadedFace("700");
+    mockFontSet(doc, [first, second]);
+    const host = mockFontSet(document);
+    host.fonts.add.mockImplementationOnce(face => host.registered.add(face));
+    host.fonts.add.mockImplementationOnce(() => {
+      throw new Error("Font registration failed");
+    });
+    await expect(
+      exportKlutchPdf(doc, "Klutch-Policy.pdf", "allroot")
+    ).rejects.toThrow("Font registration failed");
+    expect(host.registered.size).toBe(0);
+    expect(host.fonts.delete.mock.calls).toEqual([[first]]);
+    expect(renderer.capture).not.toHaveBeenCalled();
+    expect(downloads).toEqual([]);
   });
 });
 

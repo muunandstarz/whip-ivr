@@ -47,8 +47,11 @@ describe("Insurance Direct standalone Loss of Use calculator and evidence", () =
     expect(renderer).not.toContain("adjusted by the fleet utilization rate");
   });
 
-  it("starts with an independent calculator and carries its total into the uploaded letter form", () => {
-    expect(standalone).toContain("const [showDemand, setShowDemand] = useState(false)");
+  it("retains an independent LOU preparation stage and carries its total into the final letter after optional DV review", () => {
+    expect(standalone).toContain("const [workflowStage, setWorkflowStage] = useState<1 | 2 | 3>(1)");
+    expect(standalone).toContain("const showDemand = workflowStage === 3");
+    expect(standalone).toContain("setWorkflowStage(show ? 3 : 2)");
+    expect(standalone).toContain('id="lou-skip-dv"');
     expect(standalone).toContain('id="lou-calculator-total"');
     expect(standalone).toContain('id="lou-use-in-letter"');
     expect(standalone).toContain("Push LOU to Active-Claim Cover Letter");

@@ -6,6 +6,7 @@ import { buildDvReportReference, dvReportConflicts, dvReportToDollarFacts, DV_RE
 const read = (path: string) => readFileSync(path, "utf8");
 const client = read("client/src/pages/DocGenerator.tsx");
 const standalone = client.slice(client.indexOf("function LOUCalculatorTab("), client.indexOf("// ─── Tab: Medical Bill Review"));
+const review = read("client/src/components/InsuranceDirectDvReview.tsx");
 const api = read("server/insuranceDirectDvApi.ts");
 const schema = read("drizzle/schema.ts");
 const router = read("server/routers/docgen.ts");
@@ -44,20 +45,17 @@ describe("Insurance Direct DV guidance and per-report review", () => {
     expect(dvReportConflicts({ claimNumber: "OTHER-CLAIM", vin: "" }, { ...report, claimNumberRole: "unknown" })).toEqual([]);
     expect(dvReportConflicts({ claimNumber: "", vin: "" }, report)).toEqual([]);
   });
-  it("requires review/apply and keeps unrelated liability, driver/insured and enclosure facts out of automatic prefill", () => {
-    expect(standalone).toContain("!dvReportReviewed || reportConflicts.length");
-    const apply = standalone.slice(standalone.indexOf("const applyDvReport ="), standalone.indexOf("const getUtilizationRows ="));
-    expect(apply).toContain("dvAmount: report.dvAmount");
-    expect(apply).toContain('prelossValue: report.prelossValue || ""');
-    expect(apply).toContain('postlossValue: report.postlossValue || ""');
-    expect(apply).toContain("carfaxReported: false");
-    expect(apply).not.toContain("setMemberDriver");
-    expect(apply).not.toContain("insuredName:");
-    expect(apply).not.toContain("liabilityStatement:");
-    expect(apply).not.toContain("setAdverseCarrier");
-    expect(apply).not.toContain("setDropOffDate");
-    expect(standalone).toContain("dvRequestId.current += 1");
-    expect(standalone).toContain("payload.delete(\"file\")");
+  it("keeps manual DV fields editable, but final included DV requires reviewed completed-source approval", () => {
+    expect(standalone).toContain('id="lou-dv-amount" value={directDraft.dvAmount}');
+    expect(standalone).toContain('setDirect("dvAmount", value)');
+    expect(standalone).toContain('id="lou-dv-clear-fields"');
+    expect(standalone).toContain('const directErrors = [...dvCompletionErrors, ...claimErrors]');
+    expect(standalone).toContain('if (directErrors.length)');
+    expect(standalone).toContain('disabled={hasDv && !dvSourceConfirmed}');
+    expect(standalone).not.toContain("insuranceDirectDvReviewHistory.useQuery");
+    expect(review).toContain('/api/insurance-direct/dv-report/analyze');
+    expect(review).toContain('result.currency !== "USD" || result.amountUnit !== "dollars"');
+    expect(review).not.toContain('dvReportToDollarFacts');
   });
   it("gives precise field-location guidance and rejects unfinished scripted references", () => {
     expect(standalone).toContain("TOTAL DIMINISHED VALUE");
@@ -92,20 +90,57 @@ describe("Insurance Direct DV guidance and per-report review", () => {
     expect(standalone).not.toContain("markets[0]");
     expect(client).not.toContain("louMarkets[0]");
   });
-  it("separates repair invoices from the DV appraisal slot and renders DV upload only for a selected DV demand", () => {
-    expect(standalone).toContain("<InsuranceDirectRepairUpload");
-    expect(standalone).toContain("trpc.docgen.readInsuranceDirectRepair.useMutation()");
-    expect(standalone).toContain('{showDemand && hasDv && <Panel title="DV Appraisal Report');
-    expect(standalone).toContain("not a repair invoice, final bill or estimate");
-    expect(standalone.indexOf("<InsuranceDirectRepairUpload")).toBeLessThan(standalone.indexOf('title="Claim Information"'));
+  it("requests DV first, prepares LOU while waiting and uploads only a completed report in final review", () => {
+    expect(standalone).toContain('useState<1 | 2 | 3>(1)');
+    expect(standalone).toContain('id="lou-step-request"');
+    expect(standalone).toContain('id="lou-step-calculator"');
+    expect(standalone).toContain('id="lou-step-letter"');
+    expect(standalone).toContain('id="lou-dv-requested"');
+    expect(standalone).toContain('disabled={hasDv && !dvRequested}');
+    expect(standalone).toContain('{showDemand && hasDv && dvReadyForUpload && <InsuranceDirectDvReview');
+    expect(standalone).toContain('id="lou-dv-report-ready"');
+    expect(standalone).toContain('Skip DV — Prepare LOU');
+    expect(standalone).toContain('"Requested—waiting" : "Not started"');
+    expect(standalone).toContain('"Completed report reviewed"');
+    expect(standalone).toContain('<InsuranceDirectRepairUpload');
+    expect(standalone).toContain('trpc.docgen.readInsuranceDirectRepair.useMutation()');
+    expect(standalone).not.toContain('id="lou-dv-report-file"');
   });
-  it("opens the requested DV calculator from step 2 in a protected new tab without importing its result", () => {
+  it("opens the exact external calculator in step 1 without pretending that opening requests a report", () => {
     expect(standalone).toContain('id="lou-open-dv-calculator" href="https://dvcalc-unkzbfqd.manus.space/agent-login" target="_blank" rel="noopener noreferrer"');
-    expect(standalone).toContain("calculator results are not imported automatically");
+    expect(standalone.match(/id="lou-open-dv-calculator"/g)).toHaveLength(1);
+    expect(standalone).toContain('Opening the link does not submit a request or confirm completion');
+    expect(standalone).toContain('I requested the report in the external calculator');
     expect(standalone).not.toContain('event.data?.type === "dv-calculator-result"');
+    expect(review).not.toMatch(/setInterval|postMessage|localStorage|sessionStorage/);
+  });
+  it("persists input-only progress without files, report objects or source approval and resets saved evidence checks", () => {
+    expect(standalone).toContain('workflowProgress: { stage: workflowStage, dvRequested, dvReadyForUpload }');
+    const persistence = standalone.slice(standalone.indexOf('const draftData ='), standalone.indexOf('// A preview belongs'));
+    expect(persistence).not.toMatch(/dvSourceConfirmation|dvSourceConfirmed|report:|file:|buffer:/);
+    expect(standalone).toContain('const [dvSourceConfirmation, setDvSourceConfirmation] = useState("")');
+    expect(standalone).toContain('evidenceConfirmed: false, dopConfirmed: false, authorityVerified: false');
+  });
+  it("applies only explicitly reviewed DV and blank report-supported identity facts, never liability, insured or repairs", () => {
+    const apply = standalone.slice(standalone.indexOf('const applyDvReport ='), standalone.indexOf('const repairReader'));
+    expect(apply).toContain('dvAmount: report.dvAmount');
+    expect(apply).toContain('buildDvReportReference(report)');
+    expect(apply).toContain('carfaxReported: false, evidenceConfirmed: false, dopConfirmed: false');
+    expect(apply).toContain('report.claimNumberRole === "our"');
+    expect(apply).not.toMatch(/setDropOffDate|setPickUpDate|setDailyRate|setCustomRate|setMemberDriver|setAdverseCarrier|insuredName:|liabilityStatement:|repairCompleted:/);
+    expect(review).toContain('dvReportConflicts(current, report)');
+    expect(review).toContain('disabled={!reviewed || !!conflicts.length}');
+    expect(review).toContain('requestId.current += 1; controller.current?.abort()');
+  });
+  it("offers manual completed-source verification only for genuine report-reader failures, not unconditional bypass", () => {
+    expect(review).toContain('{manualAllowed &&');
+    expect(review).toContain('response.status === 422 || response.status === 500');
+    expect(review).toContain('!sourceRejected');
+    expect(review).toContain('I have the completed DV appraisal, matched its VIN/Whip claim');
+    expect(review).toContain('personally verified the manually entered final DV amount and source reference');
   });
   it("applies only reviewed repair fields, never invoice date, amount, DV, daily rate or liability", () => {
-    const apply = standalone.slice(standalone.indexOf("const applyRepairFields ="), standalone.indexOf("useEffect(() => () => { dvRequestId.current"));
+    const apply = standalone.slice(standalone.indexOf("const applyRepairFields ="), standalone.indexOf('const [liabilityExample'));
     expect(apply).toContain("setDropOffDate(patch.repairStart)");
     expect(apply).toContain("setPickUpDate(patch.returnedToService)");
     expect(apply).toContain("evidenceConfirmed: false, dopConfirmed: false");

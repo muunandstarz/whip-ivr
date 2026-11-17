@@ -22,6 +22,20 @@ describe("Klutch carrier-style print frame", () => {
     expect(rule(".ltr")).toContain("font-size:13.3px;line-height:1.45");
     expect(rule(".dec .two>div")).toContain("min-width:0");
   });
+  it("reduces only the denial letter body by exactly one point, leaving page/logo/footer and other documents unchanged", () => {
+    expect(rule(".ltr.klutch-denial")).toBe("font-size:calc(13.3px - 1pt)");
+    const renderer = html.slice(html.indexOf("function buildDoc("), html.indexOf("function ask("));
+    const denial = renderer.slice(renderer.indexOf('if(d==="den")'), renderer.indexOf('if(d==="car")'));
+    const carrier = renderer.slice(renderer.indexOf('if(d==="car")'), renderer.indexOf('if(d==="can")'));
+    expect(denial).toContain('<div class="ltr klutch-denial">');
+    expect(carrier).toContain('<div class="ltr">');
+    expect(carrier).not.toContain("klutch-denial");
+    expect(rule(".ltr+.foot")).toContain("font-size:10px");
+    expect(rule(".ltr img.lg")).toContain("height:53px");
+    expect(rule(".end")).toContain("font-size:12.6px");
+    expect(denial).toContain("Klutch Insurance Company denies liability and physical damage coverage");
+    expect(denial).toContain('${P("Dear "+esc(nm)+":")}');
+  });
   it("recovers room from inter-section and field gaps while retaining all PIP date and source disclosures", () => {
     expect(rule(".pip-history-doc .pip-doc-ref")).toContain("margin:0 0 16px");
     expect(rule(".pip-history-doc .pip-term")).toContain("padding:12px 14px");

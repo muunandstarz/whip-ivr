@@ -2,6 +2,49 @@ const ROOT_ID = "allroot";
 const SHEET_WIDTH = 816;
 const SHEET_HEIGHT = 1056;
 const ASSET_TIMEOUT_MS = 15_000;
+const captureFonts = new WeakMap<Document, Map<FontFace, number>>();
+
+/** html2canvas paints and measures baselines in its import realm's document,
+ * not the iframe/private clone where the embedded document fonts are defined.
+ * Share the already-loaded faces (no fetches or CSS/font substitutions), then
+ * remove only our registrations after the last overlapping local export. */
+function acquireKlutchCaptureFonts(frameDocument: Document): () => void {
+  const rendererDocument = document;
+  if (!frameDocument.fonts || !rendererDocument.fonts) return () => {};
+  const fonts = rendererDocument.fonts;
+  let references = captureFonts.get(rendererDocument);
+  if (!references) {
+    references = new Map();
+    captureFonts.set(rendererDocument, references);
+  }
+  const acquired: FontFace[] = [];
+  const release = () => {
+    for (const face of acquired.splice(0)) {
+      const count = references!.get(face)!;
+      if (count > 1) references!.set(face, count - 1);
+      else {
+        references!.delete(face);
+        fonts.delete(face);
+      }
+    }
+  };
+  try {
+    frameDocument.fonts.forEach(face => {
+      if (face.status !== "loaded") return;
+      const count = references!.get(face);
+      if (count !== undefined) references!.set(face, count + 1);
+      else if (!fonts.has(face)) {
+        fonts.add(face);
+        references!.set(face, 1);
+      } else return; // Never remove a font registered by the host itself.
+      acquired.push(face);
+    });
+    return release;
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
 
 export function isKlutchPdfFileName(value: unknown): value is string {
   return (
@@ -212,45 +255,50 @@ export async function exportKlutchPdf(
     title: fileName.slice(0, -4),
     author: "Klutch Insurance Company",
   });
-  // Sequential captures bound memory usage and preserve the trusted DOM page order.
-  for (let index = 0; index < sheets.length; index++) {
-    const sheet = sheets[index];
-    assertActive();
-    const canvas = await html2canvas(sheet, {
-      scale: 2,
-      width: SHEET_WIDTH,
-      height: SHEET_HEIGHT,
-      windowWidth: SHEET_WIDTH,
-      windowHeight: SHEET_HEIGHT,
-      scrollX: 0,
-      scrollY: 0,
-      backgroundColor: "#ffffff",
-      allowTaint: false,
-      useCORS: true,
-      logging: false,
-      removeContainer: true,
-      onclone: prepareKlutchCaptureClone,
-    });
-    try {
+  const releaseFonts = acquireKlutchCaptureFonts(frameDocument);
+  try {
+    // Sequential captures bound memory usage and preserve the trusted DOM page order.
+    for (let index = 0; index < sheets.length; index++) {
+      const sheet = sheets[index];
       assertActive();
-      if (index > 0) pdf.addPage("letter", "portrait");
-      pdf.addImage(
-        canvas.toDataURL("image/png"),
-        "PNG",
-        0,
-        0,
-        8.5,
-        11,
-        undefined,
-        "FAST"
-      );
-    } finally {
-      canvas.width = 0;
-      canvas.height = 0;
+      const canvas = await html2canvas(sheet, {
+        scale: 2,
+        width: SHEET_WIDTH,
+        height: SHEET_HEIGHT,
+        windowWidth: SHEET_WIDTH,
+        windowHeight: SHEET_HEIGHT,
+        scrollX: 0,
+        scrollY: 0,
+        backgroundColor: "#ffffff",
+        allowTaint: false,
+        useCORS: true,
+        logging: false,
+        removeContainer: true,
+        onclone: prepareKlutchCaptureClone,
+      });
+      try {
+        assertActive();
+        if (index > 0) pdf.addPage("letter", "portrait");
+        pdf.addImage(
+          canvas.toDataURL("image/png"),
+          "PNG",
+          0,
+          0,
+          8.5,
+          11,
+          undefined,
+          "FAST"
+        );
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
     }
+    assertActive();
+    downloadKlutchPdf(pdf.output("blob"), fileName, hostDocument);
+  } finally {
+    releaseFonts();
   }
-  assertActive();
-  downloadKlutchPdf(pdf.output("blob"), fileName, hostDocument);
 }
 
 /** Install on the React host; dispose restores titles and cancels late downloads. */
