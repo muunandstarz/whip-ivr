@@ -25,6 +25,7 @@ export function createRentalHandoffRouter(service: RentalHandoffService) {
   });
   return router({
     session: resolve.query(({ ctx }) => service.session(ctx.rentalActor)),
+    refreshInventory: authenticated.input(z.void()).mutation(({ ctx }) => { requireSameOrigin(ctx.req); return service.refreshInventory(ctx.rentalActor); }),
     connectSharedGmail: authenticated.input(z.void()).mutation(({ ctx }) => {
       requireSameOrigin(ctx.req);
       return service.connectSharedGmail(ctx.rentalActor);

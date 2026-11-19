@@ -918,3 +918,27 @@ describe("Revision-aware autosave", () => {
     );
   });
 });
+
+describe("Read-only FLEET inventory and app-only demo", () => {
+  const fleetVehicle = (extra: Record<string, unknown> = {}) => ({ id: 91, locationId: 0, ymm: "2026 Fictional Sedan", vin: "1HGCM82633A004352", plate: "TEST ONLY", lastOdometer: 0, status: "Available" as const, source: "sheet" as const, sourceAvailable: true, pickupEligible: true, assigned: false, ...extra });
+  it("renders source counts, UNASSIGNED inventory and honest stale errors", async () => {
+    mocks.session.data = { ...session("admin"), vehicles: [fleetVehicle()], inventorySource: { enabled: true, pending: false, updatedAt: 1795125600000, available: 38, excluded: 132, error: "Fleet refresh failed. Displayed sheet inventory is stale." } };
+    await mount(React.createElement(RentalHandoff)); await click(button("Vehicles"));
+    expect(container.textContent).toContain("38 source Available vehicles"); expect(container.textContent).toContain("UNASSIGNED");
+    expect(container.textContent).toContain("Fleet refresh failed"); expect(container.textContent).toContain("Sheet linked"); expect(button("Refresh fleet inventory")).toBeTruthy();
+  });
+  it("offers unassigned vehicles but hides reserved, stale and other-branch selections", async () => {
+    const d = { ...emptyRentalDraft(), locationId: 1 };
+    await mount(React.createElement(Details, { draft:d, update:vi.fn(), locations:[{id:1,name:"Rockville",address:"Test",phone:"555",timezone:"America/New_York",active:true}], vehicles:[fleetVehicle(),fleetVehicle({id:92,assigned:true}),fleetVehicle({id:93,pickupEligible:false}),fleetVehicle({id:94,locationId:2})] as any }));
+    const options = Array.from(container.querySelectorAll("option"));
+    expect(options.some(o => o.value === "91" && o.textContent?.includes("UNASSIGNED — assign here"))).toBe(true);
+    expect(options.some(o => ["92","93","94"].includes(o.value))).toBe(false);
+  });
+  it("labels demo inventory and draft records without restoring Demo rentals", async () => {
+    mocks.session.data = { ...session(), vehicles: [fleetVehicle({source:"demo",isDemo:true,ymm:"2026 Fictional Demo Sedan",vin:"1DEMV0009TA000000"})] };
+    mocks.list.data = [{id:71,status:"Scheduled",revision:1,locationId:1,vehicleId:91,draft:{...emptyRentalDraft(),renterName:"Draft walkthrough"},updatedAt:1795125600000}];
+    await mount(React.createElement(RentalHandoff)); expect(container.textContent).toContain("DEMO ONLY · 2026 Fictional Demo Sedan");
+    await click(button("Vehicles")); expect(container.textContent).toContain("Fictional app-only vehicle"); expect(container.textContent).toContain("final pickup and packet email disabled");
+    expect(container.textContent).not.toContain("Demo rentals");
+  });
+});

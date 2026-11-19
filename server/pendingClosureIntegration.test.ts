@@ -31,7 +31,7 @@ describe("Pending closure reference and integration safety", () => {
     expect(contacts).toContain('id: "pending-closure", label: "Pending Closure Letter"');
     for (const id of ["blank-letterhead", "claimant-contact", "failed-contact", "storage-mitigation"]) expect(contacts).toContain(`id: "${id}"`);
     expect(docgen).toContain('case "pending-closure": return <PendingClosureForm initialDraft={currentFormData} onDraftChange={setCurrentFormData} logoBase64={WHIP_LOGO_B64} />');
-    expect(docgen.match(/\["lou-calculator", "payment-receipt", "denial", "pending-closure"\]/g)).toHaveLength(2);
+    expect(docgen.match(/\["lou-calculator", "payment-receipt", "denial", "pending-closure", "acord-certificate"\]/g)).toHaveLength(2);
   });
   it("keeps email copy-only and exports no reference table or retained PDFs", () => {
     expect(form).toContain('copy(`Subject: ${subject}\\n\\n${body}`, "Email")');

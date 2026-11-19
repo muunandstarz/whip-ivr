@@ -35,6 +35,8 @@ import { createStandaloneLouPdf, appendLouPacketAttachment, numberLouPages, type
 import { jsPDF } from "jspdf";
 import { AlignmentType, BorderStyle, Document as WordDocument, Footer, Header, ImageRun, Packer, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import PipBillReviewWorkflow from "@/components/PipBillReviewWorkflow";
+import { createCoiLayout, coiText } from "@/lib/coiLayout";
+import AcordCertificateBuilder from "@/components/AcordCertificateBuilder";
 import {
   AlertTriangle,
   Brain,
@@ -103,6 +105,7 @@ type DocGenTab =
   | "pip-exhaustion"
   | "pip-bill-review"
   | "lou-calculator"
+  | "acord-certificate"
   | "coi-whip"
   | "coi-klutch"
   | "klutch-policy-declarations"
@@ -340,6 +343,10 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Coverage",
+    items: [{ id: "acord-certificate", label: "ACORD 25 Certificates", icon: Shield }],
+  },
+  {
     label: "Medical Review",
     items: [
       { id: "pip-bill-review", label: "Medical Bill Review", icon: FileText },
@@ -353,7 +360,7 @@ const LEGACY_KLUTCH_TAB_IDS = new Set(["coverage-tnc", "coi-whip", "coi-klutch",
 
 function normalizeDocGeneratorTab(tab: string | null | undefined): DocGenTab {
   if (LEGACY_KLUTCH_TAB_IDS.has(tab ?? "")) return "klutch-policy-documents";
-  const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","pending-closure","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","klutch-policy-documents","dv-calculator"];
+  const valid: DocGenTab[] = ["blank-letterhead","claimant-contact","pending-closure","failed-contact","storage-mitigation","coverage-tnc","denial","damage-denial","ror","release-bi","release-pd","limited-liability-bi","tl-settlement","subro-demand","carrier-rebuttal","payment-receipt","urgently-invoice","pip-exhaustion","pip-bill-review","lou-calculator","klutch-policy-documents","dv-calculator","acord-certificate"];
   return valid.includes(tab as DocGenTab) ? tab as DocGenTab : "blank-letterhead";
 }
 
@@ -7596,255 +7603,97 @@ export function UnifiedCOITab({
     const H = doc.internal.pageSize.getHeight();
     const lm = 12, rm = W - 12;
     const textW = rm - lm;
-    let y = 8;
+    const layout = createCoiLayout(doc, { left: lm, right: rm, start: 8, bottom: H - 16 });
+    const label = (text: string) => coiText(text, 7.5, "bold", "left", 1);
 
     // ── HEADER ──────────────────────────────────────────────────────────────
-    // Left column: logo (constrained to left ~35% to avoid title overlap)
+    // The image/identity band and full-width title are separate measured rows.
+    // Neither the logo nor date/certificate text can occupy the title's band.
+    const y = layout.y;
     if (isKlutch) {
-      // Transparent 1056 x 372px logo contained within the original 40 x 10mm box.
       try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 10 * (1056 / 372), 10); } catch {}
     } else {
-      // Metrocars: MCL logo (inverted, white on dark)
-      try {
-        doc.addImage(MCL_LOGO_B64, "PNG", lm, y + 1, 36, 12);
-      } catch {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.setTextColor(0, 0, 0);
-        doc.text("METROCARS LEASING CORP", lm, y + 5, { maxWidth: 42 });
+      try { doc.addImage(MCL_LOGO_B64, "PNG", lm, y + 1, 36, 12); }
+      catch {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
+        doc.text("METROCARS LEASING CORP", lm, y + 5);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(7.5);
-        doc.setTextColor(80, 80, 80);
         doc.text("Whip Claims Management", lm, y + 9.5);
       }
     }
-
-    // Center: CERTIFICATE OF INSURANCE
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text("CERTIFICATE OF INSURANCE", W / 2, y + 6, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(80, 80, 80);
+    layout.row([[], [
+      coiText("DATE (MM/DD/YYYY)", 7.5, "normal", "right"),
+      coiText(fmtDate(form.subscriptionStartDate), 9, "bold", "right"),
+      coiText("CERTIFICATE NO.", 7.5, "normal", "right"),
+      coiText(form.certNumber || "—", 9, "bold", "right"),
+    ]], { widths: [textW * 0.60, textW * 0.40], border: false, minHeight: 16, gapAfter: 1 });
     const subtitle = isKlutch
       ? "Issued by Klutch Risk Retention Group\nPursuant to Maryland Transportation Article § 17-103"
       : "Issued by the Maryland Motor Vehicle Administration\nPursuant to Maryland Transportation Article § 17-103";
-    doc.text(subtitle, W / 2, y + 11, { align: "center" });
+    layout.row([[
+      coiText("CERTIFICATE OF INSURANCE", 14, "bold", "center", 1),
+      coiText(subtitle, 7.5, "normal", "center"),
+    ]], { border: false, gapAfter: 2 });
 
-    // Right: Date + Cert No
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-    doc.text("DATE (MM/DD/YYYY)", rm, y + 3, { align: "right" });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(0, 0, 0);
-    doc.text(fmtDate(form.subscriptionStartDate) || new Date().toLocaleDateString("en-US"), rm, y + 7, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-    doc.text("CERTIFICATE NO.", rm, y + 11, { align: "right" });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(0, 0, 0);
-    doc.text(form.certNumber || "—", rm, y + 15, { align: "right" });
-
-    y += 20;
-    // Header bottom border
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.8);
-    doc.line(lm, y, rm, y);
-    y += 4;
-
-    // ── DISCLAIMER BOX ──────────────────────────────────────────────────────
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.6);
-    doc.rect(lm, y, textW, 14);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(0, 0, 0);
+    // ── DISCLAIMER / IMPORTANT ──────────────────────────────────────────────
     const disclaimerText = isKlutch
       ? "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE POLICY ISSUED BY KLUTCH RISK RETENTION GROUP. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE POLICY."
       : "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE SELF-INSURANCE PROGRAM. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE PROGRAM.";
-    doc.text(disclaimerText, lm + 2, y + 4, { maxWidth: textW - 5 });
-    y += 16;
-
-    // ── IMPORTANT BOX ───────────────────────────────────────────────────────
-    doc.setDrawColor(150, 150, 150);
-    doc.setLineWidth(0.3);
-    doc.rect(lm, y, textW, 10);
-    doc.setFontSize(6.5);
-    doc.setTextColor(60, 60, 60);
+    layout.row([[coiText(disclaimerText, 7.5)]], { gapAfter: 2 });
     const importantText = `IMPORTANT: If coverage under this certificate is extended to an ADDITIONAL INSURED, applicable endorsement provisions apply. If SUBROGATION IS WAIVED, certain conditions may require an endorsement. This certificate does not confer rights to the certificate holder beyond those provided by the ${isKlutch ? "policy issued by Klutch Risk Retention Group" : "self-insurance program"}.`;
-    doc.text(importantText, lm + 2, y + 3.5, { maxWidth: textW - 4 });
-    y += 12;
+    layout.row([[coiText(importantText, 7.5)]], { gapAfter: 3 });
 
-    // ── PRODUCER / CONTACT / INSURER GRID ───────────────────────────────────
-    const col1W = textW * 0.35;
-    const col2W = textW * 0.30;
-    const col3W = textW * 0.35;
-    const gridH = 22;
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.3);
-    doc.rect(lm, y, textW, gridH);
-    doc.line(lm + col1W, y, lm + col1W, y + gridH);
-    doc.line(lm + col1W + col2W, y, lm + col1W + col2W, y + gridH);
+    // ── PRODUCER / CONTACT / INSURER GRID ────────────────────────────────────
+    const col1W = textW * 0.35, col2W = textW * 0.30, col3W = textW * 0.35;
+    const producer = isKlutch
+      ? "Klutch Risk Retention Group\n424 Church Street, Suite 800\nNashville, Tennessee 37219\nclaims@klutchinsurance.com"
+      : "Metrocars Leasing Corp\nP.O. Box 10622\nRockville, MD 20850\n(855) 906-5949";
+    const contact = isKlutch
+      ? "EMAIL: claims@klutchinsurance.com\nFAX: 877-890-0531"
+      : "PHONE: (855) 906-5949\nFAX: 877-890-0531\nEMAIL: claims@drivewhip.com";
+    layout.row([
+      [label("PRODUCER / CARRIER"), coiText(producer), coiText(`CERT. NO: ${form.certNumber || "—"}`)],
+      [label("CONTACT"), coiText(contact)],
+      [label("INSURER(S) AFFORDING COVERAGE"), coiText("INSURER A:", 7.5, "bold"),
+        coiText(isKlutch ? "Klutch Risk Retention Group · NAIC 17966" : "Maryland MVA / Self-Insured"),
+        coiText(`CERT. NO: ${form.certNumber || "—"}`), coiText("INSURER B:\nINSURER C:\nINSURER D:", 7.5)],
+    ], { widths: [col1W, col2W, col3W], gapAfter: 3 });
 
-    // Col 1: Producer
-    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("PRODUCER / CARRIER", lm + 2, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-    if (isKlutch) {
-      doc.text("Klutch Risk Retention Group", lm + 2, y + 7);
-      doc.text("424 Church Street, Suite 800", lm + 2, y + 10.5);
-      doc.text("Nashville, Tennessee 37219", lm + 2, y + 14);
-      doc.text("claims@klutchinsurance.com", lm + 2, y + 17.5);
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("CERT. NO:", lm + 2, y + 21);
-      doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", lm + 14, y + 21);
-    } else {
-      doc.text("Metrocars Leasing Corp", lm + 2, y + 7);
-      doc.text("P.O. Box 10622", lm + 2, y + 10.5);
-      doc.text("Rockville, MD 20850", lm + 2, y + 14);
-      doc.text("(855) 906-5949", lm + 2, y + 17.5);
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("CERT. NO:", lm + 2, y + 21);
-      doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-      doc.text(form.certNumber || "—", lm + 14, y + 21);
-    }
-
-    // Col 2: Contact
-    const c2x = lm + col1W + 2;
-    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("CONTACT", c2x, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-    if (isKlutch) {
-      doc.text("EMAIL: claims@klutchinsurance.com", c2x, y + 7);
-      doc.text("FAX: 877-890-0531", c2x, y + 10.5);
-    } else {
-      doc.text("PHONE: (855) 906-5949", c2x, y + 7);
-      doc.text("FAX: 877-890-0531", c2x, y + 10.5);
-      doc.text("EMAIL: claims@drivewhip.com", c2x, y + 14);
-    }
-
-    // Col 3: Insurer
-    const c3x = lm + col1W + col2W + 2;
-    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("INSURER(S) AFFORDING COVERAGE", c3x, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-    if (isKlutch) {
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("INSURER A:", c3x, y + 7);
-      doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-      doc.text("Klutch Risk Retention Group · NAIC 17966", c3x + 14, y + 7);
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("CERT. NO:", c3x, y + 10.5);
-      doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", c3x + 14, y + 10.5);
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("INSURER B:", c3x, y + 14);
-      doc.text("INSURER C:", c3x, y + 17.5);
-      doc.text("INSURER D:", c3x, y + 21);
-    } else {
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("INSURER A:", c3x, y + 7);
-      doc.setTextColor(0, 0, 0); doc.setFontSize(7.5);
-      doc.text("Maryland MVA / Self-Insured", c3x + 14, y + 7);
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("CERT. NO:", c3x, y + 10.5);
-      doc.setTextColor(0, 0, 0); doc.text(form.certNumber || "—", c3x + 14, y + 10.5);
-      doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-      doc.text("INSURER B:", c3x, y + 14);
-      doc.text("INSURER C:", c3x, y + 17.5);
-      doc.text("INSURER D:", c3x, y + 21);
-    }
-    y += gridH + 3;
-
-    // ── INSURED SECTION ─────────────────────────────────────────────────────
-    // Metrocars Leasing Corp is shown as additional insured and the member is shown as renter/named operator.
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.3);
-    const insuredH = 24;
-    doc.rect(lm, y, textW, insuredH);
-    // Left cell: Metrocars remains the named insured; the renter is emphasized as additional named insured.
-    doc.line(lm + textW * 0.5, y, lm + textW * 0.5, y + insuredH);
-    doc.setFontSize(6.1); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("NAMED INSURED", lm + 2, y + 3.2);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-    doc.text("Metrocars Leasing Corp", lm + 2, y + 6.6);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-    doc.text("ADDITIONAL NAMED INSURED / RENTER", lm + 2, y + 10.2);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9.6); doc.setTextColor(0, 0, 0);
-    doc.text(form.namedOperator || "—", lm + 2, y + 14.7);
+    // ── INSURED SECTION ──────────────────────────────────────────────────────
+    // Metrocars remains named insured; renter/vehicle/VIN never cross the midpoint.
     const vehicleStr = [form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ") || "—";
-    doc.setFont("helvetica", "normal"); doc.setFontSize(6.6); doc.setTextColor(0, 0, 0);
-    doc.text(`RENTAL VEHICLE: ${vehicleStr}  ·  VIN: ${form.vin || "—"}`, lm + 2, y + 18.6);
-    if (form.plateNumber) doc.text(`Plate: ${form.plateNumber}`, lm + 2, y + 22);
-
-    // Right cell: coverage period + state
-    const rx = lm + textW * 0.5 + 2;
-    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("COVERAGE PERIOD", rx, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
     const periodStr = (coverageStartDate && form.expirationDate)
       ? `${fmtDateLong(coverageStartDate)} — ${fmtDateLong(form.expirationDate)}`
       : "—";
-    doc.text(periodStr, rx, y + 8);
-    doc.setFontSize(6.5); doc.setTextColor(100, 100, 100); doc.setFont("helvetica", "bold");
-    doc.text("STATE OF LOSS", rx, y + 13.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
-    doc.text(state, rx, y + 18);
-    y += insuredH + 3;
+    layout.row([
+      [label("NAMED INSURED"), coiText("Metrocars Leasing Corp", 8, "normal", "left", 1),
+        label("ADDITIONAL NAMED INSURED / RENTER"), coiText(form.namedOperator || "—", 9.6, "bold", "left", 1),
+        coiText(`RENTAL VEHICLE: ${vehicleStr}`),
+        coiText(`VIN: ${form.vin || "—"}`),
+        ...(form.plateNumber ? [coiText(`Plate: ${form.plateNumber}`)] : [])],
+      [label("COVERAGE PERIOD"), coiText(periodStr, 9, "normal", "left", 2),
+        label("STATE OF LOSS"), coiText(state, 9)],
+    ], { widths: [textW * 0.5, textW * 0.5], gapAfter: 3 });
 
-    // ── COVERAGES HEADER ────────────────────────────────────────────────────
-    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-    doc.text("COVERAGES", lm, y + 4);
-    doc.text(`CERTIFICATE NUMBER: ${form.certNumber || "—"}`, lm + 50, y + 4);
-    doc.text(`REVISION NUMBER: ${form.revisionNumber || "—"}`, rm, y + 4, { align: "right" });
-    y += 9;  // extra spacing before table
-
-    // Preamble
-    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(60, 60, 60);
+    // ── COVERAGES HEADER / PREAMBLE ──────────────────────────────────────────
+    layout.row([
+      [label("COVERAGES")],
+      [coiText(`CERTIFICATE NUMBER: ${form.certNumber || "—"}`, 7.5, "bold")],
+      [coiText(`REVISION NUMBER: ${form.revisionNumber || "—"}`, 7.5, "bold")],
+    ], { widths: [textW * 0.17, textW * 0.46, textW * 0.37], border: false, gapAfter: 1 });
     const preamble = `THIS IS TO CERTIFY THAT THE COVERAGES LISTED BELOW HAVE BEEN ISSUED TO THE INSURED NAMED ABOVE FOR THE COVERAGE PERIOD INDICATED. NOTWITHSTANDING ANY REQUIREMENT, TERM OR CONDITION OF ANY CONTRACT OR OTHER DOCUMENT WITH RESPECT TO WHICH THIS CERTIFICATE MAY BE ISSUED OR MAY PERTAIN, THE COVERAGE AFFORDED IS SUBJECT TO ALL TERMS, EXCLUSIONS AND CONDITIONS OF THE POLICY. LIMITS SHOWN MAY HAVE BEEN REDUCED BY PAID CLAIMS.`;
-    doc.text(preamble, lm, y, { maxWidth: textW });
-    y += 11;
+    layout.row([[coiText(preamble, 7.5)]], { border: false, gapAfter: 2 });
 
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
-    // Column widths: INSR(8) ADDL(8) SUBR(8) TYPE(55) POLICY#(25) EFF(18) EXP(18) LIMITS(rest)
-    // Column widths: total = textW (186mm on letter). Give type more room, tighten others
-    const cols = { insr: 11, addl: 6, type: 60, pol: 24, eff: 16, exp: 16 };
+    // All x positions come from the same cumulative widths (no padded date offset).
+    const cols = { insr: 12, addl: 13, type: 45, pol: 27, eff: 22, exp: 22 };
     const limW = textW - cols.insr - cols.addl - cols.type - cols.pol - cols.eff - cols.exp;
-    const rowH = 8;
-    const hdrH = 6;
-
-    // Table header
-    doc.setFillColor(240, 240, 240);
-    doc.rect(lm, y, textW, hdrH, "F");
-    doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.3);
-    doc.rect(lm, y, textW, hdrH);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(0, 0, 0);
-    let cx = lm;
-    const hdrLabels = [
-      { w: cols.insr, t: "INSR\nLTR" },
-      { w: cols.addl, t: "ADDL\nINSD" },
-      { w: cols.type, t: "TYPE OF INSURANCE" },
-      { w: cols.pol, t: "POLICY NUMBER" },
-      { w: cols.eff, t: "POLICY EFF\n(MM/DD/YYYY)" },
-      { w: cols.exp, t: "POLICY EXP\n(MM/DD/YYYY)" },
-      { w: limW, t: "LIMITS" },
-    ];
-    for (const h of hdrLabels) {
-      doc.text(h.t, cx + h.w / 2, y + 2.5, { align: "center", maxWidth: h.w - 1 });
-      cx += h.w;
-      if (cx < lm + textW) doc.line(cx, y, cx, y + hdrH);
-    }
-    y += hdrH;
-
-    // Coverage rows
+    const widths = [cols.insr, cols.addl, cols.type, cols.pol, cols.eff, cols.exp, limW];
+    const hdrLabels = ["INSR\nLTR", "ADDL\nINSD", "TYPE OF INSURANCE", "POLICY NUMBER", "POLICY EFF\n(MM/DD/YYYY)", "POLICY EXP\n(MM/DD/YYYY)", "LIMITS"];
+    const headerCells = hdrLabels.map(text => [coiText(text, 7.5, "bold", "center")]);
     const policyNo = form.certNumber || "—";
     const effDate = fmtDate(coverageStartDate);
     const expDate = fmtDate(form.expirationDate);
-
     const coverageRows = [
       {
         insr: "BI", type: "BODILY INJURY LIABILITY",
@@ -7883,59 +7732,23 @@ export function UnifiedCOITab({
         limits: "SUBJECT TO MEMBER AGREEMENT\nINCLUDED",
       },
     ];
-    // Metrocars is additional insured for liability and physical damage. Maryland mandates UM/UIM,
-    // so those protections also extend to Metrocars as additional insured on Maryland certificates.
+    // Applicable additional-insured coverage elections are unchanged.
     const additionalInsuredCoverageCodes = new Set(
       state === "MD" ? ["BI", "PD", "UM", "UIM", "COL", "COMP"] : ["BI", "PD", "COL", "COMP"]
     );
-
-    for (const row of coverageRows) {
-      const lines = row.limits.split("\n");
-      const rH = Math.max(rowH, lines.length * 4.5 + 2);
-      doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.2);
-      doc.rect(lm, y, textW, rH);
-      cx = lm;
-      for (const col of [cols.insr, cols.addl, cols.type, cols.pol, cols.eff, cols.exp, limW]) {
-        cx += col;
-        if (cx < lm + textW) doc.line(cx, y, cx, y + rH);
-      }
-      // INSR LTR
-      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-      doc.text(row.insr, lm + cols.insr / 2, y + rH / 2 + 1, { align: "center" });
-      // ADDL INSD indicator: applicable liability and physical-damage coverages extend to Metrocars Leasing Corp.
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.text(additionalInsuredCoverageCodes.has(row.insr) ? "[X]" : "[ ]", lm + cols.insr + cols.addl / 2, y + rH / 2 + 1.5, { align: "center" });
-      // Type — use 7pt and maxWidth to prevent overflow into policy number column
-      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-      const typeX = lm + cols.insr + cols.addl + 2;
-      doc.text(row.type, typeX, y + rH / 2 + 1, { maxWidth: cols.type - 3 });
-      // Policy No
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-      const polX = lm + cols.insr + cols.addl + cols.type + 2;
-      doc.text(policyNo, polX, y + rH / 2 + 1);
-      // Eff / Exp dates
-      const effX = polX + cols.pol;
-      doc.text(effDate, effX + cols.eff / 2, y + rH / 2 + 1, { align: "center" });
-      const expX = effX + cols.eff;
-      doc.text(expDate, expX + cols.exp / 2, y + rH / 2 + 1, { align: "center" });
-      // Limits
-      const limX = expX + cols.exp + 2;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-      for (let li = 0; li < lines.length; li++) {
-        doc.text(lines[li], limX, y + 3.5 + li * 4.5);
-      }
-      y += rH;
-    }
-    y += 3;
+    // Include the header with the first row, avoiding an orphan heading at a page end.
+    coverageRows.forEach((row, index) => {
+      const cells = [
+        [coiText(row.insr, 7.5, "bold", "center")],
+        [coiText(additionalInsuredCoverageCodes.has(row.insr) ? "[X]" : "[ ]", 7.5, "normal", "center")],
+        [coiText(row.type, 7.5, "bold")], [coiText(policyNo, 7.5)],
+        [coiText(effDate, 7.5, "normal", "center")], [coiText(expDate, 7.5, "normal", "center")],
+        [coiText(row.limits, 7.5)],
+      ];
+      layout.row(cells, { widths, padding: 1.2, repeat: { cells: headerCells, widths }, showHeading: index === 0 });
+    });
 
     // ── DESCRIPTION OF OPERATIONS ────────────────────────────────────────────
-    doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.3);
-    const descH = 30;
-    doc.rect(lm, y, textW, descH);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
-    doc.text("DESCRIPTION OF OPERATIONS / LOCATIONS / VEHICLES / SPECIAL CONDITIONS", lm + 2, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
     const desc1 = isKlutch
       ? `1. This certificate is issued by Klutch Risk Retention Group to Metrocars Leasing Corp (named insured/vehicle owner). Coverage applies to the vehicle identified above when operated by the named operator under an active Membership Agreement.`
       : `1. Coverage applies to the vehicle identified above while operated by the named member under an active Membership Agreement with Metrocars Leasing Corp.`;
@@ -7944,59 +7757,24 @@ export function UnifiedCOITab({
       : `2. Metrocars Leasing Corp is self-insured pursuant to Certificate No. ${form.certNumber || "—"} issued by the Maryland Motor Vehicle Administration.`;
     const desc3 = `3. During any TNC period in which Uber/Lyft coverage is primary, this certificate provides contingent coverage only to the extent not covered by the TNC carrier.`;
     const desc4 = `4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per applicable state law.`;
-    // Increase description box height and add more spacing between items
-    doc.text(desc1, lm + 2, y + 6.5, { maxWidth: textW - 4 });
-    doc.text(desc2, lm + 2, y + 13.5, { maxWidth: textW - 4 });
-    doc.text(desc3, lm + 2, y + 20, { maxWidth: textW - 4 });
-    doc.text(desc4, lm + 2, y + 25.5, { maxWidth: textW - 4 });
-    y += descH + 3;
+    layout.row([[label("DESCRIPTION OF OPERATIONS / LOCATIONS / VEHICLES / SPECIAL CONDITIONS"),
+      ...[desc1, desc2, desc3, desc4].map(text => coiText(text, 8, "normal", "left", 1))]], { gapAfter: 3 });
 
-    // ── BOTTOM GRID: CERT HOLDER + CANCELLATION ──────────────────────────────
-    const botH = 28;
-    doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.3);
-    doc.rect(lm, y, textW, botH);
-    doc.line(lm + textW * 0.4, y, lm + textW * 0.4, y + botH);
-    // Cert Holder
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
-    doc.text("CERTIFICATE HOLDER", lm + 2, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(0, 0, 0);
-    if (isKlutch) {
-      doc.text("Metrocars Leasing Corp", lm + 2, y + 8);
-      doc.text("P.O. Box 10622", lm + 2, y + 12.5);
-      doc.text("Rockville, MD 20850", lm + 2, y + 17);
-    } else {
-      doc.text("Metrocars Leasing Corp", lm + 2, y + 8);
-      doc.text("P.O. Box 10622", lm + 2, y + 12.5);
-      doc.text("Rockville, MD 20850", lm + 2, y + 17);
-    }
-    // Cancellation
-    const cx2 = lm + textW * 0.4 + 2;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
-    doc.text("CANCELLATION", cx2, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+    // ── CERTIFICATE HOLDER / CANCELLATION ────────────────────────────────────
     const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";
-    doc.text(cancelText, cx2, y + 8, { maxWidth: textW * 0.6 - 4 });
-    if (isKlutch) {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-      doc.text(signoff!.name, cx2, y + 19);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
-      doc.text(signoff!.title, cx2, y + 22);
-    }
-    doc.setFont("helvetica", "italic"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
     const sigLine = isKlutch ? "Authorized Representative, Klutch Risk Retention Group" : "Authorized Representative";
-    doc.text(sigLine, cx2, y + 25);
-    y += botH + 3;
+    layout.row([
+      [label("CERTIFICATE HOLDER"), coiText("Metrocars Leasing Corp\nP.O. Box 10622\nRockville, MD 20850")],
+      [label("CANCELLATION"), coiText(cancelText, 7.5, "normal", "left", 2),
+        ...(isKlutch ? [coiText(signoff!.name, 8, "bold"), coiText(signoff!.title, 7.5)] : []),
+        coiText(sigLine, 7.5, "italic")],
+    ], { widths: [textW * 0.4, textW * 0.6], gapAfter: 3 });
 
     // ── FOOTER ───────────────────────────────────────────────────────────────
-    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3);
-    doc.line(lm, y, rm, y);
-    y += 3;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(100, 100, 100);
-    if (isKlutch) {
-      doc.text(`Klutch Risk Retention Group  ·  ${form.certNumber || "—"}  ·  424 Church Street, Suite 800, Nashville, Tennessee 37219  ·  © Klutch Risk Retention Group ${new Date().getFullYear()}`, W / 2, y, { align: "center" });
-    } else {
-      doc.text(`Metrocars Leasing Corp  ·  ${form.certNumber || "—"}  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949  ·  claims@drivewhip.com  ·  © Metrocars Leasing Corp ${new Date().getFullYear()}`, W / 2, y, { align: "center" });
-    }
+    const footerText = isKlutch
+      ? `Klutch Risk Retention Group  ·  ${form.certNumber || "—"}  ·  424 Church Street, Suite 800, Nashville, Tennessee 37219  ·  © Klutch Risk Retention Group ${new Date().getFullYear()}`
+      : `Metrocars Leasing Corp  ·  ${form.certNumber || "—"}  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949  ·  claims@drivewhip.com  ·  © Metrocars Leasing Corp ${new Date().getFullYear()}`;
+    layout.finish(footerText);
 
     setPreviewPdfUrl(getPDFDataUrl(doc));
     if (shouldDownload) downloadPDF(doc, `COI_${isKlutch ? "Klutch" : "Metrocars"}_${form.certNumber || "Draft"}_${form.namedOperator || "Operator"}.pdf`);
@@ -9051,7 +8829,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
     setActiveTab(normalizeDocGeneratorTab(draft.tabKey));
     setCurrentDraftId(draft.id);
     setCurrentFormData(draft.formData as Record<string, unknown>);
-    if (["lou-calculator", "payment-receipt", "denial", "pending-closure"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt", "denial", "pending-closure", "acord-certificate"].includes(draft.tabKey)) setFormResetKey((key) => key + 1);
     setShowMyDocs(false);
     toast.info("Draft loaded — fill in the form and generate");
   };
@@ -9064,7 +8842,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
   const handleLoadSharedTemplate = (t: { id: number; tabKey: string; formData: unknown }) => {
     setActiveTab(normalizeDocGeneratorTab(t.tabKey));
     setCurrentFormData(t.formData as Record<string, unknown>);
-    if (["lou-calculator", "payment-receipt", "denial", "pending-closure"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
+    if (["lou-calculator", "payment-receipt", "denial", "pending-closure", "acord-certificate"].includes(t.tabKey)) setFormResetKey((key) => key + 1);
     markReadMut.mutate({ templateId: t.id });
     setShowSharedTemplates(false);
     toast.info("Shared template loaded");
@@ -9093,6 +8871,7 @@ export default function DocGenerator({ initialTab: directInitialTab }: { initial
       case "limited-liability-bi": return <LimitedLiabilityBITab />;
       case "lou-calculator": return <LOUCalculatorTab initialDraft={currentFormData.directDraft ? currentFormData : undefined} onDraftChange={setCurrentFormData} />;
       case "pip-bill-review": return <MedicalReviewWorkspace />;
+      case "acord-certificate": return <AcordCertificateBuilder initialDraft={currentFormData} onDraftChange={setCurrentFormData} />;
       case "coi-whip": return <UnifiedCOITab initialState={initialMemberState} />;
       case "coi-klutch": return <UnifiedCOITab initialState={initialMemberState} />;
       case "klutch-policy-declarations": return <iframe src="/klutch-policy-declarations.html" title="Klutch Policy Declarations" className="w-full min-h-[calc(100vh-7rem)] border-0 bg-[#d0d0d0]" />;

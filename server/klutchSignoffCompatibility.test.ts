@@ -69,40 +69,25 @@ describe("Klutch printed sign-off compatibility", () => {
   });
 
   it("prints Klutch name and title above the existing COI label inside the current box", () => {
-    const representative = section(generator, '    if (isKlutch) {\n      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);', "    y += botH + 3;");
-    expect(representative).toContain("doc.text(signoff!.name, cx2, y + 19);");
-    expect(representative).toContain("doc.text(signoff!.title, cx2, y + 22);");
+    const representative = section(generator, "    // ── CERTIFICATE HOLDER / CANCELLATION", "    // ── FOOTER");
+    expect(representative).toContain('...(isKlutch ? [coiText(signoff!.name, 8, "bold"), coiText(signoff!.title, 7.5)] : [])');
     expect(representative).toContain('const sigLine = isKlutch ? "Authorized Representative, Klutch Risk Retention Group" : "Authorized Representative";');
-    expect(representative).toContain("doc.text(sigLine, cx2, y + 25);");
+    expect(representative).toContain('coiText(sigLine, 7.5, "italic")');
+    expect(representative.indexOf('coiText(signoff!.name')).toBeLessThan(representative.indexOf('coiText(signoff!.title'));
+    expect(representative.indexOf('coiText(signoff!.title')).toBeLessThan(representative.indexOf('coiText(sigLine'));
+    expect(representative).toContain('widths: [textW * 0.4, textW * 0.6]');
     expect(representative).not.toMatch(/addImage|addPage|\.line\(|\.path\(|certif(?:y|ied)|autograph/i);
   });
 
-  it("leaves the generic MetroCars cancellation and representative text and geometry exactly unchanged", () => {
-    const cancellation = section(generator, "    // Cancellation\n    const cx2", "    y += botH + 3;");
-    const klutchOnly = `    if (isKlutch) {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-      doc.text(signoff!.name, cx2, y + 19);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
-      doc.text(signoff!.title, cx2, y + 22);
-    }
-`;
-    expect(cancellation).toContain(klutchOnly);
-    expect(cancellation.replace(klutchOnly, "")).toBe(`    // Cancellation
-    const cx2 = lm + textW * 0.4 + 2;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(80, 80, 80);
-    doc.text("CANCELLATION", cx2, y + 3.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-    const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";
-    doc.text(cancelText, cx2, y + 8, { maxWidth: textW * 0.6 - 4 });
-    doc.setFont("helvetica", "italic"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-    const sigLine = isKlutch ? "Authorized Representative, Klutch Risk Retention Group" : "Authorized Representative";
-    doc.text(sigLine, cx2, y + 25);
-`);
-    expect(generator).toContain(`    const botH = 28;
-    doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.3);
-    doc.rect(lm, y, textW, botH);
-    doc.line(lm + textW * 0.4, y, lm + textW * 0.4, y + botH);`);
-    expect(generator).toContain('doc.text(`Metrocars Leasing Corp  ·  ${form.certNumber || "—"}  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949  ·  claims@drivewhip.com  ·  © Metrocars Leasing Corp ${new Date().getFullYear()}`, W / 2, y, { align: "center" });');
+  it("leaves generic MetroCars cancellation, representative attribution, and footer contents exactly unchanged", () => {
+    const cancellation = section(generator, "    // ── CERTIFICATE HOLDER / CANCELLATION", "    setPreviewPdfUrl(getPDFDataUrl(doc));");
+    expect(cancellation).toContain('const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";');
+    expect(cancellation).toContain('[label("CERTIFICATE HOLDER"), coiText("Metrocars Leasing Corp\\nP.O. Box 10622\\nRockville, MD 20850")]');
+    expect(cancellation).toContain('[label("CANCELLATION"), coiText(cancelText, 7.5, "normal", "left", 2),');
+    expect(cancellation).toContain('...(isKlutch ? [coiText(signoff!.name, 8, "bold"), coiText(signoff!.title, 7.5)] : [])');
+    expect(cancellation).toContain('const sigLine = isKlutch ? "Authorized Representative, Klutch Risk Retention Group" : "Authorized Representative";');
+    expect(cancellation).toContain('`Metrocars Leasing Corp  ·  ${form.certNumber || "—"}  ·  P.O. Box 10622, Rockville MD 20850  ·  (855) 906-5949  ·  claims@drivewhip.com  ·  © Metrocars Leasing Corp ${new Date().getFullYear()}`');
+    expect(cancellation).toContain('layout.finish(footerText);');
   });
 
   it("places legacy PDF representative text beside the existing date, before the footer", () => {

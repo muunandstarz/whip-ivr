@@ -192,7 +192,7 @@ export function Admin({
       </Card>
       <Card
         title="Vehicle inventory"
-        detail="New rentals add vehicles automatically. You can optionally manage saved vehicles here; no preloaded inventory is required."
+        detail="FLEET sheet vehicles are read-only at the source. Blank source locations stay UNASSIGNED until staff chooses a pickup location. The single DEMO ONLY vehicle is fictional and cannot issue or email packets."
       >
         <div className="r-record-list">
           {vehicles.map(v => (
@@ -211,9 +211,9 @@ export function Admin({
                 })
               }
             >
-              <strong>{v.ymm}</strong>
+              <strong>{v.isDemo ? "DEMO ONLY · " : ""}{v.ymm}</strong>
               <span>
-                VIN {v.vin} · {v.plate} · {v.status}
+                VIN {v.vin} · {v.plate} · {v.assigned ? "Reserved" : v.status} · {v.locationId === 0 ? "UNASSIGNED" : locations.find(l => l.id === v.locationId)?.name} · {v.source === "sheet" ? "Sheet linked" : v.isDemo ? "App-only demo" : "Manual"}
               </span>
             </button>
           ))}

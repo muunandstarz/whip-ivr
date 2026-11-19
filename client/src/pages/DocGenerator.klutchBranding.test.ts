@@ -9,6 +9,7 @@ import { UnifiedCOITab } from "./DocGenerator";
 const source = readFileSync(path.resolve("client/src/pages/DocGenerator.tsx"), "utf8");
 const workspace = readFileSync(path.resolve("client/src/components/KlutchPolicyDocumentsWorkspace.tsx"), "utf8");
 const declarations = readFileSync(path.resolve("client/public/klutch-policy-declarations.html"), "utf8");
+const coiSource = source.slice(source.indexOf('export function UnifiedCOITab'), source.indexOf('function KlutchDecPageTab'));
 const h = vi.hoisted(() => ({ requireApproved: vi.fn(), text: vi.fn(), save: vi.fn() }));
 vi.mock("@/hooks/useKlutchSignoff", () => ({ useKlutchSignoff: (enabled = true) => ({
   ready: enabled,
@@ -20,6 +21,7 @@ vi.mock("@/hooks/useKlutchSignoff", () => ({ useKlutchSignoff: (enabled = true) 
 vi.mock("jspdf", () => ({ jsPDF: class {
   internal = { pageSize: { getWidth: () => 216, getHeight: () => 279 } };
   setFont() {} setFontSize() {} setTextColor() {} setDrawColor() {} setLineWidth() {} line() {} rect() {} addImage() {} setFillColor() {}
+  addPage() {}
   text(...args: unknown[]) { h.text(...args); }
   splitTextToSize(text: string) { return [text]; }
   output() { return "data:application/pdf;base64,c3ludGhldGlj"; }
@@ -45,18 +47,26 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function downloadCertificate(carrierMode: "auto" | "metrocars") {
-  await act(async () => root.render(React.createElement(UnifiedCOITab, { carrierMode })));
-  const issueDate = host.querySelector<HTMLInputElement>("#coi-issue-start-date")!;
+async function setInput(id: string, value: string) {
+  const input = host.querySelector<HTMLInputElement>(`#${id}`)!;
+  expect(input, `Missing COI input ${id}`).toBeTruthy();
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
-    setter.call(issueDate, "2026-07-01");
-    issueDate.dispatchEvent(new Event("input", { bubbles: true }));
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+async function downloadCertificate(carrierMode: "auto" | "metrocars", initialState = "MD") {
+  await act(async () => root.render(React.createElement(UnifiedCOITab, { carrierMode, initialState })));
+  await setInput("coi-issue-start-date", "2026-07-01");
+  await setInput("coi-exp", "2026-12-31");
+  await setInput("coi-certno", "TEST-1234");
   const download = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Download");
   expect(download).toBeTruthy();
   await act(async () => download!.click());
-  return h.text.mock.calls.map(([text]) => String(text)).join("\n");
+  // The measured renderer preserves contents but wraps at cell boundaries.
+  return h.text.mock.calls.map(([text]) => String(text)).join(" ").replace(/\s+/g, " ").trim();
 }
 
 describe("Klutch printed Risk Retention Group branding", () => {
@@ -100,8 +110,8 @@ describe("Klutch printed Risk Retention Group branding", () => {
     expect(workspace).toContain("value={docForm.handlerName} readOnly");
     expect(workspace).toContain("value={docForm.handlerTitle} readOnly");
     expect(source).toContain("useKlutchSignoff(isKlutch)");
-    expect(source).toContain('doc.text(signoff!.name, cx2, y + 19);');
-    expect(source).toContain('doc.text(signoff!.title, cx2, y + 22);');
+    expect(coiSource.includes('...(isKlutch ? [coiText(signoff!.name, 8, "bold"), coiText(signoff!.title, 7.5)] : [])'), 'COI sign-off must stay canonical and Klutch-only').toBe(true);
+    expect(coiSource.includes('coiText(sigLine, 7.5, "italic")'), 'COI representative label must remain after the signer').toBe(true);
     expect(declarations).toContain("@page { size: letter; margin: 0; }");
     expect(declarations).toContain("height: 11in;");
     expect(declarations).toContain(".klutch-logo { height: 48px !important; width: 120px !important;");
@@ -124,6 +134,50 @@ describe("Klutch printed Risk Retention Group branding", () => {
     expect(printed).toContain("Nashville, Tennessee 37219");
     expect(printed).toContain("claims@klutchinsurance.com");
     expect(printed).not.toMatch(/Klutch Insurance Company|KLUTCH INSURANCE COMPANY/);
+    expect(printed.indexOf("Morgan Ellis")).toBeLessThan(printed.indexOf("Liability Claims Specialist"));
+    expect(printed.indexOf("Liability Claims Specialist")).toBeLessThan(printed.indexOf("Authorized Representative, Klutch Risk Retention Group"));
+  });
+
+  // Independent approved fixtures: do not read expected limits from renderer rules.
+  it.each([
+    ["MD", "$30,000", "$60,000", "$15,000", "$2,500"],
+    ["VA", "$30,000", "$60,000", "$20,000", ""],
+    ["FL", "$10,000", "$20,000", "$10,000", "$10,000"],
+    ["GA", "$25,000", "$50,000", "$25,000", ""],
+    ["IL", "$25,000", "$50,000", "$20,000", ""],
+    ["MA", "$20,000", "$40,000", "$5,000", "$8,000"],
+    ["PA", "$15,000", "$30,000", "$5,000", "$5,000"],
+    ["TX", "$30,000", "$60,000", "$25,000", ""],
+  ])("preserves exact printed coverage rows, date values, and legal wording for %s", async (state, biPP, biPO, pd, pip) => {
+    for (const carrierMode of ["auto", "metrocars"] as const) {
+      h.text.mockClear(); h.save.mockClear(); h.requireApproved.mockClear();
+      const printed = await downloadCertificate(carrierMode, state);
+      expect(h.save).toHaveBeenCalledOnce();
+      expect(h.requireApproved).toHaveBeenCalledTimes(carrierMode === "auto" ? 1 : 0);
+      const rows = [
+        ["BI", "BODILY INJURY LIABILITY", `PER PERSON ${biPP} PER OCCURRENCE ${biPO}`],
+        ["PD", "PROPERTY DAMAGE LIABILITY", `PER OCCURRENCE ${pd}`],
+        ["UM", "UNINSURED MOTORIST (UM)", state === "FL" ? "REJECTED BY NAMED INSURED" : `PER PERSON ${biPP} PER OCCURRENCE ${biPO}`],
+        ["UIM", "UNDERINSURED MOTORIST (UIM)", state === "FL" ? "NOT APPLICABLE" : `PER PERSON ${biPP} PER OCCURRENCE ${biPO}`],
+        ["PIP", "PERSONAL INJURY PROTECTION (PIP)", pip ? `PER PERSON — STATUTORY MIN ${pip}` : "NOT REQUIRED IN THIS STATE"],
+        ["COL", "PHYSICAL DAMAGE — COLLISION", "SUBJECT TO MEMBER AGREEMENT INCLUDED"],
+        ["COMP", "PHYSICAL DAMAGE — COMPREHENSIVE", "SUBJECT TO MEMBER AGREEMENT INCLUDED"],
+      ];
+      for (const [code, type, limits] of rows) {
+        const additionalInsured = ["BI", "PD", "COL", "COMP"].includes(code) || (state === "MD" && ["UM", "UIM"].includes(code));
+        expect(printed, `${state}/${carrierMode}/${code}`).toContain(`${code} ${additionalInsured ? "[X]" : "[ ]"} ${type} TEST-1234 07/01/2026 12/31/2026 ${limits}`);
+        expect(h.text.mock.calls.filter(([text]) => text === code)).toHaveLength(1);
+      }
+      expect(h.text.mock.calls.filter(([text]) => text === "07/01/2026")).toHaveLength(8); // header + seven coverage rows
+      expect(h.text.mock.calls.filter(([text]) => text === "12/31/2026")).toHaveLength(7);
+      expect(printed).toContain("COVERAGE PERIOD July 1, 2026 — December 31, 2026 STATE OF LOSS " + state);
+      expect(printed).toContain("THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE " + (carrierMode === "auto" ? "POLICY ISSUED BY KLUTCH RISK RETENTION GROUP. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE POLICY." : "SELF-INSURANCE PROGRAM. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE PROGRAM."));
+      expect(printed).toContain("THIS IS TO CERTIFY THAT THE COVERAGES LISTED BELOW HAVE BEEN ISSUED TO THE INSURED NAMED ABOVE FOR THE COVERAGE PERIOD INDICATED. NOTWITHSTANDING ANY REQUIREMENT, TERM OR CONDITION OF ANY CONTRACT OR OTHER DOCUMENT WITH RESPECT TO WHICH THIS CERTIFICATE MAY BE ISSUED OR MAY PERTAIN, THE COVERAGE AFFORDED IS SUBJECT TO ALL TERMS, EXCLUSIONS AND CONDITIONS OF THE POLICY. LIMITS SHOWN MAY HAVE BEEN REDUCED BY PAID CLAIMS.");
+      expect(printed).toContain("3. During any TNC period in which Uber/Lyft coverage is primary, this certificate provides contingent coverage only to the extent not covered by the TNC carrier.");
+      expect(printed).toContain("4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per applicable state law.");
+      expect(printed).toContain("SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.");
+      if (carrierMode === "metrocars") expect(printed).not.toContain("Morgan Ellis");
+    }
   });
 
   it("leaves fixed MetroCars issuance and representative attribution unchanged", async () => {

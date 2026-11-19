@@ -3,6 +3,8 @@ import { and, eq, inArray, like, or, desc, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { PDFDocument } from "pdf-lib";
+import { RentalFleetInventory } from "./rentalFleetInventory";
+import { readRentalFleetSource, RENTAL_DEMO_VIN, type FleetSnapshot } from "./rentalFleetSource";
 import * as tables from "../drizzle/rentalSchema";
 import { rentalReminderSubscriptions } from "../drizzle/rentalReminderSchema";
 import { normalizeReminderPhone } from "../shared/rentalReminders";
@@ -67,6 +69,7 @@ export interface RentalDependencies {
   connectSharedGmail?: typeof connectSharedGmail;
   finishSharedGmail?: typeof finishSharedGmail;
   disconnectSharedGmail?: typeof disconnectSharedGmail;
+  readFleet?: () => Promise<FleetSnapshot>;
 }
 export async function readRentalStorage(key: string, maxBytes = 30 * 1024 * 1024): Promise<Buffer> {
   const url = await storageGetSignedUrl(key);
@@ -79,6 +82,7 @@ export async function readRentalStorage(key: string, maxBytes = 30 * 1024 * 1024
 }
 export const defaultRentalDependencies: RentalDependencies = {
   repo: createDrizzleRentalRepository(), now: Date.now, put: storagePut, read: readRentalStorage, senderStatus: sharedGmailStatus, providerReady: () => false, connectSharedGmail, finishSharedGmail, disconnectSharedGmail,
+  readFleet: readRentalFleetSource,
   sendEmail: async input => { const sent = await sendRentalPacketSharedGmail({ actorKey: input.actorKey, renterEmail: input.recipient, claimEmail: input.claimEmail, pdf: input.bytes, kind: input.kind === "return" ? "return" : "handoff", requestId: input.idempotencyKey }); return { providerId: sent.providerId }; },
   buildPickup: async input => { const pdf = await import("./rentalHandoffPdf"); return pdf.buildRentalPacket(input as any); },
   buildReturn: async input => { const pdf = await import("./rentalHandoffPdf"); return pdf.buildRentalReturnPacket(input as any); },
@@ -164,7 +168,8 @@ function isRentalSetupDuplicate(error: unknown): boolean {
   return false;
 }
 export class RentalHandoffService {
-  constructor(readonly deps: RentalDependencies = defaultRentalDependencies) {}
+  readonly fleet: RentalFleetInventory;
+  constructor(readonly deps: RentalDependencies = defaultRentalDependencies) { this.fleet = new RentalFleetInventory(deps.readFleet, deps.now); }
   get repo() { return this.deps.repo; }
   async settings(repo = this.repo): Promise<LaunchSettings> { const row = (await repo.find("settings", { eq: { id: 1 } }))[0]; const settings = row ? decryptRental<LaunchSettings>(row.payload) : defaults(); return { ...settings, emailProviderReady: this.deps.providerReady(settings.senderEmail) }; }
   /** Legacy credentials path is deliberately inactive; Gmail owns the shared sender. */
@@ -204,14 +209,38 @@ export class RentalHandoffService {
     if (!location || !vehicle) fail("BAD_REQUEST", "Choose an active location and a vehicle assigned to it.");
     return { location, vehicle };
   }
+  async refreshInventory(actor: RentalActor) { adminOnly(actor); return this.fleet.refresh(this.repo, actor, this.audit.bind(this), true); }
+  private publicVehicle(v: RentalRows["vehicles"]): RentalVehicle {
+    return { id: v.id, locationId: v.locationId, ymm: v.ymm, vin: v.vin, plate: v.plate, lastOdometer: v.lastOdometer, status: "Available", source: v.source === "sheet" || v.source === "demo" ? v.source : "manual", sourceAvailable: v.sourceAvailable, sourceStatus: v.sourceStatus, sourceCheckedAt: v.sourceCheckedAt, sourceLocationIssue: v.sourceLocationIssue, isDemo: v.isDemo || v.vin === RENTAL_DEMO_VIN };
+  }
+  private async chooseVehicle(tx: RentalRepository, actor: RentalActor, vehicle: RentalRows["vehicles"], locationId: number, rentalId: number | null) {
+    if (!vehicle.active || (vehicle.locationId !== 0 && vehicle.locationId !== locationId)) fail("BAD_REQUEST", "Select an available vehicle at this location or from the unassigned pool.");
+    assertRentalAccess(actor, { locationId });
+    await this.fleet.verify(vehicle);
+    const active = await tx.find("records", { eq: { vehicleId: vehicle.id }, in: { status: ["Scheduled", "Out"] }, limit: 5001, lock: true });
+    if (active.length >= 5001 || active.some(other => other.id !== rentalId)) fail("CONFLICT", "This vehicle is already assigned to another active rental. Reload inventory.");
+    if (vehicle.locationId === 0) {
+      if (!await tx.update("vehicles", { eq: { id: vehicle.id, locationId: 0, active: true } }, { locationId })) fail("CONFLICT", "Vehicle location changed. Reload inventory.");
+      await this.audit(tx, actor, rentalId, "vehicle.location.assign", { vehicleId: vehicle.id, previousLocationId: 0, locationId });
+      vehicle.locationId = locationId;
+    }
+    return vehicle;
+  }
   async session(actor: RentalActor | null) {
     if (!actor) return { actor: null, settings: null, locations: [], vehicles: [], launchGaps: [] };
+    await this.fleet.refresh(this.repo, actor, this.audit.bind(this));
     const { settings, sender } = await this.actorSettings(actor);
     const scope = actor.role === "shop" ? { in: { id: actor.locationIds } } : {};
     const locations = await this.repo.find("locations", { ...scope, eq: { active: true } });
-    const vehicles = await this.repo.find("vehicles", { eq: { active: true }, in: { locationId: locations.map(l => l.id) } });
+    const vehicles = await this.repo.find("vehicles", { eq: { active: true }, in: { locationId: [0, ...locations.map(l => l.id)] }, limit: 5000 });
     const out = await this.repo.find("records", { eq: { status: "Out" }, in: { locationId: locations.map(l => l.id) } });
-    return { actor: { key: actor.key, name: actor.name, role: actor.role, locationIds: actor.locationIds }, settings, sender, locations, vehicles: vehicles.map(v => { const rental = out.find(r => r.vehicleId === v.id); return { id: v.id, locationId: v.locationId, ymm: v.ymm, vin: v.vin, plate: v.plate, lastOdometer: v.lastOdometer, status: rental ? "Out" as const : "Available" as const, renterName: rental ? decryptRental<RentalDraft>(rental.payload).renterName : null }; }), launchGaps: launchMissing(settings) };
+    // Global reservation lookup returns IDs only to the UI, never another location's customer details.
+    const reservations = await this.repo.find("records", { in: { vehicleId: vehicles.map(v => v.id), status: ["Scheduled", "Out"] }, limit: 5001 });
+    const inventory = vehicles.filter(v => v.source !== "sheet" || v.sourceAvailable === true || reservations.some(r => r.vehicleId === v.id && locations.some(l => l.id === r.locationId))).map(v => {
+      const rental = out.find(r => r.vehicleId === v.id); const assigned = reservations.length >= 5001 || reservations.some(r => r.vehicleId === v.id);
+      return { ...this.publicVehicle(v), status: rental ? "Out" as const : "Available" as const, renterName: rental ? decryptRental<RentalDraft>(rental.payload).renterName : null, assigned, pickupEligible: v.source !== "sheet" || (v.sourceAvailable === true && !this.fleet.status.error && !!this.fleet.status.updatedAt && this.deps.now() - this.fleet.status.updatedAt <= 60000) };
+    });
+    return { actor: { key: actor.key, name: actor.name, role: actor.role, locationIds: actor.locationIds }, settings, sender, locations, vehicles: inventory, inventorySource: this.fleet.status, launchGaps: launchMissing(settings) };
   }
   async list(actor: RentalActor, input: { search?: string; status?: string } = {}) {
     const rows = await this.repo.find("records", { ...(actor.role === "shop" ? { in: { locationId: actor.locationIds } } : {}), ...(input.status ? { eq: { status: input.status } } : {}), search: input.search?.trim().slice(0, 180), order: "updatedAt", limit: 500 });
@@ -252,15 +281,18 @@ export class RentalHandoffService {
             const lastOdometer = manual.lastOdometer ?? draft.odometerOut ?? 0;
             const values = { locationId: location.id, ymm: manual.ymm, vin: manual.vin, plate: manual.plate, lastOdometer, active: true };
             const vehicleId = await tx.insert("vehicles", values);
-            vehicle = { ...values, id: vehicleId };
+            vehicle = (await tx.find("vehicles", { eq: { id: vehicleId } }))[0];
             inventoryCreated = true;
           }
+          if (!vehicle) fail("INTERNAL_SERVER_ERROR", "Inventory could not be saved.");
           if (draft.odometerOut !== null && draft.odometerOut < vehicle.lastOdometer) fail("BAD_REQUEST", "Pickup odometer cannot be below the inventory odometer.");
         } else if (draft.vehicleId > 0) {
-          const selected = (await tx.find("vehicles", { eq: { id: draft.vehicleId, locationId: location.id, active: true }, lock: true }))[0];
+          const selected = (await tx.find("vehicles", { eq: { id: draft.vehicleId, active: true }, lock: true }))[0];
           if (!selected) fail("BAD_REQUEST", "Choose an active location and a vehicle assigned to it.");
-          vehicle = selected;
+          if (selected.source === "sheet" || selected.source === "demo" || selected.isDemo || selected.locationId === 0) vehicle = await this.chooseVehicle(tx, actor, selected, location.id, null);
+          else { if (selected.locationId !== location.id) fail("BAD_REQUEST", "Choose an active location and a vehicle assigned to it."); vehicle = selected; }
         }
+        if (manual && vehicle) await this.fleet.verify(vehicle);
         // Zero is an explicit unassigned Scheduled draft, never a fabricated inventory row.
         const savedDraft = rentalDraftSchema.parse({ ...draft, vehicleId: vehicle?.id || 0 });
         const now = this.deps.now();
@@ -285,13 +317,13 @@ export class RentalHandoffService {
       return await this.repo.transaction(async tx => {
         const location = (await tx.find("locations", { eq: { id: initial.locationId, active: true }, lock: true }))[0];
         if (!location) fail("BAD_REQUEST", "The pickup location is inactive.");
-        let vehicle = (await tx.find("vehicles", { eq: manual ? { vin: manual.vin } : { id: input.vehicleId, locationId: initial.locationId, active: true }, lock: true }))[0];
+        let vehicle = (await tx.find("vehicles", { eq: manual ? { vin: manual.vin } : { id: input.vehicleId, active: true }, lock: true }))[0];
         let created = false;
         if (manual && !vehicle) {
           const values = { locationId: initial.locationId, ymm: manual.ymm, vin: manual.vin, plate: manual.plate, lastOdometer: manual.lastOdometer ?? 0, active: true };
-          const id = await tx.insert("vehicles", values); vehicle = { ...values, id }; created = true;
+          const id = await tx.insert("vehicles", values); vehicle = (await tx.find("vehicles", { eq: { id } }))[0]; created = true;
         }
-        if (!vehicle || !vehicle.active || vehicle.locationId !== initial.locationId) fail("BAD_REQUEST", "Select an available vehicle at this pickup location.");
+        if (!vehicle || !vehicle.active || (vehicle.locationId !== 0 && vehicle.locationId !== initial.locationId)) fail("BAD_REQUEST", "Select an available vehicle at this pickup location.");
         if (manual && (manual.ymm !== vehicle.ymm || (manual.plate && manual.plate !== vehicle.plate))) fail("CONFLICT", "This VIN has different inventory details. Select the existing vehicle or contact Admin.");
         const r = await this.record(actor, input.id, tx, true); checkRevision(r, input.revision);
         if (r.locationId !== initial.locationId || r.status !== "Scheduled" || r.activePacketId !== null) fail("CONFLICT", "Only an unsigned scheduled rental can be assigned a vehicle.");
@@ -299,9 +331,10 @@ export class RentalHandoffService {
         if (active.some(other => other.id !== r.id)) fail("CONFLICT", "This vehicle is already assigned to another active rental.");
         if (r.vehicleId === vehicle.id) return { revision: r.revision, vehicleId: vehicle.id };
         if (r.vehicleId > 0) fail("CONFLICT", "This rental already has a vehicle. Contact Claims for an audited correction.");
+        vehicle = await this.chooseVehicle(tx, actor, vehicle, r.locationId, r.id);
         // Different vehicle means fresh measurements and signatures; old evidence remains append-only.
         const draft = rentalDraftSchema.parse({ ...decryptRental<RentalDraft>(r.payload), vehicleId: vehicle.id, odometerOut: null });
-        await tx.update("records", { eq: { id: r.id, revision: input.revision } }, { vehicleId: vehicle.id, payload: encryptRental(draft), ...this.searchFields(draft, vehicle.vin, vehicle.plate), revision: r.revision + 1, updatedAt: this.deps.now() });
+        if (!await tx.update("records", { eq: { id: r.id, revision: input.revision } }, { vehicleId: vehicle.id, payload: encryptRental(draft), ...this.searchFields(draft, vehicle.vin, vehicle.plate), revision: r.revision + 1, updatedAt: this.deps.now() })) fail("CONFLICT", "Rental changed. Reload before assigning.");
         const assets = await tx.find("assets", { eq: { rentalId: r.id }, limit: 2000 });
         if (assets.length) await this.audit(tx, actor, r.id, "signature.invalidate", { assetCutoffId: Math.max(...assets.map(a => a.id)), fields: ["vehicleId"], revision: r.revision + 1 });
         if (created) await this.audit(tx, actor, r.id, "vehicle.create", { vehicleId: vehicle.id, source: "rental.pickup" });
@@ -336,8 +369,11 @@ export class RentalHandoffService {
   searchFields(d: RentalDraft, vin: string, plate: string) { return { renterNameSearch: d.renterName.toLowerCase().slice(0, 180), rentalVinLastSix: vin.slice(-6).toLowerCase(), renterVinLastSix: d.renterVehicleVin.slice(-6).toLowerCase(), claimNumber: d.claimNumber, plateSearch: `${plate} ${d.renterVehiclePlate}`.toLowerCase().slice(0, 80) }; }
   async save(actor: RentalActor, id: number, revision: number, draft: RentalDraft) {
     draft = rentalDraftSchema.parse(draft); enforceDraftCardSafety(draft);
+    const initial = await this.record(actor, id);
     return this.repo.transaction(async tx => {
+      const selected = draft.vehicleId ? (await tx.find("vehicles", { eq: { id: draft.vehicleId, active: true }, lock: true }))[0] : undefined;
       const r = await this.record(actor, id, tx, true); checkRevision(r, revision);
+      if (r.vehicleId !== initial.vehicleId || r.locationId !== initial.locationId) fail("CONFLICT", "Vehicle assignment changed. Reload before saving.");
       if (r.activePacketId !== null || !["Scheduled", "Out"].includes(r.status)) fail("CONFLICT", "Signed or returned rentals are locked. Claims must open a new version.");
       const previous = decryptRental<RentalDraft>(r.payload);
       if (normalizeReminderPhone(previous.mobile) !== normalizeReminderPhone(draft.mobile)) await tx.retireReminderConsent?.(id, this.deps.now());
@@ -346,8 +382,12 @@ export class RentalHandoffService {
       const location = (await tx.find("locations", { eq: { id: draft.locationId, active: true } }))[0];
       if (!location) fail("BAD_REQUEST", "Choose an active location.");
       if (!draft.vehicleId && r.status !== "Scheduled") fail("CONFLICT", "An active rental must keep its assigned vehicle.");
-      const vehicle = draft.vehicleId ? (await this.locationVehicle(draft, tx)).vehicle : undefined;
       assertRentalAccess(actor, { locationId: draft.locationId });
+      if (r.vehicleId > 0 && (draft.vehicleId !== r.vehicleId || draft.locationId !== r.locationId)) fail("CONFLICT", "Assigned vehicle and location cannot be changed through draft save. Use an audited assignment correction.");
+      if (draft.vehicleId && !selected) fail("BAD_REQUEST", "Select an active inventory vehicle.");
+      let vehicle = selected;
+      if (draft.vehicleId !== r.vehicleId && vehicle) vehicle = await this.chooseVehicle(tx, actor, vehicle, draft.locationId, r.id);
+      else if (vehicle && vehicle.locationId !== draft.locationId) fail("BAD_REQUEST", "Vehicle location does not match the pickup location. Use staff assignment for unassigned inventory.");
       // A missing legacy manual note and the blank schema default mean the same unrecorded fact.
       const changed = Object.keys(draft).filter(k => JSON.stringify(draft[k as keyof RentalDraft]) !== JSON.stringify(k === "dashboardAlertsOut" ? previous.dashboardAlertsOut ?? "" : previous[k as keyof RentalDraft]));
       if (!await tx.update("records", { eq: { id, revision } }, { payload: encryptRental(draft), ...this.searchFields(draft, vehicle?.vin || "", vehicle?.plate || ""), locationId: draft.locationId, vehicleId: draft.vehicleId, revision: revision + 1, updatedAt: this.deps.now() })) fail("CONFLICT", "Rental changed. Reload before saving.");
@@ -438,6 +478,8 @@ export class RentalHandoffService {
       checkRevision(r, input.revision);
       if (r.vehicleId !== initial.vehicleId || !vehicle) fail("CONFLICT", "Vehicle assignment changed. Reload and try again.");
       if (!(["Scheduled", "Out"].includes(r.status)) || r.activePacketId !== null) fail("CONFLICT", "Rental is locked or cannot be completed.");
+      if (vehicle.isDemo || vehicle.source === "demo" || vehicle.vin === RENTAL_DEMO_VIN) fail("PRECONDITION_FAILED", "DEMO ONLY: fictional inventory allows draft preparation, but final pickup and packet emails are disabled.");
+      await this.fleet.verify(vehicle);
       const draft = rentalDraftSchema.parse(decryptRental<RentalDraft>(r.payload)); enforceDraftCardSafety(draft);
       const { location } = await this.locationVehicle(draft, tx); const { settings } = await this.actorSettings(actor, tx); const rates = decryptRental<RentalRates>(r.rateSnapshot);
       assertFixedRates(rates); assertFixedRates(settings.rates);
@@ -451,8 +493,9 @@ export class RentalHandoffService {
       }
       if (draft.odometerOut! < vehicle.lastOdometer) fail("BAD_REQUEST", "Pickup odometer cannot be below the fleet odometer.");
       const otherOut = await tx.find("records", { eq: { vehicleId: vehicle.id, status: "Out" }, lock: true }); if (otherOut.some(other => other.id !== r.id)) fail("CONFLICT", "This vehicle is already Out on another rental.");
+      if (vehicle.source === "sheet") { const reservations = await tx.find("records", { eq: { vehicleId: vehicle.id }, in: { status: ["Scheduled", "Out"] }, limit: 5001, lock: true }); if (reservations.length >= 5001 || reservations.some(other => other.id !== r.id)) fail("CONFLICT", "This sheet vehicle is assigned to another active rental. Reload inventory before pickup."); }
       const packets = await tx.find("packets", { eq: { rentalId: r.id }, limit: 2000 }); const version = Math.max(0, ...packets.map(p => p.version)) + 1;
-      const pdfInput: RentalPdfInput = { rentalId: r.id, version, draft, vehicle: { ...vehicle, status: "Out" }, location, rates, settings, assets: assets.map(a => ({ id: a.id, kind: a.kind, signerName: a.signerName, createdAt: a.createdAt })) };
+      const pdfInput: RentalPdfInput = { rentalId: r.id, version, draft, vehicle: { ...this.publicVehicle(vehicle), status: "Out" }, location, rates, settings, assets: assets.map(a => ({ id: a.id, kind: a.kind, signerName: a.signerName, createdAt: a.createdAt })) };
       const storageKey = await this.buildPacket(pdfInput, assets, false);
       const packetId = await tx.insert("packets", { rentalId: r.id, version, kind: "pickup", storageKey, snapshot: encryptRental(pdfInput), createdBy: actor.key, createdAt: this.deps.now(), formVersion: RENTAL_FORM_VERSION, requestId: input.requestId });
       if (!await tx.update("records", { eq: { id: r.id, revision: input.revision } }, { status: "Out", activePacketId: packetId, revision: r.revision + 1, updatedAt: this.deps.now() })) fail("CONFLICT", "Rental changed during completion.");
@@ -549,6 +592,9 @@ export class RentalHandoffService {
   async resend(actor: RentalActor, input: { packetId: number; requestId: string }) {
     const packet = (await this.repo.find("packets", { eq: { id: input.packetId } }))[0]; if (!packet) fail("NOT_FOUND", "Packet not found."); const record = await this.record(actor, packet.rentalId);
     if (actor.role === "shop" && record.status === "Closed") fail("FORBIDDEN", "Claims handles original signed packets after closure.");
+    const snapshotVehicle = decryptRental<RentalPdfInput>(packet.snapshot).vehicle;
+    const inventoryVehicle = record.vehicleId ? (await this.repo.find("vehicles", { eq: { id: record.vehicleId } }))[0] : undefined;
+    if (snapshotVehicle?.isDemo || snapshotVehicle?.source === "demo" || snapshotVehicle?.vin === RENTAL_DEMO_VIN || inventoryVehicle?.isDemo || inventoryVehicle?.source === "demo" || inventoryVehicle?.vin === RENTAL_DEMO_VIN) fail("PRECONDITION_FAILED", "DEMO ONLY: packet emails for fictional vehicles are disabled.");
     // Reserve each email attempt atomically. Gmail correlation is not provider idempotency.
     // Pending/uncertain sends must be reconciled, never blindly reissued with a new key.
     const log = await this.repo.transaction(async tx => {
@@ -590,7 +636,7 @@ export class RentalHandoffService {
     return this.repo.transaction(async tx => { const { id, ...fields } = input; if (id) { if (!(await tx.find("locations", { eq: { id }, lock: true }))[0]) fail("NOT_FOUND", "Location not found."); await tx.update("locations", { eq: { id } }, fields); } const savedId = id || await tx.insert("locations", fields); await this.audit(tx, actor, null, "location.save", { locationId: savedId, active: input.active }); return { id: savedId }; });
   }
   async saveVehicle(actor: RentalActor, input: { id?: number; locationId: number; ymm: string; vin: string; plate: string; lastOdometer: number }) {
-    adminOnly(actor); return this.repo.transaction(async tx => { if (!(await tx.find("locations", { eq: { id: input.locationId, active: true } }))[0]) fail("BAD_REQUEST", "Choose an active location."); const { id, ...fields } = input; if (id) { const v = (await tx.find("vehicles", { eq: { id }, lock: true }))[0]; if (!v) fail("NOT_FOUND", "Vehicle not found."); const out = await tx.find("records", { eq: { vehicleId: id, status: "Out" } }); if (out.length) fail("CONFLICT", "An Out vehicle cannot be edited."); if (fields.lastOdometer < v.lastOdometer) fail("BAD_REQUEST", "Fleet odometer cannot decrease."); await tx.update("vehicles", { eq: { id } }, fields); } const savedId = id || await tx.insert("vehicles", { ...fields, active: true }); await this.audit(tx, actor, null, "vehicle.save", { vehicleId: savedId }); return { id: savedId }; });
+    adminOnly(actor); return this.repo.transaction(async tx => { if (input.locationId <= 0 || !(await tx.find("locations", { eq: { id: input.locationId, active: true } }))[0]) fail("BAD_REQUEST", "Choose an active location."); const { id, ...fields } = input; if (id) { const v = (await tx.find("vehicles", { eq: { id }, lock: true }))[0]; if (!v) fail("NOT_FOUND", "Vehicle not found."); const out = await tx.find("records", { eq: { vehicleId: id }, in: { status: ["Scheduled", "Out"] } }); if (out.length) fail("CONFLICT", "An assigned or Out vehicle cannot be edited."); if ((v.isDemo || v.source === "demo" || v.source === "sheet") && (fields.vin !== v.vin || fields.ymm !== v.ymm || fields.plate !== v.plate)) fail("CONFLICT", "Linked or demo vehicle identity is protected. Use source review rather than rewriting identification."); if (fields.lastOdometer < v.lastOdometer) fail("BAD_REQUEST", "Fleet odometer cannot decrease."); await tx.update("vehicles", { eq: { id } }, fields); if (fields.locationId !== v.locationId) await this.audit(tx, actor, null, "vehicle.location.assign", { vehicleId: id, previousLocationId: v.locationId, locationId: fields.locationId }); } else if (fields.vin === RENTAL_DEMO_VIN) fail("CONFLICT", "The requested demo is managed by fleet refresh; do not add a second demo."); const savedId = id || await tx.insert("vehicles", { ...fields, active: true }); await this.audit(tx, actor, null, "vehicle.save", { vehicleId: savedId }); return { id: savedId }; });
   }
   async saveSettings(actor: RentalActor, input: LaunchSettings) {
     adminOnly(actor); input = rentalSettingsSchema.parse(input); assertFixedRates(input.rates);

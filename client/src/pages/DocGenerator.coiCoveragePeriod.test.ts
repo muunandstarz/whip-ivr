@@ -3,29 +3,35 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const source = readFileSync(resolve(process.cwd(), 'client/src/pages/DocGenerator.tsx'), 'utf8');
-const coiStart = source.indexOf('function UnifiedCOITab');
+const coiStart = source.indexOf('export function UnifiedCOITab');
 const declarationsStart = source.indexOf('function KlutchDecPageTab');
 const coiSource = source.slice(coiStart, declarationsStart);
 
+function expectCoi(fragment: string) {
+  expect(coiSource.includes(fragment), `Missing COI coverage-period contract: ${fragment}`).toBe(true);
+}
+
 describe('Unified COI coverage period', () => {
   it('uses the single Date Issued / Subscription Start Date in every rendered coverage-period location', () => {
-    expect(coiSource).toContain('const coverageStartDate = form.subscriptionStartDate;');
-    expect(coiSource).toContain('fmtDateLong(coverageStartDate)');
-    expect(coiSource).toContain('const effDate = fmtDate(coverageStartDate);');
-    expect(coiSource).toContain('new Date(coverageStartDate + "T12:00:00")');
-    expect(coiSource).not.toContain('form.effectiveDate');
+    expectCoi('const coverageStartDate = form.subscriptionStartDate;');
+    expectCoi('coiText(fmtDate(form.subscriptionStartDate), 9, "bold", "right")');
+    expectCoi('fmtDateLong(coverageStartDate)');
+    expectCoi('const effDate = fmtDate(coverageStartDate);');
+    expectCoi('new Date(coverageStartDate + "T12:00:00")');
+    expect(coiSource.includes('form.effectiveDate')).toBe(false);
   });
 
   it('renders the same period in the insured panel, coverage table, and formatted preview', () => {
-    expect(coiSource).toContain('doc.text(periodStr, rx, y + 8);');
-    expect(coiSource).toContain('doc.text(effDate, effX + cols.eff / 2');
-    expect(coiSource).toContain('Coverage Period: ${coverageStartDate && form.expirationDate');
+    expectCoi('`${fmtDateLong(coverageStartDate)} — ${fmtDateLong(form.expirationDate)}`');
+    expectCoi('[label("COVERAGE PERIOD"), coiText(periodStr, 9, "normal", "left", 2),');
+    expectCoi('[coiText(effDate, 7.5, "normal", "center")], [coiText(expDate, 7.5, "normal", "center")]');
+    expectCoi('Coverage Period: ${coverageStartDate && form.expirationDate');
   });
 
   it('does not erase an entered expiration when the still-in-rental toggle is off', () => {
-    expect(coiSource).toContain('const previouslyStillInRentalCOI = React.useRef(false);');
-    expect(coiSource).toContain('const toggledFromProjectedPeriod = previouslyStillInRentalCOI.current;');
-    expect(coiSource).toContain('toggledFromProjectedPeriod || !p.expirationDate');
-    expect(coiSource).not.toContain('if (!stillInRentalCOI) {\n      setForm(p => ({ ...p, expirationDate: "" }));');
+    expectCoi('const previouslyStillInRentalCOI = React.useRef(false);');
+    expectCoi('const toggledFromProjectedPeriod = previouslyStillInRentalCOI.current;');
+    expectCoi('toggledFromProjectedPeriod || !p.expirationDate');
+    expect(coiSource.includes('if (!stillInRentalCOI) {\n      setForm(p => ({ ...p, expirationDate: "" }));')).toBe(false);
   });
 });

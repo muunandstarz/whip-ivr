@@ -8,7 +8,7 @@ describe('active certificate naming', () => {
   it('retains the Certificate of Insurance output while routing retired Klutch certificate links into the workspace', () => {
     expect(source).toContain('"coi-whip", "coi-klutch"');
     expect(source).toContain('return "klutch-policy-documents";');
-    expect(source).toContain('doc.text("CERTIFICATE OF INSURANCE", W / 2, y + 6, { align: "center" });');
+    expect(source).toContain('coiText("CERTIFICATE OF INSURANCE",');
     expect(source).toContain('`CERTIFICATE OF INSURANCE`,');
   });
 });

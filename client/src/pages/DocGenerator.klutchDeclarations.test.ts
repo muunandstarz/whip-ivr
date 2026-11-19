@@ -5,6 +5,7 @@ const source = readFileSync(new URL("./DocGenerator.tsx", import.meta.url), "utf
 const app = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
 const sidebar = readFileSync(new URL("../components/WhipLayout.tsx", import.meta.url), "utf8");
 const approvedTemplate = readFileSync(new URL("../../public/klutch-policy-declarations.html", import.meta.url), "utf8");
+const coiSource = source.slice(source.indexOf('export function UnifiedCOITab'), source.indexOf('function KlutchDecPageTab'));
 
 describe("Klutch declarations navigation", () => {
   it("moves Klutch policy documents to Knowledge Base and redirects legacy Document Generator links", () => {
@@ -25,11 +26,12 @@ describe("Klutch declarations navigation", () => {
     expect(source).toContain('startDateStr: form.subscriptionStartDate');
     expect(source).toContain('startDateStr: form.effectiveDate');
     expect(source).not.toContain('certDate: new Date().toISOString().slice(0, 10)');
-    expect(source).toContain('doc.text(fmtDate(form.subscriptionStartDate) || new Date().toLocaleDateString("en-US"), rm, y + 7, { align: "right" });');
+    expect(coiSource.includes('coiText(fmtDate(form.subscriptionStartDate), 9, "bold", "right")'), 'COI issue date must use the entered subscription date').toBe(true);
+    expect(coiSource.includes('new Date().toLocaleDateString("en-US")'), 'COI must not substitute today for an unentered issue date').toBe(false);
   });
 
   it("identifies Klutch with NAIC 17966 in the COI and approved Declarations insurer fields", () => {
-    expect(source).toContain('doc.text("Klutch Risk Retention Group · NAIC 17966", c3x + 14, y + 7);');
+    expect(coiSource.includes('coiText(isKlutch ? "Klutch Risk Retention Group · NAIC 17966" : "Maryland MVA / Self-Insured")'), 'COI insurer A must retain Klutch NAIC and MetroCars identity').toBe(true);
     expect(source).toContain('doc.text(doc.splitTextToSize("Klutch Risk Retention Group · NAIC 17966", sideW - 6), sideX + 3, syi);');
   });
 

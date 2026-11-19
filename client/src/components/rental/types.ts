@@ -6,6 +6,7 @@ import type {
   RentalReturn,
   RentalVehicle,
   LaunchSettings,
+  RentalInventorySource,
 } from "@shared/rentalHandoff";
 import type { AssetWithUrl } from "./Media";
 export type RentalSession = {
@@ -15,6 +16,7 @@ export type RentalSession = {
   vehicles: RentalVehicle[];
   launchGaps: string[];
   sender?: { connected: boolean; email?: string | null; configured?: boolean };
+  inventorySource?: RentalInventorySource;
 };
 export type RentalRow = {
   id: number;

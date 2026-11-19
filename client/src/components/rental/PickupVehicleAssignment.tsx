@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import type { RentalVehicle } from "@shared/rentalHandoff";
+import { rentalVehicleSelectable, type RentalVehicle } from "@shared/rentalHandoff";
 import { Card, ErrorNotice, Field, Select, errorMessage } from "./Controls";
 
 export function PickupVehicleAssignment({ id, locationId, vehicles, beforeAssign, onAssigned, disabled }: {
@@ -9,7 +9,7 @@ export function PickupVehicleAssignment({ id, locationId, vehicles, beforeAssign
 }) {
   const assign = trpc.rentalHandoff.assignVehicle.useMutation();
   const decode = trpc.rentalHandoff.decodeVin.useMutation();
-  const [mode, setMode] = useState<"inventory" | "manual">(vehicles.some(v => v.locationId === locationId && v.status === "Available") ? "inventory" : "manual");
+  const [mode, setMode] = useState<"inventory" | "manual">(vehicles.some(v => rentalVehicleSelectable(v, locationId)) ? "inventory" : "manual");
   const [vehicleId, setVehicleId] = useState(0);
   const [vehicle, setVehicle] = useState({ ymm: "", vin: "", plate: "" });
   const [busy, setBusy] = useState(false);
@@ -24,7 +24,7 @@ export function PickupVehicleAssignment({ id, locationId, vehicles, beforeAssign
       </div>
       {mode === "inventory" ? <Select label="Available pickup vehicle" value={vehicleId || ""} onChange={e => setVehicleId(Number(e.target.value))}>
         <option value="">Choose vehicle</option>
-        {vehicles.filter(v => v.locationId === locationId && v.status === "Available").map(v => <option key={v.id} value={v.id}>{v.ymm} · VIN {v.vin.slice(-6)}{v.plate ? ` · ${v.plate}` : ""}</option>)}
+        {vehicles.filter(v => rentalVehicleSelectable(v, locationId)).map(v => <option key={v.id} value={v.id}>{v.isDemo ? "DEMO ONLY · " : ""}{v.ymm} · VIN {v.vin.slice(-6)}{v.plate ? ` · ${v.plate}` : ""}{v.locationId === 0 ? " · UNASSIGNED — assign here" : ""}</option>)}
       </Select> : <div className="r-grid">
         <Field label="Pickup rental VIN" value={vehicle.vin} maxLength={17} onChange={e => setVehicle({ ...vehicle, vin: e.target.value.toUpperCase() })} />
         <button type="button" className="r-button" disabled={decode.isPending || !/^[A-HJ-NPR-Z0-9]{17}$/.test(vehicle.vin)} onClick={async () => {
@@ -35,6 +35,8 @@ export function PickupVehicleAssignment({ id, locationId, vehicles, beforeAssign
         <Field label="Pickup rental year, make and model" value={vehicle.ymm} maxLength={120} onChange={e => setVehicle({ ...vehicle, ymm: e.target.value })} />
         <Field label="Pickup rental license plate (optional)" value={vehicle.plate} maxLength={30} onChange={e => setVehicle({ ...vehicle, plate: e.target.value })} />
       </div>}
+      {vehicles.find(v => v.id === vehicleId)?.isDemo && mode === "inventory" && <p className="r-guidance" role="status">DEMO ONLY — fictional vehicle. Draft walkthroughs are allowed; final pickup and packet email are blocked.</p>}
+      {mode === "inventory" && <p className="r-guidance">UNASSIGNED vehicles keep their blank source location until this selection assigns them to this rental’s pickup location. Availability is checked again on the server.</p>}
       <button type="button" className="r-button r-primary" disabled={!ready || busy || disabled} onClick={async () => {
         setError(""); setBusy(true);
         try { const revision = await beforeAssign(); await assign.mutateAsync({ id, revision, ...(mode === "inventory" ? { vehicleId } : { vehicle }) }); await onAssigned(); }

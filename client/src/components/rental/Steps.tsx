@@ -11,6 +11,7 @@ import {
 import {
   eligibleOptions,
   PICKUP_EVIDENCE_KINDS,
+  rentalVehicleSelectable,
   type RentalDraft,
   type RentalLocation,
   type RentalVehicle,
@@ -618,12 +619,11 @@ export function Details({
               {vehicles
                 .filter(
                   v =>
-                    v.locationId === d.locationId &&
-                    (v.status === "Available" || v.id === d.vehicleId)
+                    rentalVehicleSelectable(v, d.locationId) || v.id === d.vehicleId
                 )
                 .map(v => (
                   <option value={v.id} key={v.id}>
-                    {v.ymm} · {v.plate} · VIN {v.vin.slice(-6)}
+                    {v.isDemo ? "DEMO ONLY · " : ""}{v.ymm} · {v.plate} · VIN {v.vin.slice(-6)}{v.locationId === 0 ? " · UNASSIGNED — assign here" : ""}
                   </option>
                 ))}
             </Select>
@@ -633,7 +633,7 @@ export function Details({
           <div className="r-vehicle-banner">
             <Car size={38} />
             <div>
-              <h3>{vehicle.ymm}</h3>
+              <h3>{vehicle.isDemo ? "DEMO ONLY · " : ""}{vehicle.ymm}</h3>
               <p>VIN {vehicle.vin}</p>
               <p>
                 Plate {vehicle.plate} · Last odometer{" "}
@@ -643,11 +643,12 @@ export function Details({
             <span className="r-tag">{vehicle.status}</span>
           </div>
         )}
-        {vehicleMode !== "later" && !vehicles.some(v => v.locationId === d.locationId) && (
+        {vehicle?.isDemo && <p className="r-guidance" role="status">Fictional vehicle, not real identification. Draft preparation is allowed; final pickup and packet email are blocked.</p>}
+        {vehicleMode !== "later" && !vehicles.some(v => rentalVehicleSelectable(v, d.locationId)) && (
           <p className="r-guidance">
             {onVehicleModeChange
-              ? "No inventory at this location yet. Enter the actual vehicle manually to add it when scheduling. No sample vehicles are supplied."
-              : "An administrator needs to configure this location’s vehicle inventory. No sample vehicles are supplied."}
+              ? "No available inventory at this location or in the unassigned pool. Enter an actual vehicle manually or assign at pickup."
+              : "No available inventory at this location or in the unassigned pool. Ask your administrator to refresh inventory."}
           </p>
         )}
       </Card>
@@ -780,7 +781,7 @@ export function Pickup({
         <div className="r-vehicle-banner r-pickup-vehicle">
           <Car size={28} aria-hidden="true" />
           <div>
-            <h3>{vehicle?.ymm || "No vehicle assigned"}</h3>
+            <h3>{vehicle?.isDemo ? "DEMO ONLY · " : ""}{vehicle?.ymm || "No vehicle assigned"}</h3>
             <p>Plate {vehicle?.plate || "Not configured"}</p>
           </div>
         </div>
@@ -1617,7 +1618,7 @@ export function Summary({
           <dd>{rentalDateDisplay(d.expectedReturn, location?.timezone || "America/New_York")}</dd>
           <dt>Rental vehicle</dt>
           <dd>
-            {vehicle?.ymm || "Not assigned"}
+            {vehicle?.isDemo ? "DEMO ONLY · " : ""}{vehicle?.ymm || "Not assigned"}
             <br />
             {vehicle?.vin || ""}
             <br />

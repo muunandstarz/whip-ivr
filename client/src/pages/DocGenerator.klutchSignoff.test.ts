@@ -17,6 +17,7 @@ vi.mock("jspdf", () => ({ jsPDF: class {
   constructor() { h.pdf(); }
   setFont() {} setFontSize() {} setTextColor() {} setDrawColor() {} setLineWidth() {} line() {} rect() {} addImage() {}
   setFillColor() {}
+  addPage() {}
   text(...args: any[]) { h.text(...args); }
   splitTextToSize(text: string) { return [text]; }
   output() { return "data:application/pdf;base64,c3ludGhldGlj"; }
@@ -50,6 +51,9 @@ describe("COI canonical Klutch-only attribution", () => {
     expect(h.text).toHaveBeenCalledWith(h.name, expect.any(Number), expect.any(Number));
     expect(h.text).toHaveBeenCalledWith(h.title, expect.any(Number), expect.any(Number));
     expect(h.text).toHaveBeenCalledWith("Authorized Representative, Klutch Risk Retention Group", expect.any(Number), expect.any(Number));
+    const printed = h.text.mock.calls.map(([text]) => String(text)).join(" ").replace(/\s+/g, " ");
+    expect(printed.indexOf(h.name)).toBeLessThan(printed.indexOf(h.title));
+    expect(printed.indexOf(h.title)).toBeLessThan(printed.indexOf("Authorized Representative, Klutch Risk Retention Group"));
   });
 
   it("blocks preview and download before constructing a PDF if the canonical sign-off has not loaded", async () => {

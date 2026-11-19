@@ -75,7 +75,10 @@ export default function RentalHandoff() {
   const id = params?.id ? Number(params.id) : 0;
   const session = trpc.rentalHandoff.session.useQuery(undefined, {
     retry: false,
+    staleTime: 30000,
+    refetchInterval: 60000,
   });
+  const refreshInventory = trpc.rentalHandoff.refreshInventory.useMutation();
   const signOut = trpc.rentalHandoff.signOut.useMutation();
   const { theme, setTheme } = useTheme();
   const [view, setView] = useState<View>(() => params?.id === "admin" ? "Settings" : "Rentals");
@@ -216,6 +219,7 @@ export default function RentalHandoff() {
         <main className="r-main">
           <ErrorNotice message={error} />
           {data?.actor && <SharedSenderStatus session={data} />}
+          {data?.actor && data.inventorySource?.enabled && <div className="r-launch-note" role="status"><div><strong>FLEET sheet · read-only inventory</strong><p>{data.inventorySource.pending ? "Initial inventory refresh pending." : `${data.inventorySource.available} source Available vehicles · last successful refresh ${data.inventorySource.updatedAt ? dateDisplay(data.inventorySource.updatedAt) : "not yet checked"}.`} Blank LOCATION remains UNASSIGNED until staff selects a pickup location.</p>{data.inventorySource.error && <p>{data.inventorySource.error}</p>}{data.actor.role === "admin" && <button type="button" className="r-button" disabled={refreshInventory.isPending} onClick={async () => { setError(""); try { await refreshInventory.mutateAsync(); await session.refetch(); } catch(e) { setError(errorMessage(e)); } }}>{refreshInventory.isPending ? "Refreshing…" : "Refresh fleet inventory"}</button>}</div></div>}
           {session.isLoading ? (
             <div className="r-loading" role="status">
               Loading secure rental session…
@@ -555,7 +559,7 @@ function RentalList({
                     </div>
                   </div>
                   <div>
-                    <strong>{v?.ymm || "Vehicle not assigned"}</strong>
+                    <strong>{v?.isDemo ? "DEMO ONLY · " : ""}{v?.ymm || "Vehicle not assigned"}</strong>
                     <span>
                       Rental VIN …{v?.vin.slice(-6) || "—"} · {v?.plate || "—"}
                     </span>
@@ -605,7 +609,7 @@ function Fleet({
         <div>
           <p className="r-eyebrow">LIVE INVENTORY</p>
           <h1>Rental vehicles</h1>
-          <p>Actual fleet availability at your accessible locations.</p>
+          <p>Accessible locations and the shared UNASSIGNED pool. Sheet pickups require a fresh Available check.</p>
         </div>
         {session.actor?.role === "admin" && (
           <button
@@ -635,13 +639,15 @@ function Fleet({
               <span
                 className={`r-status ${v.status === "Out" ? "r-status-out" : "r-status-returned"}`}
               >
-                {v.status}
+                {v.isDemo ? "DEMO ONLY" : v.assigned && v.status !== "Out" ? "Reserved" : v.status}
               </span>
+              {v.isDemo && <p className="r-guidance">Fictional app-only vehicle. Drafts allowed; final pickup and packet email disabled.</p>}
+              {v.source === "sheet" && <p className="r-guidance">Sheet linked · {v.sourceStatus}{v.sourceLocationIssue ? " · Unknown source location — staff review" : ""}{v.pickupEligible === false ? " · Not cleared for new pickup" : ""}</p>}
               <dl>
                 <dt>Location</dt>
                 <dd>
                   {session.locations.find(l => l.id === v.locationId)?.name ||
-                    "—"}
+                    "UNASSIGNED"}
                 </dd>
                 <dt>VIN</dt>
                 <dd>{v.vin}</dd>
@@ -840,6 +846,7 @@ function RentalEditor({
   const [localAssetCutoff, setLocalAssetCutoff] = useState(0);
   const requestId = useRef<string | null>(null);
   const d = autosave.draft;
+  const demoVehicle = session.vehicles.find(v => v.id === d.vehicleId)?.isDemo === true;
   const returnTimeState = useRef(hasExplicitReturnTime(
     record.draft,
     session.locations.find(l => l.id === record.draft.locationId)?.timezone || "America/New_York"
@@ -1003,6 +1010,7 @@ function RentalEditor({
       <Stepper step={step} onChange={target => void move(target)} />
       <ErrorNotice message={error} />
       <ErrorNotice message={autosave.error} />
+      {demoVehicle && <div className="r-launch-note" role="status"><div><strong>DEMO ONLY — fictional vehicle</strong><p>This draft can be used for a walkthrough. Final pickup completion and all packet email are disabled; this is not real vehicle identification.</p></div></div>}
       {autosave.state === "conflict" && (
         <div className="r-actions">
           <p>
@@ -1122,6 +1130,7 @@ function RentalEditor({
                       className="r-button r-primary"
                       disabled={
                         busy ||
+                        demoVehicle ||
                         !!missing.length ||
                         !!session.launchGaps.length ||
                         autosave.state === "conflict" ||
