@@ -49,7 +49,7 @@ describe("COI canonical Klutch-only attribution", () => {
     expect(h.requireApproved).toHaveBeenCalledOnce(); expect(h.save).toHaveBeenCalledOnce();
     expect(h.text).toHaveBeenCalledWith(h.name, expect.any(Number), expect.any(Number));
     expect(h.text).toHaveBeenCalledWith(h.title, expect.any(Number), expect.any(Number));
-    expect(h.text).toHaveBeenCalledWith("Authorized Representative, Klutch Insurance Company", expect.any(Number), expect.any(Number));
+    expect(h.text).toHaveBeenCalledWith("Authorized Representative, Klutch Risk Retention Group", expect.any(Number), expect.any(Number));
   });
 
   it("blocks preview and download before constructing a PDF if the canonical sign-off has not loaded", async () => {

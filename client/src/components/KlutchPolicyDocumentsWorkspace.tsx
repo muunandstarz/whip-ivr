@@ -20,7 +20,7 @@ import {
 } from "@shared/klutchPolicy";
 import { normalizeKlutchDocumentSignoff, useKlutchSignoff } from "@/hooks/useKlutchSignoff";
 
-const KLUTCH_LOGO_URL = "/manus-storage/klutch-insurance-logo_c2ff6576.png";
+const KLUTCH_LOGO_URL = "/manus-storage/klutch-risk-retention-group-print_94cb75e0.png";
 const NAVY = "#003B40";
 const SUPPORTED_STATES: KlutchState[] = ["MD", "VA", "PA", "FL", "IL", "GA", "MA", "TX"];
 
@@ -125,17 +125,17 @@ async function addReferenceLogo(doc: jsPDF, x = 15, y = 11, width = 38) {
       reader.onerror = () => reject(reader.error);
       response.blob().then((blob) => reader.readAsDataURL(blob), reject);
     });
-    doc.addImage(dataUrl, "PNG", x, y, width, width * 0.354);
+    doc.addImage(dataUrl, "PNG", x, y, width, width * (372 / 1056));
   } catch {
     doc.setFont("helvetica", "bold");
     doc.setTextColor(NAVY);
-    doc.setFontSize(14);
-    doc.text("KLUTCH", x, y + 10);
+    doc.setFontSize(6.8);
+    doc.text("KLUTCH RISK RETENTION GROUP", x, y + 10, { maxWidth: width });
   }
   doc.setTextColor("#111827");
 }
 
-function addReferenceFooter(doc: jsPDF, text = "Klutch Insurance Company | 424 Church Street, Suite 800, Nashville, Tennessee 37219") {
+function addReferenceFooter(doc: jsPDF, text = "Klutch Risk Retention Group | 424 Church Street, Suite 800, Nashville, Tennessee 37219") {
   doc.setTextColor("#9CA3AF");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.1);
@@ -347,11 +347,11 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     const vehicleText = `${terms.vehicle}${terms.vin ? ` (${terms.vin})` : ""}`;
     const activity = ({ "1": "waiting for a ride request", "2": "traveling to pick up a passenger", "3": "transporting a passenger" } as Record<string, string>)[docForm.tncPeriod] || "";
     const coverage = (label: string) => terms.coverages.find((entry) => entry.label === label) || { label, limit: "", deductible: "", premium: 0 };
-    const referenceFooter = (formPage?: number) => addReferenceFooter(doc, formPage ? `Klutch Insurance Company | Form KIC-END-002 (Ed. 07/26) | Page ${formPage} of 2` : undefined);
+    const referenceFooter = (formPage?: number) => addReferenceFooter(doc, formPage ? `Klutch Risk Retention Group | Form KIC-END-002 (Ed. 07/26) | Page ${formPage} of 2` : undefined);
 
     if (kind === "declarations") {
       await addReferenceLogo(doc, 145, 11, 38);
-      writeReferenceLines(doc, ["Klutch Insurance Company", "NAIC 17966", "424 Church Street, Suite 800", "Nashville, Tennessee 37219", "claims@klutchinsurance.com"], 145, 30, 6.5, 4.2);
+      writeReferenceLines(doc, ["Klutch Risk Retention Group", "NAIC 17966", "424 Church Street, Suite 800", "Nashville, Tennessee 37219", "claims@klutchinsurance.com"], 145, 30, 6.5, 4.2);
       let y = 72;
       doc.setFont("helvetica", "bold"); doc.setFontSize(7.8); doc.text(`Policy number ${policy.policyNumber}`, 15, y);
       y += 11;
@@ -420,7 +420,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       doc.text(["RE: Coverage Determination – Denial of Claim", `Policy Number: ${policy.policyNumber}`, `Claim Number: ${klutchClaimNumber || "[Klutch claim number]"}`, `Date of Loss: ${prettyDate(docForm.dateOfLoss)}`, `Vehicle: ${vehicleText}`], 15, y, { lineHeightFactor: 1.35 });
       y += 31;
       y = writeReferenceParagraph(doc, `Dear ${terms.memberName}:`, 15, y, 180, 8.8, 5.2) + 5;
-      y = writeReferenceParagraph(doc, "We have completed our review of this claim. Based on the circumstances of the loss and the applicable policy exclusion, Klutch Insurance Company denies liability and physical damage coverage for this loss.", 15, y, 180, 8.8, 5.2) + 5;
+      y = writeReferenceParagraph(doc, "We have completed our review of this claim. Based on the circumstances of the loss and the applicable policy exclusion, Klutch Risk Retention Group denies liability and physical damage coverage for this loss.", 15, y, 180, 8.8, 5.2) + 5;
       y = writeReferenceParagraph(doc, `Our review of the ${docForm.tncName} trip and activity records for the date of loss confirms that, at the time of the loss, you were logged on to the ${docForm.tncName} platform and ${activity}.`, 15, y, 180, 8.8, 5.2) + 5;
       y = writeReferenceParagraph(doc, "Your policy includes the following exclusion under the Transportation Network Company and Commercial Use Exclusion Endorsement, Form KIC-END-002 (Ed. 07/26), Section B:", 15, y, 180, 8.8, 5.2) + 4;
       y = writeReferenceParagraph(doc, "“We do not provide coverage under this policy for any loss, damage, injury, or liability, or for any claim, suit, defense, or expense, arising out of or occurring while the covered vehicle is being used, operated, or made available: 1. while the operator is logged on to a transportation network company platform or digital network, whether waiting for a request, en route to a rider or pickup location, or carrying a passenger or property …”", 25, y, 160, 8.3, 4.9) + 5;
@@ -434,7 +434,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
         y = writeReferenceParagraph(doc, `For reference only, the following TNC insurer information was provided: ${insurerReference.join("; ")}. This information does not state or imply a coverage determination by that insurer.`, 15, y, 180, 8.4, 5) + 5;
       }
       y = writeReferenceParagraph(doc, "If you believe our findings are incorrect or have additional information that may affect this decision, please send it to claims@klutchinsurance.com for review.", 15, y, 180, 8.8, 5.2) + 9;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Risk Retention Group", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
       addReferenceFooter(doc);
       return doc;
     }
@@ -448,12 +448,12 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       doc.text(["RE: Coverage Position", `Your Claim Number: ${docForm.carrierClaimNumber}`, `Policy Number: ${policy.policyNumber}`, `Our Claim Number: ${klutchClaimNumber || "[Klutch claim number]"}`, `Date of Loss: ${prettyDate(docForm.dateOfLoss)}`, `Our Insured: ${terms.memberName}`, `Vehicle: ${vehicleText}`], 15, y, { lineHeightFactor: 1.32 });
       y += 38;
       y = writeReferenceParagraph(doc, `Dear ${docForm.adjusterName}:`, 15, y, 180, 8.6, 5.05) + 5;
-      y = writeReferenceParagraph(doc, `This responds to your letter of ${docForm.carrierLetterDate ? prettyDate(docForm.carrierLetterDate) : "[date of carrier letter]"} on the above loss. Klutch Insurance Company insures the above vehicle under a policy issued to ${terms.memberName}. Our coverage position is set out below.`, 15, y, 180, 8.6, 5.05) + 5;
+      y = writeReferenceParagraph(doc, `This responds to your letter of ${docForm.carrierLetterDate ? prettyDate(docForm.carrierLetterDate) : "[date of carrier letter]"} on the above loss. Klutch Risk Retention Group insures the above vehicle under a policy issued to ${terms.memberName}. Our coverage position is set out below.`, 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, "The Klutch policy includes the Transportation Network Company and Commercial Use Exclusion Endorsement, Form KIC-END-002 (Ed. 07/26). Section B of that endorsement excludes coverage for any loss arising out of or occurring while the operator is logged on to a transportation network company platform, whether waiting for a request, en route to a rider or pickup location, or carrying a passenger or property.", 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, `Our investigation determined that ${terms.memberName} was driving in period ${docForm.tncPeriod} on the ${docForm.tncName} platform at the time of the loss, based on ${docForm.supportingRecords}. Klutch has denied coverage for this loss to its insured. The Klutch policy is not available as other insurance for this loss, and Klutch will not be contributing to any payment.`, 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, "Please direct all communications about the repair of the vehicle and the payment of any physical damage loss to Whip Claims Management at claims@drivewhip.com and reference the claim numbers above.", 15, y, 180, 8.6, 5.05) + 5;
       y = writeReferenceParagraph(doc, "Copies of the policy declarations and the denial are enclosed. Please contact our office with any questions.", 15, y, 180, 8.6, 5.05) + 8;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.6); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "Enclosures: Policy Declarations; Coverage Denial"], 15, y, { lineHeightFactor: 1.33 });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.6); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Risk Retention Group", "claims@klutchinsurance.com", "", "Enclosures: Policy Declarations; Coverage Denial"], 15, y, { lineHeightFactor: 1.33 });
       addReferenceFooter(doc);
       return doc;
     }
@@ -472,7 +472,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
       y += 2;
       y = writeReferenceParagraph(doc, "This cancellation does not affect coverage for covered losses that occurred before the cancellation effective date.", 15, y, 180, 8.8, 5.2) + 5;
       y = writeReferenceParagraph(doc, "If you believe this notice is in error, please contact us at claims@klutchinsurance.com.", 15, y, 180, 8.8, 5.2) + 10;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.text(["Sincerely,", "", signer, signerTitle, "Klutch Risk Retention Group", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"], 15, y, { lineHeightFactor: 1.35 });
       addReferenceFooter(doc);
       return doc;
     }
@@ -487,7 +487,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
     y += 12;
     doc.setFontSize(8.7); doc.text(["TRANSPORTATION NETWORK COMPANY AND COMMERCIAL USE EXCLUSION", "ENDORSEMENT"], 107.5, y, { align: "center", lineHeightFactor: 1.2 });
     y += 15;
-    y = writeReferenceParagraph(doc, "This endorsement modifies the insurance provided under the Klutch Insurance Company policy to which it is attached. It applies to every coverage part of the policy, including liability, personal injury protection, uninsured and underinsured motorist, comprehensive, and collision coverage. Where this endorsement conflicts with any other provision of the policy, this endorsement controls.", 15, y, 185, 8.3, 4.9) + 8;
+    y = writeReferenceParagraph(doc, "This endorsement modifies the insurance provided under the Klutch Risk Retention Group policy to which it is attached. It applies to every coverage part of the policy, including liability, personal injury protection, uninsured and underinsured motorist, comprehensive, and collision coverage. Where this endorsement conflicts with any other provision of the policy, this endorsement controls.", 15, y, 185, 8.3, 4.9) + 8;
     doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.text("A. Definitions", 15, y); y += 7;
     y = writeReferenceParagraph(doc, "The following definitions apply to this endorsement. Words defined elsewhere in the policy keep their meaning unless defined here.", 15, y, 185, 8.3, 4.9) + 6;
     const definitions = [
@@ -583,7 +583,7 @@ export default function KlutchPolicyDocumentsWorkspace({ initialState = "MD" }: 
           <div className="absolute right-0 top-0 h-full w-1/3 bg-[linear-gradient(120deg,transparent_0%,rgba(203,234,75,.16)_55%,rgba(203,234,75,.08)_100%)]" />
           <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4">
-              <img src={KLUTCH_LOGO_URL} alt="Klutch Insurance" className="h-11 w-auto rounded bg-white/95 px-2 py-1" />
+              <img src={KLUTCH_LOGO_URL} alt="Klutch Risk Retention Group" className="h-11 w-auto rounded px-2 py-1" />
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#CBEA4B]">Policy document workspace</p>
                 <h2 className="mt-1 text-xl font-semibold">Klutch Policy Documents</h2>

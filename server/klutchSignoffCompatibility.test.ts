@@ -44,7 +44,7 @@ describe("Klutch printed sign-off compatibility", () => {
 
   it("uses the approved signer in all three letter closings, including cancellation", () => {
     const cancellation = section(workspace, 'if (kind === "cancellation_notice")', 'doc.text("ENDORSEMENT NO. KIC-END-002"');
-    expect(cancellation).toContain('["Sincerely,", "", signer, signerTitle, "Klutch Insurance Company", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"]');
+    expect(cancellation).toContain('["Sincerely,", "", signer, signerTitle, "Klutch Risk Retention Group", "claims@klutchinsurance.com", "", "cc: Metrocars Leasing Corp"]');
     expect(cancellation).not.toContain('"Policy Services"');
     expect(workspace.match(/\["Sincerely,", "", signer, signerTitle,/g)).toHaveLength(3);
   });
@@ -72,7 +72,7 @@ describe("Klutch printed sign-off compatibility", () => {
     const representative = section(generator, '    if (isKlutch) {\n      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);', "    y += botH + 3;");
     expect(representative).toContain("doc.text(signoff!.name, cx2, y + 19);");
     expect(representative).toContain("doc.text(signoff!.title, cx2, y + 22);");
-    expect(representative).toContain('const sigLine = isKlutch ? "Authorized Representative, Klutch Insurance Company" : "Authorized Representative";');
+    expect(representative).toContain('const sigLine = isKlutch ? "Authorized Representative, Klutch Risk Retention Group" : "Authorized Representative";');
     expect(representative).toContain("doc.text(sigLine, cx2, y + 25);");
     expect(representative).not.toMatch(/addImage|addPage|\.line\(|\.path\(|certif(?:y|ied)|autograph/i);
   });
@@ -95,7 +95,7 @@ describe("Klutch printed sign-off compatibility", () => {
     const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";
     doc.text(cancelText, cx2, y + 8, { maxWidth: textW * 0.6 - 4 });
     doc.setFont("helvetica", "italic"); doc.setFontSize(7.5); doc.setTextColor(0, 0, 0);
-    const sigLine = isKlutch ? "Authorized Representative, Klutch Insurance Company" : "Authorized Representative";
+    const sigLine = isKlutch ? "Authorized Representative, Klutch Risk Retention Group" : "Authorized Representative";
     doc.text(sigLine, cx2, y + 25);
 `);
     expect(generator).toContain(`    const botH = 28;

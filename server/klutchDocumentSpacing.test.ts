@@ -33,7 +33,7 @@ describe("Klutch carrier-style print frame", () => {
     expect(rule(".ltr+.foot")).toContain("font-size:10px");
     expect(rule(".ltr img.lg")).toContain("height:53px");
     expect(rule(".end")).toContain("font-size:12.6px");
-    expect(denial).toContain("Klutch Insurance Company denies liability and physical damage coverage");
+    expect(denial).toContain("Klutch Risk Retention Group denies liability and physical damage coverage");
     expect(denial).toContain('${P("Dear "+esc(nm)+":")}');
   });
   it("recovers room from inter-section and field gaps while retaining all PIP date and source disclosures", () => {

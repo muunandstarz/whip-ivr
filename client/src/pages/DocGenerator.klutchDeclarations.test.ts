@@ -29,8 +29,8 @@ describe("Klutch declarations navigation", () => {
   });
 
   it("identifies Klutch with NAIC 17966 in the COI and approved Declarations insurer fields", () => {
-    expect(source).toContain('doc.text("Klutch Insurance Company · NAIC 17966", c3x + 14, y + 7);');
-    expect(source).toContain('doc.text("Klutch Insurance Company · NAIC 17966", sideX + 3, syi);');
+    expect(source).toContain('doc.text("Klutch Risk Retention Group · NAIC 17966", c3x + 14, y + 7);');
+    expect(source).toContain('doc.text(doc.splitTextToSize("Klutch Risk Retention Group · NAIC 17966", sideW - 6), sideX + 3, syi);');
   });
 
   it("uses the Nashville mailing address and no Bobby signature in Klutch COI and Dec Page PDFs", () => {

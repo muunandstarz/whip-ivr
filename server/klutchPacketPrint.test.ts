@@ -37,7 +37,7 @@ describe("Klutch packet selection and output",()=>{
   expect(html).toContain('DRAFT — INCOMPLETE / NOT ISSUED — DO NOT USE AS COVERAGE OR SIGNATURE CONFIRMATION');
  });
  it("keeps final denial claimant-addressed and attributed to Klutch, with reviewed TNC facts",()=>{
-  expect(html).toContain('Klutch Insurance Company’s denial letter to the claimant / named insured');
+  expect(html).toContain('Klutch Risk Retention Group’s denial letter to the claimant / named insured');
   expect(html).toContain('reviewed TNC activity and exclusion applicability');
   expect(html).toContain('${P("Dear "+esc(nm)+":")}');expect(html).toContain('${hand()}${G}${L("cc:  Metrocars Leasing Corp")}');
   expect(html).toContain('if(["dol","tnc","period","pn","member","vin","st"].includes(k)){F.tncEvidenceConfirmed=false');
