@@ -15,16 +15,17 @@ const vinPattern = /^[A-HJ-NPR-Z0-9]{17}$/;
 const safeText = (v: unknown, max: number) => typeof v === "string" && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v) ? v.trim() : null;
 
 /** Accepts only A:G, M:M and X:X. Customer, dates, prices and rental mileage never reach this parser. */
-export function parseFleetValues(input: unknown, checkedAt: number): FleetSnapshot {
+export function parseFleetValues(input: unknown, checkedAt: number, expectedRows = RENTAL_FLEET_MAX_ROWS): FleetSnapshot {
+  if (!Number.isInteger(expectedRows) || expectedRows < 4 || expectedRows > RENTAL_FLEET_MAX_ROWS) throw new Error("Invalid fleet row bounds");
   if (!input || typeof input !== "object") throw new Error("Invalid fleet response");
   const ranges = (input as { valueRanges?: unknown }).valueRanges;
   if (!Array.isArray(ranges) || ranges.length !== 3) throw new Error("Invalid fleet ranges");
   const widths = [7, 1, 1];
-  const expected = ["A1:G5000", "M1:M5000", "X1:X5000"];
+  const expected = [`A1:G${expectedRows}`, `M1:M${expectedRows}`, `X1:X${expectedRows}`];
   const blocks = ranges.map((range: any, i) => {
     if (!range || typeof range.range !== "string" || range.range.replaceAll("'", "") !== `FLEET!${expected[i]}` || (range.majorDimension && range.majorDimension !== "ROWS")) throw new Error("Unexpected fleet range");
     const values = range.values ?? [];
-    if (!Array.isArray(values) || values.length >= RENTAL_FLEET_MAX_ROWS || values.some((row: unknown) => !Array.isArray(row) || row.length > widths[i] || row.some((cell: unknown) => !["string", "number", "boolean"].includes(typeof cell)))) throw new Error("Malformed or truncated fleet values");
+    if (!Array.isArray(values) || values.length > expectedRows || values.length >= RENTAL_FLEET_MAX_ROWS || values.some((row: unknown) => !Array.isArray(row) || row.length > widths[i] || row.some((cell: unknown) => !["string", "number", "boolean"].includes(typeof cell)))) throw new Error("Malformed or truncated fleet values");
     return values as unknown[][];
   });
   const header = blocks[0][3];
@@ -79,7 +80,11 @@ export async function readRentalFleetSource(): Promise<FleetSnapshot> {
   const tab = metadata?.sheets?.find((s: any) => s.properties?.sheetId === RENTAL_FLEET_TAB_ID)?.properties;
   // Checking grid size makes the bounded values read fail closed rather than silently ignoring later rows.
   if (!tab || tab.title !== "FLEET" || !Number.isInteger(tab.gridProperties?.rowCount) || tab.gridProperties.rowCount > RENTAL_FLEET_MAX_ROWS) throw new Error("Fleet tab changed or exceeds safe read limit");
+  const rowCount = tab.gridProperties.rowCount;
+  if (rowCount < 4) throw new Error("Fleet header rows unavailable");
+  // Google clamps an oversized requested A1 range to the real grid. Request the
+  // metadata-verified bounds explicitly and validate that exact response instead.
   const params = new URLSearchParams({ majorDimension: "ROWS", valueRenderOption: "FORMATTED_VALUE", fields: "valueRanges(range,majorDimension,values)" });
-  for (const range of ["FLEET!A1:G5000", "FLEET!M1:M5000", "FLEET!X1:X5000"]) params.append("ranges", range);
-  return parseFleetValues(await get(`${base}/values:batchGet?${params}`), Date.now());
+  for (const range of [`FLEET!A1:G${rowCount}`, `FLEET!M1:M${rowCount}`, `FLEET!X1:X${rowCount}`]) params.append("ranges", range);
+  return parseFleetValues(await get(`${base}/values:batchGet?${params}`), Date.now(), rowCount);
 }
