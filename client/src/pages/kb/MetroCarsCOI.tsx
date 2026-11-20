@@ -1,5 +1,5 @@
 import WhipLayout from "@/components/WhipLayout";
-import { UnifiedCOITab } from "@/pages/DocGenerator";
+import AcordCertificateBuilder from "@/components/AcordCertificateBuilder";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { AlertTriangle, FileText, ShieldCheck } from "lucide-react";
@@ -13,7 +13,7 @@ export default function MetroCarsCOI() {
   const { user, loading } = useAuth();
   const { impersonating, isImpersonating } = useImpersonation();
   const effectiveHandlerId = isImpersonating ? impersonating?.id : user?.handlerProfileId;
-  const hasLiabilityAccess = user?.role === "admin" || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
+  const hasLiabilityAccess = (user?.role === "admin" && !isImpersonating) || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
 
   if (loading) {
     return (
@@ -53,19 +53,19 @@ export default function MetroCarsCOI() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold text-slate-950">MetroCars Certificate of Insurance</h1>
+                <h1 className="text-lg font-semibold text-slate-950">MetroCars ACORD Certificate of Insurance</h1>
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
                   <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Liability Team Only
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-600">
-                Use this restored MetroCars certificate workflow for Liability claims. It is fixed to MetroCars and does not issue a Klutch certificate.
+                Use ACORD 25 for MetroCars minimum auto-liability limits. PIP is not included in this liability certificate.
               </p>
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <UnifiedCOITab carrierMode="metrocars" />
+          <AcordCertificateBuilder initialPreset="metrocars-minimum" lockedPreset="metrocars-minimum" initialState="MD" />
         </main>
       </div>
     </WhipLayout>

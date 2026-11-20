@@ -120,7 +120,7 @@ const LOSS_INTAKE_NAV = { href: "/loss-intake", label: "Loss Intake", icon: Clip
 // profiles. Admin View retains oversight access; a handler preview must match
 // an authorized Liability profile before the entry is shown.
 const LIABILITY_COI_HANDLER_IDS = new Set([2, 90002, 330001]);
-const METROCARS_COI_NAV = { href: "/kb/metrocars-coi", label: "MetroCars COI · Liability", icon: FileText };
+const METROCARS_COI_NAV = { href: "/kb/metrocars-coi", label: "MetroCars ACORD COI · Liability", icon: FileText };
 
 export default function WhipLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
@@ -136,6 +136,10 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     enabled: !!user,
     staleTime: 60_000,
   });
+  const { data: certificateAccess } = trpc.kb.certificateAccess.useQuery(undefined, {
+    enabled: !!user && !isImpersonating, staleTime: 0,
+  });
+  const canUseOriginalMetroCarsCoi = !!user && !isImpersonating && certificateAccess?.viewerId === user.id && certificateAccess?.canUseOriginalMetroCarsCoi === true;
   const mailroomEnabled = mailFeatures?.mailroomEnabled === true;
   const mailBotEnabled = mailFeatures?.mailBotEnabled === true;
 
@@ -193,7 +197,7 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
     isAdmin ||
     (user.handlerProfileId != null && LOSS_INTAKE_HANDLER_IDS.has(user.handlerProfileId));
   const effectiveHandlerId = isImpersonating ? impersonating?.id : user.handlerProfileId;
-  const canAccessMetroCarsCOI = isAdmin || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
+  const canAccessMetroCarsCOI = (isAdmin && !isImpersonating) || (effectiveHandlerId != null && LIABILITY_COI_HANDLER_IDS.has(effectiveHandlerId));
   // Insert Loss Intake after Intake Records when the handler is authorized.
   const handlerNavItems = showLossIntake
     ? HANDLER_NAV_ITEMS_BASE.flatMap(item => item.href === "/intake" ? [item, LOSS_INTAKE_NAV] : [item])
@@ -384,6 +388,20 @@ export default function WhipLayout({ children }: { children: React.ReactNode }) 
                 </Link>
               );
             })}
+            {canAccessMetroCarsCOI && (
+              canUseOriginalMetroCarsCoi ? (
+                <Link href="/kb/metrocars-coi-original">
+                  <button onClick={() => setMobileOpen(false)} className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg text-sm text-white/60 hover:bg-background/8 hover:text-white">
+                    <FileText className="w-4 h-4 flex-shrink-0" />Original MetroCars COI · Owner only
+                  </button>
+                </Link>
+              ) : (
+                <button type="button" disabled aria-disabled="true" title="Owner-only original form. Use the MetroCars ACORD COI."
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg text-sm text-white/25 cursor-not-allowed">
+                  <FileText className="w-4 h-4 flex-shrink-0" />Original MetroCars COI · Owner only
+                </button>
+              )
+            )}
             {KB_NAV_EXTRA.map(({ href, label, icon: Icon }) => {
               const active = location.startsWith(href);
               return (

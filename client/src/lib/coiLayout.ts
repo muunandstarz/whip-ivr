@@ -1,7 +1,7 @@
 import type { jsPDF } from "jspdf";
 
-/** COI typography is never scaled down to hide overflow. Measurements use mm. */
-export const COI_MIN_FONT_SIZE = 7.5;
+/** Preserve carrier form typography; body copy stays readable and labels may use 6.5pt. Measurements use mm. */
+export const COI_MIN_FONT_SIZE = 6.5;
 const MM_PER_POINT = 25.4 / 72;
 export type CoiText = {
   text: string;
@@ -27,8 +27,10 @@ export type CoiRowOptions = {
   minHeight?: number;
   gapAfter?: number;
   border?: boolean | "top";
+  fill?: boolean;
+  verticalAlign?: "top" | "middle";
   /** Repeated table heading whenever this row moves to / spans a new page. */
-  repeat?: { cells: CoiCell[]; widths: number[] };
+  repeat?: { cells: CoiCell[]; widths: number[]; fill?: boolean };
   /** Display the heading on the first table row; preflight both as one unit. */
   showHeading?: boolean;
 };
@@ -87,6 +89,9 @@ export function createCoiLayout(doc: jsPDF, options: {
   start?: number;
   bottom?: number;
   continuationStart?: number;
+  lineHeightFactor?: number;
+  footerFontSize?: number;
+  pageNumbers?: boolean;
   onGeometry?: (geometry: CoiGeometry) => void;
 } = {}) {
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -105,19 +110,22 @@ export function createCoiLayout(doc: jsPDF, options: {
       || Math.abs(widths.reduce((sum, w) => sum + w, 0) - width) > 0.01) {
       throw new Error("COI cells must fill the content width with positive padded widths");
     }
-    return cells.map((cell, i) => cell.flatMap(run => wrapCoiText(doc, run, widths[i] - padding * 2)));
+    return cells.map((cell, i) => cell.flatMap(run => wrapCoiText(doc, run, widths[i] - padding * 2).map(line => ({
+      ...line, height: line.size * MM_PER_POINT * (options.lineHeightFactor ?? 1.3) + line.gapAfter,
+    }))));
   };
-  const draw = (cells: CoiLine[][], widths: number[], padding: number, height: number, border: CoiRowOptions["border"]) => {
+  const draw = (cells: CoiLine[][], widths: number[], padding: number, height: number, border: CoiRowOptions["border"], style: CoiRowOptions = {}) => {
     doc.setTextColor(0, 0, 0);
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.25);
+    if (style.fill) { doc.setFillColor(240, 240, 240); doc.rect(left, y, width, height, "F"); }
     if (border === "top") doc.line(left, y, right, y);
     else if (border !== false) doc.rect(left, y, width, height);
     let x = left;
     cells.forEach((lines, i) => {
       if (i > 0 && border !== false && border !== "top") doc.line(x, y, x, y + height);
       record({ kind: "cell", x, y, width: widths[i], height });
-      let lineY = y + padding;
+      let lineY = y + (style.verticalAlign === "middle" ? Math.max(padding, (height - heightOf(lines)) / 2) : padding);
       for (const line of lines) {
         doc.setFont("helvetica", line.font);
         doc.setFontSize(line.size);
@@ -157,7 +165,7 @@ export function createCoiLayout(doc: jsPDF, options: {
     }
     const newRowPage = () => {
       nextPage();
-      if (header) draw(header, headerWidths!, padding, headerHeight, true);
+      if (header) draw(header, headerWidths!, padding, headerHeight, true, { fill: rowOptions.repeat?.fill, verticalAlign: rowOptions.verticalAlign });
     };
     const totalHeight = Math.max(rowOptions.minHeight ?? 0, Math.max(...remaining.map(heightOf)) + padding * 2);
     let headingDrawn = false;
@@ -168,7 +176,7 @@ export function createCoiLayout(doc: jsPDF, options: {
     if (y + firstLineHeight + (rowOptions.showHeading && !headingDrawn ? headerHeight : 0) > bottom) {
       newRowPage(); headingDrawn = true;
     }
-    if (rowOptions.showHeading && header && !headingDrawn) draw(header, headerWidths!, padding, headerHeight, true);
+    if (rowOptions.showHeading && header && !headingDrawn) draw(header, headerWidths!, padding, headerHeight, true, { fill: rowOptions.repeat?.fill, verticalAlign: rowOptions.verticalAlign });
     do {
       const available = bottom - y - padding * 2;
       const segment = remaining.map(lines => {
@@ -184,13 +192,13 @@ export function createCoiLayout(doc: jsPDF, options: {
         throw new Error("COI continuation cannot fit a readable line");
       }
       const height = Math.min(bottom - y, Math.max(segmentHeight, rowOptions.minHeight ?? 0));
-      draw(segment, widths, padding, height, rowOptions.border);
+      draw(segment, widths, padding, height, rowOptions.border, rowOptions);
       if (hasRemaining) newRowPage();
     } while (remaining.some(lines => lines.length > 0));
     y += rowOptions.gapAfter ?? 0;
   };
   const finish = (footerText: string) => {
-    const footer = [coiText(footerText, 7.5, "normal", "center")];
+    const footer = [coiText(footerText, options.footerFontSize ?? 7.5, "normal", "center")];
     const footerHeight = heightOf(prepare([footer], [width], 2)[0]) + 4;
     if (footerHeight <= bottom - continuationStart) {
       if (y + footerHeight > bottom) nextPage();
@@ -198,7 +206,7 @@ export function createCoiLayout(doc: jsPDF, options: {
     }
     row([footer], { border: "top" });
     // Fixed, footer-safe page numbering. Legacy identity-only mocks omit these APIs.
-    if (typeof doc.setPage === "function") {
+    if (options.pageNumbers !== false && typeof doc.setPage === "function") {
       for (let index = 1; index <= page; index++) {
         doc.setPage(index); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
         doc.text(`Page ${index} of ${page}`, right, pageHeight - 8, { align: "right" });
@@ -206,5 +214,8 @@ export function createCoiLayout(doc: jsPDF, options: {
       doc.setPage(page);
     }
   };
-  return { row, finish, get y() { return y; }, get page() { return page; }, left, right, width, bottom };
+  const rule = (weight = 0.8, gapAfter = 4) => {
+    doc.setDrawColor(0, 0, 0); doc.setLineWidth(weight); doc.line(left, y, right, y); y += gapAfter;
+  };
+  return { row, rule, finish, get y() { return y; }, get page() { return page; }, left, right, width, bottom };
 }

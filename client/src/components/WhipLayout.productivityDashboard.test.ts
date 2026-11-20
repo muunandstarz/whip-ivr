@@ -28,8 +28,8 @@ describe("Handler Productivity Dashboard navigation", () => {
     expect(source).toContain("Resources");
   });
 
-  it("keeps the restored MetroCars COI limited to the active Liability handler context", () => {
-    expect(source).toContain('label: "MetroCars COI · Liability"');
+  it("keeps the primary MetroCars ACORD COI limited to the active Liability handler context", () => {
+    expect(source).toContain('label: "MetroCars ACORD COI · Liability"');
     expect(source).toContain("LIABILITY_COI_HANDLER_IDS");
     expect(source).toContain("canAccessMetroCarsCOI");
     expect(source).toContain("impersonating?.id");

@@ -8,13 +8,19 @@ import type { AcordCertificateData } from "@shared/acordCertificate";
 import {
   ACORD_STATES, ACORD_PRESETS, ACORD_MINIMUM_REFERENCES,
   emptyAcordDraft, restoreAcordDraft, applyAcordPreset, validateAcordDraft,
-  acordFilename, validAcordDate,
+  acordFilename, acordOperatorDescription, validAcordDate,
   type AcordDraft, type AcordPreset, type AcordState, type AcordScope,
 } from "@shared/acordPresets";
 
 export interface AcordCertificateBuilderProps {
   /** Plain certificate inputs only. Verification and generated PDFs are never restored. */
   initialDraft?: unknown;
+  /** Starting point for a fresh standalone form only; a supplied draft takes precedence. */
+  initialPreset?: AcordPreset;
+  /** Fresh non-Uber standalone forms start with MD unless explicitly specified. */
+  initialState?: AcordState;
+  /** Dedicated certificate pages may lock the preset, including restored legacy inputs. */
+  lockedPreset?: AcordPreset;
   onDraftChange?: (value: Record<string, unknown>) => void;
   /** Adds a second, permanent sample watermark; never removes the draft watermark. */
   sampleMode?: boolean;
@@ -38,8 +44,13 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Client-only document preparation. No policy issuance, sending, shared save, or coverage determination. */
-export default function AcordCertificateBuilder({ initialDraft, onDraftChange, sampleMode = false }: AcordCertificateBuilderProps) {
-  const [draft, setDraft] = useState(() => restoreAcordDraft(initialDraft, today()));
+export default function AcordCertificateBuilder({ initialDraft, initialPreset, initialState = "MD", lockedPreset, onDraftChange, sampleMode = false }: AcordCertificateBuilderProps) {
+  const enforcePreset = (value: AcordDraft) => lockedPreset && value.preset !== lockedPreset
+    ? applyAcordPreset(value, lockedPreset, initialState) : value;
+  const incomingDraft = () => enforcePreset(initialDraft == null && (lockedPreset || initialPreset)
+    ? applyAcordPreset(emptyAcordDraft(today()), (lockedPreset || initialPreset)!, initialState)
+    : restoreAcordDraft(initialDraft, today()));
+  const [draft, setDraft] = useState(incomingDraft);
   const [consent, setConsent] = useState<Consent>(noConsent);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -70,7 +81,7 @@ export default function AcordCertificateBuilder({ initialDraft, onDraftChange, s
     setPendingAction(null);
     setError("");
   }
-  function replace(next: AcordDraft) { invalidate(); setDraft(next); }
+  function replace(next: AcordDraft) { invalidate(); setDraft(enforcePreset(next)); }
   function update<K extends keyof AcordDraft>(key: K, value: AcordDraft[K]) { replace({ ...draft, [key]: value }); }
 
   // Parent save feedback is not a restore. An externally loaded draft revokes every confirmation.
@@ -78,7 +89,7 @@ export default function AcordCertificateBuilder({ initialDraft, onDraftChange, s
     if (sourceFingerprint === lastIncoming.current) return;
     lastIncoming.current = sourceFingerprint;
     if (sourceFingerprint === lastEmitted.current) return;
-    const next = restoreAcordDraft(initialDraft, today());
+    const next = incomingDraft();
     lastEmitted.current = fingerprint(next);
     replace(next);
   }, [sourceFingerprint]);
@@ -180,7 +191,7 @@ export default function AcordCertificateBuilder({ initialDraft, onDraftChange, s
         subrogationWaived: snapshot.subrogationWaived && Boolean(snapshot.endorsementReference.trim()),
         endorsementNotes: snapshot.endorsementReference,
         vehicle: [snapshot.vehicleYear, snapshot.vehicleMake, snapshot.vehicleModel].filter(Boolean).join(" "), vin: snapshot.vin.toUpperCase(),
-        description: [snapshot.operatorAddress ? `Named operator address: ${lines(snapshot.operatorAddress).join(", ")}` : "", snapshot.plate ? `Plate: ${snapshot.plate}` : "", snapshot.preset === "metrocars-minimum" ? "MetroCars self-insured auto liability; not a policy issued by an insurance carrier. Subject to the self-insurance authorization and applicable agreement." : "", snapshot.description, snapshot.coverageReference ? `Policy / self-insurance source: ${snapshot.coverageReference}` : ""].filter(Boolean).join("\n"),
+        description: [acordOperatorDescription(snapshot), snapshot.plate ? `Plate: ${snapshot.plate}` : "", snapshot.preset === "metrocars-minimum" ? "MetroCars self-insured auto liability; not a policy issued by an insurance carrier. Subject to the self-insurance authorization and applicable agreement." : "", snapshot.description, snapshot.coverageReference ? `Policy / self-insurance source: ${snapshot.coverageReference}` : ""].filter(Boolean).join("\n"),
         holderLines: [snapshot.holderName, ...lines(snapshot.holderAddress)].filter(Boolean),
         representativeName, representativeTitle,
       };
@@ -215,7 +226,8 @@ export default function AcordCertificateBuilder({ initialDraft, onDraftChange, s
         (blank as unknown as Record<string, unknown>)[key] = "";
       }
     }
-    blank.preset = draft.preset; blank.state = draft.state;
+    blank.preset = lockedPreset || draft.preset;
+    blank.state = lockedPreset ? lockedPreset === "klutch-fl-uber-black" ? "FL" : initialState : draft.state;
     replace(blank);
   }
   function field(key: keyof AcordDraft, label: string, multiline = false, type = "text") {
@@ -232,7 +244,7 @@ export default function AcordCertificateBuilder({ initialDraft, onDraftChange, s
     <section className="rounded-lg border border-border bg-muted/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold">ACORD 25 · Certificate builder</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Prepare evidence from verified records, not a new policy. Nothing is issued or sent here.</p></div><Button type="button" variant="outline" size="sm" onClick={clear}>Clear certificate</Button></div>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-1"><label htmlFor="acord-preset" className="text-xs font-medium">Certificate preset</label><select id="acord-preset" className={inputClass} value={draft.preset} onChange={event => replace(applyAcordPreset(draft, event.target.value as AcordPreset))}>{Object.entries(ACORD_PRESETS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
+        <div className="space-y-1"><label htmlFor="acord-preset" className="text-xs font-medium">Certificate preset</label><select id="acord-preset" className={inputClass} value={draft.preset} disabled={Boolean(lockedPreset)} onChange={event => replace(applyAcordPreset(draft, lockedPreset || event.target.value as AcordPreset))}>{Object.entries(ACORD_PRESETS).filter(([key]) => !lockedPreset || key === lockedPreset).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
         <div className="space-y-1"><label htmlFor="acord-state" className="text-xs font-medium">Reference state</label><select id="acord-state" className={inputClass} value={draft.state} disabled={draft.preset === "klutch-fl-uber-black"} onChange={event => replace(applyAcordPreset(draft, draft.preset, event.target.value as AcordState))}>{ACORD_STATES.map(state => <option key={state} value={state}>{state}</option>)}</select></div>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">{draft.preset === "klutch-fl-uber-black" ? "Owner-provided Florida Uber Black requirements (not independently confirmed platform guidance): Sunbeam Fleet named insured, active Florida coverage, policy number and NAIC 17966, BI at least $125,000 per person / $250,000 per accident and PD at least $50,000. Separately verify the documented policy satisfies the supplied $300,000 combined BI + PD requirement. Split-limit arithmetic does not establish a $300,000 CSL. A CSL-only policy still requires verification of the separate BI / PD requirements. These are starting points, not proof of coverage or platform acceptance." : `${draft.state} starting-point reference: BI $${reference.biPerson.toLocaleString()} / $${reference.biAccident.toLocaleString()}; PD $${reference.propertyDamage.toLocaleString()}. ${reference.note}`}</p>
@@ -263,6 +275,7 @@ export default function AcordCertificateBuilder({ initialDraft, onDraftChange, s
           {draft.limitBasis === "both" && <div className="mt-3 rounded-md border border-border p-3">{confirmation("both", "I verified that the actual policy documentation expressly provides both CSL and split limits; this is not a preset assumption.")}</div>}
           {draft.limitBasis === "csl" && <div className="mt-3 rounded-md border border-border p-3">{confirmation("csl", "I verified the actual policy documentation expressly states this combined single limit. It is not calculated from separate BI and PD limits.")}</div>}
           <fieldset className="mt-4 space-y-2"><legend className="mb-2 text-xs font-medium">Covered autos — select only the actual record's scope</legend>{scopes.map(([value, label]) => <label key={value} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={draft.autoScopes.includes(value)} onChange={event => update("autoScopes", event.target.checked ? value === "any" ? ["any"] : [...draft.autoScopes.filter(scope => scope !== "any"), value] : draft.autoScopes.filter(scope => scope !== value))} />{label}</label>)}</fieldset>
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">Scheduled means listed on the actual coverage schedule, not that this COI must list every auto. Non-owned is a distinct scope, not an unlisted vehicle; it excludes autos the insured owns, leases, hires, rents or borrows. Owned or Any auto may be broader only if the source supports it. Verify every selection against the issued policy or, for MetroCars, the self-insurance authorization; Scheduled is only a preset starting point.</p>
         </Panel>
         <Panel title="Endorsement status & manual coverage notes">
           <div className="space-y-2"><label className="flex items-center gap-2 text-xs"><input id="acord-additionalInsured" type="checkbox" checked={draft.additionalInsured} onChange={event => update("additionalInsured", event.target.checked)} />Additional-insured status explicitly supported by actual provision</label><label className="flex items-center gap-2 text-xs"><input id="acord-subrogationWaived" type="checkbox" checked={draft.subrogationWaived} onChange={event => update("subrogationWaived", event.target.checked)} />Subrogation waiver explicitly supported by actual provision</label></div>

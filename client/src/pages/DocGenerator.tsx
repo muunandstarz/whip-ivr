@@ -7603,12 +7603,19 @@ export function UnifiedCOITab({
     const H = doc.internal.pageSize.getHeight();
     const lm = 12, rm = W - 12;
     const textW = rm - lm;
-    const layout = createCoiLayout(doc, { left: lm, right: rm, start: 8, bottom: H - 16 });
-    const label = (text: string) => coiText(text, 7.5, "bold", "left", 1);
+    const classic = !isKlutch;
+    // Restore the familiar MetroCars single-page form, not the expanded generic layout.
+    // Body text is not globally shrunk; only the original small form labels use 6.5pt.
+    const layout = createCoiLayout(doc, {
+      left: lm, right: rm, start: 8, bottom: H - 16,
+      lineHeightFactor: classic ? 1.18 : 1.3,
+      footerFontSize: classic ? 6.5 : 7.5, pageNumbers: !classic,
+    });
+    const label = (text: string) => coiText(text, classic ? 6.5 : 7.5, "bold", "left", classic ? 0.5 : 1);
 
     // ── HEADER ──────────────────────────────────────────────────────────────
-    // The image/identity band and full-width title are separate measured rows.
-    // Neither the logo nor date/certificate text can occupy the title's band.
+    // MetroCars uses the original compact header; Klutch keeps its separate title band.
+    // Each measured region keeps logo, title and date/certificate text clear.
     const y = layout.y;
     if (isKlutch) {
       try { doc.addImage(KLUTCH_LOGO_B64, "PNG", lm, y + 1, 10 * (1056 / 372), 10); } catch {}
@@ -7621,27 +7628,35 @@ export function UnifiedCOITab({
         doc.text("Whip Claims Management", lm, y + 9.5);
       }
     }
-    layout.row([[], [
-      coiText("DATE (MM/DD/YYYY)", 7.5, "normal", "right"),
-      coiText(fmtDate(form.subscriptionStartDate), 9, "bold", "right"),
-      coiText("CERTIFICATE NO.", 7.5, "normal", "right"),
-      coiText(form.certNumber || "—", 9, "bold", "right"),
-    ]], { widths: [textW * 0.60, textW * 0.40], border: false, minHeight: 16, gapAfter: 1 });
     const subtitle = isKlutch
       ? "Issued by Klutch Risk Retention Group\nPursuant to Maryland Transportation Article § 17-103"
       : "Issued by the Maryland Motor Vehicle Administration\nPursuant to Maryland Transportation Article § 17-103";
-    layout.row([[
-      coiText("CERTIFICATE OF INSURANCE", 14, "bold", "center", 1),
-      coiText(subtitle, 7.5, "normal", "center"),
-    ]], { border: false, gapAfter: 2 });
+    const dateCell = [
+      coiText("DATE (MM/DD/YYYY)", classic ? 6.5 : 7.5, "normal", "right"),
+      coiText(fmtDate(form.subscriptionStartDate), 9, "bold", "right"),
+      coiText("CERTIFICATE NO.", classic ? 6.5 : 7.5, "normal", "right"),
+      coiText(form.certNumber || "—", 9, "bold", "right"),
+    ];
+    if (classic) {
+      // Original three-part header: logo left, title centered, dates/certificate right.
+      // Its three measured regions cannot overlap even with a long certificate number.
+      layout.row([[], [coiText("CERTIFICATE OF INSURANCE", 16, "bold", "center", 1),
+        coiText(subtitle, 7.5, "normal", "center")], dateCell],
+      { widths: [40, textW - 84, 44], border: false, padding: 0, minHeight: 20 });
+      layout.rule(0.8, 4);
+    } else {
+      layout.row([[], dateCell], { widths: [textW * 0.60, textW * 0.40], border: false, minHeight: 16, gapAfter: 1 });
+      layout.row([[coiText("CERTIFICATE OF INSURANCE", 14, "bold", "center", 1),
+        coiText(subtitle, 7.5, "normal", "center")]], { border: false, gapAfter: 2 });
+    }
 
     // ── DISCLAIMER / IMPORTANT ──────────────────────────────────────────────
     const disclaimerText = isKlutch
       ? "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE POLICY ISSUED BY KLUTCH RISK RETENTION GROUP. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE POLICY."
       : "THIS CERTIFICATE IS ISSUED AS PROOF OF FINANCIAL RESPONSIBILITY PURSUANT TO MARYLAND TRANSPORTATION ARTICLE § 17-103. IT DOES NOT AFFIRMATIVELY OR NEGATIVELY AMEND, EXTEND OR ALTER COVERAGE AFFORDED BY THE SELF-INSURANCE PROGRAM. COVERAGE IS SUBJECT TO ALL TERMS, CONDITIONS, AND EXCLUSIONS OF THE PROGRAM.";
-    layout.row([[coiText(disclaimerText, 7.5)]], { gapAfter: 2 });
+    layout.row([[coiText(disclaimerText, 7.5)]], { padding: classic ? 1.5 : 2, minHeight: classic ? 14 : 0, gapAfter: 2 });
     const importantText = `IMPORTANT: If coverage under this certificate is extended to an ADDITIONAL INSURED, applicable endorsement provisions apply. If SUBROGATION IS WAIVED, certain conditions may require an endorsement. This certificate does not confer rights to the certificate holder beyond those provided by the ${isKlutch ? "policy issued by Klutch Risk Retention Group" : "self-insurance program"}.`;
-    layout.row([[coiText(importantText, 7.5)]], { gapAfter: 3 });
+    layout.row([[coiText(importantText, classic ? 7 : 7.5)]], { padding: classic ? 1.5 : 2, minHeight: classic ? 10 : 0, gapAfter: classic ? 2 : 3 });
 
     // ── PRODUCER / CONTACT / INSURER GRID ────────────────────────────────────
     const col1W = textW * 0.35, col2W = textW * 0.30, col3W = textW * 0.35;
@@ -7652,12 +7667,14 @@ export function UnifiedCOITab({
       ? "EMAIL: claims@klutchinsurance.com\nFAX: 877-890-0531"
       : "PHONE: (855) 906-5949\nFAX: 877-890-0531\nEMAIL: claims@drivewhip.com";
     layout.row([
-      [label("PRODUCER / CARRIER"), coiText(producer), coiText(`CERT. NO: ${form.certNumber || "—"}`)],
-      [label("CONTACT"), coiText(contact)],
-      [label("INSURER(S) AFFORDING COVERAGE"), coiText("INSURER A:", 7.5, "bold"),
-        coiText(isKlutch ? "Klutch Risk Retention Group · NAIC 17966" : "Maryland MVA / Self-Insured"),
-        coiText(`CERT. NO: ${form.certNumber || "—"}`), coiText("INSURER B:\nINSURER C:\nINSURER D:", 7.5)],
-    ], { widths: [col1W, col2W, col3W], gapAfter: 3 });
+      [label("PRODUCER / CARRIER"), coiText(producer, classic ? 7.5 : 8), coiText(`CERT. NO: ${form.certNumber || "—"}`, classic ? 6.5 : 8)],
+      [label("CONTACT"), coiText(contact, classic ? 7.5 : 8)],
+      [label("INSURER(S) AFFORDING COVERAGE"),
+        ...(classic ? [coiText("INSURER A: Maryland MVA / Self-Insured", 7.5)]
+          : [coiText("INSURER A:", 7.5, "bold"), coiText("Klutch Risk Retention Group · NAIC 17966")]),
+        coiText(`CERT. NO: ${form.certNumber || "—"}`, classic ? 6.5 : 8),
+        coiText("INSURER B:\nINSURER C:\nINSURER D:", classic ? 6.5 : 7.5)],
+    ], { widths: [col1W, col2W, col3W], padding: classic ? 1.5 : 2, minHeight: classic ? 22 : 0, gapAfter: 3 });
 
     // ── INSURED SECTION ──────────────────────────────────────────────────────
     // Metrocars remains named insured; renter/vehicle/VIN never cross the midpoint.
@@ -7666,31 +7683,35 @@ export function UnifiedCOITab({
       ? `${fmtDateLong(coverageStartDate)} — ${fmtDateLong(form.expirationDate)}`
       : "—";
     layout.row([
-      [label("NAMED INSURED"), coiText("Metrocars Leasing Corp", 8, "normal", "left", 1),
-        label("ADDITIONAL NAMED INSURED / RENTER"), coiText(form.namedOperator || "—", 9.6, "bold", "left", 1),
-        coiText(`RENTAL VEHICLE: ${vehicleStr}`),
-        coiText(`VIN: ${form.vin || "—"}`),
-        ...(form.plateNumber ? [coiText(`Plate: ${form.plateNumber}`)] : [])],
-      [label("COVERAGE PERIOD"), coiText(periodStr, 9, "normal", "left", 2),
+      [label("NAMED INSURED"), coiText("Metrocars Leasing Corp", classic ? 7.5 : 8, "normal", "left", classic ? 0.5 : 1),
+        label("ADDITIONAL NAMED INSURED / RENTER"), coiText(form.namedOperator || "—", 9.6, "bold", "left", classic ? 0.5 : 1),
+        coiText(`RENTAL VEHICLE: ${vehicleStr}`, classic ? 7.5 : 8),
+        coiText(`VIN: ${form.vin || "—"}`, classic ? 7.5 : 8),
+        ...(form.plateNumber ? [coiText(`Plate: ${form.plateNumber}`, classic ? 7.5 : 8)] : [])],
+      [label("COVERAGE PERIOD"), coiText(periodStr, 9, "normal", "left", classic ? 1 : 2),
         label("STATE OF LOSS"), coiText(state, 9)],
-    ], { widths: [textW * 0.5, textW * 0.5], gapAfter: 3 });
+    ], { widths: [textW * 0.5, textW * 0.5], padding: classic ? 1.5 : 2, minHeight: classic ? 26 : 0, gapAfter: classic ? 2 : 3 });
 
     // ── COVERAGES HEADER / PREAMBLE ──────────────────────────────────────────
     layout.row([
       [label("COVERAGES")],
       [coiText(`CERTIFICATE NUMBER: ${form.certNumber || "—"}`, 7.5, "bold")],
       [coiText(`REVISION NUMBER: ${form.revisionNumber || "—"}`, 7.5, "bold")],
-    ], { widths: [textW * 0.17, textW * 0.46, textW * 0.37], border: false, gapAfter: 1 });
+    ], { widths: [textW * 0.17, textW * 0.46, textW * 0.37], border: false, padding: classic ? 0.5 : 2, gapAfter: 1 });
     const preamble = `THIS IS TO CERTIFY THAT THE COVERAGES LISTED BELOW HAVE BEEN ISSUED TO THE INSURED NAMED ABOVE FOR THE COVERAGE PERIOD INDICATED. NOTWITHSTANDING ANY REQUIREMENT, TERM OR CONDITION OF ANY CONTRACT OR OTHER DOCUMENT WITH RESPECT TO WHICH THIS CERTIFICATE MAY BE ISSUED OR MAY PERTAIN, THE COVERAGE AFFORDED IS SUBJECT TO ALL TERMS, EXCLUSIONS AND CONDITIONS OF THE POLICY. LIMITS SHOWN MAY HAVE BEEN REDUCED BY PAID CLAIMS.`;
-    layout.row([[coiText(preamble, 7.5)]], { border: false, gapAfter: 2 });
+    layout.row([[coiText(preamble, classic ? 7 : 7.5)]], { border: false, padding: classic ? 0 : 2, gapAfter: 2 });
 
     // ── COVERAGE TABLE ───────────────────────────────────────────────────────
     // All x positions come from the same cumulative widths (no padded date offset).
-    const cols = { insr: 12, addl: 13, type: 45, pol: 27, eff: 22, exp: 22 };
+    // Date widths fit MM/DD/YYYY at 7.5pt; the limits column returns to its original generous width.
+    // All centers use column boundaries, never a policy-text inset added to a date offset.
+    const cols = classic
+      ? { insr: 11, addl: 9.5, type: 52, pol: 25, eff: 19, exp: 19 }
+      : { insr: 12, addl: 13, type: 45, pol: 27, eff: 22, exp: 22 };
     const limW = textW - cols.insr - cols.addl - cols.type - cols.pol - cols.eff - cols.exp;
     const widths = [cols.insr, cols.addl, cols.type, cols.pol, cols.eff, cols.exp, limW];
     const hdrLabels = ["INSR\nLTR", "ADDL\nINSD", "TYPE OF INSURANCE", "POLICY NUMBER", "POLICY EFF\n(MM/DD/YYYY)", "POLICY EXP\n(MM/DD/YYYY)", "LIMITS"];
-    const headerCells = hdrLabels.map(text => [coiText(text, 7.5, "bold", "center")]);
+    const headerCells = hdrLabels.map(text => [coiText(text, classic ? 6.5 : 7.5, "bold", "center")]);
     const policyNo = form.certNumber || "—";
     const effDate = fmtDate(coverageStartDate);
     const expDate = fmtDate(form.expirationDate);
@@ -7741,11 +7762,11 @@ export function UnifiedCOITab({
       const cells = [
         [coiText(row.insr, 7.5, "bold", "center")],
         [coiText(additionalInsuredCoverageCodes.has(row.insr) ? "[X]" : "[ ]", 7.5, "normal", "center")],
-        [coiText(row.type, 7.5, "bold")], [coiText(policyNo, 7.5)],
+        [coiText(row.type, classic ? 7 : 7.5, "bold")], [coiText(policyNo, 7.5)],
         [coiText(effDate, 7.5, "normal", "center")], [coiText(expDate, 7.5, "normal", "center")],
         [coiText(row.limits, 7.5)],
       ];
-      layout.row(cells, { widths, padding: 1.2, repeat: { cells: headerCells, widths }, showHeading: index === 0 });
+      layout.row(cells, { widths, padding: classic ? 0.9 : 1.2, minHeight: classic ? 8 : 0, gapAfter: classic && index === coverageRows.length - 1 ? 3 : 0, verticalAlign: classic ? "middle" : "top", repeat: { cells: headerCells, widths, fill: classic }, showHeading: index === 0 });
     });
 
     // ── DESCRIPTION OF OPERATIONS ────────────────────────────────────────────
@@ -7758,7 +7779,7 @@ export function UnifiedCOITab({
     const desc3 = `3. During any TNC period in which Uber/Lyft coverage is primary, this certificate provides contingent coverage only to the extent not covered by the TNC carrier.`;
     const desc4 = `4. Unauthorized/unlisted operator exclusion applies. PIP and UM/UIM are provided at statutory minimums only, per applicable state law.`;
     layout.row([[label("DESCRIPTION OF OPERATIONS / LOCATIONS / VEHICLES / SPECIAL CONDITIONS"),
-      ...[desc1, desc2, desc3, desc4].map(text => coiText(text, 8, "normal", "left", 1))]], { gapAfter: 3 });
+      ...[desc1, desc2, desc3, desc4].map(text => coiText(text, classic ? 7.5 : 8, "normal", "left", classic ? 0.7 : 1))]], { padding: classic ? 1.5 : 2, gapAfter: classic ? 2 : 3 });
 
     // ── CERTIFICATE HOLDER / CANCELLATION ────────────────────────────────────
     const cancelText = "SHOULD ANY OF THE ABOVE DESCRIBED COVERAGES BE CANCELLED BEFORE THE EXPIRATION DATE THEREOF, NOTICE WILL BE DELIVERED IN ACCORDANCE WITH APPLICABLE MARYLAND STATUTORY REQUIREMENTS AND THE TERMS OF THE MEMBER AGREEMENT.";
@@ -7768,7 +7789,7 @@ export function UnifiedCOITab({
       [label("CANCELLATION"), coiText(cancelText, 7.5, "normal", "left", 2),
         ...(isKlutch ? [coiText(signoff!.name, 8, "bold"), coiText(signoff!.title, 7.5)] : []),
         coiText(sigLine, 7.5, "italic")],
-    ], { widths: [textW * 0.4, textW * 0.6], gapAfter: 3 });
+    ], { widths: [textW * 0.4, textW * 0.6], padding: classic ? 1.5 : 2, minHeight: classic ? 22 : 0, gapAfter: classic ? 2 : 3 });
 
     // ── FOOTER ───────────────────────────────────────────────────────────────
     const footerText = isKlutch

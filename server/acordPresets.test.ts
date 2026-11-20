@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACORD_STATES, ACORD_MINIMUM_REFERENCES, emptyAcordDraft, applyAcordPreset, restoreAcordDraft,
-  validateAcordDraft, validAcordDate, acordAmount, acordFilename, acordDescription,
+  validateAcordDraft, validAcordDate, acordAmount, acordFilename, acordDescription, acordOperatorDescription,
   type AcordDraft,
 } from "../shared/acordPresets";
 
@@ -39,6 +39,18 @@ describe("ACORD preset starting points", () => {
     expect(draft.autoScopes).toEqual(["scheduled"]);
     expect(draft.additionalInsured).toBe(false); expect(draft.subrogationWaived).toBe(false);
     expect(draft.metrocarsRepresentative).toBe(""); expect(draft.metrocarsRepresentativeTitle).toBe("");
+  });
+  it("defaults all three contacts to Jasmine without creating policy facts or sign-off and preserves edits", () => {
+    for (const preset of ["klutch-fl-uber-black", "klutch-minimum", "metrocars-minimum"] as const) {
+      const draft = applyAcordPreset(emptyAcordDraft(), preset, "MD");
+      expect(draft.contactName).toBe("Jasmine Lane Acosta");
+      expect(draft.autoScopes).toEqual(["scheduled"]);
+      expect(draft.policyNumber).toBe(""); expect(draft.coverageReference).toBe("");
+      expect(draft.description).toBe(""); expect(draft.metrocarsRepresentative).toBe("");
+      expect(draft).not.toHaveProperty("representativeName");
+      expect(applyAcordPreset({ ...draft, contactName: "Edited Contact" }, preset).contactName).toBe("Edited Contact");
+      expect(restoreAcordDraft({ ...draft, contactName: "Edited Contact" }).contactName).toBe("Edited Contact");
+    }
   });
   it("changes reference limits for every state but never invents actual policy facts or endorsements", () => {
     const source = { ...complete(), additionalInsured: true, subrogationWaived: true, endorsementReference: "TEST OLD ENDORSEMENT" };
@@ -106,6 +118,22 @@ describe("ACORD actual-fact validation and input-only restoration", () => {
     expect(validateAcordDraft({ ...draft, metrocarsRepresentative: "", metrocarsRepresentativeTitle: "" })).toContain("MetroCars authorized representative name and title");
     expect(acordDescription(draft)).toContain("self-insured");
     expect(acordDescription(draft)).toContain("does not represent a policy issued by an insurance carrier");
+  });
+  it("includes one driver and complete address in the operations description for every preset", () => {
+    for (const preset of ["klutch-fl-uber-black", "klutch-minimum", "metrocars-minimum"] as const) {
+      const draft = { ...complete(preset), namedOperator: " Synthetic Example Driver ", operatorAddress: "100 Example Avenue\r\n Suite 2 \r\nRockville, MD 20850", description: "Verified manual note" };
+      const expected = "Driver: Synthetic Example Driver; 100 Example Avenue, Suite 2, Rockville, MD 20850";
+      expect(acordOperatorDescription(draft)).toBe(expected);
+      const description = acordDescription(draft);
+      expect(description.split("\n")[0]).toBe(expected);
+      expect(description.match(/Synthetic Example Driver/g)).toHaveLength(1);
+      expect(description.match(/100 Example Avenue/g)).toHaveLength(1);
+      expect(description).toContain("Verified manual note");
+      expect(description).not.toMatch(/demonstration only|No insurance or Uber approval represented/i);
+    }
+    expect(acordOperatorDescription({ namedOperator: "", operatorAddress: "Unattributed address" })).toBe("");
+    expect(acordOperatorDescription({ namedOperator: "Driver only", operatorAddress: "" })).toBe("Driver: Driver only");
+    expect(validateAcordDraft({ ...complete(), operatorAddress: "" })).toContain("Operator address");
   });
   it("restores only supported plain inputs and never persisted verification or foreign attribution", () => {
     const raw = { ...complete(), state: "ZZ", preset: "UNKNOWN", limitBasis: "FAKE", autoScopes: ["scheduled", "invalid", 1], producerName: "x".repeat(20000), additionalInsured: true, subrogationWaived: "yes", consent: { source: true }, representativeName: "FORGED", handlerName: "LOGIN", pdfUrl: "blob:old" };

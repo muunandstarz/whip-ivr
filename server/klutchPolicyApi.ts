@@ -1,12 +1,14 @@
 import type { Express, Request, Response } from "express";
 import { sdk } from "./_core/sdk";
 import { assertCanonicalKlutchSignoff, getKlutchSignoff, klutchSignoffInfo, KlutchSignoffError, updateKlutchSignoff } from "./klutchSignoff";
+import { assertRecordedPoiMatch, authorizeExistingPoiOutput, signExistingPoi, validateExistingPoi } from "./klutchExistingPoi";
 import {
   cancelKlutchPolicy,
   correctKlutchPolicy,
   documentMarylandPipHistory,
   findKlutchPoliciesByVin,
   getKlutchPolicy,
+  getKlutchPolicyByExactNumber,
   issueKlutchPolicy,
   listKlutchPolicies,
   recordKlutchDocument,
@@ -87,6 +89,30 @@ function stringValue(value: unknown) {
 export function registerKlutchPolicyApi(app: Express) {
   const base = "/api/klutch-policy-documents";
 
+  // These endpoints authorize source-backed local correspondence only. No persistence.
+  app.post(`${base}/existing-poi/verify`, async (req, res) => {
+    const user = await authenticatedUser(req, res); if (!user) return;
+    try {
+      assertCanonicalKlutchSignoff(req.body, await getKlutchSignoff());
+      const verified = validateExistingPoi(req.body);
+      const policy = await getKlutchPolicyByExactNumber(verified.facts.policyNumber);
+      if (verified.source.kind === "recorded") assertRecordedPoiMatch(verified, policy);
+      else if (policy) throw new Error("This exact number is already in the shared register. Select the recorded policy source and verify its member, VIN, state and historical term; external POI cannot override it.");
+      res.json({ verificationToken: signExistingPoi(verified, user.id), ...verified, mode: "source_backed_correspondence", issued: false, recorded: false, sent: false });
+    } catch (error) { res.status(400).json({ error: messageOf(error) }); }
+  });
+  app.post(`${base}/existing-poi/output`, async (req, res) => {
+    const user = await authenticatedUser(req, res); if (!user) return;
+    try {
+      const signoff = await getKlutchSignoff(); assertCanonicalKlutchSignoff(req.body, signoff);
+      const output = authorizeExistingPoiOutput(req.body, user.id);
+      const policy = await getKlutchPolicyByExactNumber(output.facts.policyNumber);
+      if (output.source.kind === "recorded") assertRecordedPoiMatch(output, policy);
+      else if (policy) throw new Error("This number is now recorded in the shared register. Reverify the recorded source before correspondence output.");
+      res.json({ ...output, signoff });
+    } catch (error) { res.status(400).json({ error: messageOf(error) }); }
+  });
+
   app.get(`${base}/signoff`, async (req, res) => {
     const user = await authenticatedUser(req, res);
     if (!user) return;
@@ -134,6 +160,15 @@ export function registerKlutchPolicyApi(app: Express) {
     } catch (error) {
       res.status(400).json({ error: messageOf(error) });
     }
+  });
+
+  app.use(base, (req, res, next) => {
+    const body = req.body ?? {};
+    if (req.method === "POST" && ["/issue", "/renew", "/correct", "/pip-history", "/document", "/cancel"].includes(req.path) &&
+      (body.sourceMode === "existing" || body.terms?.sourceMode === "existing" || body.snapshot?.sourceMode === "existing" || body.verificationToken || body.source?.kind === "external")) {
+      res.status(400).json({ error: "Existing POI is correspondence-only. It cannot issue, register, renew, correct, endorse, cancel or record a policy." }); return;
+    }
+    next();
   });
 
   app.post(`${base}/draft`, async (req, res) => {

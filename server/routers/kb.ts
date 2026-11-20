@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { canEditKlutchSignoff } from "../klutchSignoff";
 import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 
@@ -26,6 +28,19 @@ const STATE_RULES: Record<string, string> = {
 };
 
 export const kbRouter = router({
+  // Reuse the exact SDK-authenticated native-owner rule. No names, emails,
+  // submitted IDs, general admin privileges or handler preview grant access.
+  certificateAccess: protectedProcedure.query(({ ctx }) => ({
+    viewerId: ctx.user.id,
+    canUseOriginalMetroCarsCoi: canEditKlutchSignoff(ctx.user, ctx.req),
+  })),
+  originalMetroCarsCoiAccess: protectedProcedure.query(({ ctx }) => {
+    if (!canEditKlutchSignoff(ctx.user, ctx.req)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "The original MetroCars COI is available only to the project owner. Use the MetroCars ACORD certificate." });
+    }
+    return { viewerId: ctx.user.id, allowed: true as const };
+  }),
+
   searchPolicyTerms: protectedProcedure
     .input(z.object({
       scenario: z.string().min(5),

@@ -197,7 +197,7 @@ class Fields {
       return ops;
     });
   }
-  block(values: readonly string[] | undefined, keys: [FieldKey, FieldKey, FieldKey, FieldKey, FieldKey, FieldKey], label: string): void {
+  block(values: readonly string[] | undefined, keys: [FieldKey, FieldKey, FieldKey, FieldKey, FieldKey, FieldKey], label: string, consecutive = false): void {
     const supplied = lines(values);
     if (!supplied.length) return;
     const [first, second, third, city, state, zip] = keys;
@@ -207,7 +207,10 @@ class Fields {
     const assignments: Array<[FieldKey, string]> = [];
     if (supplied.length <= 4) {
       supplied.forEach((text, index) => {
-        if (index === supplied.length - 1 && index > 0 && locality) {
+        // The producer's name/street/locality belong in its three consecutive
+        // full-width widgets. Use the lower locality widgets only for a fourth
+        // supplied line, avoiding an empty address row without moving geometry.
+        if (index === supplied.length - 1 && index > 0 && locality && (!consecutive || index === 3)) {
           assignments.push([city, locality[1].replace(/,$/, "")], [state, locality[2]], [zip, locality[3]]);
         } else assignments.push([[first, second, third, city][index], text]);
       });
@@ -353,7 +356,7 @@ export async function renderAcordCertificatePdf(input: AcordCertificateData, opt
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const f = new Fields(document.getForm(), font);
   f.set("issueDate", date(input.issueDate, "Certificate issue date"), "Certificate issue date");
-  f.block([plain(input.producerName), ...lines(input.producerAddressLines)], ["producerName", "producerAddress1", "producerAddress2", "producerCity", "producerState", "producerZip"], "Producer name and address");
+  f.block([plain(input.producerName), ...lines(input.producerAddressLines)], ["producerName", "producerAddress1", "producerAddress2", "producerCity", "producerState", "producerZip"], "Producer name and address", true);
   f.block(input.insuredLines, ["insuredName", "insuredAddress1", "insuredAddress2", "insuredCity", "insuredState", "insuredZip"], "Named insured/operator and address");
   f.block(input.holderLines, ["holderName", "holderAddress1", "holderAddress2", "holderCity", "holderState", "holderZip"], "Certificate holder and address");
   for (const [key, label] of [["contactName", "Producer contact name"], ["phone", "Producer phone"], ["fax", "Producer fax"], ["email", "Producer email"],

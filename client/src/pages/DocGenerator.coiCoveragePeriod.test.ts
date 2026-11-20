@@ -23,7 +23,7 @@ describe('Unified COI coverage period', () => {
 
   it('renders the same period in the insured panel, coverage table, and formatted preview', () => {
     expectCoi('`${fmtDateLong(coverageStartDate)} — ${fmtDateLong(form.expirationDate)}`');
-    expectCoi('[label("COVERAGE PERIOD"), coiText(periodStr, 9, "normal", "left", 2),');
+    expectCoi('[label("COVERAGE PERIOD"), coiText(periodStr, 9, "normal", "left", classic ? 1 : 2),');
     expectCoi('[coiText(effDate, 7.5, "normal", "center")], [coiText(expDate, 7.5, "normal", "center")]');
     expectCoi('Coverage Period: ${coverageStartDate && form.expirationDate');
   });

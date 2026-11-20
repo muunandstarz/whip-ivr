@@ -90,6 +90,40 @@ describe("ACORD 25 exact-template local renderer", () => {
     expect(values.length).toBeGreaterThan(0);
     expect(values.every(stream => /\s8\sTf/.test(stream) && /\sW\s/.test(stream))).toBe(true);
   });
+  it("uses consecutive original producer name/street/locality widgets, not a detached bottom locality", async () => {
+    const blank = await syntheticBlank();
+    const setText = vi.spyOn(PDFTextField.prototype, "setText");
+    try {
+      const result = await renderAcordCertificatePdf({ ...FICTIONAL, producerName: "Whip Claims Management", producerAddressLines: ["14670 Southlawn Ln", "Rockville, MD 20850"], contactName: "Jasmine Lane Acosta" }, { templateBytes: blank, draft: false });
+      const assignments = setText.mock.calls.flatMap(([text], index) => text ? [[setText.mock.contexts[index].getName(), text]] : []);
+      expect(assignments).toContainEqual([ACORD_FIELDS.producerName, "Whip Claims Management"]);
+      expect(assignments).toContainEqual([ACORD_FIELDS.producerAddress1, "14670 Southlawn Ln"]);
+      expect(assignments).toContainEqual([ACORD_FIELDS.producerAddress2, "Rockville, MD 20850"]);
+      expect(assignments.some(([name]) => [ACORD_FIELDS.producerCity, ACORD_FIELDS.producerState, ACORD_FIELDS.producerZip].includes(name as never))).toBe(false);
+      const doc = await PDFDocument.load(result.bytes);
+      expect(textStrings(doc)).toContain("Rockville, MD 20850");
+      expect(textStrings(doc).filter(text => text === "Jasmine Lane Acosta")).toHaveLength(1);
+      expect(result.pageCount).toBe(1);
+      expect(result.warnings).toEqual([]);
+    } finally { setText.mockRestore(); }
+  });
+  it("retains a supplied producer suite line and puts long producer addresses in full on a continuation", async () => {
+    const suite = await render({ ...FICTIONAL, producerAddressLines: ["100 Example Avenue", "Suite 2", "Rockville, MD 20850"] });
+    expect(textStrings(await PDFDocument.load(suite.bytes))).toContain("Suite 2");
+    expect(suite.pageCount).toBe(1);
+    const addresses = ["100 Example Avenue", "Suite 2", "Building Three", "Department Four", "Rockville, MD 20850"];
+    const long = await render({ ...FICTIONAL, producerAddressLines: addresses }, { draft: false, sample: true });
+    const text = textStrings(await PDFDocument.load(long.bytes));
+    expect(long.pageCount).toBe(2);
+    expect(text).toContain("Producer name and address");
+    expect(text).toContain("SEE ATTACHED DETAILS");
+    addresses.forEach(line => expect(text).toContain(line));
+    expect(text.filter(line => line === "SAMPLE - NOT VALID FOR PROOF OF INSURANCE")).toHaveLength(2);
+    const tooWide = "100 Example Avenue ".repeat(12);
+    const wide = await render({ ...FICTIONAL, producerAddressLines: [tooWide, "Rockville, MD 20850"] });
+    expect(textStrings(await PDFDocument.load(wide.bytes)).join("\n").replace(/\s+/g, " ")).toContain(tooWide.trim());
+    expect(wide.warnings).toContain("Producer name and address is shown in full on the labelled continuation.");
+  });
 
   it("leaves every unrelated policy row and insurer B blank", async () => {
     const bytes = await syntheticBlank();
@@ -242,5 +276,30 @@ describe.skipIf(!actualFixture)("actual supplied ACORD 25 blank integration", ()
     original.forEach(stream => expect(rawStreams(after)).toContain(stream));
     expect(textStrings(after)).toContain(FICTIONAL.policyNumber);
     expect(textStrings(after)).toContain("SAMPLE - NOT VALID FOR PROOF OF INSURANCE");
+  });
+  it("draws normal producer name/street/locality consecutively at the exact supplied widget coordinates", async () => {
+    const bytes = readFileSync(actualFixture!);
+    const blank = await PDFDocument.load(bytes);
+    const originals = new Map(blank.getForm().getFields().filter(field => field instanceof PDFTextField).map(field => [field.getName(), field.acroField.getWidgets()[0].getRectangle()]));
+    const drawn: Array<{ name: string; text: string; rect: { x: number; y: number; width: number; height: number } }> = [];
+    const update = PDFTextField.prototype.updateAppearances;
+    const spy = vi.spyOn(PDFTextField.prototype, "updateAppearances").mockImplementation(function (font, provider) {
+      if (this.getText()) drawn.push({ name: this.getName(), text: this.getText()!, rect: this.acroField.getWidgets()[0].getRectangle() });
+      return update.call(this, font, provider);
+    });
+    try {
+      const result = await renderAcordCertificatePdf({ ...FICTIONAL, producerName: "Whip Claims Management", producerAddressLines: ["14670 Southlawn Ln", "Rockville, MD 20850"], contactName: "Jasmine Lane Acosta", authorizedRepresentative: "" }, { templateBytes: bytes, draft: false, sample: true });
+      expect(drawn).toEqual(expect.arrayContaining([
+        { name: ACORD_FIELDS.producerName, text: "Whip Claims Management", rect: { x: 22, y: 648, width: 280, height: 12 } },
+        { name: ACORD_FIELDS.producerAddress1, text: "14670 Southlawn Ln", rect: { x: 22, y: 636, width: 280, height: 12 } },
+        { name: ACORD_FIELDS.producerAddress2, text: "Rockville, MD 20850", rect: { x: 22, y: 624, width: 280, height: 12 } },
+      ]));
+      drawn.forEach(({ name, rect }) => expect(rect).toEqual(originals.get(name)));
+      const doc = await PDFDocument.load(result.bytes);
+      expect(result.pageCount).toBe(1);
+      expect(textStrings(doc).filter(text => text === "Jasmine Lane Acosta")).toHaveLength(1);
+      expect(textStrings(doc)).not.toContain(FICTIONAL.authorizedRepresentative);
+      expect(rawStreams(doc).join("\n")).not.toContain("/FT /Sig");
+    } finally { spy.mockRestore(); }
   });
 });

@@ -31,7 +31,8 @@ describe("Klutch declarations navigation", () => {
   });
 
   it("identifies Klutch with NAIC 17966 in the COI and approved Declarations insurer fields", () => {
-    expect(coiSource.includes('coiText(isKlutch ? "Klutch Risk Retention Group · NAIC 17966" : "Maryland MVA / Self-Insured")'), 'COI insurer A must retain Klutch NAIC and MetroCars identity').toBe(true);
+    expect(coiSource.includes('coiText("Klutch Risk Retention Group · NAIC 17966")'), 'Klutch COI insurer A retains the approved name and NAIC').toBe(true);
+    expect(coiSource.includes('coiText("INSURER A: Maryland MVA / Self-Insured", 7.5)'), 'Original MetroCars COI retains its self-insured issuer identity').toBe(true);
     expect(source).toContain('doc.text(doc.splitTextToSize("Klutch Risk Retention Group · NAIC 17966", sideW - 6), sideX + 3, syi);');
   });
 

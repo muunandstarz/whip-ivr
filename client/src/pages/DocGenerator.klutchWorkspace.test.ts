@@ -84,8 +84,9 @@ describe("Klutch policy documents source integration", () => {
     expect(garagingState).toBeGreaterThan(formStart);
     expect(garagingState).toBeLessThan(documentSet);
     expect(policyNumber).toBeGreaterThan(coverageElections);
-    expect(sourcePage).toContain('"Create draft policy number"');
-    expect(sourcePage).toContain("Creates a draft number for review only. The final policy number and shared-register entry are assigned when you Print / Save PDF.");
+    expect(sourcePage).toContain('data-act="genpol">Create policy number</button>');
+    expect(sourcePage).toContain("Create policy number works on declarations and letter tabs after the required policy inputs are complete.");
+    expect(sourcePage).toContain("prepare a marked draft without issuance.");
   });
 
   it("requires an explicit garaging-state confirmation and invalidates an unissued state-specific draft", () => {
@@ -107,11 +108,14 @@ describe("Klutch policy documents source integration", () => {
     expect(sourcePage).toContain('<div class="s6"><label>Policy type</label>');
   });
 
-  it("keeps a new-policy number as a draft until Print or Save PDF creates the shared policy", () => {
+  it("keeps missing-fact drafts unissued and requires explicit confirmation before assigning a real policy number", () => {
     expect(sourcePage).toContain('F.pn = `DRAFT-KIC-${F.st}-${String(Date.now()).slice(-6)}`');
     expect(sourcePage).toContain('Draft policy number prepared. Print / Save PDF assigns the final shared policy number.');
-    expect(sourcePage).toContain('if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) return issueCurrent();');
-    expect(sourcePage).toContain('if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await prepareDraftPolicyNumber(); }');
+    expect(sourcePage).toContain('if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) {if(F.pn&&!/^DRAFT-KIC-/.test(F.pn))');
+    expect(sourcePage).toContain('if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await createPolicyNumber(); }');
+    expect(sourcePage).toContain('"Prepare marked draft"))await prepareDraftPolicyNumber();return');
+    expect(sourcePage).toContain('"Confirm policy issuance"))return');
+    expect(sourcePage).toContain('An existing POI must use its actual number, not create a new number.');
     expect(sourcePage).not.toContain('if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await issueCurrent(); }');
   });
 

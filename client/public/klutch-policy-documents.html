@@ -145,7 +145,7 @@ input:focus,select:focus{outline:2px solid var(--lime);border-color:var(--teal)}
 .docs button.on{background:var(--teal);color:#fff;border-color:var(--teal)}
 .panel{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto}
 .f>div{min-width:0}
-.pb{display:flex;gap:6px}.pb input{flex:1}.pb button{white-space:nowrap}
+.pb{display:flex;gap:6px;flex-wrap:wrap}.pb input{flex:1;min-width:0}.pb button{white-space:nowrap}
 
 #allroot{display:none}
 .mid{max-width:1360px}
@@ -371,8 +371,9 @@ function applyKlutchHandlerDefaults(s){
 let F,K;
 function load(){try{F=JSON.parse(localStorage.getItem("klutch_form_v3"))}catch(e){}try{K=JSON.parse(localStorage.getItem("klutch_nums_v3"))}catch(e){}
  F=F||{};
- F=Object.assign({set:"liab",ptype:"n",sel:"dec",st:"MD",stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",guideFocus:"opening",date:today(),tnc:"Uber",period:"2",eff:today()},F);
+ F=Object.assign({set:"liab",ptype:"n",sourceMode:"new",sel:"dec",st:"MD",stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",guideFocus:"opening",date:today(),tnc:"Uber",period:"2",eff:today()},F);
  if(F.stateConfirmed!==true||F.confirmedState!==F.st){F.stateConfirmed=false;F.confirmedState=""}
+ if(F.sourceMode==="existing"){F.poiAttested=false;F.poiPositionConfirmed=false}
  applyKlutchHandlerDefaults(F);
  if(Object.prototype.hasOwnProperty.call(F,"dopSignerContact")){delete F.dopSignerContact;try{localStorage.setItem("klutch_form_v3",JSON.stringify(F))}catch(e){}}
  if(F.set==="dec")F.set="liab";if(F.term!=="12")F.term="6";K=K||{counter:100100,map:{}};K.pols=K.pols||{};K.clms=K.clms||[];if(K.counter<100100)K.counter=100100}
@@ -459,11 +460,27 @@ Whip Claims Management`;
  if(F.emailSubject===undefined)F.emailSubject=defaultSubject;if(F.emailBody===undefined)F.emailBody=defaultBody;
  return `<div class="f">${sec("Carrier Coverage Request Email")}<div class="s6 note" style="margin-top:-2px">Use this editable communication when requesting the adverse carrier’s comprehensive and collision coverage information. It is a non-PDF working email: Copy Email does not issue a policy, create a document record, or send anything.</div>${fld("emailRecipient","Carrier recipient email",3,{t:"email"})}${fld("emailAdjuster","Carrier adjuster / claims contact",3)}${fld("emailSubject","Subject",6)}<div class="s6"><label>Email body</label><textarea data-k="emailBody" style="min-height:250px;width:100%;resize:vertical">${esc(F.emailBody||defaultBody)}</textarea></div><div class="s6"><details class="note"><summary style="cursor:pointer;font-weight:700">Handler guide — carrier coverage verification</summary><ul style="margin:8px 0 0 18px;line-height:1.5"><li>Identify Whip Claims Management and Metrocars Leasing Corp.’s owner/lessor interest.</li><li>Request confirmation of comprehensive and collision coverage, including conditions, limits, deductible, and required records.</li><li>Review and tailor the recipient, subject, and facts before copying the email into the approved claim delivery workflow.</li><li>Attach only the records appropriate for the claim. This email template and the Carrier Communication Guide are not PDF packet documents.</li></ul></details></div><div class="s6"><button type="button" class="b" data-act="copyCarrierCoverageEmail">Copy Email</button></div></div>`;
 }
+function existingPoiFacts(){return {policyNumber:String(F.pn||"").trim(),memberName:String(F.member||"").trim(),memberNumber:String(F.mno||"").trim(),vin:String(F.vin||"").trim().toUpperCase(),state:F.st,effectiveOn:F.eff,expiresOn:F.exp}}
+function existingPoiSource(){const text=value=>String(value||"").trim();return {kind:F.poiKind||"external",policyNumber:text(F.poiNumber),memberName:text(F.poiMember),memberNumber:text(F.poiMemberNumber),vin:text(F.poiVin).toUpperCase(),state:F.poiState||"",effectiveOn:F.poiEffective||"",expiresOn:F.poiExpires||"",issuer:text(F.poiIssuer),reference:text(F.poiReference),issuedOn:F.poiIssuedOn||"",attested:F.poiAttested===true}}
+function existingPoiForm(){
+ return sec("Actual existing policy")+fld("pn","Actual existing policy number",6)+fld("eff","Document policy term begins (from POI)",3,{t:"date"})+fld("exp","Exact policy term expires (from POI)",3,{t:"date"})+sec("Original POI source — verify against this document")+
+ fld("poiKind","Source type",6,{sel:[["external","Existing POI issued outside this register"],["recorded","Exact existing issued shared-register policy"]]})+
+ fld("poiNumber","Policy number exactly as shown on POI",6)+fld("poiMember","Member name on POI",3)+fld("poiMemberNumber","Member number on POI",3)+fld("poiVin","Full VIN on POI",6)+fld("poiState","Garaging state on POI",3,{sel:[["","Choose source state"],...Object.keys(RULES).map(k=>[k,k])]})+
+ fld("poiIssuer","Actual issuer on POI",6)+fld("poiEffective","POI effective date",3,{t:"date"})+fld("poiExpires","POI expiration date",3,{t:"date"})+fld("poiIssuedOn","Original POI issuance / document date",3,{t:"date"})+fld("poiReference","Retained POI file ID / source reference",6)+
+ `<div class="s6">${chk("poiAttested","I confirm this member already has authentic issued Klutch POI; I reviewed the original retained source and matched the actual number, member, VIN, state and exact term. No historical coverage or renewal is inferred.")}</div><div class="s6"><button type="button" class="b ghost" data-act="verifyPoi">Verify existing POI source</button><p class="note" style="margin-top:8px">This validates source facts and operator attestation, not issuer authenticity independently. Keep the original issued records in the claim file. Editing source facts clears verification. Verification expires after 30 minutes and is not restored from a saved draft.</p></div>`;
+}
+function buildExistingPoiCorrespondence(pol,s){
+ const miss=[];for(const [k,label] of [["pn","actual existing policy number"],["member","named insured"],["mno","member number"],["vin","VIN"],["vehicle","vehicle"],["dol","date of loss"],["carrier","carrier name"],["attn","adjuster name and title"],["caddr","carrier address"],["ccity","carrier city, state ZIP"],["cclm","carrier claim number"],["poiPosition","reviewed coverage position"],["poiPositionRef","determination source reference"]])if(!String(s[k]||"").trim())miss.push(label);
+ if(!s.poiPositionConfirmed)miss.push("reviewed determination attestation");
+ const text=String(s.poiPosition||"").trim();
+ const html=`<div class="sheet"><div class="ltr"><img class="lg" src="${LOGO}" alt="Klutch Risk Retention Group"><p>${esc(ld(s.date||today()))}</p><div>${esc(s.carrier||"")} Claims<br>Attn: ${esc(s.attn||"")}<br>${esc(s.caddr||"")}<br>${esc(s.ccity||"")}</div><div class="gap"></div><div>RE: Coverage Position — Existing POI Correspondence<br>Your Claim Number: ${esc(s.cclm||"")}<br>Existing Policy Number: ${esc(s.pn||"")}<br>Date of Loss: ${esc(ld(s.dol))}<br>Member: ${esc(s.member||"")} · ${esc(s.mno||"")}<br>Vehicle: ${esc(s.vehicle||"")} (${esc(s.vin||"")})<br>POI term: ${esc(s.eff||"")} – ${esc(s.exp||"")}</div><div class="gap"></div><p>Dear ${esc(s.attn||"")}:</p><p>This correspondence references existing proof of insurance retained in the claim file. The original POI source is ${esc(s.poiReference||"")}, issued by ${esc(s.poiIssuer||"")} and dated ${esc(s.poiIssuedOn||"")}. The policy number and term above were checked against that source by the preparing operator.</p><p><b>Reviewed coverage position</b> (source: ${esc(s.poiPositionRef||"")}):</p><p style="white-space:pre-wrap">${esc(text)}</p><p>This letter does not issue, register, renew, endorse, cancel, replace or extend a policy or POI. No coverage or denial is established by the policy number alone. Refer to the original issued policy documents and the retained determination for applicable terms and findings.</p><p>Please reference the claim number above in further correspondence.</p><p>Sincerely,</p><div>${esc(klutchSignoffAccess.signoff.name)}<br>${esc(klutchSignoffAccess.signoff.title)}<br>Klutch Risk Retention Group<br>claims@klutchinsurance.com</div>${FOOT}</div></div>`;
+ return {html,miss};
+}
 function buildForm(){
  applyKlutchHandlerDefaults(F);
  const d=F.sel,R=RULES[F.st];
- const full=(d==="dec"||d==="den"||d==="can"||d==="dop"||d==="pip_history");
- const issuedPolicy=/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"");
+ const full=F.sourceMode!=="existing"||(d==="den"||d==="can");
+ const issuedPolicy=F.sourceMode!=="existing"&&/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"");
  if(d==="carrier_email"){ $("#form").innerHTML=carrierEmailForm();return; }
  if(d==="carrier_guide"){ $("#form").innerHTML=carrierGuideForm();return; }
  let h=`<div class="f">`;
@@ -481,23 +498,26 @@ function buildForm(){
   h+=F.lease==="t"?fld("cdate","Date the lease ended",3,{t:"date"}):`<div class="s3 note" style="align-self:end">No cancellation notice needed.</div>`;
   h+=F.lease==="t"?`<div class="s6 note" style="margin-top:-4px">The policy cancels on this date at 11:59 p.m. This works mid-term or at the end of a term. For a long lease, open the most recent renewal first.</div>`:"";
  }
+ h+=sec("Policy number source");
+ h+=`<div class="s6"><label>Choose one</label>${seg("sourceMode",[["new","Create a number"],["existing","Member already has POI"]])}</div>`;
+ h+=`<div class="s6 note">${F.sourceMode==="existing"?"Use only the actual number on an authentic existing Klutch POI. This is source-backed correspondence, not a new policy or a replacement coverage document. Nothing is registered, renewed, cancelled or sent.":"Create a number uses the authoritative shared-register issuance rules. Complete policy details and confirm issuance; choosing a letter does not limit you to a draft."}</div>`;
  h+=sec("Policy");
- if(d==="dec")h+=`<div class="s6"><label>Policy type</label>${seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]],undefined,"policy-type")}</div>`;
+ if(d==="dec"&&F.sourceMode!=="existing")h+=`<div class="s6"><label>Policy type</label>${seg("ptype",[["n","New policy"],["r","Renewal"],["c","Correction"]],undefined,"policy-type")}</div>`;
  if(d!=="dec"||F.ptype==="r"||F.ptype==="c")h+=`<div class="s6"><label>${d==="dec"?"Find the existing policy":"Find a saved policy"}</label><input id="rsq" placeholder="Member name, member number or policy number" value="${esc(F.rq||"")}"><div id="rsr" style="margin-top:6px"></div>${d==="dec"&&F.ptype==="r"?`<div class="note" style="margin-top:4px">A renewal keeps the policy number. The new term starts when the last term ends.</div>`:""}${d==="dec"&&F.ptype==="c"?`<div class="note" style="margin-top:4px">A correction keeps the policy number and the same term dates. Fix what was wrong and print the corrected dec page.</div>`:""}</div>`;
- if(d==="dec"){
+ if(d!=="dop"&&F.sourceMode!=="existing"){
   h+=fld("eff","Effective date",3,{t:"date"});
   h+=`<div class="s3"><label>Term</label>${seg("term",[["6","6 months"],["12","12 months"]])}<div class="note" style="margin-top:4px">In the lease more than 6 months: select 12 months. In the lease less than 6 months: select 6 months.</div></div>`;
   if(F.ptype==="n")h+=`<div class="s6 note" style="margin-top:-4px">If today falls after the original term ends, Print / Save PDF automatically creates the original declaration plus each needed contiguous renewal declaration under the same policy number. No separate renewal form is required.</div>`;
   h+=`<div class="s3"><label>Expires</label><input id="expv" disabled></div>`;
  }
- if(d!=="end"){
+ if(d!=="dop"){
   h+=sec("Member and vehicle");
   h+=fld("member","Named insured",3)+fld("mno","Member number",3);
   if(full){h+=fld("address","Street address",6)+fld("city","City",3)+fld("cst","State",1)+fld("zip","ZIP",2)}
   h+=`<div class="s6"><label>VIN</label><div class="pb"><input data-k="vin" value="${esc(F.vin||"")}" maxlength="17" style="text-transform:uppercase"><button class="b ghost" data-act="decode">Decode</button></div><div id="vinmsg" class="note" style="margin-top:4px"></div></div>`;
   h+=fld("vehicle","Year, make, model",6);
  }
- if(d==="dec"||d==="pip_history"){
+ if(d!=="dop"&&F.sourceMode!=="existing"){
   h+=sec("Coverage elections");
   if(R.pip&&!(F.st==="MD"&&F.mdPipSame==="no"))h+=`<div class="s3"><label>PIP</label>${seg("pip",F.st==="MD"?[["a","Elected"],["l","Limited election"],["w","Waived"]]:[["a","Accepted"],["w","Waived"]],R.pip&&!R.pip.waive?["w"]:[])}</div>`;
   h+=`<div class="s3"><label>UM / UIM</label>${seg("um",[["a","Accepted"],["r","Rejected"]],R.umReject?[]:["r"])}</div>`;
@@ -506,17 +526,20 @@ function buildForm(){
   h+=`<div class="s6" id="calc"></div>`;
   h+=`<div class="s6"><details><summary>Adjust deductibles</summary><div class="f" style="margin-top:8px">${fld("compD","Comprehensive deductible",3)+fld("collD","Collision deductible",3)}</div></details></div>`;
   h+=sec("Policy number");
-  h+=`<div class="s6"><label>Policy number</label><div class="pb"><input data-k="pn" value="${esc(F.pn||"")}" ${F.ptype!=="n"?"readonly":""}>${F.ptype==="n"&&!/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")?`<button class="b ghost" data-act="genpol">${F.pn?"Replace draft policy number":"Create draft policy number"}</button>`:""}</div><div class="note" style="margin-top:4px">${/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")?"Policy number assigned in the shared register.":"Creates a draft number for review only. The final policy number and shared-register entry are assigned when you Print / Save PDF."}</div></div>`;
+  h+=`<div class="s6"><label>Policy number</label><div class="pb"><input data-k="pn" value="${esc(F.pn||"")}" readonly>${F.ptype==="n"&&!/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")?`<button class="b ghost" data-act="genpol">Create policy number</button>`:""}</div><div class="note" style="margin-top:4px">${/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")?"Policy number assigned in the shared register.":"Create policy number works on declarations and letter tabs after the required policy inputs are complete. If details are missing, review them or prepare a marked draft without issuance."}</div></div>`;
  }
+ if(F.sourceMode==="existing"&&d!=="dop")h+=existingPoiForm();
  if(d==="den"||d==="car"){
   h+=sec("Claim");
   h+=`<div class="s6"><label>Snapsheet claim number</label><div class="pb"><input data-k="snap" value="${esc(F.snap||"")}"><button class="b ghost" data-act="genclm">Get Klutch no.</button></div></div>`;
   h+=fld("kc","Klutch claim number",3)+fld("dol","Date of loss",3,{t:"date"})+fld("tnc","TNC",3,{sel:[["Uber","Uber"],["Lyft","Lyft"]]})+fld("period","TNC period",3,{sel:[["1","1 – Waiting for a ride request"],["2","2 – Traveling to pick up a passenger"],["3","3 – Transporting a passenger"],["0","0 – Personal use (no denial)"]]});
   if(d==="den")h+=fld("filed","Date claim filed",3,{t:"date"})+fld("dden","Letter date (next business day, editable)",3,{t:"date"})+`<div class="s6">${chk("tncEvidenceConfirmed","I reviewed the TNC activity records for this loss and confirmed that the cited KIC-END-002 exclusion applies.")}</div>`;
   else h+=fld("date","Letter date",6,{t:"date"});
+  if(d==="car"&&F.sourceMode!=="existing")h+=`<div class="s6">${chk("tncEvidenceConfirmed","I reviewed the TNC activity records and the existing coverage denial for this loss, and confirmed that the cited KIC-END-002 exclusion applies.")}</div>`;
  }
  if(["dec","den","car","can","end","pip_history"].includes(d))h+=klutchSignoffFields();
  if(d==="car"){
+  if(F.sourceMode==="existing")h+=sec("Reviewed coverage position")+`<div class="s6"><label>Coverage position — exact reviewed determination</label><textarea data-k="poiPosition" maxlength="5000" style="min-height:140px">${esc(F.poiPosition||"")}</textarea></div>`+fld("poiPositionRef","Retained determination source reference",6)+`<div class="s6">${chk("poiPositionConfirmed","I reviewed this determination and its source for this loss. POI alone does not establish coverage, an exclusion or a denial.")}</div>`;
   h+=sec("Carrier");
   h+=fld("carrier","Carrier name",3)+fld("cclm","Carrier claim number",3)+fld("attn","Adjuster name and title",6)+fld("caddr","Carrier street address",3)+fld("ccity","City, State ZIP",3)+fld("cdt","Date of carrier letter",3,{t:"date"})+fld("rec","Supporting records",3);
  }
@@ -552,18 +575,18 @@ function buildForm(){
  if(d==="end")h+=sec("Endorsement")+`<div class="s6 note">This form is available for preview and creation without a manager-approval or carrier-evidence field.</div>`;
  $("#form").innerHTML=h+"</div>";calc();rsearch()}
 function calc(){
- const d=derive(F);if(!d)return;F.exp=addMonths(F.eff,+F.term);const dd=derive(F);
+ const d=derive(F);if(!d)return;if(F.sourceMode!=="existing")F.exp=addMonths(F.eff,+F.term);const dd=derive(F);
  const e=$("#expv");if(e)e.value=ld(F.exp);
  const c=$("#calc");if(!c)return;
  const rows=COVS.filter(([k])=>k!=="pip"||dd.pipOn).filter(([k])=>(k!=="um"&&k!=="uim")||dd.umOn);
  c.innerHTML=`<table class="tbl">${rows.map(([k,l])=>`<tr><td>${l}</td><td>${money(dd.cov[k+"P"])}</td></tr>`).join("")}<tr><td><b>${dd.wk} weeks × $${WEEKLY}</b></td><td><b>${money(dd.tot)}</b></td></tr></table>`}
 function ctx(){
- const dd=derive(F);if(dd)F.exp=addMonths(F.eff,+F.term);
+ const dd=derive(F);if(dd&&F.sourceMode!=="existing")F.exp=addMonths(F.eff,+F.term);
  const d2=derive(F);
  const pol={number:F.pn||"",member:F.member||"",address:F.address||"",city:[F.city,F.cst?", "+String(F.cst).toUpperCase():"",F.zip?" "+F.zip:""].join("").replace(/^, /,""),vehicle:F.vehicle||"",vin:F.vin||"",terms:[{eff:F.eff,exp:F.exp,cov:d2?d2.cov:{}}]};
  const claim=(F.kc&&F.dol&&F.tnc&&F.period!=null&&F.period!=="")?{kc:F.kc,dol:F.dol,tnc:F.tnc,period:+F.period}:null;
  return{pol,claim}}
-  function result(d){const{pol,claim}=ctx();return buildDoc(d,pol,claim,Object.assign({},F))}
+  function result(d){const{pol,claim}=ctx();if(F.sourceMode==="existing"){if(d==="car")return buildExistingPoiCorrespondence(pol,F);if(isPrintablePdf(d))return {html:"",miss:["Use original issued source documents; existing POI mode cannot create replacement policy documents."]}}return buildDoc(d,pol,claim,Object.assign({},F))}
   function declarationResultForIssuedTerm(entry){
     const t=entry.terms||{}, cov={}, keyByLabel={"Bodily Injury Liability":"bi","Property Damage Liability":"pd","Personal Injury Protection":"pip","Uninsured Motorist":"um","Underinsured Motorist":"uim","UMPD":"umpd","Comprehensive":"comp","Collision":"coll"};
     (t.coverages||[]).forEach(coverage=>{const key=keyByLabel[coverage.label];if(!key)return;cov[key]=coverage.limit||"";cov[key+"P"]=Number(coverage.premium||0);if(coverage.deductible)cov[key+"D"]=coverage.deductible});
@@ -622,15 +645,16 @@ function preview(){
  renderDocs(rs);
  const r=rs[F.sel];
  const dv=dupVin();
- const vk=(F.vin||"").trim().toUpperCase(),dvBlock=!!(dv&&dv.pn!==F.pn&&F.ack!==vk);
- $("#ban").innerHTML=(dv&&dv.pn!==F.pn?(dvBlock?`<div class="warn err">This vehicle already has policy <b>${dv.pn}</b> (${esc(dv.member)}). One policy per lease. Choose one before you can print:<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="b" style="padding:5px 12px" data-act="loadren" data-v="${dv.pn}">Renew that policy</button><button class="b ghost" style="padding:5px 12px" data-act="loadcor" data-v="${dv.pn}">Correct that policy</button><button class="b ghost" style="padding:5px 12px" data-act="ackdup">This is a new lease. Issue a new policy.</button></div></div>`:`<div class="warn">New lease acknowledged. Existing policy on this vehicle: <b>${dv.pn}</b> (${esc(dv.member)}).</div>`):"")+`<div class="note" style="margin-bottom:8px">${DOCNOTE[F.sel]}</div>`+(r.err?`<div class="warn err">${r.err}</div>`:(r.miss.length?`<div class="warn">Still needed: ${[...new Set(r.miss)].join(", ")}.</div>`:""));
+ const vk=(F.vin||"").trim().toUpperCase(),dvBlock=F.sourceMode!=="existing"&&!!(dv&&dv.pn!==F.pn&&F.ack!==vk);
+ $("#ban").innerHTML=(F.sourceMode!=="existing"&&dv&&dv.pn!==F.pn?(dvBlock?`<div class="warn err">This vehicle already has policy <b>${dv.pn}</b> (${esc(dv.member)}). One policy per lease. Choose one before you can print:<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="b" style="padding:5px 12px" data-act="loadren" data-v="${dv.pn}">Renew that policy</button><button class="b ghost" style="padding:5px 12px" data-act="loadcor" data-v="${dv.pn}">Correct that policy</button><button class="b ghost" style="padding:5px 12px" data-act="ackdup">This is a new lease. Issue a new policy.</button></div></div>`:`<div class="warn">New lease acknowledged. Existing policy on this vehicle: <b>${dv.pn}</b> (${esc(dv.member)}).</div>`):"")+`<div class="note" style="margin-bottom:8px">${DOCNOTE[F.sel]}</div>`+(r.err?`<div class="warn err">${r.err}</div>`:(r.miss.length?`<div class="warn">Still needed: ${[...new Set(r.miss)].join(", ")}.</div>`:""));
   const selectedIsNonPdf=!isPrintablePdf(F.sel);renderPacketPicker(rs);
  const printing=Boolean(window.isKlutchPrinting?.()),signoffPending=!klutchSignoffAccess.ready;$("#form").inert=printing;$("#packetpicker").inert=printing;
- $("#prt").style.display=selectedIsNonPdf?"none":"";$("#prt").disabled=selectedIsNonPdf||dvBlock||!isStateConfirmed()||printing||signoffPending;$("#prt").setAttribute("aria-busy",String(printing));
- $("#prtall").style.display="";$("#prtall").disabled=dvBlock||!isStateConfirmed()||printing||signoffPending;$("#prtall").setAttribute("aria-busy",String(printing));
+ $("#prt").style.display=selectedIsNonPdf?"none":"";$("#prt").disabled=selectedIsNonPdf||dvBlock||!isStateConfirmed()||printing||signoffPending||(F.sourceMode==="existing"&&F.sel!=="car");$("#prt").setAttribute("aria-busy",String(printing));
+ $("#prtall").style.display="";$("#prtall").disabled=dvBlock||!isStateConfirmed()||printing||signoffPending||F.sourceMode==="existing";$("#prtall").setAttribute("aria-busy",String(printing));
  const verb=F.outputMode==="print"?"Print":"Download",currentIds=packetDocumentIds(false);
  $("#prt").textContent=verb+(F.sel==="dec"?" declaration packet":" current document");
  $("#prtall").textContent=verb+` selected packet (${packetDocumentIds(true).length})`;
+ if(F.sourceMode==="existing")$("#ban").innerHTML=`<div class="warn">Existing POI mode: only source-backed Coverage Position correspondence is available. Use original issued declarations, endorsements and denial records from the retained source; no policy packet or cancellation is generated here.</div>`+$("#ban").innerHTML;
  $("#pv").innerHTML=r.html||`<div class="empty">Fill in the form to see the document.</div>`;fit();return rs}
 function fit(){const pv=$("#pv");if(!pv)return;const k=Math.min(1,(pv.clientWidth-36)/816);document.querySelectorAll("#pv .sheet").forEach(sh=>{sh.style.transform=k<1?`scale(${k})`:"";sh.style.marginBottom=k<1?`${(1056*k-1056)+18}px`:"18px"})}
 window.addEventListener("resize",fit);
@@ -765,6 +789,7 @@ function buildDoc(d,pol,claim,s){
   return{html,miss,claim:denialClaim.kc};
  }
  if(d==="car"){
+  if(!s.dol)miss.push("date of loss");if(!s.tnc)miss.push("TNC platform");if(!["1","2","3"].includes(String(s.period)))miss.push("applicable reviewed TNC period (1, 2 or 3)");if(!s.tncEvidenceConfirmed)miss.push("reviewed TNC activity, exclusion applicability and existing denial");
   const carrierClaim=claim||{kc:s.kc||"[Klutch claim number]",dol:s.dol||"",tnc:s.tnc||"Uber",period:+s.period||1};
   const need=[["carrier","carrier name"],["attn","adjuster name and title"],["caddr","carrier address"],["ccity","carrier city, state ZIP"],["cclm","carrier claim number"],["cdt","date of carrier letter"],["rec","supporting records"]];
   need.forEach(([k,l])=>{if(!s[k])miss.push(l)});
@@ -810,6 +835,9 @@ async function clearFlow(){if(!await ask("Reset the form? This clears everything
  F={ptype:"n",set:F.set,sel:F.sel,st:F.st,stateConfirmed:false,confirmedState:"",term:"6",pip:"w",um:"a",lease:"a",date:today(),tnc:"Uber",period:"2",eff:today()};applyKlutchHandlerDefaults(F);save();buildForm();preview();window.scrollTo(0,0);say("Form reset")}
 document.addEventListener("click",e=>{
  const sg=e.target.closest("[data-seg]");
+ if(sg?.dataset.seg==="sourceMode"){
+  const next=sg.dataset.v;if(next!==F.sourceMode){F.sourceMode=next;F.pn="";F.ptype="n";F.annualIssueRequestKey="";F.rq="";F.poiAttested=false;F.poiPositionConfirmed=false;if(next==="existing")F.sel="car";save();buildForm();preview()}return;
+ }
  if(sg){const k=sg.dataset.seg;const prevPt=F.ptype;F[k]=sg.dataset.v;save();if(k==="ptype"&&F.ptype==="n"&&(prevPt==="r"||prevPt==="c")){F.pn="";F.rq=""}if(k==="set"&&!setDocs().includes(F.sel))F.sel=setDocs()[0];if(k==="set"||k==="term"||k==="pip"||k==="um"||k==="lease"||k==="ptype"||k==="dopSignatureMode"||k==="mdPipSame"){if(k==="dopSignatureMode"){F.dopSignatureData="";clearDopCertification()}buildForm();if(k==="ptype")rsearch()}preview();return}
  const b=e.target.closest("[data-act]");if(!b)return;const a=b.dataset.act;
  if(a==="mdPipAdd"){F.mdPipChanges=F.mdPipChanges||[];if(F.mdPipChanges.length<10)F.mdPipChanges.push({selection:"",effectiveOn:"",signedOn:"",sourceReference:"",electionDetails:"",confirmed:false});save();buildForm();preview()}
@@ -851,7 +879,7 @@ document.addEventListener("change",e=>{
  if(e.target.id==="outputmode"){F.outputMode=e.target.value==="print"?"print":"pdf";save();preview();return}
  if(inputMdPip(e))return;if(e.target.id==="imp"){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.pols)throw 0;K=j;K.clms=K.clms||[];save();$("#regb").innerHTML=regHtml("")}catch(x){say("That file isn't a policy register backup.")}};r.readAsText(f);return}const k=e.target.dataset.k;if(!k)return;const priorState=F.st;F[k]=e.target.type==="checkbox"?e.target.checked:e.target.value;
  if(k==="st"){
-  if(/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.st=priorState;say("Garaging state is locked after a shared policy number is issued. Start a correction workflow for a verified policy-record issue.");buildForm();save();preview();return}
+  if(F.sourceMode!=="existing"&&/^KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.st=priorState;say("Garaging state is locked after a shared policy number is issued. Start a correction workflow for a verified policy-record issue.");buildForm();save();preview();return}
   if(F.st!==priorState){F.mdPipSame="";F.mdPipChanges=[];F.mdPipInitial="";F.mdPipInitialDetails="";F.mdPipRentalStart="";F.stateConfirmed=false;F.confirmedState="";if(/^DRAFT-KIC-[A-Z]{2}-\d{6}$/.test(F.pn||"")){F.pn="";say("Garaging state changed. The unissued draft policy number was cleared.")}}
   const R=RULES[F.st];if(!R.pip)F.pip="w";else if(!R.pip.waive)F.pip="a";if(!R.umReject)F.um="a";buildForm()
  }
@@ -887,6 +915,16 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   };
   const key = () => (crypto.randomUUID ? crypto.randomUUID() : `kic-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const clean = v => String(v || "").trim();
+  const invalidatePoiSource=event=>{
+    const k=event.target.dataset.k;
+    if(!k)return;
+    if(k==="st"&&F.sourceMode==="existing"){F.stateConfirmed=false;F.confirmedState=""}
+    if(["pn","member","mno","vin","st","eff","exp","poiKind","poiNumber","poiMember","poiMemberNumber","poiVin","poiState","poiEffective","poiExpires","poiIssuer","poiReference","poiIssuedOn"].includes(k)){
+      poiVerification=null;F.poiAttested=false;const box=document.querySelector('[data-k="poiAttested"]');if(box)box.checked=false;
+    }
+    if(["dol","poiPosition","poiPositionRef"].includes(k)){F.poiPositionConfirmed=false;const box=document.querySelector('[data-k="poiPositionConfirmed"]');if(box)box.checked=false}
+    if(F.sourceMode==="existing")saveDraft();
+  };
   const asLegacy = p => {
     const t = p.terms || {};
     return {
@@ -899,11 +937,16 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     };
   };
   const policyTerms = () => {
+    if(F.sourceMode==="existing")throw new Error("Existing POI is source-backed correspondence only; no policy terms may be issued or changed.");
     if (!isStateConfirmed()) throw new Error("Confirm the garaging state before creating or printing a policy document.");
-    if(F.st==="MD"&&["dec","pip_history"].includes(F.sel)&&mdPipErrors(F).length)throw new Error(mdPipErrors(F).join("; "));
+    if(F.st==="MD"&&mdPipErrors(F).length)throw new Error(mdPipErrors(F).join("; "));
     const d = derive(F); if (!d) throw new Error("Choose a supported garaging state and complete the policy dates.");
     F.exp = addMonths(F.eff, +(F.term || 6));
     const z = derive(F);
+    const required=[["leaseId",F.leaseId||F.mno],["member name",F.member],["member number",F.mno],["vehicle",F.vehicle],["street address",F.address],["city",F.city],["member state",F.cst],["ZIP",F.zip]].filter(([,v])=>!clean(v)).map(([k])=>k);
+    if(required.length)throw new Error("Complete the authoritative policy inputs: "+required.join(", ")+".");
+    if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(clean(F.vin).toUpperCase()))throw new Error("Enter a valid full 17-character VIN before creating a policy number.");
+    if(!validMdDate(F.eff)||!validMdDate(F.exp)||![6,12].includes(Number(F.term))||F.eff>today())throw new Error("Enter valid effective dates and a 6- or 12-month term beginning on or before today.");
     const limits = {
       "Bodily Injury Liability": z.cov.bi, "Property Damage Liability": z.cov.pd,
       ...(z.R.pip ? { "Personal Injury Protection": z.cov.pip } : {}), "Uninsured Motorist": z.cov.um,
@@ -966,12 +1009,47 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     if (typeof regHtml === "function" && document.querySelector("#regb")) document.querySelector("#regb").innerHTML = regHtml("");
     if (typeof rsearch === "function") rsearch();
   }
+  document.addEventListener("input",invalidatePoiSource);
+  document.addEventListener("change",invalidatePoiSource);
   function saveDraft() {
     try { localStorage.setItem("klutch_form_v3", JSON.stringify(F)); } catch (_) {}
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(() => plain("/draft", { method: "POST", body: JSON.stringify({ draft: F }) }).catch(() => {}), 800);
+    if(F.sourceMode!=="existing")draftTimer = setTimeout(() => plain("/draft", { method: "POST", body: JSON.stringify({ draft: F }) }).catch(() => {}), 800);
   }
   const isIssuedPolicyNumber = value => /^KIC-[A-Z]{2}-\d{6}$/.test(clean(value));
+  let poiVerification=null;
+  const poiPayload=()=>({sourceMode:"existing",stateConfirmed:isStateConfirmed(),facts:existingPoiFacts(),source:existingPoiSource()});
+  const poiBinding=()=>JSON.stringify(poiPayload());
+  const correspondenceBinding=()=>JSON.stringify({...poiPayload(),dol:F.dol,poiPosition:F.poiPosition,poiPositionRef:F.poiPositionRef,poiPositionConfirmed:F.poiPositionConfirmed,carrier:F.carrier,attn:F.attn,caddr:F.caddr,ccity:F.ccity,cclm:F.cclm,vehicle:F.vehicle,date:F.date});
+  async function verifyExistingPoi(){
+    if(!isStateConfirmed())throw new Error("Confirm garaging state before verifying existing POI.");
+    const binding=poiBinding(),data=await plain("/existing-poi/verify",{method:"POST",body:JSON.stringify(poiPayload())});
+    if(binding!==poiBinding())throw new Error("The POI source changed during verification. Review and verify again.");
+    poiVerification={binding,token:data.verificationToken};say("POI source attestation validated for correspondence only. No policy was registered or changed.");
+  }
+  async function printExistingPoi(all){
+    if(all||F.sel!=="car")throw new Error("Existing POI is correspondence-only. Original policy documents must come from the issued source; no packet or cancellation is created.");
+    if(!poiVerification||poiVerification.binding!==poiBinding())throw new Error("Verify the actual existing POI first. Changed number, member, VIN, state, term or source requires re-verification.");
+    const rendered=result("car");if(rendered.miss.length)throw new Error("Coverage correspondence still needs: "+rendered.miss.join(", "));
+    const binding=correspondenceBinding();
+    const data=await plain("/existing-poi/output",{method:"POST",body:JSON.stringify({...poiPayload(),verificationToken:poiVerification.token,documentType:"car",lossOn:F.dol,position:F.poiPosition,positionReference:F.poiPositionRef,positionConfirmed:F.poiPositionConfirmed})});
+    if(binding!==correspondenceBinding())throw new Error("Correspondence or POI facts changed during output validation. Review and verify the source again.");
+    const output=buildExistingPoiCorrespondence(ctx().pol,{...F,pn:data.facts.policyNumber,poiPosition:data.position,poiPositionRef:data.positionReference});
+    if(output.miss.length)throw new Error(output.miss.join("; "));
+    const box=document.createElement("div");box.style.cssText="position:fixed;left:-30000px;top:0;visibility:hidden;width:816px";box.innerHTML=output.html;document.body.appendChild(box);
+    try{const sheet=box.querySelector(".sheet"),body=sheet.querySelector(".ltr"),footer=body.querySelector(".foot");if([...body.children].filter(el=>el!==footer).some(el=>el.getBoundingClientRect().bottom>footer.getBoundingClientRect().top-8))throw new Error("The reviewed correspondence is too long for its page. Shorten the quoted position and retain the full determination at its source reference; no clipped document was generated.")}finally{box.remove()}
+    const filename=await outputKlutchHtml(output.html,["car"],false);say("Source-backed correspondence prepared: "+filename+". Not a policy issuance or replacement POI. Nothing recorded or sent.");
+  }
+  async function createPolicyNumber(){
+    if(klutchPrintBusy)throw new Error("A policy or document output is already being prepared.");
+    if(F.sourceMode==="existing")throw new Error("An existing POI must use its actual number, not create a new number.");
+    if(F.ptype!=="n"||isIssuedPolicyNumber(F.pn))throw new Error("Open the recorded policy; its issued number must not be replaced.");
+    let issues=[];try{policyTerms()}catch(error){issues.push(error.message)}
+    issues.push(...result("dec").miss.filter(detail=>detail!=="policy number"));
+    if(issues.length){if(await ask("Policy issuance needs actual information:\n\n"+[...new Set(issues)].join("\n")+"\n\nComplete these fields for an issued policy number. You may prepare a review-only draft now; no issuance occurs.","Prepare marked draft"))await prepareDraftPolicyNumber();return}
+    if(!await ask("Create a new policy number in the shared register for this member, VIN, garaging state and policy term? This is policy issuance, not merely preparing a letter. Original issuance rules and any needed contiguous renewals still apply. Nothing will be sent.","Confirm policy issuance"))return;
+    klutchPrintBusy=true;preview();try{await refreshApprovedSignoff();await issueCurrent()}finally{klutchPrintBusy=false;preview()}
+  }
   async function prepareDraftPolicyNumber() {
     if (!isStateConfirmed()) throw new Error("Confirm the garaging state before preparing a draft policy number.");
     if (F.ptype !== "n") throw new Error("Draft policy numbers are available only for a new policy.");
@@ -981,6 +1059,7 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     say("Draft policy number prepared. Print / Save PDF assigns the final shared policy number.");
   }
   async function issueCurrent() {
+    if(F.sourceMode==="existing"||(F.pn&&!isIssuedPolicyNumber(F.pn)&&!/^DRAFT-KIC-/.test(F.pn)))throw new Error("Use the actual existing POI source option; an external policy number cannot be replaced or auto-registered.");
     const terms = policyTerms();
     const existing = (await plain(`/vin/${encodeURIComponent(terms.vin)}`)).policies || [];
     let newLeaseConfirmed = false;
@@ -998,9 +1077,9 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   }
   async function persistTermIfNeeded() {
     const terms = policyTerms();
-    if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) return issueCurrent();
+    if (F.ptype === "n" && !isIssuedPolicyNumber(F.pn)) {if(F.pn&&!/^DRAFT-KIC-/.test(F.pn))throw new Error("Use the existing POI source option for an actual externally issued policy number; it cannot be auto-registered.");return issueCurrent();}
     const existing = serverPolicies.get(F.pn) || (await plain(`/vin/${encodeURIComponent(terms.vin)}`)).policies?.find(policy => policy.policyNumber === F.pn);
-    if (!existing) return issueCurrent();
+    if (!existing) {if(F.pn&&!/^DRAFT-KIC-/.test(F.pn))throw new Error("This policy number is not in the authoritative register. Use Member already has POI and verify the source; it will not be auto-registered.");return issueCurrent();}
     if(existing.state==="MD"&&existing.terms?.marylandPipHistory&&!terms.marylandPipHistory)throw new Error("This policy has documented PIP changes. Keep its confirmed history in the packet; use a correction for a verified error.");
     if (F.ptype === "r") {
       const { policy } = await plain("/renew", { method: "POST", body: JSON.stringify({ policyId: existing.id, effectiveOn: terms.effectiveOn, expiresOn: terms.expiresOn, terms }) });
@@ -1088,10 +1167,10 @@ go(location.hash==="#coverage"?"#coverage":"#home");
     try{
       if(!all&&!isPrintablePdf(F.sel))throw new Error(F.sel==="carrier_guide"?"This is an on-screen communication guide. Use Copy guide; it is not a printable PDF.":"This is an email template. Use Copy Email; it is not a printable PDF.");
       if(!isStateConfirmed())throw new Error("Confirm the garaging state before creating or printing a policy document.");
-      klutchPrintBusy=true;preview();await refreshApprovedSignoff();applyKlutchHandlerDefaults(F);let rs=preview();const candidates=packetDocumentIds(all);
+      klutchPrintBusy=true;preview();await refreshApprovedSignoff();applyKlutchHandlerDefaults(F);if(F.sourceMode==="existing"){await printExistingPoi(all);return}let rs=preview();const candidates=packetDocumentIds(all);
       if(!candidates.length)throw new Error("Select at least one printable PDF document. Email templates and communication scripts are not included in print packets.");
       const dv=dupVin(),vk=(F.vin||"").trim().toUpperCase();if(dv&&dv.pn!==F.pn&&F.ack!==vk)throw new Error("Resolve the existing policy on this vehicle before preparing another policy packet.");
-      const issues=candidates.flatMap(id=>{const item=rs[id];return [...(item?.err?[item.err]:[]),...(item?.miss||[])].map(detail=>(DOCS.find(([k])=>k===id)?.[1]||id)+": "+detail)});
+      const issues=candidates.flatMap(id=>{const item=rs[id];return [...(item?.err?[item.err]:[]),...(item?.miss||[])].filter(detail=>!(detail==="policy number"&&F.sourceMode!=="existing"&&F.ptype==="n"&&!isIssuedPolicyNumber(F.pn))).map(detail=>(DOCS.find(([k])=>k===id)?.[1]||id)+": "+detail)});
       try{policyTerms()}catch(error){issues.push("Policy record: "+(error.message||"Complete the policy details."))}
       if(issues.length){
         const message="Some selected documents need details:\n\n"+[...new Set(issues)].join("\n")+"\n\nReview those fields for final documents, or continue with a clearly marked DRAFT packet. Draft output does not issue, renew, correct, cancel, certify, or record a policy/document. Missing TNC facts do not establish a denial.";
@@ -1123,14 +1202,16 @@ go(location.hash==="#coverage"?"#coverage":"#home");
   document.addEventListener("click", async event => {
     const target = event.target.closest("[data-act]"); if (!target) return;
     const action = target.dataset.act;
+    if(["loadpol","loadren","loadcor"].includes(action)){F.sourceMode="new";poiVerification=null;F.poiAttested=false;}
     if(action==="saveKlutchSignoff"){event.preventDefault();event.stopImmediatePropagation();try{await saveApprovedSignoff()}catch(error){say(error.message||"Could not save the approved Klutch sign-off.")}return}
-    if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await prepareDraftPolicyNumber(); } catch (error) { say(error.message || "Unable to prepare the draft policy number."); } }
+    if (action === "verifyPoi") { event.preventDefault(); event.stopImmediatePropagation(); try { await verifyExistingPoi(); } catch (error) {poiVerification=null;say(error.message||"POI verification failed.")}return; }
+    if (action === "genpol") { event.preventDefault(); event.stopImmediatePropagation(); try { await createPolicyNumber(); } catch (error) { say(error.message || "Unable to create the policy number."); } }
     if (action === "genclm") { event.preventDefault(); event.stopImmediatePropagation(); F.kc = "Assigned when document is created"; saveDraft(); buildForm(); preview(); say("The Klutch claim number is assigned by the shared register when the document is created."); }
     if (action === "export" || action === "import") { event.preventDefault(); event.stopImmediatePropagation(); say("Export and import are disabled. The shared Klutch register is the source of record."); }
   }, true);
   window.doPrint = durablePrint;
   window.isKlutchPrinting = () => klutchPrintBusy;
-  window.genpolFlow = prepareDraftPolicyNumber;
+  window.genpolFlow = createPolicyNumber;
   window.save = saveDraft;
   document.addEventListener("click", event => {
     if (event.target.closest("#prt")) { event.preventDefault(); event.stopImmediatePropagation(); durablePrint(false); }

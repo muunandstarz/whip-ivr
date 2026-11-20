@@ -13,8 +13,8 @@ function expectCoiText(fragment: string) {
 
 describe('COI named insured hierarchy and Maryland UM indicators', () => {
   it('keeps Metrocars as named insured and emphasizes the renter as additional named insured', () => {
-    expectCoiText('[label("NAMED INSURED"), coiText("Metrocars Leasing Corp", 8, "normal", "left", 1),');
-    expectCoiText('label("ADDITIONAL NAMED INSURED / RENTER"), coiText(form.namedOperator || "—", 9.6, "bold", "left", 1),');
+    expectCoiText('[label("NAMED INSURED"), coiText("Metrocars Leasing Corp", classic ? 7.5 : 8, "normal", "left", classic ? 0.5 : 1),');
+    expectCoiText('label("ADDITIONAL NAMED INSURED / RENTER"), coiText(form.namedOperator || "—", 9.6, "bold", "left", classic ? 0.5 : 1),');
     expect(coi.indexOf('label("NAMED INSURED")')).toBeLessThan(coi.indexOf('label("ADDITIONAL NAMED INSURED / RENTER")'));
   });
 

@@ -89,6 +89,95 @@ describe("ACORD certificate builder", () => {
     expect(saved.mock.calls.at(-1)?.[0].producerName).toBe("EDITED PRODUCER");
     expect(saved.mock.calls.at(-1)?.[0].insuredOrganization).toBe("EDITED ORGANIZATION");
   });
+  it("shows Jasmine for every fresh preset, leaves contact editable and never replaces canonical Morgan sign-off", async () => {
+    await mount();
+    for (const preset of ["klutch-minimum", "metrocars-minimum", "klutch-fl-uber-black"]) {
+      await change("preset", preset);
+      expect(input("contactName").value).toBe("Jasmine Lane Acosta");
+      expect(input("contactName").readOnly).toBe(false);
+    }
+    mocks.fresh.mockResolvedValue({ name: "Morgan Ellis", title: "Liability Claims Specialist", revision: 7 });
+    await change("contactName", "Edited Contact");
+    await draftPreview();
+    expect(mocks.pdf.mock.calls[0][0]).toEqual(expect.objectContaining({ contactName: "Edited Contact", representativeName: "Morgan Ellis", representativeTitle: "Liability Claims Specialist" }));
+    await change("preset", "klutch-minimum");
+    expect(input("contactName").value).toBe("Edited Contact");
+  });
+  it("explains scheduled versus ownership scope without adding an invented non-scheduled option", async () => {
+    await mount();
+    expect(container.textContent).toContain("not that this COI must list every auto");
+    expect(container.textContent).toContain("Non-owned is a distinct scope, not an unlisted vehicle");
+    expect(container.textContent).toContain("for MetroCars, the self-insurance authorization");
+    const fieldset = container.querySelector("fieldset")!;
+    expect(fieldset.querySelectorAll('input[type="checkbox"]')).toHaveLength(5);
+    expect(fieldset.textContent).not.toMatch(/non-scheduled/i);
+    expect(saved.mock.calls.at(-1)?.[0].autoScopes).toEqual(["scheduled"]);
+  });
+  it("supports a fresh standalone MetroCars/MD starting point without changing the three choices or certifying PIP", async () => {
+    await act(async () => { root.render(React.createElement(AcordCertificateBuilder, { initialPreset: "metrocars-minimum", onDraftChange: saved })); });
+    expect(container.querySelector<HTMLSelectElement>("#acord-preset")?.value).toBe("metrocars-minimum");
+    expect(container.querySelector<HTMLSelectElement>("#acord-preset")?.options.length).toBe(3);
+    expect(container.querySelector<HTMLSelectElement>("#acord-state")?.value).toBe("MD");
+    expect(input("contactName").value).toBe("Jasmine Lane Acosta");
+    expect(input("metrocarsRepresentative").value).toBe("");
+    expect(input("description").value).toBe("");
+    expect(input("coverageReference").value).toBe("");
+    expect(container.textContent).toContain("UM, PIP, physical damage and other coverages are not filled or certified automatically");
+    await draftPreview();
+    const data = mocks.pdf.mock.calls[0][0];
+    expect(data.description).toContain("MetroCars self-insured auto liability");
+    expect(data.description).not.toMatch(/\bPIP\b|personal injury protection/i);
+    expect(data).not.toHaveProperty("pip");
+    expect(data).not.toHaveProperty("pipLimit");
+    expect(data.naic).toBeUndefined();
+    expect(mocks.fresh).not.toHaveBeenCalled();
+  });
+  it("restores saved inputs instead of overriding them with a standalone initial preset", async () => {
+    await act(async () => { root.render(React.createElement(AcordCertificateBuilder, { initialPreset: "metrocars-minimum", initialDraft: complete("klutch-minimum"), onDraftChange: saved })); });
+    expect(container.querySelector<HTMLSelectElement>("#acord-preset")?.value).toBe("klutch-minimum");
+    expect(input("contactName").value).toBe("TEST PRODUCER CONTACT");
+    expect(input("policyNumber").value).toBe("TEST-POLICY");
+    expect(checkbox("source").checked).toBe(false);
+  });
+  it("keeps the dedicated MetroCars preset locked through stale Klutch restore and resets to MD with no PIP", async () => {
+    const lockedMount = async (initialDraft?: unknown) => {
+      await act(async () => { root.render(React.createElement(AcordCertificateBuilder, { initialPreset: "metrocars-minimum", lockedPreset: "metrocars-minimum", initialState: "MD", initialDraft, onDraftChange: saved })); });
+    };
+    await lockedMount(complete("klutch-fl-uber-black"));
+    const preset = container.querySelector<HTMLSelectElement>("#acord-preset")!;
+    expect(preset.value).toBe("metrocars-minimum"); expect(preset.disabled).toBe(true); expect(preset.options.length).toBe(1);
+    expect(container.querySelector<HTMLSelectElement>("#acord-state")?.value).toBe("MD");
+    expect(input("insuredOrganization").value).toBe("Metrocars Leasing Corp.");
+    expect(input("klutch-name")).toBeNull();
+    expect(mocks.hook).toHaveBeenLastCalledWith(false);
+    await confirmAll();
+    await lockedMount({ ...complete("klutch-minimum"), certificateNumber: "RESTORED-KLUTCH" });
+    expect(preset.value).toBe("metrocars-minimum");
+    expect(checkbox("source").checked).toBe(false);
+    expect(input("klutch-name")).toBeNull();
+    await change("state", "TX");
+    expect(container.querySelector<HTMLSelectElement>("#acord-state")?.value).toBe("TX");
+    await click(button("Clear certificate"));
+    expect(preset.value).toBe("metrocars-minimum");
+    expect(container.querySelector<HTMLSelectElement>("#acord-state")?.value).toBe("MD");
+    expect(input("policyNumber").value).toBe("");
+    expect(input("description").value).toBe("");
+    await draftPreview();
+    expect(mocks.pdf.mock.calls[0][0].description).not.toMatch(/\bPIP\b|personal injury protection/i);
+    expect(mocks.pdf.mock.calls[0][0].naic).toBeUndefined();
+    expect(mocks.fresh).not.toHaveBeenCalled();
+  });
+  it.each(["klutch-fl-uber-black", "klutch-minimum", "metrocars-minimum"] as const)("prints one concise driver/full-address entry for %s", async preset => {
+    await mount({ ...complete(preset), namedOperator: "Synthetic Example Driver", operatorAddress: "100 Example Avenue\nSuite 2\nRockville, MD 20850", description: "Verified manual note" });
+    await draftPreview();
+    const description = mocks.pdf.mock.calls[0][0].description;
+    expect(description.split("\n")[0]).toBe("Driver: Synthetic Example Driver; 100 Example Avenue, Suite 2, Rockville, MD 20850");
+    expect(description.match(/Synthetic Example Driver/g)).toHaveLength(1);
+    expect(description.match(/100 Example Avenue/g)).toHaveLength(1);
+    expect(description).toContain("Verified manual note");
+    expect(description).not.toMatch(/Named operator address|demonstration only|No insurance or Uber approval represented/i);
+    expect(description.includes("self-insured auto liability")).toBe(preset === "metrocars-minimum");
+  });
   it("locks canonical Klutch attribution and freshly checks before a watermarked incomplete preview", async () => {
     await mount({ ...complete(), handlerName: "FORGED LOGIN", representativeName: "FORGED" });
     expect(input("klutch-name").readOnly).toBe(true);

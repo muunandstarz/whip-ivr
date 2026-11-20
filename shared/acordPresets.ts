@@ -34,7 +34,7 @@ export const ACORD_MINIMUM_REFERENCES: Record<AcordState, MinimumLimitReference>
   TX: {biPerson:30000,biAccident:60000,propertyDamage:25000,effectiveDate:"2011-01-01",note:"Verify policy, rental and commercial applicability.",sources:["https://statutes.capitol.texas.gov/GetStatute.aspx?Code=TN&Value=601"]},
 };
 export function emptyAcordDraft(today = ""): AcordDraft {
-  return {preset:"klutch-fl-uber-black",state:"FL",issueDate:today,producerName:"Whip Claims Management",producerAddress:"14670 Southlawn Ln\nRockville, MD 20850",contactName:"",phone:"(855) 906-5949",fax:"(877) 890-0531",email:"claims@drivewhip.com",insuredOrganization:"Sunbeam Fleet",insuredOrganizationAddress:"7901 4th St N, Suite 300\nSt. Petersburg, FL 33702",namedOperator:"",operatorAddress:"",certificateNumber:"",revisionNumber:"",policyNumber:"",effectiveDate:"",expirationDate:"",limitBasis:"split",combinedSingleLimit:"300000",biPerson:"125000",biAccident:"250000",propertyDamage:"50000",autoScopes:["scheduled"],additionalInsured:false,subrogationWaived:false,endorsementReference:"",coverageReference:"",description:"",vehicleYear:"",vehicleMake:"",vehicleModel:"",vin:"",plate:"",holderName:"Uber Technologies, Inc.",holderAddress:"1515 3rd Street\nSan Francisco, CA 94158",metrocarsRepresentative:"",metrocarsRepresentativeTitle:""};
+  return {preset:"klutch-fl-uber-black",state:"FL",issueDate:today,producerName:"Whip Claims Management",producerAddress:"14670 Southlawn Ln\nRockville, MD 20850",contactName:"Jasmine Lane Acosta",phone:"(855) 906-5949",fax:"(877) 890-0531",email:"claims@drivewhip.com",insuredOrganization:"Sunbeam Fleet",insuredOrganizationAddress:"7901 4th St N, Suite 300\nSt. Petersburg, FL 33702",namedOperator:"",operatorAddress:"",certificateNumber:"",revisionNumber:"",policyNumber:"",effectiveDate:"",expirationDate:"",limitBasis:"split",combinedSingleLimit:"300000",biPerson:"125000",biAccident:"250000",propertyDamage:"50000",autoScopes:["scheduled"],additionalInsured:false,subrogationWaived:false,endorsementReference:"",coverageReference:"",description:"",vehicleYear:"",vehicleMake:"",vehicleModel:"",vin:"",plate:"",holderName:"Uber Technologies, Inc.",holderAddress:"1515 3rd Street\nSan Francisco, CA 94158",metrocarsRepresentative:"",metrocarsRepresentativeTitle:""};
 }
 export function applyAcordPreset(draft: AcordDraft, preset: AcordPreset, state: AcordState = draft.state): AcordDraft {
   const uber = preset === "klutch-fl-uber-black";
@@ -103,8 +103,15 @@ export function validateAcordDraft(d:AcordDraft):string[] {
   if(d.preset==="metrocars-minimum" && (!d.metrocarsRepresentative.trim()||!d.metrocarsRepresentativeTitle.trim())) errors.push("MetroCars authorized representative name and title");
   return errors;
 }
+/** One operator entry, with all supplied address lines; no address is attributed to an unnamed driver. */
+export function acordOperatorDescription(d: Pick<AcordDraft, "namedOperator" | "operatorAddress">): string {
+  const name = d.namedOperator.trim().replace(/\s+/g, " ");
+  if (!name) return "";
+  const address = d.operatorAddress.split(/\r?\n/).map(line => line.trim()).filter(Boolean).join(", ");
+  return `Driver: ${name}${address ? `; ${address}` : ""}`;
+}
 export function acordDescription(d:AcordDraft):string {
-  return [[d.vehicleYear,d.vehicleMake,d.vehicleModel].filter(Boolean).join(" "),d.vin?`VIN: ${d.vin.toUpperCase()}`:"",d.plate?`Plate: ${d.plate}`:"",d.preset==="metrocars-minimum"?"MetroCars self-insured auto liability. This certificate does not represent a policy issued by an insurance carrier; evidence is subject to the self-insurance authorization and applicable agreement.":"",d.description,d.endorsementReference?`Provision / endorsement reference: ${d.endorsementReference}`:""].filter(Boolean).join("\n");
+  return [acordOperatorDescription(d),[d.vehicleYear,d.vehicleMake,d.vehicleModel].filter(Boolean).join(" "),d.vin?`VIN: ${d.vin.toUpperCase()}`:"",d.plate?`Plate: ${d.plate}`:"",d.preset==="metrocars-minimum"?"MetroCars self-insured auto liability. This certificate does not represent a policy issued by an insurance carrier; evidence is subject to the self-insurance authorization and applicable agreement.":"",d.description,d.endorsementReference?`Provision / endorsement reference: ${d.endorsementReference}`:""].filter(Boolean).join("\n");
 }
 export function acordFilename(d:AcordDraft,draft=false):string {
   const prefix=d.preset==="metrocars-minimum"?"MetroCars":"Klutch";

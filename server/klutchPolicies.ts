@@ -687,6 +687,17 @@ export async function getKlutchPolicy(policyId: number) {
   }
 }
 
+/** Exact lookup only; never allocates, registers, renews or cancels a policy. */
+export async function getKlutchPolicyByExactNumber(policyNumber: string) {
+  const conn = await mysql.createConnection(databaseUrl());
+  let id: number | undefined;
+  try {
+    const [rows] = await conn.execute<RowDataPacket[]>("SELECT id FROM klutch_policies WHERE BINARY policy_number = BINARY ? LIMIT 1", [policyNumber]);
+    id = rows[0] ? Number(rows[0].id) : undefined;
+  } finally { await conn.end(); }
+  return id === undefined ? null : getKlutchPolicy(id);
+}
+
 export async function listKlutchPolicies(limit = 100, search = "") {
   const conn = await mysql.createConnection(databaseUrl());
   try {

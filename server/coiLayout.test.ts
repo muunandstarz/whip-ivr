@@ -84,6 +84,49 @@ function assertGeometry(geometry: CoiGeometry[], doc: jsPDF) {
 const printed = (geometry: CoiGeometry[]) => geometry.filter(item => item.kind === "text").map(item => item.text).join(" ");
 
 describe("COI measured PDF geometry", () => {
+  it("restores the normal MetroCars certificate to one page with the original shared header and boxed sections", () => {
+    const { doc, geometry } = render();
+    expect(doc.getNumberOfPages()).toBe(1);
+    assertGeometry(geometry, doc);
+    const title = geometry.find(item => item.text === "CERTIFICATE OF INSURANCE")!;
+    const date = geometry.find(item => item.text === "07/01/2026")!;
+    expect(title.y).toBeLessThan(15);
+    expect(date.y).toBeLessThan(20);
+    const disclaimerCell = geometry.find(item => item.kind === "cell" && item.y >= 30)!;
+    expect(disclaimerCell.y).toBeCloseTo(32, 2);
+    const header = geometry.find(item => item.text === "TYPE OF INSURANCE")!;
+    expect(header.y).toBeLessThan(145);
+    expect(printed(geometry)).not.toContain("CONTINUED");
+    expect(geometry.filter(item => item.text?.includes("© Metrocars")).every(item => item.y + item.height <= 263.4)).toBe(true);
+  });
+
+  it("keeps realistic long names, vehicles, certificate IDs and September dates on one page without losing fields", () => {
+    const { doc, geometry } = render({ form: {
+      namedOperator: "Synthetic Alexandria Catherine Montgomery-Sample",
+      vehicleModel: "Model Y Long Range All-Wheel Drive Premium Package",
+      certNumber: "SAMPLE-COI-NOT-ISSUED", revisionNumber: "REVIEW-2026-11",
+      subscriptionStartDate: "2025-09-30", expirationDate: "2026-09-30",
+    } });
+    expect(doc.getNumberOfPages()).toBe(1);
+    assertGeometry(geometry, doc);
+    expect(printed(geometry)).toContain("September 30, 2025");
+    expect(printed(geometry)).toContain("September 30, 2026");
+    expect(printed(geometry)).toContain(defaults.vin);
+    expect(printed(geometry)).toContain("CANCELLATION");
+  });
+
+  it("centers all seven effective and expiration dates in their own single cells, not from the policy inset", () => {
+    const { doc, geometry } = render();
+    assertGeometry(geometry, doc);
+    const tableStart = geometry.find(item => item.text === "TYPE OF INSURANCE")!.y;
+    const eff = geometry.filter(item => item.text === "07/01/2026" && item.y > tableStart);
+    const exp = geometry.filter(item => item.text === "12/31/2026" && item.y > tableStart);
+    expect(eff).toHaveLength(7); expect(exp).toHaveLength(7);
+    for (const item of eff) expect(item.x + item.width / 2).toBeCloseTo(12 + 11 + 9.5 + 52 + 25 + 19 / 2, 3);
+    for (const item of exp) expect(item.x + item.width / 2).toBeCloseTo(12 + 11 + 9.5 + 52 + 25 + 19 + 19 / 2, 3);
+    for (const item of [...eff, ...exp]) expect(item.fontSize).toBe(7.5);
+  });
+
   it("keeps the existing logo clear of title/date and fits every issuer, insured, table, paragraph and footer cell", () => {
     const { doc, geometry, images } = render();
     assertGeometry(geometry, doc);
@@ -106,6 +149,7 @@ describe("COI measured PDF geometry", () => {
     for (const umRejected of [false, true]) {
       const { doc, geometry } = render({ state, umRejected, pipWaived: true });
       assertGeometry(geometry, doc);
+      expect(doc.getNumberOfPages()).toBe(1);
       const text = printed(geometry);
       expect(text).toContain(stateRules[state].biPP);
       expect(text).toContain(stateRules[state].biPO);
